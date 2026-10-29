@@ -2,9 +2,11 @@
 //! the app's live window of sessions on a virtual clock. Each session is one writer's document,
 //! checked before it shows and drawn by the canvas core into a GPU-layer view; the meter times
 //! every pass, charges each writer for its own, and the degrade ladder steps only the costly
-//! writer's layer. Results equal by content key are made once and counted in full against every
-//! writer whose revisions read them. Canonical renders run on their own state, at the class's
-//! base rung, never the live meter's.
+//! writer's layer. The app's windows, each on its display, draw under one GPU budget (#777): their
+//! frames' charges summed step down only the writer that cost the most, in whichever window it
+//! draws, and every writer is told why its rung changed. Results equal by content key are made
+//! once and counted in full against every writer whose revisions read them. Canonical renders
+//! run on their own state, at the class's base rung, never the live meter's.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -23,7 +25,9 @@ use deep_gpu::cache::{self, Cache, Reader};
 use deep_gpu::compile::{CompileThread, Compiling, THREAD as COMPILE_THREAD};
 use deep_gpu::device::{Backend, Device};
 use deep_gpu::memory;
-use deep_gpu::meter::{self, Estimate, Ladder, Reason, Ring, Rung, Shape, Step, MAX_PASSES};
+use deep_gpu::meter::{
+    self, AppMeter, Estimate, Ladder, Reason, Ring, Rung, Shape, Step, MAX_PASSES,
+};
 use deep_gpu::surface::Path;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -41,6 +45,7 @@ const UI_THREAD: &str = "main";
 pub struct Plants {
     ladder: meter::Planted,
     steps_every_writer: bool,
+    tells_first_step_only: bool,
     sums_pass_intervals: bool,
     allocates_per_frame: bool,
     compiles_at_swap: bool,
@@ -54,7 +59,10 @@ impl Plants {
             ladder: meter::Planted {
                 steps_on_first_slow_frame: p == Some(Planted::StepsOnFirstSlowFrame),
                 skips_a_rung: p == Some(Planted::SkipsARung),
+                budgets_each_window: p == Some(Planted::BudgetsEachWindow),
+                steps_main_window: p == Some(Planted::StepsMainWindow),
             },
+            tells_first_step_only: p == Some(Planted::TellsFirstStepOnly),
             steps_every_writer: p == Some(Planted::StepsEveryWriter),
             sums_pass_intervals: p == Some(Planted::SumsPassIntervals),
             allocates_per_frame: p == Some(Planted::AllocatesPerFrame),
@@ -93,6 +101,8 @@ struct Open {
     writer: String,
     doc: PathBuf,
     size: Option<[u32; 2]>,
+    /// The window its view draws in, an index into the call's windows.
+    window: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,6 +172,10 @@ struct Reports {
 }
 
 struct Args {
+    /// The app's windows by ID, the main one first, each on a display; `named` when the call
+    /// listed them, which alone reports the app's meter row.
+    windows: Vec<String>,
+    named: bool,
     look: Look3,
     /// The look's frame-history window, 0 without history.
     history: u32,
@@ -182,8 +196,14 @@ fn pair(v: &Value) -> Option<[u32; 2]> {
     ])
 }
 
-fn open_of(v: &Value) -> Option<Open> {
+fn open_of(v: &Value, windows: &[String]) -> Option<Open> {
     Some(Open {
+        window: match v.get("window") {
+            None | Some(Value::Null) => 0,
+            Some(w) => windows
+                .iter()
+                .position(|id| Some(id.as_str()) == w.as_str())?,
+        },
         session: v["session"].as_str()?.to_string(),
         writer: v["writer"].as_str()?.to_string(),
         doc: PathBuf::from(v["doc"].as_str()?),
@@ -229,6 +249,26 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .ok_or_else(|| bad("fps"))?;
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
     let history = history_of(&call["look"]).map_err(|e| bad(&e))?;
+    let windows = match call.get("windows") {
+        None => vec!["main".to_string()],
+        Some(ws) => {
+            let mut windows: Vec<String> = Vec::new();
+            for w in ws.as_array().into_iter().flatten() {
+                let (Some(id), Some(_display)) = (w["window"].as_str(), w["display"].as_str())
+                else {
+                    return Err(bad("a window is {window, display}"));
+                };
+                if windows.iter().any(|x| x == id) {
+                    return Err(bad("window IDs are distinct"));
+                }
+                windows.push(id.to_string());
+            }
+            if windows.is_empty() {
+                return Err(bad("windows is a list of at least one window"));
+            }
+            windows
+        }
+    };
     let mut events = Vec::new();
     for s in call["sessions"]
         .as_array()
@@ -237,7 +277,8 @@ fn parse(call: &Value) -> Result<Args, Value> {
         events.push((
             1,
             Event::Open(
-                open_of(s).ok_or_else(|| bad("a session is {session, writer, doc, size?}"))?,
+                open_of(s, &windows)
+                    .ok_or_else(|| bad("a session is {session, writer, doc, size?, window?}"))?,
             ),
         ));
     }
@@ -246,7 +287,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
             .as_u64()
             .ok_or_else(|| bad("an event names its frame"))?;
         let ev = if let Some(o) = e.get("open") {
-            Event::Open(open_of(o).ok_or_else(|| bad("open"))?)
+            Event::Open(open_of(o, &windows).ok_or_else(|| bad("open"))?)
         } else if let Some(s) = e.get("close") {
             Event::Close(
                 s.as_str()
@@ -331,6 +372,8 @@ fn parse(call: &Value) -> Result<Args, Value> {
         );
     }
     Ok(Args {
+        named: call.get("windows").is_some(),
+        windows,
         look,
         history,
         frames,
@@ -420,6 +463,7 @@ struct Session {
     writer: String,
     doc_id: String,
     size: Option<[u32; 2]>,
+    window: usize,
     state: State,
     issues: Vec<Value>,
     revisions: Vec<(u64, &'static str, Vec<Value>)>,
@@ -629,6 +673,8 @@ struct ChangeRow {
     frame: u64,
     session: usize,
     step: Step,
+    /// The meter scope whose budget moved it: none for the initial rung, you or the battery.
+    scope: Option<&'static str>,
     pipelines: Vec<&'static str>,
     compiled_by: Option<u64>,
     thread: Option<&'static str>,
@@ -675,6 +721,7 @@ struct Live {
     views: Vec<ViewRow>,
     passes: Vec<PassRow>,
     changes: Vec<ChangeRow>,
+    app: AppMeter,
     canonicals: Vec<Value>,
     planted_log: Vec<Vec<f64>>,
 }
@@ -707,6 +754,7 @@ impl Live {
             views: Vec::with_capacity(frames * most),
             passes: Vec::with_capacity(frames * most * 10),
             changes: Vec::new(),
+            app: AppMeter::new(plants.ladder),
             canonicals: Vec::new(),
             planted_log: Vec::new(),
             device,
@@ -727,11 +775,18 @@ impl Live {
         (frame as i64 - 1) * FLICKS_PER_SECOND / self.args.fps as i64
     }
 
-    fn record_change(&mut self, frame: u64, session: usize, step: Step) -> usize {
+    fn record_change(
+        &mut self,
+        frame: u64,
+        session: usize,
+        step: Step,
+        scope: Option<&'static str>,
+    ) -> usize {
         self.changes.push(ChangeRow {
             frame,
             session,
             step,
+            scope,
             pipelines: Vec::new(),
             compiled_by: None,
             thread: None,
@@ -742,8 +797,8 @@ impl Live {
 
     /// A step decided at the end of `frame`: its new rung's pipelines compile off-screen, and it
     /// takes effect on the first frame after they're ready.
-    fn decide(&mut self, frame: u64, session: usize, step: Step) {
-        let change = self.record_change(frame, session, step);
+    fn decide(&mut self, frame: u64, session: usize, step: Step, scope: Option<&'static str>) {
+        let change = self.record_change(frame, session, step, scope);
         let needs = step.to.scale(1.0) < 1.0 && self.kit.upscale.is_none();
         let compiling = (needs && !self.plants.compiles_at_swap).then(|| {
             self.changes[change].pipelines =
@@ -804,11 +859,13 @@ impl Live {
     fn open(&mut self, frame: u64, o: &Open) {
         let n = self.sessions.len();
         let (ladder, first) = Ladder::new(self.plants.ladder);
+        self.app.open();
         self.sessions.push(Session {
             id: o.session.clone(),
             writer: o.writer.clone(),
             doc_id: format!("01jb379000000000000{n:07}"),
             size: o.size,
+            window: o.window,
             state: State::Live,
             issues: Vec::new(),
             revisions: Vec::new(),
@@ -835,7 +892,7 @@ impl Live {
             s.issues = s.revisions.last().map(|r| r.2.clone()).unwrap_or_default();
             return;
         }
-        let c = self.record_change(frame, n, first);
+        let c = self.record_change(frame, n, first, None);
         self.changes[c].effective = Some(frame);
     }
 
@@ -998,6 +1055,7 @@ impl Live {
     }
 
     fn close(&mut self, s: usize) {
+        self.app.close(s);
         let ses = &mut self.sessions[s];
         ses.state = State::Closed;
         ses.view = None;
@@ -1118,7 +1176,7 @@ impl Live {
                             .filter(|s| self.sessions[*s].state == State::Live)
                         {
                             if let Some(step) = self.sessions[s].ladder.set(*to) {
-                                self.decide(frame, s, step);
+                                self.decide(frame, s, step, None);
                             }
                         }
                     }
@@ -1311,8 +1369,8 @@ impl Live {
                 charged[v.session % 64].1 = v.cpu;
             }
 
-            // The meter: each writer's charges, the operator meter, then each ladder.
-            let mut stepped_for_health = false;
+            // The meter: each writer's charges and the operator meter, the app's one budget
+            // across every window, then each layer's ladder.
             for v in views_start..views_end {
                 let s = self.views[v].session;
                 let (mut gpu, mut cpu) = charged[s % 64];
@@ -1338,10 +1396,32 @@ impl Live {
                         ses.ops_resolution = 0.5;
                     }
                 }
-                let limits = ses.limits();
-                if let Some(step) = ses.ladder.frame(gpu, cpu, &limits) {
+            }
+            // The app's frame is every window's views; its limit the loosest class among them
+            // (none if one has none), so no writer is held to a tighter class's share of the app.
+            let costly = {
+                let (views, sessions) = (&self.views[views_start..views_end], &self.sessions);
+                let limit = views
+                    .iter()
+                    .map(|v| sessions[v.session].limits().gpu_ms)
+                    .reduce(|a, b| Some(a?.max(b?)))
+                    .flatten();
+                self.app.frame(
+                    views
+                        .iter()
+                        .map(|v| (v.session, sessions[v.session].window, v.gpu)),
+                    limit,
+                )
+            };
+            let app_over = self.app.last_over;
+            let mut stepped_for_health = false;
+            for v in views_start..views_end {
+                let (s, gpu, cpu) = (self.views[v].session, self.views[v].gpu, self.views[v].cpu);
+                let limits = self.sessions[s].limits();
+                if let Some(step) = self.sessions[s].ladder.frame(gpu, cpu, &limits, app_over) {
                     stepped_for_health = true;
-                    self.decide(frame, s, step);
+                    let scope = (step.reason == Reason::FrameHealth).then_some("writer");
+                    self.decide(frame, s, step, scope);
                 }
             }
             if stepped_for_health && self.plants.steps_every_writer {
@@ -1355,7 +1435,7 @@ impl Live {
                         continue;
                     }
                     if let Some(step) = self.sessions[s].ladder.step_down(Reason::FrameHealth) {
-                        self.decide(frame, s, step);
+                        self.decide(frame, s, step, Some("writer"));
                     }
                 }
             }
@@ -1374,8 +1454,23 @@ impl Live {
                         continue;
                     }
                     if let Some(step) = self.sessions[s].ladder.battery(percent, discharging) {
-                        self.decide(frame, s, step);
+                        self.decide(frame, s, step, None);
                     }
+                }
+            }
+            // The app's budget steps down its costly writer, in whichever window it draws; any
+            // rung change this frame restarts its count instead.
+            let moved = self
+                .changes
+                .iter()
+                .rev()
+                .take_while(|c| c.frame == frame)
+                .any(|c| c.step.from.is_some());
+            if moved {
+                self.app.restart();
+            } else if let Some(s) = costly {
+                if let Some(step) = self.sessions[s].ladder.health_step() {
+                    self.decide(frame, s, step, Some("app"));
                 }
             }
             let allocs = counting.then(deep_gpu::alloc::stop);
@@ -1487,7 +1582,8 @@ impl Live {
                     .map(|v| {
                         let ses = &sessions[v.session];
                         let mut o = json!({
-                            "session": ses.id, "writer": ses.writer, "rung": v.rung.unwrap_or(Rung::Base).name(),
+                            "session": ses.id, "writer": ses.writer, "window": self.args.windows[ses.window],
+                            "rung": v.rung.unwrap_or(Rung::Base).name(),
                             "drawn": v.drawn, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
                             "internal_scale": v.scale, "history_frames": v.history,
                         });
@@ -1551,6 +1647,26 @@ impl Live {
                 })
             })
             .collect();
+        // Every rung change is told to its writer, with why (on the planted ladder, only its
+        // initial rung and first step).
+        let told: Vec<Value> = self
+            .changes
+            .iter()
+            .filter(|c| {
+                !self.plants.tells_first_step_only
+                    || c.step.from.is_none()
+                    || !self.changes.iter().any(|e| {
+                        e.session == c.session && e.step.from.is_some() && e.frame < c.frame
+                    })
+            })
+            .map(|c| {
+                let ses = &sessions[c.session];
+                json!({
+                    "frame": c.frame, "session": ses.id, "writer": ses.writer,
+                    "rung": c.step.to.name(), "reason": c.step.reason.name(), "scope": c.scope,
+                })
+            })
+            .collect();
         let session_rows: Vec<Value> = sessions
             .iter()
             .map(|s| {
@@ -1570,11 +1686,11 @@ impl Live {
             })
             .collect();
         let mut out = json!({
-            "frames": frames, "changes": changes, "sessions": session_rows, "canonicals": self.canonicals,
+            "frames": frames, "changes": changes, "told": told, "sessions": session_rows, "canonicals": self.canonicals,
             "device_before": device_before,
         });
         if self.args.reports.meter {
-            let rows: Vec<Value> = sessions
+            let mut rows: Vec<Value> = sessions
                 .iter()
                 .filter(|s| s.state == State::Live)
                 .map(|s| {
@@ -1592,6 +1708,14 @@ impl Live {
                     })
                 })
                 .collect();
+            if self.args.named {
+                rows.push(json!({
+                    "scope": "app",
+                    "windows": self.args.windows,
+                    "limits": {"gpu_ms": self.app.limit},
+                    "measured": self.app.ring.oldest_first().collect::<Vec<_>>(),
+                }));
+            }
             out["meter"] = json!(rows);
         }
         out
