@@ -234,7 +234,9 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}),
       ...(process.env.DEEP_HUB_TEST_INDEX ? { index: process.env.DEEP_HUB_TEST_INDEX } : {}),
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
-      ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}) };
+      ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
+      ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
+      ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}) };
     const frame = (sub: string, event: string) => {
       const s = this.subs.get(sub);
       if (!s || s.conn.done) return;
@@ -621,8 +623,10 @@ class Hub {
         const off = method === 'gates.off';
         // The core asks the OS to confirm you; only then do the gates change.
         return void reply(this.core.request({ op: 'call', method: 'you.confirm', params: { command: off ? 'deep off' : 'deep on' }, context: { role: conn.name, ...(conn.peer ? { peer: conn.peer } : {}) } }).then(() => {
-          this.off = off;
-          setGatesOff(this.root, off);
+          // The planted wrong program answers `deep on` as done and keeps every gate watch-only.
+          const stays = off || this.plant === 'on-stays-off';
+          this.off = stays;
+          setGatesOff(this.root, stays);
           return { off };
         }));
       }

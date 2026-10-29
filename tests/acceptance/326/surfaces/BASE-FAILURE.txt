@@ -1,0 +1,90 @@
+Base commit: debda22a6ef976bd7ce20a92e005272406accf23 (origin/main, no implementation of #326)
+Command:     cargo test --locked -p deep-replica --test acceptance_326_surfaces
+             (from the checkout; Rust 1.99.1 from rust-toolchain.toml; darwin-arm64; with the [[test]] entry this
+             suite adds to crates/deep-replica/Cargo.toml)
+Date:        2026-10-27
+Exit code:   101
+Result:      the target doesn't compile, so none of its 22 cases runs; every error names a missing piece of the
+             surface the README pins, and nothing else in the file fails (see "The file itself" below).
+             Trimmed: the Compiling lines and rustc's caret drawings are cut.
+
+== Why it fails at the base: a missing surface, never its own setup
+
+error[E0432]: unresolved imports `deep_replica::Notifier`, `deep_replica::Posted`, `deep_replica::Replica`,
+              `deep_replica::Seen`, `deep_replica::Sound`, `deep_replica::NOTIFY_AFTER`
+  --> crates/deep-replica/../../tests/acceptance/326/surfaces/surfaces.rs:36:40
+   |     use deep_replica::{kit, repo_root, Notifier, Posted, Replica, Seen, Sound, NOTIFY_AFTER, NOW};
+   |     no `Notifier` / `Posted` / `Replica` / `Seen` / `Sound` / `NOTIFY_AFTER` in the root
+error[E0425]: cannot find function `notifications` in module `kit`   (surfaces.rs:161, :295)
+error[E0425]: cannot find function `states` in module `kit`          (surfaces.rs:721, :749)
+error: could not compile `deep-replica` (test "acceptance_326_surfaces") due to 5 previous errors
+
+`kit`, `repo_root` and `NOW` resolve: they are the base's. Every one of the 22 cases opens a `Replica`, so each
+fails for that missing surface; the kit cases also need `kit::notifications` or `kit::states`:
+
+  AC2  ac2_an_ask_answered_0_9_s_after_it_shows_fires_no_notification        Replica, kit::notifications
+  AC2  ac2_an_ask_still_open_1_s_after_it_shows_fires_exactly_one            Replica, Sound, kit::notifications
+  AC2  ac2_an_ask_from_the_session_open_in_the_focused_window_fires_none     Replica, kit::notifications
+  AC2  ac2_a_notifier_that_fires_at_once_fails_naming_the_ask                Replica, Notifier, NOTIFY_AFTER, kit::notifications
+  AC2  ac2_finished_work_makes_no_sound_and_never_sounds_like_a_question     Replica, Posted, Sound
+  AC2  ac2_only_one_device_plays_a_sound                                     Replica (open_devices), Posted, Sound
+  scope_a_notification_opens_its_asks_card_and_answers_nothing               Replica (click, card, menu_bar)
+  scope_one_count_the_same_on_every_device                                   Replica (open_devices, menu_bar)
+  AC3  ac3_<row>_on_every_surface, 11 cases, one per row                     Replica (surfaces, window), Seen, kit::states
+  AC3  ac3_a_view_that_shows_pass_for_a_stale_verdict_fails_naming_...       Replica, Seen, kit::states
+  AC3  ac3_a_view_that_shows_done_for_says_done_fails_naming_...             Replica, Seen, kit::states
+  AC3  ac3_a_view_that_draws_another_rows_status_entry_fails_naming_...      Replica, Seen, kit::states
+
+== The file itself: compiled and run against a stand-in, kept outside the checkout
+
+Since nothing of the surface exists at the base, the file was also compiled and run against a stand-in: a copy of
+crates/deep-replica in the job's scratch folder (a separate workspace with the checkout's lock file, .cargo patches
+and profiles, depending on the checkout's crates/deep-app by path) plus a src/standin.rs of about 300 lines that
+implements the pinned surface without gpui, computing each surface's text from the record, and stand-in kits.
+STANDIN_MUTANT selects a wrong program. The stand-in was not added to the checkout. This proves the file is
+type-correct against the pinned surface, passes a right program and fails each wrong one; it proves nothing about
+the real app, which only the run after #326 lands does.
+
+  cargo test -q --test acceptance_326_surfaces   (in the stand-in; CARGO_TARGET_DIR in scratch)
+  cargo clippy --test acceptance_326_surfaces -- -D warnings   clean;   rustfmt --edition 2021 --check   clean
+
+  STANDIN_MUTANT unset (the right program)                 test result: ok. 22 passed; 0 failed
+
+  The wrong program                                         Cases that fail (the rest pass)
+  early: the app's own notifier fires at once               ac2 answered at 0.9 s, ac2 open at 1 s, ac2 focused (its
+                                                            kit check)                                  19 / 3 failed
+      "ask:01MD3269000000000000000001 notified within 0.9 s of showing: [Posted { device: 0, ... at: 1800000000000 ..."
+  no-recheck: posts at 1 s without checking the ask is open ac2 answered at 0.9 s                       21 / 1
+  ignores-focus: notifies the session you're looking at     ac2 focused                                 21 / 1
+  every-device-sounds                                       ac2 only one device                          21 / 1
+      "2 devices played a sound for ask:01MD3269000000000000000001: [...]  left: 2  right: 1"
+  finished-question: a notice sounds as a question          ac2 finished work                           21 / 1
+  finished-notifies: a PASS notifies with no notice asked   ac2 finished work                           21 / 1
+  click-answers: clicking a notification answers the ask    scope card                                  21 / 1
+  count-per-device: device 1's menu bar counts one more     scope one count                             21 / 1
+  pass-for-stale: a stale verdict shows PASS                ac3 stale, ac3 PASS-for-stale kit, ac3 entry kit
+                                                                                                        19 / 3
+      "sidebar-row, row "stale": the word "stale" isn't shown; it shows "✓ Cart totals · PASS"" (and the 5 others)
+  done-for-says-done: says done shows "done"                ac3 says done, ac3 done kit, ac3 entry kit  19 / 3
+  no-round: sent back without "1 of 3"                      ac3 sent back                               21 / 1
+  no-expected-time: says done without its 4 min             ac3 says done                               21 / 1
+  no-last-seen: quiet without when it was last seen         ac3 quiet                                   21 / 1
+      "sidebar-row, row "quiet": it doesn't show when it was last seen, 2 h ago; it shows "○ Cart totals · quiet""
+  kit-notify-passes-all: kit::notifications passes anything ac2 fires-at-once                           21 / 1
+  kit-states-passes-all: kit::states passes anything        the three ac3 kit cases                     19 / 3
+  kit-states-names-none: it fails but names nothing         the three ac3 kit cases                     19 / 3
+      "the states kit failed a view showing PASS in place of stale on the sidebar-row naming "", not the surface
+       and the row "stale""
+
+The criterion's own wrong programs, `Notifier::new(Duration::ZERO)` and the planted views (PASS for stale, done for
+says done, another row's status entry, on each of the six surfaces), are in surfaces.rs and run against whatever
+implements the surface; above, the stand-in's kits passed the app and failed every one of them, naming the ask, or
+the surface and the row.
+
+== The fixtures
+
+All 86 events in fixtures/*.events.jsonl and fixtures/live.json validate against their kind's published schema
+through packages/contracts (validate(name, event), with dist built at the base), each record's log_pos runs 1, 2,
+3 ... and every line has a session_id. Command and result:
+
+  node -e '<the loop in README.md, Fixtures>'      86 events, 0 invalid

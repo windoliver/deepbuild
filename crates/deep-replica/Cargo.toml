@@ -35,3 +35,23 @@ path = "src/live.rs"
 name = "headless"
 path = "headless.rs"
 harness = false
+
+# Issue #326, criterion group "panels": the acceptance tests written blind in
+# tests/acceptance/326/panels. `acceptance_326_panels` holds the criteria; `..._planted` runs the
+# wrong programs they name through the same judges. AppKit needs the main thread, so no harness.
+[[test]]
+name = "acceptance_326_panels"
+path = "../../tests/acceptance/326/panels/panels.rs"
+harness = false
+
+[[test]]
+name = "acceptance_326_panels_planted"
+path = "../../tests/acceptance/326/panels/planted.rs"
+harness = false
+
+# Issue #326, criterion group "surfaces": notifications on the virtual clock and every row of States
+# people see on every surface, written blind in tests/acceptance/326/surfaces. No harness, as above.
+[[test]]
+name = "acceptance_326_surfaces"
+path = "../../tests/acceptance/326/surfaces/surfaces.rs"
+harness = false

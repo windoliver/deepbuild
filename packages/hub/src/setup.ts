@@ -39,8 +39,26 @@ export async function setupCommand(cli: string, args: readonly string[] = []): P
   return install(cli);
 }
 
-/** Exit 0 once everything is in place; 1 when a file of yours refused it, with nothing written; 3 when the hub didn't start. */
-async function install(cli: string): Promise<number> {
+/** What the Set up click and the first `deep` command say they did (#326), in one line. */
+export const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
+
+/**
+ * The first `deep` command (#326): in a home with nothing of DeepBuild in it, `deep setup`'s steps run without asking,
+ * and the one line goes to stderr, so the command's own output stays on stdout. 0 when nothing was needed or all of
+ * it is in place; else setup's exit code.
+ */
+export async function setUpFirst(cli: string): Promise<number> {
+  if (existsSync(installedRoot())) return 0;
+  const code = await install(cli, true);
+  if (code === 0) process.stderr.write(`${SET_UP_LINE}\n`);
+  return code;
+}
+
+/**
+ * Exit 0 once everything is in place; 1 when a file of yours refused it, with nothing written; 3 when the hub didn't
+ * start. `quiet` leaves the summary to the caller's one line.
+ */
+async function install(cli: string, quiet = false): Promise<number> {
   const root = installedRoot();
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const settingsFile = claudeSettings();
@@ -96,8 +114,8 @@ async function install(cli: string): Promise<number> {
     process.stderr.write(`deep setup: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
-  console.log(`DeepBuild added its hooks and status line forwarder to ${settingsFile}, beside yours; its MCP server to ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.`);
-  for (const r of relations(root)) console.log(`${r.holds ? 'OK' : 'BROKEN'} ${r.text}`);
+  if (!quiet) console.log(`DeepBuild added its hooks and status line forwarder to ${settingsFile}, beside yours; its MCP server to ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.`);
+  if (!quiet) for (const r of relations(root)) console.log(`${r.holds ? 'OK' : 'BROKEN'} ${r.text}`);
   const started = await startHub({ cli });
   if (started !== 0) {
     process.stderr.write('deep setup: the hub didn\'t start through its login service; deep doctor names what is missing.\n');

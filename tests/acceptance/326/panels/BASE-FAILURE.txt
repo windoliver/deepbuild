@@ -1,0 +1,47 @@
+#326, group "panels": the run at the base commit debda22 (origin/main), October 28, 2026, on macOS
+(Darwin 25.6.0), Node 24.22.0, trimmed to each failure's reason. Every tagged test fails for a missing
+surface; the wrong programs pass, since they test the tests.
+
+== node --test tests/acceptance/326/panels/guard.test.mjs  (exit 1; 2 tests, 0 pass, 2 fail)
+
+✖ #326.2ba76db1 a planted module that subscribes to the stream or calls the reads for its own view fails the guard, naming it; the app as it stands passes
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no guard at <checkout>/scripts/record-reader-guard.mjs'
+  + ]
+  - []
+
+✖ #326.2ba76db1 the guard runs in the app's local preflight, on every change to the app's source, and passes the app
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   "no lane of the local preflight's checks runs scripts/record-reader-guard.mjs"
+  + ]
+  - []
+
+== cargo test --locked -p deep-replica --test acceptance_326_panels  (exit 101; does not compile, so its 5 tests fail before they run)
+
+error[E0425]: cannot find function `install` in module `deep_app::record`         (panels.rs:86)
+error[E0425]: cannot find function `poll` in module `deep_app::record`            (panels.rs:105)
+error[E0425]: cannot find function `panel` in module `deep_replica::kit`          (panels.rs:148, 263, 306)
+error[E0425]: cannot find function `open_with_card` in module `deep_replica::shell` (panels.rs:204)
+error: could not compile `deep-replica` (test "acceptance_326_panels") due to 6 previous errors
+
+The 5 tests: needs_you_and_session_page_share_each_log_pos (AC4), git_dependency_refused_at_install_and_never_fetched
+(AC5), four_faults_refused_each_with_its_own_message (AC6), the_card_is_drawn_at_its_rect and nothing_covers_the_card
+(AC7).
+
+== The wrong programs, passing at the base
+
+cargo test --locked -p deep-replica --test acceptance_326_panels_planted  (exit 0)
+test network_only_host_fails_naming_the_other_three ... ok
+test network_fixture_connects_when_granted ... ok
+test clip_only_host_fails_on_the_dialog ... ok
+test unclipped_layouts_paint_outside_their_slot ... ok
+test base_loader_reaches_the_network ... ok
+test a_view_with_its_own_subscription_disagrees ... ok
+test result: ok. 6 passed; 0 failed
+
+node --test tests/acceptance/326/panels/guard.wrong.test.mjs  (exit 0)
+ℹ tests 16
+ℹ pass 16
+ℹ fail 0
