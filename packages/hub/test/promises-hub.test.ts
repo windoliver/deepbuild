@@ -94,6 +94,10 @@ describe('promised checks through the hub', () => {
       expect(String(handed.text)).toContain('I\'ll check again in 3 seconds and report.');
       expect(String(handed.text)).toContain('promised check is due');
       expect((await until(() => events(root, 'promise.due'), (e) => e.length > 0))[0]).toMatchObject({ promise: set[0]!.promise, route: 'wake' });
+      expect(await events(root, 'promise.woken'), 'woken only once a turn shows the wake').toEqual([]);
+      // The wake's prompt, Claude Code's task-notification with the waiter's words: the record says woken through the waiter, and the prompt hears it once.
+      const woken = await hook('UserPromptSubmit', { prompt: `<task-notification>\n${String(handed.text)}\n</task-notification>`, prompt_id: 'p2' });
+      expect(JSON.stringify(woken)).not.toContain('promised check is due');
       expect((await until(() => events(root, 'promise.woken'), (e) => e.length > 0))[0]).toMatchObject({ promise: set[0]!.promise, via: 'waiter' });
     });
   }, 60_000);
@@ -114,7 +118,10 @@ describe('promised checks through the hub', () => {
       // The waiter asks now: the session wakes at once, through it.
       const handed = await waiter(root, id, s.work);
       expect(String(handed.text)).toContain('I\'ll check again in 2 seconds.');
-      expect((await until(() => events(root, 'promise.woken'), (e) => e.length > 0))[0]).toMatchObject({ via: 'waiter' });
+      // A Claude Code that never wakes from it: the next prompt you type carries the check, and the record says so.
+      const typed = await hook('UserPromptSubmit', { prompt: 'anything new?', prompt_id: 'p2' });
+      expect(JSON.stringify(typed)).toContain('I\'ll check again in 2 seconds.');
+      expect((await until(() => events(root, 'promise.woken'), (e) => e.length > 0))[0]).toMatchObject({ via: 'next_prompt' });
     });
   }, 60_000);
 
