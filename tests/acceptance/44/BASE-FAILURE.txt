@@ -1,0 +1,482 @@
+# The #44 acceptance tests on the base commit 7b39aa0d0c006301ee72a96c3ce9868181205803 (main), 2026-10-28T19:15:47Z
+# Node v24.22.0, macOS 14.7.7, python3 3.10.11
+# Every test fails at an assertion for a missing surface: deep.lease is not in the extension API, the manifest
+# has no lease kinds field (extension.manifest@1 refuses 'leases' as unlisted), and the host neither takes
+# 'leases' nor knows the new plants. No test crashes outside its assertions.
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/44/tsconfig.json
+tests/acceptance/44/helpers.ts(102,5): error TS2353: Object literal may only specify known properties, and 'leases' does not exist in type 'ExtensionHostOptions'.
+tests/acceptance/44/kinds.test.ts(75,32): error TS2345: Argument of type '"skips-kind-declare"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/44/kinds.test.ts(79,38): error TS2345: Argument of type '"skips-kind-declare"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/44/kinds.test.ts(83,31): error TS2345: Argument of type '"skips-kind-declare"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/44/lease.test.ts(92,32): error TS2345: Argument of type '"skips-kind-declare"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/44/lease.test.ts(96,29): error TS2345: Argument of type '"drops-mode"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/44/lease.test.ts(100,37): error TS2345: Argument of type '"holder-from-arguments"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/44/refusals.test.ts(31,36): error TS2345: Argument of type '"declares-kind-on-first-lease"' is not assignable to parameter of type 'Plant | undefined'.
+(exit 2)
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/44 --no-file-parallelism
+
+ RUN  v5.0.5 <repo>/tests/acceptance/44
+
+ ❯ lease.test.ts (10 tests | 10 failed) 1442ms
+   ❯ R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder (10)
+     × R1 the extension API schema lists deep.lease 269ms
+     × R1 a sandboxed TypeScript package's deep.lease({kind, key}, exclusive) is granted, held by ext:test/alpha on host local: as returned, in the table, on record 248ms
+     × R1 a TypeScript package in the hub (a release package) gets the same: held by ext:test/hub on host local 98ms
+     × R1 a second package's overlapping exclusive lease is refused, naming the holder ext:test/alpha; its lease on a free key of the same kind is its own 51ms
+     × R1 a glob kind: beta's exclusive src/lib/a.ts, which alpha's src/** could match, is refused naming ext:test/alpha 79ms
+     × R1 two shared leases on one key are both granted, each held by its caller in mode shared 86ms
+     × R1 the holder is the caller's ext:<id>, never one the call's arguments name 51ms
+     × R1 (wrong program) a host that never declares a manifest's lease kinds fails the grant, naming device.rig 121ms
+     × R1 (wrong program) a host that leases every call exclusive fails the shared pair, naming ext:test/beta 180ms
+     × R1 (wrong program) a host that takes the holder from the call's arguments fails, naming ext:test/alpha 44ms
+ ❯ kinds.test.ts (9 tests | 9 failed) 1385ms
+   ❯ R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused (9)
+     × R2 a package's manifest lease kinds are declared by its id: table.kinds() lists device.rig (exact) and repo.tree (glob), each by test/alpha 375ms
+     × R2 every match form of the four is declared: exact, glob, prefix and pool(2) 161ms
+     × R2 a kind matching by regex, outside exact, glob, prefix and pool(n), is refused naming the kind, and never declared 51ms
+     × R2 a kind matching by pool(0), outside exact, glob, prefix and pool(n), is refused naming the kind, and never declared 36ms
+     × R2 a kind matching by range, outside exact, glob, prefix and pool(n), is refused naming the kind, and never declared 90ms
+     × R2 a kind name another package declared is refused naming it, and stays the first package's 63ms
+     × R2 (wrong program) a host that never declares a manifest's lease kinds fails the listing, naming device.rig 64ms
+     × R2 (wrong program) a host that never declares a manifest's lease kinds admits a kind matching by regex, failing the test 217ms
+     × R2 (wrong program) a host that never declares a manifest's lease kinds admits a taken name, failing the test 58ms
+ ❯ refusals.test.ts (2 tests | 2 failed) 1423ms
+   ❯ R3 #44.544d1a4a tests for each refusal, failing first, plus a sample extension in TypeScript and one over JSON-RPC (2)
+     × R3 deep.lease on a kind no package declared is refused naming the kind; nothing is leased or declared 928ms
+     × R3 (wrong program) a host that declares an unknown kind for its caller on first lease fails, naming device.none 373ms
+ ❯ jsonrpc.test.ts (2 tests | 2 failed) 816ms
+   ❯ R3 #44.544d1a4a tests for each refusal, failing first, plus a sample extension in TypeScript and one over JSON-RPC (2)
+     × R3 the Python package loads in the sandbox, its manifest kind device.rig is declared by test/pylease, and its deep.lease is granted, held by ext:test/pylease on host local 441ms
+     × R3 refusals both ways: test/beta's lease on the Python package's key names ext:test/pylease; the Python package's lease on beta's key comes back naming ext:test/beta 277ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  jsonrpc.test.ts > R3 #44.544d1a4a tests for each refusal, failing first, plus a sample extension in TypeScript and one over JSON-RPC > R3 the Python package loads in the sandbox, its manifest kind device.rig is declared by test/pylease, and its deep.lease is granted, held by ext:test/pylease on host local
+AssertionError: test/pylease loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario jsonrpc.test.ts:13:14
+ ❯ jsonrpc.test.ts:20:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  jsonrpc.test.ts > R3 #44.544d1a4a tests for each refusal, failing first, plus a sample extension in TypeScript and one over JSON-RPC > R3 refusals both ways: test/beta's lease on the Python package's key names ext:test/pylease; the Python package's lease on beta's key comes back naming ext:test/beta
+AssertionError: test/pylease loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario jsonrpc.test.ts:13:14
+ ❯ jsonrpc.test.ts:27:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 a package's manifest lease kinds are declared by its id: table.kinds() lists device.rig (exact) and repo.tree (glob), each by test/alpha
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0},{\"name\":\"repo.tree\",\"match\":\"glob\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ alphaDeclares kinds.test.ts:14:3
+ ❯ kinds.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 every match form of the four is declared: exact, glob, prefix and pool(2)
+AssertionError: test/forms loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.form0\",\"match\":\"exact\",\"cap\":10,\"cooldown\":0,\"cost\":0},{\"name\":\"device.form1\",\"match\":\"glob\",\"cap\":10,\"cooldown\":0,\"cost\":0},{\"name\":\"device.form2\",\"match\":\"prefix\",\"cap\":10,\"cooldown\":0,\"cost\":0},{\"name\":\"device.form3\",\"match\":\"pool(2)\",\"cap\":10,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ kinds.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 a kind matching by regex, outside exact, glob, prefix and pool(n), is refused naming the kind, and never declared
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 a kind matching by pool(0), outside exact, glob, prefix and pool(n), is refused naming the kind, and never declared
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 a kind matching by range, outside exact, glob, prefix and pool(n), is refused naming the kind, and never declared
+AssertionError: test/fine, whose kind device.fine matches by exact loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.fine\",\"match\":\"exact\",\"cap\":10,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ oddRefused kinds.test.ts:26:3
+ ❯ kinds.test.ts:66:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 a kind name another package declared is refused naming it, and stays the first package's
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ takenRefused kinds.test.ts:37:3
+ ❯ kinds.test.ts:71:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 (wrong program) a host that never declares a manifest's lease kinds fails the listing, naming device.rig
+AssertionError: expected [Function] to throw error matching /lists device\.rig, declared by t…/alpha but got 'test/alpha loads: expected \'check fa…'
+
+- Expected:
+/lists device\.rig, declared by test\/alpha/
+
++ Received:
+"test/alpha loads: expected 'check failed: its manifest fails exte…' to be null"
+
+ ❯ kinds.test.ts:75:54
+     73|
+     74|   it('R2 (wrong program) a host that never declares a manifest\'s leas…
+     75|     await expect(alphaDeclares('skips-kind-declare')).rejects.toThrow(…
+       |                                                      ^
+     76|   }, 120_000);
+     77|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 (wrong program) a host that never declares a manifest's lease kinds admits a kind matching by regex, failing the test
+AssertionError: expected [Function] to throw error matching /device\.odd matches by regex is refus…/ but got 'test/fine, whose kind device.fine mat…'
+
+- Expected:
+/device\.odd matches by regex is refused/
+
++ Received:
+"test/fine, whose kind device.fine matches by exact loads: expected 'check failed: its manifest fails exte…' to be null"
+
+ ❯ kinds.test.ts:79:60
+     77|
+     78|   it('R2 (wrong program) a host that never declares a manifest\'s leas…
+     79|     await expect(oddRefused('regex', 'skips-kind-declare')).rejects.to…
+       |                                                            ^
+     80|   }, 120_000);
+     81|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  kinds.test.ts > R2 #44.780b900a a manifest's lease kinds go through table.declare('<id>', kind): a match form outside the four and a name another package declared are refused > R2 (wrong program) a host that never declares a manifest's lease kinds admits a taken name, failing the test
+AssertionError: expected [Function] to throw error matching /declaring device\.rig…/alpha is refused but got 'test/alpha loads: expected \'check fa…'
+
+- Expected:
+/declaring device\.rig after test\/alpha is refused/
+
++ Received:
+"test/alpha loads: expected 'check failed: its manifest fails exte…' to be null"
+
+ ❯ kinds.test.ts:83:53
+     81|
+     82|   it('R2 (wrong program) a host that never declares a manifest\'s leas…
+     83|     await expect(takenRefused('skips-kind-declare')).rejects.toThrow(/…
+       |                                                     ^
+     84|   }, 120_000);
+     85| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 the extension API schema lists deep.lease
+AssertionError: expected [ 'deep.on', …(19) ] to include 'deep.lease'
+ ❯ lease.test.ts:54:48
+     52|   it('R1 the extension API schema lists deep.lease', async () => {
+     53|     const { EXTENSION_API } = await host();
+     54|     expect(EXTENSION_API.map((m) => m.method)).toContain('deep.lease');
+       |                                                ^
+     55|   });
+     56|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 a sandboxed TypeScript package's deep.lease({kind, key}, exclusive) is granted, held by ext:test/alpha on host local: as returned, in the table, on record
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0},{\"name\":\"repo.tree\",\"match\":\"glob\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario lease.test.ts:18:3
+ ❯ alphaHoldsRig lease.test.ts:25:13
+ ❯ lease.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 a TypeScript package in the hub (a release package) gets the same: held by ext:test/hub on host local
+AssertionError: test/hub loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ lease.test.ts:65:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 a second package's overlapping exclusive lease is refused, naming the holder ext:test/alpha; its lease on a free key of the same kind is its own
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0},{\"name\":\"repo.tree\",\"match\":\"glob\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario lease.test.ts:18:3
+ ❯ lease.test.ts:71:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 a glob kind: beta's exclusive src/lib/a.ts, which alpha's src/** could match, is refused naming ext:test/alpha
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0},{\"name\":\"repo.tree\",\"match\":\"glob\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario lease.test.ts:18:3
+ ❯ lease.test.ts:78:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 two shared leases on one key are both granted, each held by its caller in mode shared
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0},{\"name\":\"repo.tree\",\"match\":\"glob\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario lease.test.ts:18:3
+ ❯ bothShared lease.test.ts:31:13
+ ❯ lease.test.ts:84:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 the holder is the caller's ext:<id>, never one the call's arguments name
+AssertionError: test/alpha loads: expected 'check failed: its manifest fails exte…' to be null
+
+- Expected:
+null
+
++ Received:
+"check failed: its manifest fails extension.manifest@1 at /leases: unlisted_field [{\"name\":\"device.rig\",\"match\":\"exact\",\"cap\":100,\"cooldown\":0,\"cost\":0},{\"name\":\"repo.tree\",\"match\":\"glob\",\"cap\":100,\"cooldown\":0,\"cost\":0}]"
+
+ ❯ loaded helpers.ts:203:38
+    201| /** A package admitted and loaded, or a failure naming why not. */
+    202| export function loaded(a: Admission, what: string): Loaded {
+    203|   expect(a.refusal, `${what} loads`).toBeNull();
+       |                                      ^
+    204|   expect(a.load?.status, `${what} loads: ${JSON.stringify(a.load)}`).t…
+    205|   return a.load as Loaded;
+ ❯ scenario lease.test.ts:18:3
+ ❯ holderIsTheCallers lease.test.ts:41:13
+ ❯ lease.test.ts:88:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 (wrong program) a host that never declares a manifest's lease kinds fails the grant, naming device.rig
+AssertionError: expected [Function] to throw error matching /devic…/alpha (rejected|returns a grant) but got 'test/alpha loads: expected \'check fa…'
+
+- Expected:
+/device\.rig.* for ext:test\/alpha (rejected|returns a grant)/
+
++ Received:
+"test/alpha loads: expected 'check failed: its manifest fails exte…' to be null"
+
+ ❯ lease.test.ts:92:54
+     90|
+     91|   it('R1 (wrong program) a host that never declares a manifest\'s leas…
+     92|     await expect(alphaHoldsRig('skips-kind-declare')).rejects.toThrow(…
+       |                                                      ^
+     93|   }, 120_000);
+     94|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 (wrong program) a host that leases every call exclusive fails the shared pair, naming ext:test/beta
+AssertionError: expected [Function] to throw error matching /shared\) for ext:…/beta returns a grant but got 'test/alpha loads: expected \'check fa…'
+
+- Expected:
+/shared\) for ext:test\/beta returns a grant/
+
++ Received:
+"test/alpha loads: expected 'check failed: its manifest fails exte…' to be null"
+
+ ❯ lease.test.ts:96:43
+     94|
+     95|   it('R1 (wrong program) a host that leases every call exclusive fails…
+     96|     await expect(bothShared('drops-mode')).rejects.toThrow(/shared\) f…
+       |                                           ^
+     97|   }, 120_000);
+     98|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  lease.test.ts > R1 #44.2d670703 deep.lease(resource, mode): the host leases with holder ext:<id> on host local, returning the grant or the refusal naming the holder > R1 (wrong program) a host that takes the holder from the call's arguments fails, naming ext:test/alpha
+AssertionError: expected [Function] to throw error matching /e…/alpha as its holder is never granted but got 'test/alpha loads: expected \'check fa…'
+
+- Expected:
+/ext:test\/alpha as its holder is never granted/
+
++ Received:
+"test/alpha loads: expected 'check failed: its manifest fails exte…' to be null"
+
+ ❯ lease.test.ts:100:62
+     98|
+     99|   it('R1 (wrong program) a host that takes the holder from the call\'s…
+    100|     await expect(holderIsTheCallers('holder-from-arguments')).rejects.…
+       |                                                              ^
+    101|   }, 120_000);
+    102| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  refusals.test.ts > R3 #44.544d1a4a tests for each refusal, failing first, plus a sample extension in TypeScript and one over JSON-RPC > R3 deep.lease on a kind no package declared is refused naming the kind; nothing is leased or declared
+AssertionError: test/gamma's deep.lease({kind: device.none, key: n-1}) on a kind no package declared: the refusal names device.none: expected '{"error":"deep.lease is not a functio…' to contain 'device.none'
+
+Expected: "device.none"
+Received: "{"error":"deep.lease is not a function"}"
+
+ ❯ undeclaredRefused refusals.test.ts:18:74
+     16|   expect(seen.result?.status, `${what} is never granted: ${JSON.string…
+     17|   expect(seen.error !== undefined || (seen.result !== undefined && see…
+     18|   expect(JSON.stringify(seen), `${what}: the refusal names device.none…
+       |                                                                          ^
+     19|   expect(seen.error ?? '', `${what}: the refusal is the host's, not a …
+     20|   expect((await held(w, 'device.none', 'n-1')).map((v) => v.lease), `$…
+ ❯ refusals.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  refusals.test.ts > R3 #44.544d1a4a tests for each refusal, failing first, plus a sample extension in TypeScript and one over JSON-RPC > R3 (wrong program) a host that declares an unknown kind for its caller on first lease fails, naming device.none
+AssertionError: expected [Function] to throw error matching /device\.none.* is never granted/ but got 'test/gamma\'s deep.lease({kind: devic…'
+
+- Expected:
+/device\.none.* is never granted/
+
++ Received:
+"test/gamma's deep.lease({kind: device.none, key: n-1}) on a kind no package declared: the refusal names device.none: expected '{\"error\":\"deep.lease is not a functio…' to contain 'device.none'"
+
+ ❯ refusals.test.ts:31:68
+     29|
+     30|   it('R3 (wrong program) a host that declares an unknown kind for its …
+     31|     await expect(undeclaredRefused('declares-kind-on-first-lease')).re…
+       |                                                                    ^
+     32|   }, 120_000);
+     33| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  23 failed (23)
+   Start at  12:15:57
+   Duration  6.88s (tests 83%, import 14%, transform 2%)
+
+    Isolate  4 workers spawned · ~168ms startup each (spawn + environment, per file)
+             at least ~505ms faster with isolate: false — reuses workers across files instead of one per file
+
+(exit 1)

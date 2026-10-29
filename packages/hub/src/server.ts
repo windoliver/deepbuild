@@ -15,7 +15,7 @@ import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
@@ -36,8 +36,10 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
+  // A run of a destructive command undone from the copy staged before it ran (#347).
+  ['staged.undo', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
@@ -56,6 +58,8 @@ const CONTEXT_HOLD_MS = 2000;
 const GATE_HOLD_MS = 10_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
+/** The guard entry whose delete the hub stages before it runs with the hub up, or asks about (#347). */
+const STAGED_MATCH = 'effect:unknown-reach-delete';
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -79,8 +83,18 @@ function agentReply(agent: string, reply: ExtensionReply, ruled: string): string
   const additionalContext = [...warnings(ruled), ...reply.context.map((b) => `[${b.extension}] ${b.text}`)].join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
-/** Context Claude Code adds to the session: at a session's start or a prompt, never a decision. */
-const contextReply = (event: string, text: string): string => line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' });
+/**
+ * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
+ * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
+ * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
+ */
+function coreReplyLine(event: string, reply: { context?: string; block?: string; message?: string }): string {
+  const out: Record<string, unknown> = {};
+  if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
+  else if (reply.context) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
+  if (reply.message) out.systemMessage = reply.message;
+  return Object.keys(out).length ? line({ exit: 0, stdout: JSON.stringify(out), stderr: '' }) : EMPTY_REPLY;
+}
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
@@ -97,15 +111,15 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; cl
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
-    if (m.op === 'asking') return onAsking(m.sessions ?? []);
+    if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? []);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -125,7 +139,7 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame, onAsking);
@@ -264,7 +278,7 @@ class Hub {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
     };
-    const asking = (sessions: string[]) => { this.asking = new Set(sessions); };
+    const asking = (sessions: string[], judged: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES, generation: writerGeneration(this.root.ledger) });
@@ -425,8 +439,12 @@ class Hub {
     // A permission prompt is held while the core reads whether a saved decision covers it (#23).
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
     const before = !blocked && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    // A tool call this hub saw run marks its session as having worked, so the stop that follows at once is held for
+    // its line whether or not the core's word of the turn has come back yet (#83).
+    if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
-    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
+    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
@@ -454,9 +472,15 @@ class Hub {
     const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
     const decided = [...new Set(meta.matched.filter((n) => DECIDED_MATCH.test(String(entries[n]?.match ?? ''))).map((n) => String(entries[n]!.match).slice('effect:'.length)))];
     const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
-    if (!authority.length && !mcp && !decided.length) return undefined;
+    // A delete whose reach can't be worked out is staged first (#347): the folders deep-hook read, or null when it
+    // couldn't name them. The planted stager stages the working folder of every shell call.
+    const staged = meta.matched.find((n) => entries[n]?.match === STAGED_MATCH);
+    const stage = staged !== undefined ? meta.stage?.[staged] ?? null
+      : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? [meta.cwd] : undefined;
+    if (!authority.length && !mcp && !decided.length && stage === undefined) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : typeof data.command === 'string' ? data.command : String(data.kind);
-    return { label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...(typeof data.command === 'string' ? { command: data.command } : {}) } : {}) };
+    const command = typeof data.command === 'string' ? { command: data.command } : {};
+    return { label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}) };
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
@@ -515,16 +539,23 @@ class Hub {
   private holdFor(meta: HookMeta): number | null {
     const now = Date.now();
     if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
-    if (meta.event !== 'Stop' || meta.agent === 'codex') return null;
+    if (meta.event !== 'Stop') return null;
+    // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
+    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     const relation = this.stopHold();
     if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
     if (meta.watchOnly || !relation.holds || this.off) return null;
     // Until you approve a repo's checks no verdict holds a stop: only an answer on its way back does (design: How it
-    // installs). The planted wrong program holds every stop, as gates on unapproved checks would.
+    // installs), and a stop whose turn did work is held for the one line the chat shows of it (#83), which the core
+    // reads from the record at once. The planted wrong program holds every stop, as gates on unapproved checks would.
     // A test's planted sorter (#321) may answer any stop "proceed".
-    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
+    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !this.sawWork.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
+  /** The sessions whose next stop the stop rule would read as a claim, as the core tells it beside `asking`: it is held for its line (#83). */
+  private worked = new Set<string>();
+  /** The sessions a tool call of which this hub saw run since their last stop; the core's word may still be on its way. */
+  private sawWork = new Set<string>();
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {
@@ -540,12 +571,12 @@ class Hub {
   private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string } | null>;
+    const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string; message?: string } | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
-    if (reply?.block) conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ decision: 'block', reason: reply.block }), stderr: '' }));
-    else if (reply?.context) conn.sock.end(contextReply(meta.event, reply.context));
-    else conn.sock.end(EMPTY_REPLY);
+    // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
+    const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
+    conn.sock.end(shown ? coreReplyLine(meta.event, shown) : EMPTY_REPLY);
   }
 
   /**
@@ -584,7 +615,8 @@ class Hub {
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    const decided = (n: string) => !this.off && DECIDED_MATCH.test(String(entries[n]?.match ?? ''));
+    // A delete whose reach can't be worked out is staged or asked about at the gate (#347), never blocked outright.
+    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (entries[n]?.match === STAGED_MATCH && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
     if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     if (this.off) return EMPTY_REPLY;
@@ -661,7 +693,7 @@ class Hub {
     const method = value.method;
     if (typeof method !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', method) });
     const allowed = ALLOWED.get(method);
-    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
+    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {
       return conn.write({ id, error: refusal('role', '/method', `A ${conn.name} connection can't call ${method}: its credential allows ${allowed.join(' or ')} connections only.`, method) });
     }

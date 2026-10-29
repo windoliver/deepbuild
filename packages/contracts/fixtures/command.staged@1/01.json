@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "command.staged",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "call": "toolu_01A2B3C4D5E6F7G8H9",
+    "command": "bash clean.sh",
+    "folders": [
+      "/work/shop/build"
+    ],
+    "until": 1760272651123
+  },
+  "subject": "session:01K74FKZVK8Q2X5R7M3N9P4T6W"
+}
