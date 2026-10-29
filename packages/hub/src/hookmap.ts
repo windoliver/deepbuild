@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
+import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
 import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
@@ -229,6 +230,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
+        // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
+        // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a
+        // Codex session's rollout is never read.
+        if (callKind === 'shell' && typeof call.command === 'string' && isPrCreate(call.command)) {
+          const url = prUrlIn(typeof payload.tool_response === 'string' ? payload.tool_response : JSON.stringify(payload.tool_response ?? ''));
+          if (url) meta.pr = url;
+        }
       }
       const loop = loopFact(name, tool, request.event, payload);
       if (loop) meta.loop = loop;

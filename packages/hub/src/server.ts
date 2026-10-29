@@ -439,7 +439,11 @@ class Hub {
     // A permission prompt is held while the core reads whether a saved decision covers it (#23).
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
     const before = !blocked && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    // A tool call this hub saw run marks its session as having worked, so the stop that follows at once is held for
+    // its line whether or not the core's word of the turn has come back yet (#83).
+    if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
@@ -537,7 +541,7 @@ class Hub {
     if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
     if (meta.event !== 'Stop') return null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
-    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && this.worked.has(meta.session) ? now + STOP_HOLD_MS : null;
+    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     const relation = this.stopHold();
     if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
     if (meta.watchOnly || !relation.holds || this.off) return null;
@@ -545,11 +549,13 @@ class Hub {
     // installs), and a stop whose turn did work is held for the one line the chat shows of it (#83), which the core
     // reads from the record at once. The planted wrong program holds every stop, as gates on unapproved checks would.
     // A test's planted sorter (#321) may answer any stop "proceed".
-    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
+    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !this.sawWork.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
   /** The sessions whose next stop the stop rule would read as a claim, as the core tells it beside `asking`: it is held for its line (#83). */
   private worked = new Set<string>();
+  /** The sessions a tool call of which this hub saw run since their last stop; the core's word may still be on its way. */
+  private sawWork = new Set<string>();
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {
