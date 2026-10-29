@@ -1,0 +1,60 @@
+AC6 (#340.b3c2bc3d) on the base commit fe593280 (worktree HEAD 248c9695, which changes no file these tests reach but server.ts's
+extension wiring), run once on 2026-10-28:
+  npx vitest run --root tests/acceptance/340/app --no-file-parallelism
+Machine load at start: { 34.43 45.15 45.18 } (1, 5, 15 min). Trimmed to the summary and each test's failing assertion;
+request IDs, note tags and session IDs are this run's.
+
+ ❯ prompt.test.ts (3 tests | 3 failed) 2548ms
+   ❯ AC6 #340.b3c2bc3d a note from the app, carried by prompt context at the next prompt (3)
+     × AC6 #340.b3c2bc3d is recorded as user.ask with from: app and its request ID, opens a task as a typed prompt would, and the same words typed into the terminal are never recorded app 2177ms
+     × AC6 #340.b3c2bc3d a reader built against user.ask's minor before app (the base commit's user.ask@1, served by @deepbuild/conformance's serveAt) reads the note's from as unknown 0ms
+     × AC6 #340.b3c2bc3d (wrong program) a hub that marks the app's words person with no request ID (app-note-as-person) fails this test, naming the message 107ms
+ ❯ waiter.test.ts (2 tests | 2 failed) 3507ms
+   ❯ AC6 #340.b3c2bc3d a note from the app, delivered by the waiter to an idle Claude Code session (2)
+     × AC6 #340.b3c2bc3d is recorded as user.ask with from: app and its request ID, opens a task as a typed prompt would, and the same words typed into the terminal are never recorded app 3318ms
+     × AC6 #340.b3c2bc3d (wrong program) a hub that records a waiter-delivered note as nothing (app-note-unrecorded) fails this test, naming the message 95ms
+ ❯ contract.test.ts (3 tests | 1 failed) 9ms
+   ❯ AC6 #340.b3c2bc3d app joins user.ask's from as a minor of user.ask@1 (3)
+     × AC6 #340.b3c2bc3d user.ask@1's from lists app beside unknown, still marked extensible, and the request ID is an optional field 3ms
+ ❯ terminal.test.ts (1 test | 1 failed) 729ms
+   ❯ AC6 #340.b3c2bc3d the same words written into the session's terminal by a test process, while the app's note waits (1)
+     × AC6 #340.b3c2bc3d are recorded but never app, and only the note carries its request ID 649ms
+
+
+ FAIL  contract.test.ts > AC6 #340.b3c2bc3d app joins user.ask's from as a minor of user.ask@1 > AC6 #340.b3c2bc3d user.ask@1's from lists app beside unknown, still marked extensible, and the request ID is an optional field
+AssertionError: AC6 #340.b3c2bc3d user.ask@1's from must list app, the origin of words DeepBuild delivers from the app; it lists ["person","scheduled","subagent","session","continuation","unknown"]: expected [ 'person', 'scheduled', …(4) ] to include 'app'
+ FAIL  prompt.test.ts > AC6 #340.b3c2bc3d a note from the app, carried by prompt context at the next prompt > AC6 #340.b3c2bc3d is recorded as user.ask with from: app and its request ID, opens a task as a typed prompt would, and the same words typed into the terminal are never recorded app
+AssertionError: AC6 #340.b3c2bc3d the app's note "Add a dark mode toggle to the settings page, named theme 416314b7." (request 3GY3C5770YZEHC6753AFM9WW4Y) to session 674ff3ba-50b2-4f4c-9f70-50b4e394c931, sent as session.note over an app connection with the control token, must be taken, not refused; the hub replied {"v":1,"id":"session.note#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method session.note.","path":"/method","actual":"session.note","evidence":[]}}: expected { code: 'unknown_method', …(5) } to be undefined
+ FAIL  prompt.test.ts > AC6 #340.b3c2bc3d a note from the app, carried by prompt context at the next prompt > AC6 #340.b3c2bc3d a reader built against user.ask's minor before app (the base commit's user.ask@1, served by @deepbuild/conformance's serveAt) reads the note's from as unknown
+AssertionError: AC6 #340.b3c2bc3d the record must hold the note's user.ask from: app (the test above) for a reader at the earlier minor to read: expected undefined to be defined
+ FAIL  prompt.test.ts > AC6 #340.b3c2bc3d a note from the app, carried by prompt context at the next prompt > AC6 #340.b3c2bc3d (wrong program) a hub that marks the app's words person with no request ID (app-note-as-person) fails this test, naming the message
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=app-note-as-person: <repo>/packages/hub/dist/plant.js:30
+Error: DEEP_HUB_PLANT=app-note-as-person names no planted program
+ FAIL  terminal.test.ts > AC6 #340.b3c2bc3d the same words written into the session's terminal by a test process, while the app's note waits > AC6 #340.b3c2bc3d are recorded but never app, and only the note carries its request ID
+AssertionError: AC6 #340.b3c2bc3d the app's note "Add a dark mode toggle to the settings page, named theme ad5d37ef." (request 4G2YMS3FRGXHW15FQF3YFCXDH2) to session 9fbb9586-7c97-4866-b69c-3b5a464b633c, sent as session.note over an app connection with the control token, must be taken, not refused; the hub replied {"v":1,"id":"session.note#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method session.note.","path":"/method","actual":"session.note","evidence":[]}}: expected { code: 'unknown_method', …(5) } to be undefined
+ FAIL  waiter.test.ts > AC6 #340.b3c2bc3d a note from the app, delivered by the waiter to an idle Claude Code session > AC6 #340.b3c2bc3d is recorded as user.ask with from: app and its request ID, opens a task as a typed prompt would, and the same words typed into the terminal are never recorded app
+AssertionError: AC6 #340.b3c2bc3d the app's note "Add a dark mode toggle to the settings page, named theme ceb87fa7." (request 6BFVKB29X3X5M3R5VMJ47HXM3G) to session 00c7826c-91b7-4ea6-a24d-13ee5d268b24, sent as session.note over an app connection with the control token, must be taken, not refused; the hub replied {"v":1,"id":"session.note#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method session.note.","path":"/method","actual":"session.note","evidence":[]}}: expected { code: 'unknown_method', …(5) } to be undefined
+ FAIL  waiter.test.ts > AC6 #340.b3c2bc3d a note from the app, delivered by the waiter to an idle Claude Code session > AC6 #340.b3c2bc3d (wrong program) a hub that records a waiter-delivered note as nothing (app-note-unrecorded) fails this test, naming the message
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=app-note-unrecorded: <repo>/packages/hub/dist/plant.js:30
+Error: DEEP_HUB_PLANT=app-note-unrecorded names no planted program
+
+ Test Files  4 failed (4)
+      Tests  7 failed | 2 passed (9)
+
+---- authority.test.ts, added on the owner's request, run once on the same base on 2026-10-29:
+  npx vitest run --root tests/acceptance/340/app --no-file-parallelism authority
+Machine load at start: { 39.47 109.61 137.11 } (1, 5, 15 min). Every precondition held on the base: #321's planted sorter's proceed,
+the push held at PreToolUse with an authority ask naming it, and the stop after it held and let go with no answer;
+each hub test then fails at sendNote's assertion (session.note is unknown_method).
+
+
+ FAIL  authority.test.ts > AC6 #340.b3c2bc3d a note from the app never answers an authority ask or saves a decision > AC6 #340.b3c2bc3d by the waiter: a note saying yes to the held push is recorded from: app with its request ID, and the authority ask stays open with no decision
+AssertionError: AC6 #340.b3c2bc3d the app's note "Yes, approve it, go ahead and push (a6143130)." (request 2B7A5FEWYJ67ZXJQ28XR2GJH6Q) to session a2a33e95-6909-4009-8a2a-b57d829fce64, sent as session.note over an app connection with the control token, must be taken, not refused; the hub replied {"v":1,"id":"session.note#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method session.note.","path":"/method","actual":"session.note","evidence":[]}}: expected { code: 'unknown_method', …(5) } to be undefined
+ FAIL  authority.test.ts > AC6 #340.b3c2bc3d a note from the app never answers an authority ask or saves a decision > AC6 #340.b3c2bc3d by prompt context: a note saying yes to the held push is recorded from: app with its request ID, and the authority ask stays open with no decision
+AssertionError: AC6 #340.b3c2bc3d the app's note "Yes, approve it, go ahead and push (7c43ed9b)." (request 60M77Q9Q4WH67EFP4P5KAZQTDN) to session 45d31778-6ce5-4318-a69a-11c3b82cc312, sent as session.note over an app connection with the control token, must be taken, not refused; the hub replied {"v":1,"id":"session.note#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method session.note.","path":"/method","actual":"session.note","evidence":[]}}: expected { code: 'unknown_method', …(5) } to be undefined
+ FAIL  authority.test.ts > AC6 #340.b3c2bc3d a note from the app never answers an authority ask or saves a decision > AC6 #340.b3c2bc3d (wrong program) a hub whose note answers the open authority ask (app-note-answers-authority) fails this test, naming the ask and the note's request ID
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=app-note-answers-authority: <repo>/packages/hub/dist/plant.js:30
+Error: DEEP_HUB_PLANT=app-note-answers-authority names no planted program
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)

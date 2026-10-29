@@ -1,11 +1,11 @@
 // What the core reads about a Claude Code session beside its hooks (#18): what it loads at its start, each with a
 // digest; the short briefing it gets then; and the commits made in its worktree, read from git's own files.
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { run } from './children.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -122,10 +122,9 @@ export async function headOf(cwd: string): Promise<{ sha: string; branch: string
   return /^[0-9a-f]{40}$/.test(packed) ? { sha: packed, branch: ref.replace(/^refs\/heads\//, '') } : undefined;
 }
 /** The commits from `from` (exclusive) to `to`, oldest first; just `to` when `from` isn't one of its ancestors. */
-export function commitsBetween(cwd: string, from: string, to: string): Promise<string[]> {
+export async function commitsBetween(cwd: string, from: string, to: string): Promise<string[]> {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
-  return new Promise((done) => execFile('git', ['-C', cwd, 'rev-list', '--reverse', '--max-count=100', `${from}..${to}`], { env, timeout: 10_000 }, (error, stdout) => {
-    const list = error ? [] : String(stdout).split('\n').filter((l) => /^[0-9a-f]{40}$/.test(l));
-    done(list.length ? list : [to]);
-  }));
+  const r = await run('git', ['-C', cwd, 'rev-list', '--reverse', '--max-count=100', `${from}..${to}`], { env, timeout: 10_000 });
+  const list = r.error ? [] : r.stdout.split('\n').filter((l) => /^[0-9a-f]{40}$/.test(l));
+  return list.length ? list : [to];
 }
