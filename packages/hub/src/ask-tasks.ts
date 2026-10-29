@@ -98,7 +98,8 @@ export class AskTasks {
    * that names a work item opens that item's task instead, once the source's reading shows it (`opened`).
    */
   tasksOf(p: { session: string; msg: number; text: string; from: string; queued: boolean; first: boolean }): string[] {
-    if (p.from !== 'person') return [];
+    // Your words sent from the app count as typed by you (#340).
+    if (p.from !== 'person' && p.from !== 'app') return [];
     const planted = (p.first && this.o.plant === 'first-prompt-always-task') || (p.queued && this.o.plant === 'midturn-always-task');
     return planted || asksForChange(p.text) ? [`session:${letters(p.session)}#${String(p.msg)}`] : [];
   }
@@ -266,7 +267,9 @@ export class AskTasks {
   async brief(session: string, thread: string | undefined): Promise<string | undefined> {
     const rows = await this.lockedIn(session, thread).catch(() => []);
     if (!rows.length) return undefined;
-    const lines = rows.map((r) => `- ${String(r.task_ref)}: ${(JSON.parse(String(r.requirements)) as { id: string }[]).map((q) => q.id).join(', ')}`);
+    // The planted wrong program sends each requirement's whole text, not its ID alone.
+    const said = (q: { id: string; text?: string; refuted_by?: string }) => (this.o.plant === 'brief-full-text' ? `${q.id} (${String(q.text)}; refuted by ${String(q.refuted_by)})` : q.id);
+    const lines = rows.map((r) => `- ${String(r.task_ref)}: ${(JSON.parse(String(r.requirements)) as { id: string }[]).map(said).join(', ')}`);
     return `DeepBuild: the open asks in this thread and their requirements (deep_status shows each one):\n${lines.join('\n')}`;
   }
 }
