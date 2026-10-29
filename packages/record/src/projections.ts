@@ -510,7 +510,7 @@ export class Projector {
       case 'learn.rolled_back': {
         // A change is judged at its place in the log, from the record alone; what the core read in the evidence
         // store at append comes as learn_check.made, in the same commit.
-        const judged = CHECKED.has(e.kind) ? judge(this.db, d as unknown as LearnedChange, e.writer) : undefined;
+        const judged = CHECKED.has(e.kind) ? judge(this.db, d as unknown as LearnedChange, e.writer, e.kind) : undefined;
         const state = e.kind === 'learn.proposed' ? 'proposed' : e.kind === 'learn.rolled_back' ? null : judged?.outcome ?? 'applied';
         const handle = `doc:${e.id}`;
         this.up('learned_layer', { id: e.id, kind: e.kind, layer: str(d.layer), target: str(d.target), scope: str(d.scope), created: e.ts, state, reason: judged?.reason ?? null, handle, diff: str(d.diff), evidence: json(d.evidence), supersedes: str(d.supersedes), applied_by: str(d.applied_by), log_pos: e.log_pos });
@@ -524,6 +524,13 @@ export class Projector {
         if (e.kind !== 'learn.rolled_back' || !undone) break;
         if (!ROLLERS.has(e.writer)) {
           this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE id = ?").run(`a rollback takes a change out of force only from the app, the CLI or the core, not ${e.writer}`, e.id);
+          break;
+        }
+        // What the core read of the replays a rollback cites lands just before it, in its commit: a refusal there
+        // leaves the change in force.
+        const read = this.stmt("SELECT data FROM events WHERE kind = 'learn_check.made' AND json_extract(data, '$.change') = ? AND log_pos < ? ORDER BY log_pos DESC LIMIT 1").get(handle, e.log_pos) as { data: string } | undefined;
+        if (read) {
+          this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE id = ?").run(str((JSON.parse(read.data) as Obj).reason), e.id);
           break;
         }
         if (!YOURS.has(e.writer)) {

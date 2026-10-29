@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
+import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
 import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
@@ -157,7 +158,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
   const fields: NonNullable<HookMeta['fields']> = {};
-  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
+  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
   const tool = str(payload.tool_name);
   if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
@@ -223,6 +224,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
+        // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
+        // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a
+        // Codex session's rollout is never read.
+        if (callKind === 'shell' && typeof call.command === 'string' && isPrCreate(call.command)) {
+          const url = prUrlIn(typeof payload.tool_response === 'string' ? payload.tool_response : JSON.stringify(payload.tool_response ?? ''));
+          if (url) meta.pr = url;
+        }
       }
       const loop = loopFact(name, tool, request.event, payload);
       if (loop) meta.loop = loop;

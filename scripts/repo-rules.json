@@ -1104,6 +1104,20 @@
         }
       }
     },
+    "packages/config-eval/package.json": {
+      "dependencies": {
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #112: the eval compares its replays by the record's one comparison rule (compareReplay, planHash), which the learned layer's widening also uses."
+        }
+      },
+      "devDependencies": {
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #112: the archive test stores transcripts in a real evidence store, which the task reader reads through the record's reader."
+        }
+      }
+    },
     "packages/wiki/package.json": {
       "dependencies": {
         "@deepbuild/extension-host": {

@@ -89,13 +89,18 @@ export interface HookMeta {
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
-  /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
+  /**
+   * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
+   * subagent, a stop's last message, and Codex's turn.
+   */
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
+  pr?: string;
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }
