@@ -855,6 +855,7 @@ class Hub {
   async stop(reason: string): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
+    clearTimeout(this.waitTimer);
     this.server.close();
     for (const conn of this.conns) conn.sock.destroy();
     try {

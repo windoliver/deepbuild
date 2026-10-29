@@ -9,7 +9,6 @@ export const MAX_SETS = 3;
 /** How long after its first due time a promise can still be set again: past it the promise is BLOCKED. */
 export const PROMISE_END_MS = 24 * 3_600_000;
 /** The hour a promise "in the morning" or "tomorrow" comes due, local time. */
-const MORNING_HOUR = 9;
 const HOURS: Record<string, number> = { morning: 9, noon: 12, lunch: 13, afternoon: 14, evening: 19, tonight: 20, night: 20 };
 const UNITS: Record<string, number> = { s: 1000, sec: 1000, second: 1000, m: 60_000, min: 60_000, minute: 60_000, h: 3_600_000, hr: 3_600_000, hour: 3_600_000, d: 86_400_000, day: 86_400_000, week: 7 * 86_400_000 };
 const COUNTS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, fifteen: 15, twenty: 20, thirty: 30, 'a couple of': 2, 'a few': 5, several: 5, half: 0.5 };
@@ -46,7 +45,7 @@ export function dueOf(words: string, now: number): number | undefined {
     return now + Math.round(count * ms);
   }
   const tomorrow = TOMORROW.exec(words);
-  if (tomorrow) return nextHour(now, HOURS[tomorrow[1]?.toLowerCase() ?? 'morning'] ?? MORNING_HOUR, 0, 1);
+  if (tomorrow) return nextHour(now, HOURS[tomorrow[1]?.toLowerCase() ?? 'morning'] ?? HOURS.morning!, 0, 1);
   const part = IN_PART.exec(words);
   if (part) return nextHour(now, HOURS[part[1]!.toLowerCase()]!);
   const soon = TONIGHT.exec(words);
@@ -65,7 +64,7 @@ export function dueOf(words: string, now: number): number | undefined {
     if (meridiem === 'am' && hour === 12) hour = 0;
     return nextHour(now, hour, minute);
   }
-  if (NEXT_WEEK.test(words)) return nextHour(now, MORNING_HOUR, 0, 7);
+  if (NEXT_WEEK.test(words)) return nextHour(now, HOURS.morning!, 0, 7);
   return undefined;
 }
 

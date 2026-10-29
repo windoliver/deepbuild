@@ -326,7 +326,7 @@ export class Core {
   /** The typed-saves-decision plant's sessions you typed words in. */
   private readonly typedAt = new Map<string, number>();
   /** Each session's promised check (#120): its state as the record has it, the timer for its due time, and whether its one ask was raised. */
-  private readonly promises = new Map<string, PromiseState & { timer?: NodeJS.Timeout | undefined; asked?: boolean }>();
+  private readonly promises = new Map<string, PromiseState & { timer?: NodeJS.Timeout | undefined; asked?: boolean; handed?: boolean }>();
   /** resolver-decisions with no ledger, asked whether a saved decision covers a prompt before anything is raised (#23). */
   private precheck!: Resolver;
 
@@ -890,7 +890,7 @@ export class Core {
   /** A line the chat showed of a wait: kept as the session's reading, so the next ten minutes count from it after a restart too. */
   async line(session: string, agent: string, text: string): Promise<void> {
     await this.ready;
-    await this.queue(() => this.appendReading(session, agent, text.replace(/^DeepBuild: /, '')));
+    await this.queue(() => this.appendReading(session, agent, text.replace(/^DeepBuild: /gm, '')));
   }
   /** A call still running past its expected time: recorded as an overrun, and the session's row says so. It never becomes a wait on you. */
   async overrun(m: { session: string; agent: string; cwd: string; data: Obj }): Promise<void> {
@@ -945,28 +945,30 @@ export class Core {
     const r = this.routes.get(session);
     const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && r.busy < r.waiter.since;
     await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: idle ? 'wake' : 'next_hook' });
+    p.status = 'due';
     if (idle && r.waiter) {
+      // Handed to the waiter; woken only once the wake's prompt shows it, else the next prompt or stop carries it.
       const waiter = r.waiter;
       r.waiter = undefined;
-      p.status = 'woken';
+      p.handed = true;
       waiter.give({ session, text: wakeText(p) });
-      await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: 'waiter' });
       return;
     }
-    p.status = 'due';
     await this.appendReading(session, agent, dueReading(p));
     // The event loop holds this session's next stop for it.
     this.askingSoon();
   }
   /** The due promise a session's prompt or stop carries, taken once, with how it went. */
-  private async promiseCarried(session: string, via: 'next_prompt' | 'stop_hold'): Promise<string | undefined> {
+  private async promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt = ''): Promise<string | undefined> {
     const p = this.promises.get(session);
     if (!p || p.status !== 'due') return undefined;
     p.status = 'woken';
     const agent = this.sessions.get(session)?.agent ?? 'claude-code';
-    await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via }).catch(() => undefined);
+    // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check itself.
+    const woke = via === 'next_prompt' && p.handed === true && prompt.includes(p.quote);
+    await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: woke ? 'waiter' : via }).catch(() => undefined);
     this.askingSoon();
-    return wakeText(p);
+    return woke ? undefined : wakeText(p);
   }
   private promiseDueFor(session: string): boolean { return this.promises.get(session)?.status === 'due'; }
   private async promiseBlocked(session: string, agent: string, cwd: string, p: PromiseState & { asked?: boolean }): Promise<void> {
@@ -992,7 +994,10 @@ export class Core {
       const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
       const p = this.promises.get(row.session);
       if (row.kind === 'promise.set') this.promises.set(row.session, { id: String(d.promise), quote: String(d.quote), due: Number(d.due), set: Number(d.times_set), end: Number(d.end), status: 'set', timer: undefined, asked: p?.asked ?? false });
-      else if (p && p.id === d.promise) p.status = row.kind === 'promise.due' ? (d.route === 'wake' ? 'woken' : 'due') : row.kind === 'promise.woken' ? 'woken' : 'blocked';
+      else if (p && p.id === d.promise) {
+        p.status = row.kind === 'promise.due' ? 'due' : row.kind === 'promise.woken' ? 'woken' : 'blocked';
+        if (row.kind === 'promise.due' && d.route === 'wake') p.handed = true;
+      }
       if (row.kind === 'promise.blocked' && p) p.asked = true;
     }
     for (const [session, p] of this.promises) {
@@ -1422,12 +1427,10 @@ export class Core {
       // A promised check that came due before this waiter asked (a hub restarted on the record, the waiter back a
       // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
       const p = this.promises.get(session);
-      if (p?.status === 'due') {
+      if (p?.status === 'due' && !p.handed) {
         r.waiter = undefined;
-        p.status = 'woken';
+        p.handed = true;
         waiter.give({ session, text: wakeText(p) });
-        await this.appendSession(session, this.sessions.get(session)?.agent ?? 'claude-code', 'promise.woken', { promise: p.id, via: 'waiter' }).catch(() => undefined);
-        this.askingSoon();
         return;
       }
       const rows = await this.waitingFor(session);
@@ -1651,7 +1654,7 @@ export class Core {
         const answers = leaves ? undefined : await this.deliver(waiting, 'next_prompt');
         // A verdict that landed after the stop's reply goes with the next prompt (#83).
         const landed = await this.landedLine(meta.session);
-        const promised = await this.promiseCarried(meta.session, 'next_prompt');
+        const promised = await this.promiseCarried(meta.session, 'next_prompt', prompt);
         const context = [answers, promised, ...r.later.splice(0), landed && `DeepBuild: ${landed}`].filter(Boolean).join('\n\n');
         return { ...(context ? { context } : {}), ...(status ? { message: status } : {}) };
       });
