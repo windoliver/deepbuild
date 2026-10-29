@@ -38,7 +38,7 @@ import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
+import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { checkArguments } from './tools.js';
@@ -168,9 +168,9 @@ interface Live {
   /**
    * Its turns as the verdict line judges them (#83): the turn's count and whether the stop rule reads its stop as a
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
-   * one that lands later goes with the next prompt; and how far its transcript was read for `gh pr create` calls.
+   * one that lands later goes with the next prompt.
    */
-  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined; scanned: { first?: unknown; entries: number; calls: Set<string> };
+  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
 }
 /**
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
@@ -464,6 +464,7 @@ export class Core {
       this.endTurn(session);
       this.judge(session);
     }
+    await this.judgedAcrossRestart();
     await this.recoverRuns();
     await this.retain();
     this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
@@ -781,7 +782,7 @@ export class Core {
 
   private liveOf(meta: HookMeta): Live {
     let live = this.live.get(meta.session);
-    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: false, scanned: { entries: 0, calls: new Set() } }));
+    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: false }));
     return live;
   }
   private registry(): AdapterRegistry {
@@ -803,6 +804,8 @@ export class Core {
     const foreign = FOREIGN.has(meta.agent);
     for (const draft of drafts) {
       const data = draft.data;
+      // The pull request a `gh pr create` call opened, read once off its own PostToolUse (#83).
+      if (draft.kind === 'tool.after' && meta.pr) await this.openedPr(meta.session, live.agent, meta.pr);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
@@ -1846,7 +1849,6 @@ export class Core {
   private async judging(meta: HookMeta): Promise<Live | undefined> {
     const live = this.live.get(meta.session);
     if (!live?.judged) return undefined;
-    await this.recordPr(meta.session, live);
     // The claims the rule made at this stop, for the locked ask-tasks (#303): the newest is the one the line reads.
     const made = (await live.claiming) ?? [];
     live.claiming = undefined;
@@ -1871,6 +1873,22 @@ export class Core {
     if (live.state === 'finished' || live.state === 'failed') await this.attention(meta.session, live.agent, live.state);
     return live;
   }
+  /**
+   * A session whose turn this hub's restart interrupted, with work the stop rule would read as a claim, is judged
+   * from the start (#83): its stop is held for its line, as it would have been had the hub stayed up.
+   */
+  private async judgedAcrossRestart(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT id, agent, worktree FROM sessions WHERE status NOT IN ('finished', 'failed') AND id IN (${[...this.cursors.keys()].map((id) => `'${sql(id)}'`).join(', ') || "''"})`).catch(() => [])) as { id: string; agent: string | null; worktree: string | null }[];
+    for (const row of rows) {
+      if (!this.stopRule(await this.counterOf(row.id))) continue;
+      // A session the spool replay already brought back keeps what the replay knew of it.
+      const live = this.live.get(row.id);
+      if (live) live.judged = true;
+      else this.live.set(row.id, { agent: row.agent ?? 'claude-code', cwd: row.worktree && row.worktree !== '-' ? row.worktree : '', last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: true });
+    }
+    // Told before the hub reports ready, so the stop that comes first is held.
+    await this.askingNow();
+  }
   /** The line a judged stop carries, from the record as it stands now, never from the agent's words. */
   private async judgedLine(live: Live): Promise<string> {
     const state = live.claim && live.claimTurn === live.turn ? await this.stateOf(live.claim) : undefined;
@@ -1891,29 +1909,13 @@ export class Core {
     return line;
   }
   /**
-   * The pull request a turn opened with `gh pr create`, read from the call's result in the transcript and recorded
-   * once as a session.reading. Only a call that is that one command (`isPrCreate`) counts, so an echoed URL never
-   * passes for one; the turn's entries are read on from where the last stop left them, from their start when a
-   * prompt began them anew.
+   * The pull request a session opened with `gh pr create`, read from the call's own PostToolUse (hookmap) and
+   * recorded once as a session.reading, for the receipt (#83); a Codex session's too, whose rollout is never read.
    */
-  private async recordPr(session: string, live: Live): Promise<void> {
-    const s = this.sessions.get(session);
-    if (!s) return;
-    const { scanned } = live;
-    if (s.entries[0] !== scanned.first) { scanned.first = s.entries[0]; scanned.entries = 0; scanned.calls.clear(); }
-    for (const entry of s.entries.slice(scanned.entries)) {
-      const parts = isObj(entry.message) && Array.isArray(entry.message.content) ? entry.message.content.filter(isObj) : [];
-      for (const part of parts) {
-        if (part.type === 'tool_use' && part.name === 'Bash' && isObj(part.input) && isPrCreate(String(part.input.command ?? '')) && typeof part.id === 'string') scanned.calls.add(part.id);
-        if (part.type !== 'tool_result' || typeof part.tool_use_id !== 'string' || !scanned.calls.delete(part.tool_use_id)) continue;
-        const url = prUrlIn(typeof part.content === 'string' ? part.content : JSON.stringify(part.content ?? ''));
-        if (!url) continue;
-        const reading = `Opened pull request ${url}`;
-        const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.reading' AND json_extract(data, '$.reading') = '${sql(reading)}' LIMIT 1`);
-        if (!seen) await this.appendReading(session, live.agent, reading);
-      }
-    }
-    scanned.entries = s.entries.length;
+  private async openedPr(session: string, agent: string, url: string): Promise<void> {
+    const reading = `Opened pull request ${url}`;
+    const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.reading' AND json_extract(data, '$.reading') = '${sql(reading)}' LIMIT 1`);
+    if (!seen) await this.appendReading(session, agent, reading);
   }
   /** The pull request a session opened, as its readings record it: the newest. */
   private async prOf(session: string | null): Promise<string | undefined> {
@@ -2718,6 +2720,9 @@ export class Core {
     try {
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
+      // What deep-hook spooled ran before this call, as a hook's does: a replay running goes first, so a claim comes
+      // after the call it follows, not before the work it claims.
+      await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search'));
       switch (tool) {
@@ -3058,8 +3063,12 @@ export class Core {
     // the next prompt, as a prompt that opened none.
     const [prompt] = session ? await this.record.raw(`SELECT json_extract(data, '$.from') AS f, json_extract(data, '$.tasks[0]') AS task, log_pos FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask' ORDER BY log_pos DESC LIMIT 1`).catch(() => []) as { f: string | null; task: string | null; log_pos: number }[] : [];
     const [started] = prompt ? await this.record.raw(`SELECT 1 AS one FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.start' AND log_pos > ${prompt.log_pos} LIMIT 1`).catch(() => []) as { one: number }[] : [];
+    // The turn's work since its last boundary (its prompt, its last stop or a start), so a turn a hub restart
+    // interrupted is judged at its stop as the rule reads it (#83): a tool call, and one that may have changed code.
+    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events WHERE session_id = '${sql(session)}' AND kind IN ('user.ask', 'agent.stop', 'session.start')`).catch(() => []) as { at: number | null }[] : [];
+    const calls = boundary?.at !== null && boundary?.at !== undefined ? (await this.record.raw(`SELECT json_extract(data, '$.kind') AS k FROM events WHERE session_id = '${sql(session)}' AND kind = 'tool.after' AND log_pos > ${boundary.at}`).catch(() => [])) as { k: string | null }[] : [];
     const count = this.counters.get(session) ?? {
-      msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: false,
+      msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: calls.length > 0, changed: calls.some((c) => !READS.has(String(c.k))),
       ...(prompt ? { prompt: { person: prompt.f === 'person', opened: prompt.task !== null }, fresh: started !== undefined } : {}),
     };
     this.counters.set(session, count);
