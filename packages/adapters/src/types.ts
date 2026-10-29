@@ -41,10 +41,14 @@ export interface TurnUsage {
 }
 export interface Skill { name: string; source: string }
 
-/** What the adapter is handed for a permission request: the asks core's delivery, plus the chosen option's label. */
+/**
+ * What the adapter is handed for a permission request: the asks core's delivery, plus the chosen option's label, as
+ * permission.answer@1 has it: allow, deny or cancel (the ask was cancelled, so the agent's own dialog asks), for this
+ * call or for the session.
+ */
 export interface PermissionAnswer {
   ask: string; session: string; option: string | null; label: string | null;
-  decision: 'allow' | 'deny' | 'none'; words: string | null; provisional: boolean; undoes: string | null;
+  decision: 'allow' | 'deny' | 'cancel' | 'none'; for?: 'call' | 'session'; words: string | null; provisional: boolean; undoes: string | null;
 }
 
 export interface Adapter {

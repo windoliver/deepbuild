@@ -77,9 +77,26 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
   if (o.plant === 'fail-closed-only-rules') entries = Object.fromEntries(Object.entries(entries).filter(([, e]) => isObj(e) && e.fail_closed === true));
   const kept = isObj(current.proofs) ? current.proofs : {};
   const names = Object.keys(given.entries);
-  const rules = { v: 1, entries, proofs: { ...kept, ...Object.fromEntries(names.map((n) => [n, proofs[n]])) }, classes: o.classes };
+  const rules = { v: 1, entries, proofs: { ...kept, ...Object.fromEntries(names.map((n) => [n, proofs[n]])) }, classes: o.classes, ...(Array.isArray(current.standing) ? { standing: current.standing } : {}) };
   writeSynced(file, Buffer.from(`${JSON.stringify(rules, null, 2)}\n`));
   return { status: 'installed', names };
+}
+
+/**
+ * Copies your standing rules for cloud resources into `<dir>/rules.json` (#23), keeping every other member, so
+ * deep-hook lets a call one covers through with the hub down. Written only when they changed.
+ */
+export function writeStanding(dir: string, standing: readonly unknown[]): void {
+  const file = join(dir, 'rules.json');
+  let current: Obj;
+  try {
+    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
+  } catch {
+    // No rules.json, or one deep-hook can't read either: nothing to add a rule to.
+    return;
+  }
+  if (!isObj(current.entries) || JSON.stringify(current.standing ?? []) === JSON.stringify(standing)) return;
+  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, standing }, null, 2)}\n`));
 }
 
 const USAGE = 'Usage: deep guard add <file>';

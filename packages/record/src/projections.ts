@@ -352,8 +352,14 @@ export class Projector {
         this.stmt("UPDATE decisions SET state = 'revoked' WHERE id = ?").run(bare(d.decision));
         break;
       case 'decision.overruled':
-        // Overruled on the trusted path: it answers nothing from then on.
+        // Overruled on the trusted path: it answers nothing from then on. Overruled at one scope (@2), it keeps
+        // answering everywhere else, so its state stands.
+        if (typeof d.at === 'string') break;
         this.stmt("UPDATE decisions SET state = 'revoked', overruled_by = ? WHERE id = ?").run(e.id, bare(d.decision));
+        break;
+      case 'decision.judged':
+        // A standing rule judged by what later broke (#23): active, frozen or revoked, and revoked is final.
+        this.stmt("UPDATE decisions SET state = ? WHERE id = ? AND state != 'revoked'").run(str(d.state), bare(d.decision));
         break;
       case 'definition.drafted':
         this.add('definitions', this.definition(d, 'drafted', null));
