@@ -3,9 +3,10 @@
 // right after any one of them as by kill -9, every sync can be held, and every write can be refused, as on a
 // full disk. The ledger then lives in memory, and only what a FULL commit made durable reaches ledger.db, so a
 // cut loses exactly what a power cut would: every NORMAL commit after the last FULL one.
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { closeSync, constants, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync, type Dirent } from 'node:fs';
+import { copyFile, mkdir, open, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import Database from 'better-sqlite3';
+import Database, { type Statement } from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
 import type { VfsSettings } from './wire.js';
 
@@ -72,6 +73,48 @@ export function syncPath(path: string): void {
   }
 }
 
+/** Syncs the file or folder at `path` without holding up the thread. */
+export async function synced(path: string): Promise<void> {
+  const handle = await open(path, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+const gone = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+/**
+ * Copies the folder `from` to `to`, which mustn't exist, each file and folder synced (#572). It copies plain files
+ * and folders only, so no link is followed; skips a file still being written (the evidence store's `.tmp-` files, the
+ * wiki's `.tmp` ones); and skips what retention removes mid-walk, as it would be gone a moment later anyway.
+ */
+export async function copySynced(from: string, to: string): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(from, { withFileTypes: true });
+  } catch (error) {
+    if (gone(error)) return;
+    throw error;
+  }
+  await mkdir(to, { mode: 0o700 });
+  for (const entry of entries) {
+    if (entry.name.startsWith('.tmp-') || entry.name.endsWith('.tmp')) continue;
+    const [src, dst] = [join(from, entry.name), join(to, entry.name)];
+    if (entry.isDirectory()) await copySynced(src, dst);
+    if (!entry.isFile()) continue;
+    try {
+      await copyFile(src, dst, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if (gone(error)) continue;
+      throw error;
+    }
+    await synced(dst);
+  }
+  await synced(to);
+}
+
 export function testVfs(settings: VfsSettings): Durable {
   let n = 0;
   const held = new Int32Array(new SharedArrayBuffer(4));
@@ -95,9 +138,18 @@ export function testVfs(settings: VfsSettings): Durable {
     probe: () => !refusing(),
     backend() {
       let file: string | undefined;
+      // Each database's statements, prepared once: every commit runs the same three.
+      const statements = new WeakMap<Db, Map<string, Statement>>();
+      const prepared = (db: Db, sql: string): Statement => {
+        let byText = statements.get(db);
+        if (!byText) statements.set(db, (byText = new Map()));
+        let s = byText.get(sql);
+        if (!s) byText.set(sql, (s = db.prepare(sql).pluck()));
+        return s;
+      };
       const scalar = (db: Db, sql: string): unknown => {
         try {
-          return db.prepare(sql).pluck().get();
+          return prepared(db, sql).get();
         } catch {
           return undefined;
         }
@@ -119,7 +171,7 @@ export function testVfs(settings: VfsSettings): Durable {
             // A refused write fails at the commit, after the body ran, as a disk's does.
             if (refusing()) throw Error('SQLITE_IOERR: the test VFS refuses writes');
           })();
-          const ids = db.prepare('SELECT id FROM events WHERE log_pos > ? ORDER BY log_pos').pluck().all(before) as string[];
+          const ids = prepared(db, 'SELECT id FROM events WHERE log_pos > ? ORDER BY log_pos').all(before) as string[];
           if (mode === 'full') {
             vfs.sync();
             // The image reaches ledger.db at once only when a cut is set up, the one way this process ends

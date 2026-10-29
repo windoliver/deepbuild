@@ -59,6 +59,9 @@ const wrap = (store: RecordStore): RecordStore => ({
   raw: (sql) => store.raw(sql),
   sync: () => store.sync(),
   startSlice: (id) => store.startSlice(id),
+  loadLearned: (id) => store.loadLearned(id),
+  resolve: (handle) => store.resolve(handle),
+  keep: (connection, file) => store.keep(connection, file),
   rollBack: (connection, what) => store.rollBack(connection, what),
   close: () => store.close(),
 });
