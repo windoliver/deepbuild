@@ -42,7 +42,7 @@ function exchange(socket: string, line: string): Promise<{ ack: Record<string, u
 }
 
 // An outside package: it denies a command that names `deny-me`, sleeps past any deadline on one that names
-// `late-me`, and adds one templated block to every other call.
+// `late-me`, answers nothing on one that names `quiet-me`, and adds one templated block to every other call.
 const MANIFEST = {
   id: ID, version: '1.0.0', digest: 'd1:0000000000000000000000000000000000000000000000000000000000000000',
   access: { words: ['record'] },
@@ -56,6 +56,7 @@ const CODE = `export default function (deep: any): void {
     const command = String(req?.data?.command ?? '');
     if (command.includes('deny-me')) return { deny: { template: 'blocked', values: { what: 'force-push' } } };
     if (command.includes('late-me')) { await new Promise((r) => setTimeout(r, 10_000)); return null; }
+    if (command.includes('quiet-me')) return null;
     return { context: { template: 'open', values: { count: 3 } } };
   });
 }
@@ -136,6 +137,32 @@ describe('an extension on the hub answers tool.before', () => {
       } finally {
         db.close();
       }
+    });
+  }, 120_000);
+
+  it('is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning', async () => {
+    await withHub(async (root, home, hub) => {
+      const socket = join(root, 'hub.sock');
+      await install(home, root);
+      const guard = { match: 'run:git push', scope: 'all_repos', mode: 'warn', reason: 'Pushes go to a shared branch.', next_step: 'Check the branch first.', fail_closed: false };
+      writeFileSync(join(root, 'rules.json'), JSON.stringify({ v: 1, entries: { 'check-branch': guard } }), { mode: 0o600 });
+      await hub.restart();
+
+      const denied = await exchange(socket, request('01K74FKZVKZGATTBZAEGPRET91', 'git push --force deny-me', { matched: ['check-branch'] }));
+      expect(denied.reply.exit, `a warn entry doesn't let the extension's deny go: ${JSON.stringify(denied.reply)}`).toBe(2);
+      expect(String(denied.reply.stderr)).toContain('this is a force-push call');
+
+      const told = await exchange(socket, request('01K74FKZVKZGATTBZAEGPRET92', 'git push origin main', { matched: ['check-branch'] }));
+      expect(told.reply.exit).toBe(0);
+      const context = (JSON.parse(String(told.reply.stdout)) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext;
+      expect(context).toContain('DeepBuild warns: Pushes go to a shared branch. Check the branch first. (guard check-branch)');
+      expect(context).toContain('3 notes are open');
+
+      // A handler with nothing to add, or one that never answers: the warning still goes out, as with no extension.
+      const quiet = await exchange(socket, request('01K74FKZVKZGATTBZAEGPRET94', 'git push quiet-me', { matched: ['check-branch'] }));
+      expect(String(quiet.reply.stdout)).toContain('(guard check-branch)');
+      const late = await exchange(socket, request('01K74FKZVKZGATTBZAEGPRET93', 'git push late-me', { matched: ['check-branch'] }));
+      expect(String(late.reply.stdout)).toContain('(guard check-branch)');
     });
   }, 120_000);
 });

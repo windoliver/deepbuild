@@ -53,6 +53,22 @@
       },
       "description": "For a matched entry, by name, what deep-hook read of this call that a person needs to act on it, such as the other checkout a git command is aimed at or the dispatch it would run; the hub shows it with that entry's denial."
     },
+    "stage": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[^\\s]+$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "maxItems": 256
+      },
+      "description": "For a matched entry whose match is effect:unknown-reach-delete, by name, the absolute folders the delete names, for the hub to stage as a copy-on-write copy before it runs. An entry with no list here names a value the line can't know: nothing can be staged for it."
+    },
     "payload": {
       "x-opaque": "the agent's hook JSON, unchanged; its adapter reads it",
       "description": "The agent's hook JSON, unchanged."

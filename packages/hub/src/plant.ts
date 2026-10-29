@@ -38,7 +38,9 @@ export type Plant =
   // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
   // continuations taken for yours or read by their look, every enqueue counted, and a brief sent 25 ms late.
   | 'brief-full-text' | 'brief-at-startup-only' | 'queue-shows-newest' | 'continuation-as-person' | 'continuation-by-likeness'
-  | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority';
+  | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority'
+  // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
+  | 'stages-without-ceiling' | 'stages-unpredicted-writes';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -66,6 +68,7 @@ const PLANTS: readonly string[] = [
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
+  'stages-without-ceiling', 'stages-unpredicted-writes',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

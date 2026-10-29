@@ -220,12 +220,15 @@ export class AskTasks {
    * A stop the stop rule reads as a claim: a claim for each open task of the session's thread with a locked
    * definition, carrying the hash recomputed from the stored definition and the checks' bytes now. A check whose
    * bytes differ from the approved ones is a proposal naming its file; the claim's checks run the approved bytes,
-   * read from the evidence store by digest, never the file in the folder the agent works in.
+   * read from the evidence store by digest, never the file in the folder the agent works in. Answers the claims it
+   * made, in order; one task's failure is reported and the others still claimed.
    */
-  async claim(session: string, agent: string, cwd: string): Promise<void> {
+  async claim(session: string, agent: string, cwd: string): Promise<string[]> {
     const head = await headOf(cwd).catch(() => undefined);
+    const made: string[] = [];
     for (const row of await this.lockedIn(session)) {
       const task_ref = String(row.task_ref);
+      try {
       const stored = JSON.parse(String(row.requirements)) as Requirement[];
       const requirements: Requirement[] = [];
       const changed: { check: string; approved: string | null; now: string | null }[] = [];
@@ -248,6 +251,7 @@ export class AskTasks {
         v: 3, id, kind: 'claim.made', ts,
         data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash: this.hashOf(definition) },
       });
+      made.push(`claim:${id}`);
       for (const c of changed) {
         const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
         const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = '${sql(diff)}' LIMIT 1`);
@@ -260,7 +264,11 @@ export class AskTasks {
       }
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
       for (const r of stored) if (r.check && r.check_sha256) await this.o.run({ claim: `claim:${id}`, check: r.check, approved: r.check_sha256, commit, cwd });
+      } catch (error) {
+        process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
+      }
     }
+    return made;
   }
 
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */
