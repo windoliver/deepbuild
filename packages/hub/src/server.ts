@@ -4,11 +4,12 @@
 // credential it presents in its first line, and every event takes its writer from that role.
 import { execFileSync } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { shipped, type HookRequestLine } from '@deepbuild/adapters';
+import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
@@ -36,7 +37,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
@@ -63,21 +64,26 @@ const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
+/** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
+const warnings = (ruled: string): string[] =>
+  ruled === EMPTY_REPLY ? [] : [(JSON.parse(String((JSON.parse(ruled) as Obj).stdout)) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext];
 /**
  * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
- * as deep-hook's own denials are; context goes as Claude Code reads it, each block labelled with its extension. An
- * agent with no context channel gets only the denies.
+ * as deep-hook's own denials are; context goes as Claude Code reads it, after a warn entry's words, each block
+ * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
+ * with no context, gets it as it is.
  */
-function agentReply(agent: string, reply: ExtensionReply): string {
+function agentReply(agent: string, reply: ExtensionReply, ruled: string): string {
   if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
-  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return EMPTY_REPLY;
-  const additionalContext = reply.context.map((b) => `[${b.extension}] ${b.text}`).join('\n');
+  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
+  const additionalContext = [...warnings(ruled), ...reply.context.map((b) => `[${b.extension}] ${b.text}`)].join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
 /** Context Claude Code adds to the session: at a session's start or a prompt, never a decision. */
 const contextReply = (event: string, text: string): string => line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' });
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
+
 
 interface CoreLink {
   post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' }): void;
@@ -227,7 +233,7 @@ class Hub {
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
   readonly start = ulid(Date.now());
-  private readonly helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES });
+  private helloLine = '';
 
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {}
 
@@ -259,6 +265,9 @@ class Hub {
       this.exit(1);
     };
     const asking = (sessions: string[]) => { this.asking = new Set(sessions); };
+    // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
+    // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
+    this.helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES, generation: writerGeneration(this.root.ledger) });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking) : coreWorker(options, frame, fatal, asking);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
@@ -410,11 +419,12 @@ class Hub {
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     const ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
-    // the core's gate first (#321, #23).
-    const gated = ruled === EMPTY_REPLY ? this.gated(meta, parsed.drafts) : undefined;
+    // the core's gate first (#321, #23); a warn entry's words go out with the gate's reply.
+    const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+    const gated = blocked ? undefined : this.gated(meta, parsed.drafts);
     // A permission prompt is held while the core reads whether a saved decision covers it (#23).
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
-    const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    const before = !blocked && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
@@ -424,8 +434,8 @@ class Hub {
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
     if (prompted) void this.permissionReply(conn, meta, hold!);
-    else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data);
-    else if (before) void this.extensionReply(conn, meta, before.data, hold!);
+    else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
+    else if (before) void this.extensionReply(conn, meta, before.data, hold!, ruled);
     else if (held !== null) void this.coreReply(conn, meta, held);
   }
 
@@ -471,25 +481,30 @@ class Hub {
     }
     conn.sock.end(line({ exit: 0, stdout: JSON.stringify(reply), stderr: '' }));
   }
-  /** The gate's reply, written by its hold: a held call is denied with its ask; one the gate didn't decide in time too. */
-  private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown): Promise<void> {
+  /**
+   * The gate's reply, written by its hold: a held call is denied with its ask; one the gate didn't decide in time too.
+   * A call it lets go gets `ruled`, the guard entries' reply.
+   */
+  private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
     const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
-    const ruled = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
-    const why = 'late' in ruled ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
-      : ruled.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${ruled.failed}). Run it again.` : ruled.held ?? ruled.deny;
+    const why = 'late' in gate ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
+      : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
     if (why) return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
-    if (before !== undefined) return this.extensionReply(conn, meta, before, hold);
-    // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call.
-    const allow = 'late' in ruled ? undefined : ruled.allow;
+    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
+    // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call;
+    // a warn entry's words go with it.
+    const allow = 'late' in gate ? undefined : gate.allow;
     if (allow !== undefined && (meta.agent === 'claude-code' || meta.agent === 'claude')) {
       const past = !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode';
-      const output = { hookEventName: 'PreToolUse', ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext: allow };
+      const additionalContext = [...warnings(ruled), allow].join('\n');
+      const output = { hookEventName: 'PreToolUse', ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext };
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
-    conn.sock.end(EMPTY_REPLY);
+    conn.sock.end(ruled);
   }
 
   /**
@@ -537,12 +552,12 @@ class Hub {
    * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
    * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
    */
-  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number): Promise<void> {
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply) : EMPTY_REPLY);
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
   }
 
   /**
@@ -766,6 +781,12 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   const lock = takeLock(root.lock);
   if (!lock) {
     process.stderr.write(`deep hub: a hub is already running on ${root.dir}: it holds the lock\n`);
+    return 1;
+  }
+  // A restore cut off midway may have put back the record without its evidence and wiki, or the reverse (#572).
+  if (existsSync(root.restoring)) {
+    lock.release();
+    process.stderr.write(`deep hub: a restore didn't finish: run deep restore ${readFileSync(root.restoring, 'utf8').trim()} again, then start the hub\n`);
     return 1;
   }
   // A hangup isn't a stop: closing the terminal or SSH session that started the hub leaves it running.
