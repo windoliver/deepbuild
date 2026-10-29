@@ -4387,7 +4387,8 @@ export interface UserAsk {
     msg: number;
     text: string;
     tasks: Array<string>;
-    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "unknown";
+    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
+    request?: string;
   };
   evidence?: Array<string>;
 }
