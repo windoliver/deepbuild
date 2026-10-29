@@ -33,6 +33,12 @@ export type Plant =
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
   | 'runs-disk-bytes'
+  // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
+  | 'app-note-unrecorded' | 'app-note-as-person'
+  // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
+  // continuations taken for yours or read by their look, every enqueue counted, and a brief sent 25 ms late.
+  | 'brief-full-text' | 'brief-at-startup-only' | 'queue-shows-newest' | 'continuation-as-person' | 'continuation-by-likeness'
+  | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority'
   // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
   | 'stages-without-ceiling' | 'stages-unpredicted-writes';
 const PLANTS: readonly string[] = [
@@ -59,6 +65,9 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'app-note-unrecorded', 'app-note-as-person',
+  'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
+  'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
