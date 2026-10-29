@@ -378,6 +378,7 @@ A tick is a millisecond. A stop `at` T makes a claim on `snapshot`; its checkout
 13. **"Touched".** The hub tests take an ask as touched when the turn did work while it was open; the pure `claimsFor` takes `touched` as given. `deep_claim` and `gh pr create` are tested only through `claimsFor` (`gh pr create` meets an authority hold through deep-hook).
 10. **Budgets.** The merge base has no gate runner, so "compared with the merge base" has nothing to compare; AC18 holds the
     absolute limits on a reference Mac and the p50 comparison belongs to the perf lane once a base has the runner.
+14. **Blind redraft (see REDRAFT.md).** AC37's goal ends its script on a continuation 1 s after the fourth reply, because a grace window that ends with no prompt starts a held check (rule 9), which would make "the fourth stop starts nothing" false for a correct runner; the paths `start()` is handed (`checkout`, `worktree`) are the scheduler's own, so AC33's scheduler tests record them and assert against those, never against paths of their own.
 
 ## Criteria to tests
 

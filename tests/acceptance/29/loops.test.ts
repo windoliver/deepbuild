@@ -59,6 +59,9 @@ function claimTurn(via: 'deep_claim' | 'gh_pr_create', plant?: SchedulerPlant) {
     prompt(5000, 'continuation'), edit(6000, 'S2'), stop(7000, 'S2'),
     prompt(10_000, 'continuation'), edit(11_000, 'S3'), { at: 11_500, kind: 'claim', via }, stop(12_000, 'S3'),
     prompt(315_000, 'continuation'), edit(316_000, 'S4'), stop(317_000, 'S4'),
+    // The goal's next continuation comes 1 s after the fourth reply (319 s), well inside the grace window, so the loop has not
+    // paused: a grace window that ended with no prompt would start the held place (README rule 9), which is AC39's case, not this one.
+    prompt(320_000, 'continuation'),
   ];
   const sc: Scenario = { config: { slots: 2, stop_timeout_ms: 45 * MINUTE }, sessions: [script('G', 'codex-observed', [unit(), journey()], events, { facts: { goal: 'active' } })] };
   return simulate(sc, plant ? { plant } : {});
@@ -68,14 +71,17 @@ function ac37(via: 'deep_claim' | 'gh_pr_create', plant?: SchedulerPlant) {
   const runs = runsOf(t, J);
   expect(runs.map((r) => r.snapshot), `claim ${via}: the journey runs on the claim's snapshot only`).toEqual(['S3']);
   expect(runs[0]!.started_at, `claim ${via}: starts when the stop's fast-lane checks end`).toBe(14_000);
-  expect(['claim', 'turn_end']).toContain(runs[0]!.started_by);
+  expect(['claim', 'turn_end', 'loop_paused'], `claim ${via}: started by the claim's turn end`).toContain(runs[0]!.started_by);
+  expect(heldOf(t, 'S1')?.replaced_by, `claim ${via}: as in the goal's first turns, the first snapshot's held place goes to the second`).toBe('S2');
   const s3 = stopOf(t, 'G', 3);
   expect(s3.reply_at, `claim ${via}: its stop is held until the journey lands`).toBe(14_000 + JOURNEY);
   expect(s3.held.slow, `claim ${via}: slow hold`).toBe(JOURNEY);
   const s4 = stopOf(t, 'G', 4);
   expect(s4.reply_at, `claim ${via}: the fourth stop replies when its fast lane ends`).toBe(s4.at + 2000);
   expect(s4.held.slow).toBe(0);
-  expect(heldOf(t, 'S4'), `claim ${via}: the fourth stop takes the held place again`).toBeDefined();
+  const h4 = heldOf(t, 'S4');
+  expect(h4, `claim ${via}: the fourth stop takes the held place again`).toBeDefined();
+  expect(h4!.started_at, `claim ${via}: the fourth snapshot's held place is not started, with the slot free and the continuation 1 s after its reply`).toBeNull();
   expect(runsOf(t, J, 'S4'), `claim ${via}: and starts nothing`).toEqual([]);
 }
 describe('AC37 a claim in a goal turn starts the journey at its green stop', () => {
