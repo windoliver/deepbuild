@@ -1161,6 +1161,64 @@ const WAITER_LOOK: Duration = Duration::from_millis(500);
 
 extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
+    #[cfg(target_os = "macos")]
+    fn sysctl(
+        name: *const i32,
+        namelen: u32,
+        oldp: *mut u8,
+        oldlenp: *mut usize,
+        newp: *const u8,
+        newlen: usize,
+    ) -> i32;
+}
+
+/// A process's arguments, as it was started: macOS's KERN_PROCARGS2 (argc, the executable's path, padding, then
+/// argc strings), or Linux's /proc cmdline. Empty when they can't be read.
+fn args_of(pid: u32) -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    let raw = {
+        // CTL_KERN, KERN_PROCARGS2; 1 MiB holds the largest argument area the kernel allows.
+        let mib = [1, 49, pid as i32];
+        let mut buf = vec![0u8; 1 << 20];
+        let mut len = buf.len();
+        // SAFETY: the buffer is len bytes long and the kernel writes at most len into it.
+        let read = unsafe {
+            sysctl(
+                mib.as_ptr(),
+                3,
+                buf.as_mut_ptr(),
+                &mut len,
+                std::ptr::null(),
+                0,
+            )
+        };
+        if read != 0 || len < 4 {
+            return Vec::new();
+        }
+        buf.truncate(len);
+        let argc = i32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]).max(0) as usize;
+        let rest = &buf[4..];
+        // Past the executable's path and the NULs after it.
+        let path = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        let start = rest[path..]
+            .iter()
+            .position(|&b| b != 0)
+            .map_or(rest.len(), |at| path + at);
+        rest[start..]
+            .split(|&b| b == 0)
+            .take(argc)
+            .map(<[u8]>::to_vec)
+            .collect::<Vec<_>>()
+    };
+    #[cfg(target_os = "linux")]
+    let raw = fs::read(format!("/proc/{pid}/cmdline"))
+        .unwrap_or_default()
+        .split(|&b| b == 0)
+        .map(<[u8]>::to_vec)
+        .collect::<Vec<_>>();
+    raw.into_iter()
+        .map(|arg| String::from_utf8_lossy(&arg).into_owned())
+        .collect()
 }
 
 /// Whether a process still runs: signal 0 reaches it, or would but for permission.
@@ -1248,6 +1306,15 @@ fn waiter() -> ExitCode {
         quoted(&field("cwd"))
     );
     let agent = std::os::unix::process::parent_id();
+    // A print run (`claude -p`) has no later turn to wake, and it waits for its async Stop entries before it exits,
+    // while this waits for it to exit: under one, the waiter is done at once (#668).
+    if args_of(agent)
+        .iter()
+        .skip(1)
+        .any(|arg| arg == "-p" || arg == "--print")
+    {
+        return ExitCode::SUCCESS;
+    }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
     let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
     let gone = || watched && (std::os::unix::process::parent_id() != agent || !alive(agent));

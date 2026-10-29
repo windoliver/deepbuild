@@ -4,7 +4,7 @@
 // output or a backfill never holds up the event loop that acknowledges hooks.
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -28,6 +28,7 @@ import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
 import { addGuards } from './guards.js';
+import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
@@ -160,19 +161,26 @@ interface Live {
   calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; reading?: Promise<void>;
   from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: number; looping: boolean;
   /**
-   * Its turns as the verdict line judges them (#83): the turn's count and whether it did work (an edit, a write or a
-   * command); the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
+   * Its turns as the verdict line judges them (#83): the turn's count and whether the stop rule reads its stop as a
+   * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
    * one that lands later goes with the next prompt; and how far its transcript was read for `gh pr create` calls.
    */
-  turn: number; turnFrom?: string | undefined; turnTask?: string | undefined; worked: boolean; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined; scanned: { first?: unknown; entries: number; calls: Set<string> };
+  turn: number; turnTask?: string | undefined; judged: boolean; stopAt?: number; claiming?: Promise<unknown> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined; scanned: { first?: unknown; entries: number; calls: Set<string> };
 }
-/** The tool kinds whose call is work a stop is judged on (design: Every stop is judged): a change, never a read. */
+/** The tool kinds whose call changes code, after which a turn's standing claim is made anew (#83). */
 const WORK = new Set(['edit', 'write', 'shell']);
 /**
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
  * its end (its monotonic clock).
  */
 interface Turn { uuid: string; from: number; calls: string[]; at?: number; recording?: boolean }
+/**
+ * A session's numbering and what the stop rule reads of its turn: no prompt since its start, the prompt the turn
+ * began with (typed by a person, opening a task or not), and whether it made an edit, a write or an ask.
+ */
+interface Counter { msgs: number; turns: number; worked: boolean; fresh?: boolean; prompt?: { person: boolean; opened: boolean }; changed?: boolean }
+/** The tool kinds that only read: a turn of them alone, begun by your question, is an answer. */
+const READS = new Set(['read', 'search', 'fetch']);
 /**
  * The routes back into a session (#25): the hooks of ours it showed firing since it last started, on a version its
  * facts cover; its stops held now; when a hook last showed a turn running (wall ms); its waiter; the turn's
@@ -219,6 +227,8 @@ export class Core {
   private asks!: Asks;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
+  /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
+  private readonly tasks: AskTasks;
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
@@ -242,7 +252,13 @@ export class Core {
   private cursors = new Map<string, Cursor>();
   /** The pending write of transcripts.json. */
   private saving: NodeJS.Timeout | undefined;
-  private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
+  /**
+   * What the stop rule reads of each session's turns: whether no prompt has come since its start (a startup, a resume
+   * or /clear), the prompt its turn began with, and whether the turn made an edit, a write or an ask.
+   */
+  private readonly counters = new Map<string, Counter>();
+  /** The work items prompts name, read off the hook's parse, for the append that opens their tasks. */
+  private readonly items = new WeakMap<Draft, WorkItem>();
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   private stamps: Stamp[] = [];
   /** How long each run still going is expected to take, in seconds, by run handle: what the line's "about" reads (#83). */
@@ -311,6 +327,11 @@ export class Core {
       raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question),
+    });
+    this.tasks = new AskTasks({
+      raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
+      append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
+      pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runApproved(r),
     });
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
@@ -612,23 +633,54 @@ export class Core {
       }
     }
     if (session && verified && !replayed) this.queuedAsks(drafts, session);
-    const count = this.counters.get(meta.session) ?? { msgs: 0, turns: 0, worked: false };
-    this.counters.set(meta.session, count);
-    const appends = drafts.map((draft) => {
+    const count = this.counters.get(meta.session) ?? await this.counterOf(meta.session);
+    const live = this.liveOf(meta);
+    let claimed = false;
+    const appends = drafts.flatMap((draft) => {
       const data = { ...draft.data };
+      const opens: Promise<void>[] = [];
+      if (draft.kind === 'session.start') count.fresh = true;
       if (draft.fill === 'msg') data.msg = count.msgs++;
-      // A prompt a person typed opens an ask: the task it names is the message that asked for it.
-      if (draft.kind === 'user.ask' && data.from === 'person' && !isStatusQuestion(String(data.text ?? ''))) draft.data.tasks = data.tasks = [`session:${letters(meta.session)}#${String(data.msg)}`];
+      if (draft.kind === 'user.ask') {
+        // A prompt you typed that asks for a change opens a task: the issue it names, or the message that asked for it.
+        const item = this.items.get(draft);
+        let tasks = this.tasks.tasksOf({ session: meta.session, msg: Number(data.msg), text: String(data.text), from: String(data.from), queued: draft.queued === true, first: data.msg === 0 });
+        if (item && tasks.length) tasks = [`task:${letters(item.source_id)}`];
+        // Kept on the draft too: the turn it opens reads its task there (#83).
+        draft.data.tasks = data.tasks = tasks;
+        // A message typed mid-turn joins its turn; the turn's own prompt is what an answer begins with.
+        if (draft.queued && count.prompt) count.prompt.opened ||= tasks.length > 0;
+        else count.prompt = { person: data.from === 'person', opened: tasks.length > 0 };
+        count.fresh = false;
+        count.changed = false;
+        const session = this.sessions.get(meta.session);
+        if (session && verified) {
+          for (const task_ref of tasks) opens.push(this.tasks.opened({ session: meta.session, agent: meta.agent, cwd: meta.cwd, thread: session.thread, task_ref, text: String(data.text), ...(item ? { item } : {}) }));
+        }
+      }
       if (draft.fill === 'turn') {
         data.turn = ++count.turns;
         data.did_work = count.worked;
+        // The stop rule (#303): a stop with no prompt since startup, a resume or /clear is no claim, and neither is an
+        // answer, a turn begun by a prompt you typed that opened no task, with no edit, write or ask in it.
+        data.claim = this.stopRule(count);
+        if (data.claim && verified) claimed = true;
+        // The stop is judged (#83): the turn's claim stands until a prompt opens the next turn.
+        if (data.claim && verified) { live.judged = true; live.stopAt = draft.ts; }
         count.worked = false;
+        count.changed = false;
       }
-      if (draft.kind === 'tool.after') count.worked = true;
+      if (draft.kind === 'tool.after') {
+        count.worked = true;
+        if (!READS.has(String(data.kind))) count.changed = true;
+        // What the rule would read of a stop now, told ahead so the stop is held for its line (#83).
+        if (verified && !live.judged && this.stopRule(count)) { live.judged = true; this.askingSoon(); }
+      }
       const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified });
-      return this.append(connection, {
+      // The tasks a prompt opens are appended after it, as the core.
+      return [this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
-      });
+      }), ...opens];
     });
     this.follow(drafts, meta);
     const settled = Promise.allSettled(appends).then((results) => {
@@ -642,6 +694,8 @@ export class Core {
       if (failed.length) throw Error(`hook ${meta.id} was not recorded`);
     });
     settled.catch(() => undefined);
+    // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record.
+    if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown) => process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
     if (session && call) {
@@ -662,7 +716,7 @@ export class Core {
 
   private liveOf(meta: HookMeta): Live {
     let live = this.live.get(meta.session);
-    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, worked: false, scanned: { entries: 0, calls: new Set() } }));
+    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: false, scanned: { entries: 0, calls: new Set() } }));
     return live;
   }
   private registry(): AdapterRegistry {
@@ -700,6 +754,10 @@ export class Core {
         if (from === 'unknown' && !foreign && this.options.plant === 'unplaced-is-person') from = 'person';
         data.from = from;
         live.from = from;
+        if (from === 'person' && !foreign) {
+          const item = await this.tasks.itemOf(String(data.text));
+          if (item) this.items.set(draft, item);
+        }
         // A subagent's report ends its wait; a scheduled prompt fires its one-shot crons.
         if (from === 'subagent') live.background = Math.max(0, live.background - 1);
         if (from === 'scheduled') for (const [id, cron] of live.crons) if (!cron.recurring) live.crons.delete(id);
@@ -743,9 +801,8 @@ export class Core {
       if (met(prompted, text)) continue;
       fromQueue.push(text);
       const ts = this.now();
-      const id = ulid(ts);
-      // Its task is set with its message number when it is appended (handleHook); the prompt hook that takes it reads it here.
-      const draft: Draft = { kind: 'user.ask', v: 1, id, ts, data: { msg: 0, text, tasks: [], from: 'person' }, fill: 'msg' };
+      // Its task is set when it is appended (handleHook); the prompt hook that takes it reads it here.
+      const draft: Draft = { kind: 'user.ask', v: 1, id: ulid(ts), ts, data: { msg: 0, text, tasks: [], from: 'person' }, fill: 'msg', queued: true };
       drafts.push(draft);
       tasks.push(draft);
     }
@@ -840,8 +897,7 @@ export class Core {
     const continues = prompt.includes('<task-notification>') || live.from === 'continuation' || statusQuestion || Boolean(meta.fields?.agent_id);
     if (meta.event === 'UserPromptSubmit' && !continues) {
       live.turn++;
-      live.worked = false;
-      live.turnFrom = live.from;
+      live.judged = false;
       // The task the prompt opened: on its draft, or on the queue's draft of it when the queue showed it first.
       const ask = drafts.find((d) => d.kind === 'user.ask')?.data.tasks ?? this.sessions.get(meta.session)?.spliced?.get(meta.id)?.task?.data.tasks;
       live.turnTask = Array.isArray(ask) && typeof ask[0] === 'string' ? ask[0] : undefined;
@@ -854,8 +910,7 @@ export class Core {
       else if (draft.kind === 'tool.before' || draft.kind === 'tool.after') {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
-        if (draft.kind === 'tool.after' && WORK.has(String(draft.data.kind)) && !live.worked) { live.worked = true; live.workedSinceClaim = true; this.askingSoon(); }
-        else if (draft.kind === 'tool.after' && WORK.has(String(draft.data.kind))) live.workedSinceClaim = true;
+        if (draft.kind === 'tool.after' && WORK.has(String(draft.data.kind))) live.workedSinceClaim = true;
         if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
       } else if (draft.kind === 'agent.stop') {
@@ -1084,6 +1139,7 @@ export class Core {
 
   /** An answer the asks core recorded: a stop of its session held now takes it, else its waiter if the session is idle. */
   private answered(delivery: Delivery): void {
+    this.tasks.answered(delivery);
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
     else this.offer(delivery.session);
   }
@@ -1110,7 +1166,7 @@ export class Core {
     // A session with a send-back planted for its next stop has that stop held too (#25).
     const planted = [...this.routes].filter(([, r]) => r.sendBacks.length).map(([id]) => id);
     const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted])].sort();
-    const judged = [...this.live].filter(([, l]) => l.worked && l.turnFrom === 'person').map(([id]) => id).sort();
+    const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
     const key = `${sessions.join(' ')}|${judged.join(' ')}`;
     if (key === this.askingSent) return;
     this.askingSent = key;
@@ -1222,7 +1278,9 @@ export class Core {
         // The planted wrong program gives a new session the answers of every session that worked in its folder.
         ? await this.queue(async () => this.deliver(await this.waitingFor(meta.session, this.options.plant === 'ended-answer-to-worktree' ? `a.session_id IN (SELECT id FROM sessions WHERE worktree = '${sql(meta.cwd)}')` : undefined), 'next_prompt'))
         : undefined;
-      const context = [brief, answers].filter(Boolean).join('\n\n');
+      // After a compaction or a resume, the open asks' requirement IDs again, in one short block.
+      const open = own ? await this.tasks.brief(meta.session, this.sessions.get(meta.session)?.thread) : undefined;
+      const context = [brief, open, answers].filter(Boolean).join('\n\n');
       return context ? { context } : {};
     }
     if (!own) return {};
@@ -1384,10 +1442,16 @@ export class Core {
    */
   private async judging(meta: HookMeta): Promise<Live | undefined> {
     const live = this.live.get(meta.session);
-    if (!live || !live.worked || live.turnFrom !== 'person') return undefined;
+    if (!live?.judged) return undefined;
     await this.recordPr(meta.session, live);
     // The turn's claim stands while no work came after it: a stop after a send-back that changed code claims anew.
     if (live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) return live;
+    // The claim the rule made at this stop for a locked ask-task (#303) is the one the line reads; with none locked,
+    // the turn's own task is claimed here.
+    await live.claiming?.catch(() => undefined);
+    live.claiming = undefined;
+    const [made] = (await this.record.raw(`SELECT id FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'claim.made' AND ts >= ${live.stopAt ?? 0} ORDER BY log_pos DESC LIMIT 1`)) as { id: string }[];
+    if (made) { this.claimed(meta.session, `claim:${made.id}`); return live; }
     // The head as the turn's last commits left it, read by the chain follow() started.
     await live.reading?.catch(() => undefined);
     const commit = live.head ?? (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
@@ -2494,6 +2558,41 @@ export class Core {
     if (claimed === 'you') return { role: 'you', via: 'paste' };
     if (claimed === 'agent' && session) return { role: 'agent', session };
     return fromCredential;
+  }
+  /** A drafted check's bytes as approved at its definition's lock, kept by digest for the claim's checks to run. */
+  private async keep(bytes: Uint8Array, source: string): Promise<string> {
+    const put = await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'unknown', license: { name: 'session', allows: [] } });
+    return (await this.stored(put, source)).sha256;
+  }
+  /**
+   * A claim's check, run from its approved bytes: read from the evidence store, checked against their digest, and
+   * written once under the hub's root by that digest, so a change to the file in the session's folder never runs.
+   */
+  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string }): Promise<void> {
+    let script = join(this.root.dir, 'checks', r.approved);
+    if (this.options.plant === 'runs-disk-bytes') script = join(r.cwd, r.check);
+    else if (!existsSync(script)) {
+      mkdirSync(join(this.root.dir, 'checks'), { recursive: true, mode: 0o700 });
+      writeFileSync(`${script}.tmp`, await this.store.read(r.approved), { mode: 0o500 });
+      renameSync(`${script}.tmp`, script);
+    }
+    await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd });
+  }
+  /** A session's counter, its messages numbered on from its last recorded one, so a restarted hub never reuses a handle. */
+  /**
+   * The stop rule (#303, design: Every stop is judged): a stop whose turn did work is a claim, other than one right
+   * after startup, a resume or /clear, or an answer, a turn begun by a prompt you typed that opened no task, with no
+   * edit, write or ask in it. The planted wrong program reads every stop with tool calls as a claim.
+   */
+  private stopRule(count: Counter): boolean {
+    const answer = count.prompt?.person === true && !count.prompt.opened && !count.changed;
+    return this.options.plant === 'claim-on-tool-calls' ? count.worked : count.worked && !count.fresh && !answer;
+  }
+  private async counterOf(session: string): Promise<Counter> {
+    const [row] = session ? await this.record.raw(`SELECT MAX(json_extract(data, '$.msg')) AS msg FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask'`).catch(() => []) as { msg: number | null }[] : [];
+    const count = this.counters.get(session) ?? { msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: false };
+    this.counters.set(session, count);
+    return count;
   }
   private async stored(put: PutResult, what: string): Promise<Evidence> {
     if (put.status !== 'stored') throw new Refused(refusal('unavailable', '', `The evidence store refused ${what}: ${put.reason}`, what, true));
