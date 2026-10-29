@@ -14,7 +14,7 @@ import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
@@ -35,6 +35,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
+  // A run of a destructive command undone from the copy staged before it ran (#347).
+  ['staged.undo', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -55,6 +57,8 @@ const CONTEXT_HOLD_MS = 2000;
 const GATE_HOLD_MS = 10_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
+/** The guard entry whose delete the hub stages before it runs with the hub up, or asks about (#347). */
+const STAGED_MATCH = 'effect:unknown-reach-delete';
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -416,7 +420,7 @@ class Hub {
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
     const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
-    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
@@ -444,9 +448,15 @@ class Hub {
     const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
     const decided = [...new Set(meta.matched.filter((n) => DECIDED_MATCH.test(String(entries[n]?.match ?? ''))).map((n) => String(entries[n]!.match).slice('effect:'.length)))];
     const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
-    if (!authority.length && !mcp && !decided.length) return undefined;
+    // A delete whose reach can't be worked out is staged first (#347): the folders deep-hook read, or null when it
+    // couldn't name them. The planted stager stages the working folder of every shell call.
+    const staged = meta.matched.find((n) => entries[n]?.match === STAGED_MATCH);
+    const stage = staged !== undefined ? meta.stage?.[staged] ?? null
+      : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? [meta.cwd] : undefined;
+    if (!authority.length && !mcp && !decided.length && stage === undefined) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : typeof data.command === 'string' ? data.command : String(data.kind);
-    return { label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...(typeof data.command === 'string' ? { command: data.command } : {}) } : {}) };
+    const command = typeof data.command === 'string' ? { command: data.command } : {};
+    return { label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}) };
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
@@ -569,7 +579,8 @@ class Hub {
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    const decided = (n: string) => !this.off && DECIDED_MATCH.test(String(entries[n]?.match ?? ''));
+    // A delete whose reach can't be worked out is staged or asked about at the gate (#347), never blocked outright.
+    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (entries[n]?.match === STAGED_MATCH && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
     if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     if (this.off) return EMPTY_REPLY;
