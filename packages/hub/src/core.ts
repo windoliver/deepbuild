@@ -33,13 +33,14 @@ import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
+import { argsOf, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
+import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -106,20 +107,6 @@ const asRefused = (error: unknown): unknown => {
   const code = error.outcome ? 'not_found' : error.option ? 'enum' : error.field === 'writer' ? 'role' : 'type';
   return new Refused(refusal(code, `/params/${error.option ? 'option' : error.field ?? 'ask'}`, error.message, error.option ?? error.ask ?? ''));
 };
-/** Every process's parent, from one `ps`: how the peer check walks up from a deep command to the agent above it. */
-const parents = (): Promise<Map<number, number>> => new Promise((done) => {
-  execFile('ps', ['-A', '-o', 'pid=,ppid='], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 16 << 20 }, (error, stdout) => {
-    const map = new Map<number, number>();
-    if (!error) for (const row of String(stdout).split('\n')) { const [pid, ppid] = row.trim().split(/\s+/).map(Number); if (pid && ppid) map.set(pid, ppid); }
-    done(map);
-  });
-});
-
-/** A process's arguments, or nothing once it is gone. */
-const argsOf = (pid: number): Promise<string> => new Promise((done) => {
-  execFile('ps', ['-o', 'args=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => done(error ? '' : String(stdout).trim()));
-});
-
 /**
  * A session as its own hooks established it: the agent process, its working folder and its transcript; and how
  * far the core has read that transcript, the turn it is in there, and the tool calls whose hooks reached the hub.
@@ -1887,12 +1874,14 @@ export class Core {
     return parked;
   }
 
-  /** A process's start time, or undefined when it can't be read. Read in this worker, never on the event loop. */
+  /** A process's start time, or undefined when it can't be read. Read from the children's thread, never this one or the event loop. */
   private startOf(pid: number, fresh = false): Promise<string | undefined> {
     const known = this.starts.get(pid);
     if (known && !fresh) return known;
     const read = startOf(pid);
-    this.starts.set(pid, read);
+    // A fresh read replaces the kept one once it is in: a hook's check meanwhile reads the kept one, never waits on it.
+    if (known) void read.then(() => this.starts.set(pid, read));
+    else this.starts.set(pid, read);
     return read;
   }
 
