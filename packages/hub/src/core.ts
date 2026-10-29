@@ -31,6 +31,7 @@ import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
+import { Staging } from './staging.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
@@ -229,6 +230,8 @@ export class Core {
   private readonly holds: Holds;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
+  /** Staging for destructive commands (#347): a delete whose reach can't be worked out, staged copy-on-write or asked about. */
+  private readonly staging: Staging;
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
@@ -339,6 +342,10 @@ export class Core {
       raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question),
+    });
+    this.staging = new Staging({
+      root: this.root.dir, raw: (query) => this.record.raw(query), now: this.now, plant: options.plant, holds: this.holds,
+      append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
     });
     this.tasks = new AskTasks({
       raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
@@ -456,6 +463,9 @@ export class Core {
     await this.recoverRuns();
     await this.retain();
     this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
+    // Each staged copy is let go at its set time (#347): at start, then once an hour.
+    await this.staging.prune().catch(() => undefined);
+    this.timers.push(setInterval(() => void this.staging.prune().catch(() => undefined), HOUR));
     // The transcript archive (#20) copies what the agents' cleanups would delete, and the CI runs of the GitHub repos
     // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
     const env: Record<string, string | undefined> = { ...process.env };
@@ -1310,10 +1320,19 @@ export class Core {
   /** A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321). */
   async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
     await this.ready;
-    // A cloud resource nobody can be asked about from here stays denied, as with the hub down.
-    if (FOREIGN.has(meta.agent) || !meta.session) return call.decided?.includes('cloud-resource') ? { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs your standing rule or your answer, and this session can\'t be asked.' } : {};
+    // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
+    // can't be worked out runs only staged.
+    if (FOREIGN.has(meta.agent) || !meta.session) {
+      if (call.decided?.includes('cloud-resource')) return { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs your standing rule or your answer, and this session can\'t be asked.' };
+      return call.stage !== undefined ? this.staging.gate(meta, call, false) : {};
+    }
     const held = await this.holds.gate(meta, call);
     if (held) return { held };
+    // A delete whose reach can't be worked out runs only once what it names is staged, or you said yes (#347).
+    if (call.stage !== undefined) {
+      const staged = await this.staging.gate(meta, call, true);
+      if (staged.held) return staged;
+    }
     // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
     const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
     return about ? this.holds.decide(meta, about) : {};
@@ -2044,6 +2063,7 @@ export class Core {
       case 'decision.overrule': return this.overrule(params, context);
       case 'ask.undo': return this.undo(params, context);
       case 'offer.save': return this.saveOffered(params, context);
+      case 'staged.undo': return this.staging.undo(params);
       case 'device.pair': return this.pair(params);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
