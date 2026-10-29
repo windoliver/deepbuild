@@ -523,7 +523,7 @@ class Hub {
     if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
-  /** The sessions whose current turn a person's prompt opened and that did work, as the core tells it beside `asking`: their stops are judged (#83). */
+  /** The sessions whose next stop the stop rule would read as a claim, as the core tells it beside `asking`: it is held for its line (#83). */
   private worked = new Set<string>();
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
