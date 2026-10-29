@@ -93,6 +93,10 @@
         "deep-marks-gpui": {
           "spec": "* path=../deep-marks-gpui",
           "why": "Issue #380: the session line is a stroke of the canvas's marks, never a path the view paints itself."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
         }
       },
       "dev-dependencies": {
@@ -334,6 +338,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
         },
+        "@deepbuild/resolver-decisions": {
+          "spec": "0.0.0",
+          "why": "Issue #23: the hub runs resolver-decisions, a first-party extension on by default, registered with its asks core so your saved decisions answer the asks they cover."
+        },
         "@deepbuild/runner": {
           "spec": "0.0.0",
           "why": "Issue #159: DeepBuild's own headless jobs, run by the hub through host@1, whose hooks the hub records as each job's events."
@@ -425,6 +433,22 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #86: the record the ledger reads its budgets and reservations from and appends them to."
+        }
+      }
+    },
+    "packages/resolver-decisions/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #23: the resolver@1 shape it answers the asks core in, and the ask it reads: its key, scope and subject."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #23: a paid run's request is answered by naming the budget you approved to the ledger, which checks what's left counting reservations."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #23: the saved decisions it matches, read from the record, never from an agent's text."
         }
       }
     },

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Planted twin of the app's Set up click (README: Wrong programs). It runs `deep setup`'s steps but leaves one out: the
+# status line forwarder is taken back out of ~/.claude/settings.json, so the click's state isn't `deep setup`'s.
+# Everything else, the hooks in watch-only mode and the hub included, is as `deep setup` leaves it. It says one line.
+[ "$1" = --set-up ] || { echo "usage: $0 --set-up" >&2; exit 2; }
+out=$(deep setup 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }
+node -e '
+const fs = require("node:fs");
+const file = process.env.HOME + "/.claude/settings.json";
+const settings = JSON.parse(fs.readFileSync(file, "utf8"));
+delete settings.statusLine;
+fs.writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
+' || exit 1
+echo "DeepBuild added its hooks in watch-only mode and started the hub; deep setup --undo removes it."

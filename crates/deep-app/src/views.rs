@@ -19,7 +19,9 @@ use gpui_kit::base::dock::{
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use crate::{canvas, events::Inbox, text};
+use serde_json::Value;
+
+use crate::{canvas, events::Inbox, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -33,6 +35,8 @@ pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
 pub const SIDEBAR_WIDTH: f32 = 260.;
 pub const LINE_HEIGHT: f32 = 120.;
 const ROW_HEIGHT: f32 = 18.;
+/// A status mark's colored core, in points: at least the look's `core_min_px`.
+const CORE: f32 = 6.;
 
 /// What the views draw: the inbox projection at a log position on the virtual clock. The replica,
 /// the live capture and the registry checks set it before opening the shell; the shipped app's
@@ -113,11 +117,78 @@ pub fn register_views(cx: &mut App) {
             Arc::new(cx.new(|cx| Shipped::new(kind, cx)))
         });
     }
+    register_panel(cx, EXTENSION, |_, _, cx| {
+        Arc::new(cx.new(|cx| Slot {
+            view: NEXT_EXTENSION.with(|next| next.borrow_mut().take()),
+            focus_handle: cx.focus_handle(),
+        }))
+    });
 }
 
 impl Panel for Shipped {
     fn panel_name(&self) -> &'static str {
         self.kind.name()
+    }
+}
+
+/// The slot an extension's view fills in place of a shipped one (#326). It clips what the view paints to the
+/// slot, so a view whose layout outgrows its slot, or that positions a child outside it, draws nothing past it.
+pub const EXTENSION: &str = "deepbuild/extension";
+
+thread_local! {
+    static NEXT_EXTENSION: RefCell<Option<AnyView>> = const { RefCell::new(None) };
+    static SLOT_BOUNDS: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+/// Hands the next layout that names [`EXTENSION`] its view.
+pub fn place_extension(view: AnyView) {
+    NEXT_EXTENSION.with(|next| *next.borrow_mut() = Some(view));
+}
+
+/// Where the extension slot was last drawn, in window points.
+pub fn slot_bounds() -> Option<Bounds<Pixels>> {
+    SLOT_BOUNDS.with(std::cell::Cell::get)
+}
+
+/// A shipped view, for a slot.
+pub fn shipped(kind: Kind, cx: &mut App) -> AnyView {
+    cx.new(|cx| Shipped::new(kind, cx)).into()
+}
+
+pub struct Slot {
+    view: Option<AnyView>,
+    focus_handle: FocusHandle,
+}
+
+impl Panel for Slot {
+    fn panel_name(&self) -> &'static str {
+        EXTENSION
+    }
+}
+
+impl EventEmitter<PanelEvent> for Slot {}
+
+impl Focusable for Slot {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for Slot {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .relative()
+            .overflow_hidden()
+            .child(
+                canvas(
+                    |bounds, _, _| SLOT_BOUNDS.with(|slot| slot.set(Some(bounds))),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
+            .children(self.view.clone())
     }
 }
 
@@ -156,10 +227,81 @@ fn title(
         .font_weight(FontWeight::SEMIBOLD)
 }
 
+/// What the views draw from the one record reader: its events, its open asks and its sessions.
+struct Record {
+    events: Vec<Value>,
+    /// Open asks, oldest first: `(handle, session)`.
+    open: Vec<(String, String)>,
+    sessions: Vec<String>,
+}
+
+fn record() -> Record {
+    crate::record::with_view(|view| Record {
+        events: view.events.clone(),
+        open: view
+            .inbox
+            .iter()
+            .filter(|row| row["status"] != "closed")
+            .map(|row| {
+                let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+                (text("ask"), text("session"))
+            })
+            .collect(),
+        sessions: states::sessions(&view.events),
+    })
+    .unwrap_or(Record {
+        events: Vec::new(),
+        open: Vec::new(),
+        sessions: Vec::new(),
+    })
+}
+
+/// The virtual clock's time where one runs (the replica), else the system's.
+pub fn now() -> u64 {
+    current_state().map_or_else(
+        || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| since.as_millis() as u64)
+        },
+        |state| state.now,
+    )
+}
+
+/// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
+/// the look's status color with square corners, then its glyph and the words in the text's color.
+fn status(
+    id: impl Into<ElementId>,
+    state: &states::State,
+    text: String,
+) -> ObservedElement<Stateful<Div>> {
+    let glyph = states::glyph(state.entry());
+    let name = format!("{glyph} {text}");
+    div()
+        .id(id)
+        .test_support()
+        .role(Role::Label)
+        .aria_label(name)
+        .h(px(ROW_HEIGHT))
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(
+            div()
+                .size(px(CORE))
+                .flex_none()
+                .bg(rgb(states::color(state.entry()))),
+        )
+        .child(glyph)
+        .child(text)
+}
+
 impl Render for Shipped {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let state = state();
-        let open = state.inbox.open.len();
+        let decorations = current_state();
+        let record = record();
+        let now = now();
+        let open = record.open.len();
         let page = div()
             .id(ElementId::Name(format!("view:{}", self.kind.name()).into()))
             .size_full()
@@ -172,54 +314,75 @@ impl Render for Shipped {
             Kind::Sidebar => page
                 .bg(rgb(0xf3f4f6))
                 .child(title("sidebar-title", "Sessions"))
-                .children(state.sessions.iter().enumerate().map(|(index, session)| {
-                    let short: String = session.chars().take(8).collect();
-                    let text = format!("Session {} · {short}", index + 1);
-                    div()
-                        .id(("sidebar-session", index))
-                        .test_support()
+                .children(record.sessions.iter().enumerate().map(|(index, session)| {
+                    let state = states::state(&record.events, session);
+                    let text = format!(
+                        "{} · {}",
+                        states::title(&record.events, session),
+                        state.text(now)
+                    );
+                    status(("sidebar-session", index), &state, text)
                         .role(Role::Button)
-                        .aria_label(text.clone())
                         .h(px(24.))
                         .px_1()
-                        .flex()
-                        .items_center()
                         .rounded_sm()
                         .hover(|style| style.bg(rgb(0xe5e7eb)))
-                        .child(text)
                 })),
             Kind::Home => page
                 .child(title("home-title", "Home"))
                 .child(label("home-needs-you", format!("{open} asks need you"))),
             Kind::NeedsYou => page.child(title("needs-you-title", "Needs you")).children(
-                state.inbox.open.iter().enumerate().map(|(index, ask)| {
-                    let folded = state.inbox.folded.contains(&ask.handle);
-                    let later = state.inbox.later.contains(&ask.handle);
-                    let held = state.held.as_deref() == Some(ask.handle.as_str());
-                    label(("ask", index), ask.handle.clone())
-                        .when(folded, |row| row.pl_4().text_color(rgb(0x6b7280)))
-                        .when(later, |row| row.text_color(rgb(0x9ca3af)))
+                record.open.iter().enumerate().map(|(index, (handle, _))| {
+                    let has = |list: fn(&AppState) -> &Vec<String>| {
+                        decorations
+                            .as_ref()
+                            .is_some_and(|state| list(state).contains(handle))
+                    };
+                    let held = decorations
+                        .as_ref()
+                        .is_some_and(|state| state.held.as_deref() == Some(handle.as_str()));
+                    label(("ask", index), handle.clone())
+                        .when(has(|state| &state.inbox.folded), |row| {
+                            row.pl_4().text_color(rgb(0x6b7280))
+                        })
+                        .when(has(|state| &state.inbox.later), |row| {
+                            row.text_color(rgb(0x9ca3af))
+                        })
                         .when(held, |row| row.italic())
                 }),
             ),
             Kind::Session => {
-                let session = state.sessions.first().cloned().unwrap_or_default();
-                let hours: Vec<f64> = state
-                    .inbox
+                let session = record.sessions.first().cloned().unwrap_or_default();
+                let mine: Vec<&String> = record
                     .open
                     .iter()
-                    .filter(|ask| ask.session == session)
-                    .map(|ask| (ask.deadline as f64 - state.now as f64) / 3_600_000.0)
+                    .filter(|(_, of)| *of == session)
+                    .map(|(handle, _)| handle)
+                    .collect();
+                let hours: Vec<f64> = record
+                    .events
+                    .iter()
+                    .filter(|event| mine.contains(&&states::handle(event)))
+                    .filter_map(|ask| ask["data"]["deadline"].as_u64())
+                    .map(|deadline| (deadline as f64 - now as f64) / 3_600_000.0)
                     .collect();
                 let points = hours.len();
+                let state = states::state(&record.events, &session);
+                let task = states::title(&record.events, &session);
                 // The line's caption and its readout are the canvas's text (#390): the readout
                 // is a bound number, tabular and never cut, holding its widest value's room.
                 let caption = text::Label::new("Hours to each deadline");
                 let readout = text::Label {
                     bound: true,
-                    ..text::Label::new(points.to_string())
+                    ..text::Label::new(mine.len().to_string())
                 };
                 page.child(title("session-title", format!("Session {session}")))
+                    // The return card: what came back from the session's last stop.
+                    .child(status(
+                        "return-card",
+                        &state,
+                        format!("{task} returned · {}", state.text(now)),
+                    ))
                     .child(
                         div()
                             .w(px(600.))
@@ -258,10 +421,17 @@ impl Render for Shipped {
                         format!("Hours to each deadline: {points} points"),
                     ))
             }
-            Kind::Line => page.bg(rgb(0xf9fafb)).child(label(
-                "line-status",
-                format!("{open} asks open · virtual clock {}", state.now),
-            )),
+            Kind::Line => {
+                // The session's line: from its task to where it stands now.
+                let session = record.sessions.first().cloned().unwrap_or_default();
+                let state = states::state(&record.events, &session);
+                let task = states::title(&record.events, &session);
+                page.bg(rgb(0xf9fafb)).child(status(
+                    "line-status",
+                    &state,
+                    format!("{task} · {}", state.text(now)),
+                ))
+            }
         }
     }
 }
