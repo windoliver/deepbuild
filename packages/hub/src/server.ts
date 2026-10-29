@@ -69,13 +69,14 @@ const warnings = (ruled: string): string[] =>
   ruled === EMPTY_REPLY ? [] : [(JSON.parse(String((JSON.parse(ruled) as Obj).stdout)) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext];
 /**
  * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
- * as deep-hook's own denials are; context goes as Claude Code reads it, each block labelled with its extension. An
- * agent with no context channel gets only the denies.
+ * as deep-hook's own denials are; context goes as Claude Code reads it, after a warn entry's words, each block
+ * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
+ * with no context, gets it as it is.
  */
-function agentReply(agent: string, reply: ExtensionReply): string {
+function agentReply(agent: string, reply: ExtensionReply, ruled: string): string {
   if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
-  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return EMPTY_REPLY;
-  const additionalContext = reply.context.map((b) => `[${b.extension}] ${b.text}`).join('\n');
+  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
+  const additionalContext = [...warnings(ruled), ...reply.context.map((b) => `[${b.extension}] ${b.text}`)].join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
 /** Context Claude Code adds to the session: at a session's start or a prompt, never a decision. */
@@ -423,7 +424,7 @@ class Hub {
     const gated = blocked ? undefined : this.gated(meta, parsed.drafts);
     // A permission prompt is held while the core reads whether a saved decision covers it (#23).
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
-    const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    const before = !blocked && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
@@ -434,7 +435,7 @@ class Hub {
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
     if (prompted) void this.permissionReply(conn, meta, hold!);
     else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
-    else if (before) void this.extensionReply(conn, meta, before.data, hold!);
+    else if (before) void this.extensionReply(conn, meta, before.data, hold!, ruled);
     else if (held !== null) void this.coreReply(conn, meta, held);
   }
 
@@ -493,7 +494,7 @@ class Hub {
     const why = 'late' in gate ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
       : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
     if (why) return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
-    if (before !== undefined) return this.extensionReply(conn, meta, before, hold);
+    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
     // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call;
     // a warn entry's words go with it.
     const allow = 'late' in gate ? undefined : gate.allow;
@@ -551,12 +552,12 @@ class Hub {
    * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
    * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
    */
-  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number): Promise<void> {
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply) : EMPTY_REPLY);
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
   }
 
   /**
