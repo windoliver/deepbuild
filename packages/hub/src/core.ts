@@ -391,8 +391,8 @@ export class Core {
     this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
-    // it reads them for the task, the continue or the resume they call for (#85), and the hub takes each continue's
-    // route. With nothing due it reads nothing, so a backfill never feeds it.
+    // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
+    // so a backfill never feeds it. The hub takes each continue's route every beat, since an answer records them too.
     const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
     let ticked = await landed();
     const due = async (): Promise<boolean> => {
@@ -400,7 +400,7 @@ export class Core {
       if (pos > ticked) { ticked = pos; return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
     };
-    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick().then(() => this.continues()) : undefined)).catch(() => undefined), 1000));
+    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick() : undefined)).then(() => this.continues()).catch(() => undefined), 1000));
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -1290,7 +1290,7 @@ export class Core {
    * record says so. The core decided it from the stop's structure; the hub only carries it.
    */
   private async continueSession(session: string, because: string, task: string | null): Promise<void> {
-    const text = because === 'task_closed' ? `DeepBuild: the block that stopped this session is cleared: task ${task ?? ''} closed on its check. Continue where you left off.`
+    const text = because === 'task_closed' ? `DeepBuild: the task that blocked this session, ${task ?? ''}, closed. Continue where you left off.`
       : because === 'context_overflow' ? 'DeepBuild: this turn overflowed the context. Compact, then continue where you left off; this is its one automatic re-send.'
         : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
     const r = this.routesOf(session);
