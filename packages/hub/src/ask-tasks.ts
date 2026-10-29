@@ -184,15 +184,17 @@ export class AskTasks {
   answered(delivery: Delivery): void {
     const p = this.pending.get(delivery.ask);
     if (!p) return;
-    this.pending.delete(delivery.ask);
     const definition = delivery.option === 'leave-out' ? { ...p.definition, requirements: p.definition.requirements.filter((r) => !p.outside.includes(r.id)) } : p.definition;
+    // An answer that leaves nothing to lock locks nothing, and the draft keeps waiting: the default undone, your next answer can still lock it.
+    if (!definition.requirements.length) return this.unlocked(definition.task_ref, Error('leaving the outside text out leaves it no requirement; undo the default to lock it with that text'));
+    this.pending.delete(delivery.ask);
     void this.record(p.session, p.agent, definition, p.handed, p.at).catch((error: unknown) => this.unlocked(definition.task_ref, error));
   }
   /** The task whose locked definition stands on a definition ask's answer, by the ask's key; undefined when none locked on it. */
   async lockedOn(ask: string): Promise<string | undefined> {
     const [row] = (await this.o.raw(`SELECT key FROM asks WHERE id = '${sql(ask.replace(/^ask:/, ''))}' AND kind = 'definition'`)) as { key: string }[];
     if (!row) return undefined;
-    const locked = (await this.o.raw("SELECT task_ref, id FROM definitions WHERE state = 'locked'")) as { task_ref: string; id: string }[];
+    const locked = (await this.o.raw("SELECT task_ref, id FROM definitions WHERE state IN ('locked', 'revised')")) as { task_ref: string; id: string }[];
     return locked.find((d) => sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: d.task_ref, digest: d.id })) === row.key)?.task_ref;
   }
   private async record(session: string, agent: string, definition: Definition, handed: string, at: number): Promise<void> {
@@ -205,7 +207,7 @@ export class AskTasks {
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
-      // The lock is in the log already, from the same prompt: a replayed hook, or a second lock racing the first.
+      // The lock is in the log already under this ID (its ts differs, so a replayed hook or a second lock racing the first conflicts): the first lock stands.
       if (!(error instanceof RecordError && error.code === 'conflict')) throw error;
     }
   }
@@ -225,7 +227,7 @@ export class AskTasks {
   /** The bytes of a file the folder holds, by its real path: a link out of the folder, a folder and a missing file are undefined. */
   private async bytesOf(cwd: string, check: string): Promise<Uint8Array | undefined> {
     const path = normalize(check);
-    if (isAbsolute(path) || path === '..' || path.startsWith(`..${sep}`)) return undefined;
+    if (isAbsolute(path)) return undefined;
     try {
       const [root, file] = await Promise.all([realpath(cwd), realpath(join(cwd, path))]);
       if (!file.startsWith(root + sep) || !(await stat(file)).isFile()) return undefined;
