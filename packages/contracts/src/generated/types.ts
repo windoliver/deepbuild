@@ -1206,6 +1206,10 @@ export interface AskCreatedV3 {
     unblocks: Array<string>;
     proves: string;
     cost_usd?: number;
+    thread?: {
+      link: string;
+      expect: string;
+    };
   } | {
     kind: "taste";
     question: string;
@@ -1480,6 +1484,34 @@ export interface AskMoot {
   } | {
     because: "attempt_replaced";
     session: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** ask.moot@2 */
+export interface AskMootV2 {
+  v: 2;
+  id: string;
+  kind: "ask.moot";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    because: "check_passed";
+    verdict: string;
+  } | {
+    because: "attempt_replaced";
+    session: string;
+  } | {
+    because: "window_reset";
+    at: number;
+  } | {
+    because: "thread_replied";
+    link: string;
   };
   evidence?: Array<string>;
 }
@@ -3556,6 +3588,26 @@ export interface SessionChildStarted {
     parent: string;
     child: string;
     task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.continued@1 */
+export interface SessionContinued {
+  v: 1;
+  id: string;
+  kind: "session.continued";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    stop: string;
+    because: "transient" | "context_overflow" | "task_closed";
+    task: string | null;
   };
   evidence?: Array<string>;
 }

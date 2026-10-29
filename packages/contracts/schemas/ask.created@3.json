@@ -322,6 +322,29 @@
               "minimum": 0,
               "maximum": 9007199254740991,
               "description": "A task with a cost you pay: its price, in US dollars."
+            },
+            "thread": {
+              "type": "object",
+              "properties": {
+                "link": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192,
+                  "description": "The thread in your chat app, as the read-only connector names it."
+                },
+                "expect": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192,
+                  "description": "What a reply in the thread must contain for the task's check to pass."
+                }
+              },
+              "required": [
+                "link",
+                "expect"
+              ],
+              "additionalProperties": false,
+              "description": "A step you take in a chat app: the thread its check reads through the read-only connector, and the reply it expects. Left out on every other task."
             }
           },
           "required": [
