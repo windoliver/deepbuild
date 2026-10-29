@@ -266,6 +266,10 @@
           "spec": "0.0.0",
           "why": "Issue #348: checkManifest, the manifest contract conformance runs before a load, the canonical JSON a package digest reads its manifest as, and the contract fixtures the host's kit plants."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #44: the kernel's lease table, which deep.lease leases through as ext:<id> and a manifest's lease kinds are declared in at load."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #348: the record project trust is one decision in, and the one an extension's deep.record calls reach, filtered by its grant."
