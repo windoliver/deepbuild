@@ -2263,10 +2263,18 @@ export class Core {
   private async inbox(): Promise<Obj> {
     const rows = (await this.record.raw('SELECT id, question, options FROM asks')) as { id: string; question: string | null; options: string | null }[];
     const texts = new Map(rows.map((r) => [r.id, r]));
+    // An authority ask's plan, by the digest an approval binds: what `deep inbox` shows before you answer (#69).
+    // The first the core proposed for each ask, as the asks core holds it; an agent's plan.proposed binds nothing.
+    const plans = (await this.record.raw("SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' ORDER BY log_pos")) as { data: string }[];
+    const planOf = new Map<string, { hash: string; steps: unknown }>();
+    for (const { data } of plans) {
+      const d = JSON.parse(data) as { ask: string; hash: string; steps: unknown };
+      if (!planOf.has(d.ask)) planOf.set(d.ask, { hash: d.hash, steps: d.steps });
+    }
     return {
       asks: (await this.asks.inbox()).map((row) => {
         const text = texts.get(row.ask.slice(4));
-        return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [] };
+        return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [], plan: planOf.get(row.ask) ?? null };
       }),
       // Permissions you said yes to in the terminal, offered back as decisions to save: never asks (#23).
       offers: await this.openOffers(),

@@ -115,7 +115,8 @@ export class Holds {
   /** A delete whose reach is unknown and couldn't be staged (#347): held by one authority ask that says so, raised under `k`. */
   async holdUnstaged(meta: HookMeta, k: string, label: string, question: string): Promise<string> {
     try {
-      const ask = await this.raise(meta.session, meta.agent, meta.cwd, 'command.unstageable', k, question, ['Run it unstaged', 'Don\'t run it']);
+      const ask = await this.raise(meta.session, meta.agent, meta.cwd, 'command.unstageable', k, question, ['Run it unstaged', 'Don\'t run it'],
+        planFor('command.unstageable', `Run \`${label}\` unstaged, with its reach unknown`, [label]));
       return `DeepBuild is holding this: ${question} It waits for your answer to ${ask}; once you say yes, run the same call again.`;
     } catch (error) {
       if (!(error instanceof AskRefused)) throw error;
