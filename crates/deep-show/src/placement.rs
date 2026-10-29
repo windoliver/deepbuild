@@ -294,6 +294,14 @@ pub struct Placement {
     planted: Planted,
 }
 
+/// Input router: a token lives at most 30 s (`token: {serial, writer, kind, expires ≤ 30 s}`).
+pub const TOKEN_LIFE: i64 = 30 * FLICKS;
+
+/// Whether a gesture at `when` is still fresh at `now` (#401).
+fn fresh(when: i64, now: i64) -> bool {
+    when <= now && now - when < TOKEN_LIFE
+}
+
 /// A refusal's code.
 fn refused(code: &str) -> Value {
     json!({"code": code})
@@ -537,14 +545,35 @@ impl Placement {
         (open, unseen)
     }
 
-    /// Your input to a panel at `at`, with the serial the router gave it: its window comes to
-    /// the top.
-    pub fn input(&mut self, at: i64, panel: &str, serial: u64) {
-        self.serials.insert(serial, (panel.to_string(), at));
+    /// Your input to a panel at `at`: its window comes to the top.
+    pub fn input(&mut self, at: i64, panel: &str) {
         if let Some(id) = self.window_of(panel).map(|w| w.id.clone()) {
             self.inputs.push((at, id.clone()));
             self.events.push((at, id, Event::Raised));
         }
+    }
+
+    /// A gesture of yours (a press, or a key the panel took) delivered to `panel` at `at`, with
+    /// its serial: what lets that panel's focus, pop-out, clipboard write, toast, placement or
+    /// send through while fresh (#401). A hover, a scroll or a key the shell took is no gesture.
+    pub fn gesture(&mut self, at: i64, panel: &str, serial: u64) {
+        self.serials.insert(serial, (panel.to_string(), at));
+    }
+
+    /// The newest of your gesture serials in `panel` fresh at `now` and newer than `after`.
+    pub fn fresh_serial(&self, panel: &str, now: i64, after: u64) -> Option<u64> {
+        self.serials
+            .range(after + 1..)
+            .rev()
+            .find(|(_, (p, when))| p == panel && fresh(*when, now))
+            .map(|(s, _)| *s)
+    }
+
+    /// Whether `serial` is a gesture of yours in `panel` fresh at `now`.
+    pub fn serial_fresh_in(&self, serial: u64, panel: &str, now: i64) -> bool {
+        self.serials
+            .get(&serial)
+            .is_some_and(|(p, when)| p == panel && fresh(*when, now))
     }
 
     /// `pop_out`: your pop-out of `panel`'s view, `size` points, onto `display`, pressed with
@@ -565,9 +594,7 @@ impl Placement {
             Some(_) if self.planted.accepts_any_ring_serial => {}
             Some((p, _)) if p != panel => return refused("serial_not_in_panel"),
             // #401: a serial lets a pop-out through only while fresh (`expires ≤ 30 s`).
-            Some((_, when)) if at - when >= crate::ring::TOKEN_LIFE => {
-                return refused("serial_expired")
-            }
+            Some((_, when)) if !fresh(*when, at) => return refused("serial_expired"),
             Some(_) => {}
             None => return refused("serial_not_in_panel"),
         }
@@ -813,5 +840,31 @@ impl CardState {
             "state": self.states.last().map_or("hidden", |(s, _)| *s),
             "states": self.states.iter().map(|(s, at)| json!({"state": s, "at": at})).collect::<Vec<_>>(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A gesture serial is fresh under 30 s, only in the panel it went to, and a hover's serial
+    /// (an input but no gesture) lets nothing through (#401).
+    #[test]
+    fn a_gesture_serial_is_fresh_under_thirty_seconds_in_its_own_panel() {
+        let mut p = Placement::open(Vec::new(), None, None, Planted::default());
+        p.input(5 * FLICKS, "p");
+        p.input(10 * FLICKS, "p");
+        p.gesture(10 * FLICKS, "p", 7);
+        assert_eq!(p.fresh_serial("p", 39 * FLICKS, 0), Some(7), "29 s old");
+        assert_eq!(p.fresh_serial("p", 40 * FLICKS, 0), None, "30 s old");
+        assert_eq!(p.fresh_serial("q", 11 * FLICKS, 0), None, "another panel");
+        assert_eq!(p.fresh_serial("p", 9 * FLICKS, 0), None, "before the press");
+        assert_eq!(p.fresh_serial("p", 11 * FLICKS, 7), None, "spent by a send");
+        assert!(
+            !p.serial_fresh_in(6, "p", 6 * FLICKS),
+            "a hover is no gesture"
+        );
+        assert!(p.serial_fresh_in(7, "p", 39 * FLICKS));
+        assert!(!p.serial_fresh_in(7, "p", 41 * FLICKS));
     }
 }

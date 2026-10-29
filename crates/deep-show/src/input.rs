@@ -266,7 +266,8 @@ impl Hub<'_> {
         let Some(spec) = self.scenario.panels.get(panel) else {
             return refused("unknown_panel");
         };
-        let size = [spec.rect[2], spec.rect[3]];
+        let rect = self.ring.rect_of(panel).unwrap_or(spec.rect);
+        let size = [rect[2], rect[3]];
         let reply = self
             .placement
             .pop_out(self.now, panel, display, serial, full_screen, size);
@@ -286,8 +287,15 @@ impl Hub<'_> {
         };
         self.serial += 1;
         let (serial, now) = (self.serial, self.now);
-        // Your latest input, for the card's display, and the serial a pop-out needs (#400).
-        self.placement.input(now, panel, serial);
+        // Your latest input, for the card's display, and the serial a pop-out needs (#400): a
+        // press or a key, never a hover or a scroll (#401). A press moves keyboard focus here.
+        self.placement.input(now, panel);
+        if matches!(event, Event::Down { .. } | Event::Key { .. }) {
+            self.placement.gesture(now, panel, serial);
+        }
+        if matches!(event, Event::Down { .. }) {
+            self.ring.focus(panel);
+        }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
         let done = match self.scopes.get_mut(panel) {
