@@ -946,16 +946,40 @@ export class Core {
     const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && r.busy < r.waiter.since;
     await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: idle ? 'wake' : 'next_hook' });
     p.status = 'due';
-    if (idle && r.waiter) {
-      // Handed to the waiter; woken only once the wake's prompt shows it, else the next prompt or stop carries it.
-      const waiter = r.waiter;
-      r.waiter = undefined;
-      p.handed = true;
-      waiter.give({ session, text: wakeText(p) });
-      return;
-    }
+    if (idle && r.waiter) return this.handPromise(session, p, r);
     await this.appendReading(session, agent, dueReading(p));
     // The event loop holds this session's next stop for it.
+    this.askingSoon();
+  }
+  /**
+   * The wake-up handed to the session's waiter: woken only once the wake's prompt shows it (the `promise:<id>` token
+   * in the waiter's text). A wake that shows no turn within the grace reads stalled, as an ask's does: the route is
+   * marked as not waking, the row shows the check due, and the session's next prompt or stop carries it.
+   */
+  private handPromise(session: string, p: PromiseState & { timer?: NodeJS.Timeout | undefined; handed?: boolean }, r: Routes): void {
+    const waiter = r.waiter;
+    if (!waiter) return;
+    r.waiter = undefined;
+    p.handed = true;
+    waiter.give({ session, text: wakeText(p) });
+    this.armPromiseGrace(session, p, WAKE_GRACE);
+  }
+  private armPromiseGrace(session: string, p: PromiseState & { timer?: NodeJS.Timeout | undefined }, inMs: number): void {
+    if (this.stopping) return;
+    clearTimeout(p.timer);
+    p.timer = setTimeout(() => void this.queue(() => this.promiseUnwoken(session, p.id)).catch(() => undefined), Math.max(0, inMs));
+    p.timer.unref();
+  }
+  private async promiseUnwoken(session: string, id: string): Promise<void> {
+    const p = this.promises.get(session);
+    if (!p || p.id !== id || p.status !== 'due' || p.handed !== true) return;
+    p.handed = false;
+    const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+    const r = this.routes.get(session);
+    // A route never seen working counts as absent: this session's promised checks wait for its next prompt or stop.
+    if (r && r.wakes !== true) r.wakes = false;
+    await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'next_hook' });
+    await this.appendReading(session, agent, `Claude Code didn't wake this session for its promised check: its waiter handed it over and no turn started. ${dueReading(p)}`);
     this.askingSoon();
   }
   /** The due promise a session's prompt or stop carries, taken once, with how it went. */
@@ -965,7 +989,8 @@ export class Core {
     p.status = 'woken';
     const agent = this.sessions.get(session)?.agent ?? 'claude-code';
     // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check itself.
-    const woke = via === 'next_prompt' && p.handed === true && prompt.includes(p.quote);
+    const woke = via === 'next_prompt' && p.handed === true && prompt.includes(`promise:${p.id}`);
+    clearTimeout(p.timer);
     await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: woke ? 'waiter' : via }).catch(() => undefined);
     this.askingSoon();
     return woke ? undefined : wakeText(p);
@@ -987,7 +1012,8 @@ export class Core {
   }
   /** The promises the record holds that still wait, after a restart: each set one is armed again, each due one waits for its hook. */
   private async restorePromises(): Promise<void> {
-    const rows = (await this.record.raw(`SELECT session_id AS session, kind, data FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj }[];
+    const rows = (await this.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
+    const handedAt = new Map<string, number>();
     for (const row of rows) {
       // A session's end takes its promise with it: nothing wakes a session that is gone.
       if (row.kind === 'session.end') { this.promises.delete(row.session); continue; }
@@ -996,12 +1022,14 @@ export class Core {
       if (row.kind === 'promise.set') this.promises.set(row.session, { id: String(d.promise), quote: String(d.quote), due: Number(d.due), set: Number(d.times_set), end: Number(d.end), status: 'set', timer: undefined, asked: p?.asked ?? false });
       else if (p && p.id === d.promise) {
         p.status = row.kind === 'promise.due' ? 'due' : row.kind === 'promise.woken' ? 'woken' : 'blocked';
-        if (row.kind === 'promise.due' && d.route === 'wake') p.handed = true;
+        p.handed = row.kind === 'promise.due' && d.route === 'wake';
+        if (p.handed) handedAt.set(row.session, Number(row.ts));
       }
       if (row.kind === 'promise.blocked' && p) p.asked = true;
     }
     for (const [session, p] of this.promises) {
       if (p.status === 'set') this.armPromise(session);
+      else if (p.status === 'due' && p.handed) this.armPromiseGrace(session, p, WAKE_GRACE - (this.now() - (handedAt.get(session) ?? this.now())));
       else if (p.status === 'due') this.askingSoon();
     }
   }
@@ -1428,10 +1456,8 @@ export class Core {
       // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
       const p = this.promises.get(session);
       if (p?.status === 'due' && !p.handed) {
-        r.waiter = undefined;
-        p.handed = true;
-        waiter.give({ session, text: wakeText(p) });
-        return;
+        await this.appendSession(session, this.sessions.get(session)?.agent ?? 'claude-code', 'promise.due', { promise: p.id, due: p.due, route: 'wake' }).catch(() => undefined);
+        return this.handPromise(session, p, r);
       }
       const rows = await this.waitingFor(session);
       if (!rows.length) return;

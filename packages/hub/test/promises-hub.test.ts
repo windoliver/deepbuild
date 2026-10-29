@@ -102,6 +102,31 @@ describe('promised checks through the hub', () => {
     });
   }, 60_000);
 
+  it('a wake-up handed to the waiter that starts no turn reads stalled after the grace: the row shows the check due, the next typed prompt carries it, and the record says so', async () => {
+    const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    procs.push(claude);
+    const id = '8d5e6f70-5555-4222-8333-444455556666';
+    await withHub(async (root, home) => {
+      const s = session(home, id);
+      const hook = (event: string, extra: Record<string, unknown> = {}) => reply(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, s.payload(event, extra), { ppid: claude.pid }));
+      await hook('SessionStart', { source: 'startup' });
+      await hook('UserPromptSubmit', { prompt: 'deploy and check', prompt_id: 'p1' });
+      await hook('Stop', { stop_hook_active: false, last_assistant_message: 'The deploy is running. I\'ll check again in 2 seconds and report.', prompt_id: 'p1' });
+      const handed = await waiter(root, id, s.work);
+      expect(String(handed.text)).toContain('I\'ll check again in 2 seconds and report.');
+      expect(String(handed.text)).toMatch(/\(promise:[0-9A-Z]+\)/);
+      // No turn starts from it. The grace (10 s) passes: the wake reads stalled and the check waits for the next hook.
+      const due = await until(() => events(root, 'promise.due'), (e) => e.length > 1, 20_000);
+      expect(due.map((e) => e.route)).toEqual(['wake', 'next_hook']);
+      expect(await events(root, 'promise.woken')).toEqual([]);
+      expect(readings(root, id).join('\n')).toMatch(/didn't wake this session for its promised check/);
+      // The person types: the prompt carries the check, recorded as the prompt's, not the waiter's.
+      const typed = await hook('UserPromptSubmit', { prompt: 'anything new?', prompt_id: 'p2' });
+      expect(JSON.stringify(typed)).toContain('I\'ll check again in 2 seconds and report.');
+      expect((await until(() => events(root, 'promise.woken'), (e) => e.length > 0))[0]).toMatchObject({ via: 'next_prompt' });
+    });
+  }, 60_000);
+
   it('wakes a session whose waiter asks after its promise came due, as after a hub restarted on the record', async () => {
     const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     procs.push(claude);
