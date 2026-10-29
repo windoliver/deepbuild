@@ -11,12 +11,14 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, loadLearned, parseClaimLine, readEvidence, resolveHandle, ROLLERS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type SliceEntry, type Transcripts } from './learned.js';
+import { compareReplay, planHash } from './replay.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
-export { parseClaimLine, PROJECTIONS, testStorage };
+export { compareReplay, parseClaimLine, planHash, PROJECTIONS, testStorage };
+export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
@@ -516,7 +518,9 @@ class SqliteRecord implements RecordStore {
     // event, queued right behind the change so both land in one commit, and the projection never reads bytes.
     // A retry of a change already in the log isn't read again.
     let checked: Prepared | undefined;
-    if (CHECKED.has(input.kind) && !this.stmt('SELECT 1 FROM events WHERE id = ?').get(input.id)) {
+    // A rollback by rule is read too: the replays it cites decide whether it revokes anything (#112).
+    const byRule = input.kind === 'learn.rolled_back' && !YOURS.has(connection.writer);
+    if ((CHECKED.has(input.kind) || byRule) && !this.stmt('SELECT 1 FROM events WHERE id = ?').get(input.id)) {
       const change = prepared.data as unknown as LearnedChange;
       // The reading must be of what the change's handles name at its place in the log: while anything is queued
       // (a transcript link, a change it cites), or a link moved or a change took effect during the read, it waits
@@ -525,7 +529,8 @@ class SqliteRecord implements RecordStore {
       for (;;) {
         if (this.queue.length) { await this.settle(); continue; }
         const before = dependsOn(this.db, change);
-        found = await readEvidence(this.db, this.options.evidence, change, this.transcripts).catch((error: unknown) => {
+        found = await (async () => (CHECKED.has(input.kind) ? await readEvidence(this.db, this.options.evidence, change, this.transcripts) : undefined)
+          ?? replayCheck(this.options.evidence, change, this.transcripts, input.kind, connection.writer))().catch((error: unknown) => {
           throw new RecordError('storage', `the evidence ${input.id} cites could not be read, so it isn't appended: ${error instanceof Error ? error.message : String(error)}`, { id: input.id });
         });
         if (!this.queue.length && dependsOn(this.db, change) === before) break;
@@ -536,8 +541,10 @@ class SqliteRecord implements RecordStore {
       }
     }
     return new Promise<Appended>((resolve, reject) => {
+      // A rollback's refusal goes first, so the rollback never takes effect, even for a moment.
+      if (checked && byRule) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
       this.queue.push({ prepared, resolve, reject });
-      if (checked) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
+      if (checked && !byRule) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
       if (!this.scheduled) {
         this.scheduled = true;
         setImmediate(() => this.flush());
@@ -830,6 +837,8 @@ export interface RecordReader {
   transcript(session: string): Promise<Message[] | undefined>;
   /** The sessions a transcript.archived event links, by ID. */
   archived(): Promise<string[]>;
+  /** The same sessions with their agent, worktree and branch, and the SHA-256 of the newest transcript copy (#112). */
+  sessions(): Promise<{ id: string; agent: string | null; worktree: string | null; branch: string | null; transcript: string }[]>;
   /** Handles `deep find` searches besides transcripts: your decisions in force, and evidence that is neither media nor a transcript. */
   findable(): Promise<string[]>;
   close(): void;
@@ -841,6 +850,7 @@ export function openRecordReader(options: { path: string; evidence?: EvidenceSto
     resolve: (handle) => resolveHandle(db, options.evidence, transcripts, handle),
     transcript: (session) => sessionTranscript(db, options.evidence, transcripts, session),
     archived: async () => (db.prepare('SELECT id FROM sessions WHERE transcript IS NOT NULL ORDER BY id').all() as { id: string }[]).map((r) => r.id),
+    sessions: async () => db.prepare('SELECT id, agent, worktree, branch, transcript FROM sessions WHERE transcript IS NOT NULL ORDER BY id').all() as Awaited<ReturnType<RecordReader['sessions']>>,
     findable: async () => [
       ...(db.prepare("SELECT id FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string }[]).map((r) => `decision:${r.id}`),
       ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4') AND kind != 'transcript' ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
