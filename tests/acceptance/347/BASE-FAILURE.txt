@@ -1,0 +1,126 @@
+#347 acceptance suite on the base commit 8ae15875 (origin/main), 2026-10-28, before any #347 code.
+Built first: npm run build --workspaces; cargo build --locked -q -p deep-hook. Rerun after the redraft of helpers.ts
+(lazy failure messages; INCONCLUSIVE read from every trace deep-hook leaves when it decides alone).
+Run: node node_modules/vitest/vitest.mjs run --root tests/acceptance/347 --no-file-parallelism (the same as npx
+vitest; Node 24.22.0; 1-minute load 39.3 before the run and 40.8 after it, on 12 cores)
+Result: Test Files 3 failed (3); Tests 8 failed (8); 37 s. Every test fails at a named assertion, or BLOCKED on a
+plant the base doesn't list. None crashes the runner and none was INCONCLUSIVE. Trimmed to each test's failing
+assertion. The run's output follows the summary, cut (...) where the guard text and paths repeat.
+
+staged.test.ts (AC1 #347.3abdadd8)
+  x AC1 rm -rf cache/* over the ignored cache/ runs only once cache/ is staged as a copy-on-write copy kept for
+    staging.keep, with no ask, and deep undo brings back every file with its bytes
+    Error: AC1 #347.3abdadd8 `rm -rf cache/*` must run once cache/ is staged: deep-hook's PreToolUse ended deny (exit 2
+    after 6 ms, stderr "DeepBuild blocked this: A delete whose reach can't be worked out before it runs, ... (guard
+    no-unknown-reach-delete)")  (helpers.ts expectStaged)
+    -> the base has no stager: with the hub up, the hub denies every match of no-unknown-reach-delete (block mode).
+  x AC1 the copy is kept for the set time only: on the hub's clock past staging.keep (3d), the copy of cache/ is let
+    go and deep undo of the run is refused, leaving cache/ as the run left it
+    Error: AC1 #347.3abdadd8 [kept for a set time] `rm -rf cache/*` must run once cache/ is staged: deep-hook's
+    PreToolUse ended deny (exit 2 after 7 ms, ... (guard no-unknown-reach-delete))
+    -> nothing is staged, so there is no copy to keep or let go.
+
+ceiling.test.ts (AC2 #347.f308d7e8)
+  x AC2 ceiling 1,000 files: the agent-written wipe.sh deleting the untracked tmpdata/ of 5,000 files isn't staged,
+    the partial copy is dropped, an authority ask says its reach is unknown before the hook timeout, and tmpdata/
+    keeps its 5,000 files
+    Error: AC2 #347.f308d7e8 [1,000 files] `bash wipe.sh` must become an authority ask that says its reach is unknown:
+    no ask names it; deep-hook's PreToolUse ended deny after 23 ms (exit 2, stderr "DeepBuild blocked this: ... It
+    runs: rm -rf tmpdata (guard no-unknown-reach-delete)")  (helpers.ts expectAsked)
+    -> the base blocks the script outright: no ask, so nobody can approve a run whose reach is unknown.
+  x AC2 a test file system that slows each clone (3000 ms) past the seconds ceiling (2 s), files ceiling out of reach,
+    gives the same ask, and tmpdata/ keeps its 5,000 files
+    Error: AC2 #347.f308d7e8 [2 s, slow clones] `bash wipe.sh` must become an authority ask that says its reach is
+    unknown: no ask names it; deep-hook's PreToolUse ended deny after 18 ms (exit 2, ... (guard no-unknown-reach-delete))
+  x AC2 (wrong program) a stager with no ceiling (DEEP_HUB_PLANT=stages-without-ceiling) copies all 5,000, runs
+    wipe.sh with no ask and fails this test
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stages-without-ceiling did not start: ...
+    Error: DEEP_HUB_PLANT=stages-without-ceiling names no planted program
+
+commands.test.ts (AC3 #347.8c6cfb34)
+  x AC3 npm test, npm run build and cargo build, from scripts this session didn't change, are neither staged nor
+    asked about, while the agent-written clean.sh running rm -rf "$OUT"/* is staged
+    Error: AC3 #347.8c6cfb34 `bash clean.sh` must run once build/ is staged: deep-hook's PreToolUse ended deny (exit 2
+    after 7 ms, stderr "DeepBuild blocked this: ... It runs: rm -rf 'build/*' (guard no-unknown-reach-delete)"); read
+    at 1-minute load 33.7 on 12 cores  (helpers.ts expectStaged)
+    -> npm run build, npm test and cargo build each ran for real with no ask and nothing staged, as they must; the
+       test then fails on the contrast, clean.sh, which the base blocks instead of staging.
+  x AC3 the agent-written clean.sh running rm -rf "$OUT"/* is staged before it runs, and deep undo brings back build/
+    with its bytes
+    Error: AC3 #347.8c6cfb34 [clean.sh] `bash clean.sh` must run once build/ is staged: deep-hook's PreToolUse ended
+    deny (exit 2 after 7 ms, ... (guard no-unknown-reach-delete)); read at 1-minute load 33.7 on 12 cores
+  x AC3 (wrong program) a stager that stages every command whose writes it can't predict
+    (DEEP_HUB_PLANT=stages-unpredicted-writes) stages npm run build and fails, naming it
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stages-unpredicted-writes did not start: ...
+    Error: DEEP_HUB_PLANT=stages-unpredicted-writes names no planted program
+
+---- Output, cut where it repeats ----
+
+ RUN  v5.0.5 tests/acceptance/347
+
+ ❯ commands.test.ts (3 tests | 3 failed) 25683ms
+     × AC3 npm test, npm run build and cargo build, from scripts this session didn't change, are neither staged nor asked about, while the agent-written clean.sh running rm -rf "$OUT"/* is staged 24625ms
+     × AC3 the agent-written clean.sh running rm -rf "$OUT"/* is staged before it runs, and deep undo brings back build/ with its bytes 834ms
+     × AC3 (wrong program) a stager that stages every command whose writes it can't predict (DEEP_HUB_PLANT=stages-unpredicted-writes) stages npm run build and fails, naming it 224ms
+ ❯ ceiling.test.ts (3 tests | 3 failed) 9045ms
+     × AC2 ceiling 1,000 files: the agent-written wipe.sh deleting the untracked tmpdata/ of 5,000 files isn't staged, the partial copy is dropped, an authority ask says its reach is unknown before the hook timeout, and tmpdata/ keeps its 5,000 files 2821ms
+     × AC2 a test file system that slows each clone (3000 ms) past the seconds ceiling (2 s), files ceiling out of reach, gives the same ask, and tmpdata/ keeps its 5,000 files 3386ms
+     × AC2 (wrong program) a stager with no ceiling (DEEP_HUB_PLANT=stages-without-ceiling) copies all 5,000, runs wipe.sh with no ask and fails this test 2837ms
+ ❯ staged.test.ts (2 tests | 2 failed) 1644ms
+     × AC1 rm -rf cache/* over the ignored cache/ runs only once cache/ is staged as a copy-on-write copy kept for staging.keep, with no ask, and deep undo brings back every file with its bytes 830ms
+     × AC1 the copy is kept for the set time only: on the hub's clock past staging.keep (3d), the copy of cache/ is let go and deep undo of the run is refused, leaving cache/ as the run left it 813ms
+
+ FAIL  ceiling.test.ts > AC2 ... > AC2 ceiling 1,000 files: ...
+Error: AC2 #347.f308d7e8 [1,000 files] `bash wipe.sh` must become an authority ask that says its reach is unknown: no ask names it; deep-hook's PreToolUse ended deny after 23 ms (exit 2 after 23 ms, stdout "", stderr "DeepBuild blocked this: A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stage them first or ask you. Delete the paths by name, or ask the person to run it, or retry once the hub is up. What it deletes can't be worked out before it runs: a script file runs it. It runs: rm -rf tmpdata (guard no-unknown-reach-delete)\n")
+ ❯ must helpers.ts:85:18
+ ❯ expectAsked helpers.ts:721:3
+ ❯ scenario ceiling.test.ts:33:5
+
+ FAIL  ceiling.test.ts > AC2 ... > AC2 a test file system that slows each clone (3000 ms) past the seconds ceiling (2 s), ...
+Error: AC2 #347.f308d7e8 [2 s, slow clones] `bash wipe.sh` must become an authority ask that says its reach is unknown: no ask names it; deep-hook's PreToolUse ended deny after 18 ms (exit 2 after 18 ms, stdout "", stderr "DeepBuild blocked this: ... What it deletes can't be worked out before it runs: a script file runs it. It runs: rm -rf tmpdata (guard no-unknown-reach-delete)\n")
+ ❯ must helpers.ts:85:18
+ ❯ expectAsked helpers.ts:721:3
+ ❯ scenario ceiling.test.ts:33:5
+
+ FAIL  ceiling.test.ts > AC2 ... > AC2 (wrong program) a stager with no ceiling (DEEP_HUB_PLANT=stages-without-ceiling) ...
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stages-without-ceiling did not start: file:///.../packages/hub/dist/plant.js:30
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+Error: DEEP_HUB_PLANT=stages-without-ceiling names no planted program
+    at plantOf (packages/hub/dist/plant.js:30:15)
+    at runHub (packages/hub/dist/server.js:817:19)
+ ❯ startHub helpers.ts:378:45
+ ❯ scenario ceiling.test.ts:28:15
+ ❯ failureOf helpers.ts:71:5
+
+ FAIL  commands.test.ts > AC3 ... > AC3 npm test, npm run build and cargo build, ... while the agent-written clean.sh running rm -rf "$OUT"/* is staged
+Error: AC3 #347.8c6cfb34 `bash clean.sh` must run once build/ is staged: deep-hook's PreToolUse ended deny (exit 2 after 7 ms, stdout "", stderr "DeepBuild blocked this: ... What it deletes can't be worked out before it runs: a script file runs it. It runs: rm -rf 'build/*' (guard no-unknown-reach-delete)\n"); read at 1-minute load 33.7 on 12 cores
+ ❯ expectStaged helpers.ts:664:11
+ ❯ scenario commands.test.ts:44:5
+
+ FAIL  commands.test.ts > AC3 ... > AC3 the agent-written clean.sh running rm -rf "$OUT"/* is staged before it runs, and deep undo brings back build/ with its bytes
+Error: AC3 #347.8c6cfb34 [clean.sh] `bash clean.sh` must run once build/ is staged: deep-hook's PreToolUse ended deny (exit 2 after 7 ms, stdout "", stderr "DeepBuild blocked this: ... It runs: rm -rf 'build/*' (guard no-unknown-reach-delete)\n"); read at 1-minute load 33.7 on 12 cores
+ ❯ expectStaged helpers.ts:664:11
+ ❯ commands.test.ts:60:24
+
+ FAIL  commands.test.ts > AC3 ... > AC3 (wrong program) a stager that stages every command whose writes it can't predict (DEEP_HUB_PLANT=stages-unpredicted-writes) ...
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stages-unpredicted-writes did not start: file:///.../packages/hub/dist/plant.js:30
+Error: DEEP_HUB_PLANT=stages-unpredicted-writes names no planted program
+ ❯ startHub helpers.ts:378:45
+ ❯ world commands.test.ts:26:15
+ ❯ scenario commands.test.ts:36:32
+ ❯ failureOf helpers.ts:71:5
+
+ FAIL  staged.test.ts > AC1 ... > AC1 rm -rf cache/* over the ignored cache/ runs only once cache/ is staged as a copy-on-write copy ...
+Error: AC1 #347.3abdadd8 `rm -rf cache/*` must run once cache/ is staged: deep-hook's PreToolUse ended deny (exit 2 after 6 ms, stdout "", stderr "DeepBuild blocked this: ... What it deletes can't be worked out before it runs: what it names is a pattern or a value the line can't know. It runs: rm -rf 'cache/*' (guard no-unknown-reach-delete)\n"); read at 1-minute load 40.7 on 12 cores
+ ❯ expectStaged helpers.ts:664:11
+ ❯ staged.test.ts:27:24
+
+ FAIL  staged.test.ts > AC1 ... > AC1 the copy is kept for the set time only: ...
+Error: AC1 #347.3abdadd8 [kept for a set time] `rm -rf cache/*` must run once cache/ is staged: deep-hook's PreToolUse ended deny (exit 2 after 7 ms, stdout "", stderr "DeepBuild blocked this: ... It runs: rm -rf 'cache/*' (guard no-unknown-reach-delete)\n"); read at 1-minute load 40.7 on 12 cores
+ ❯ expectStaged helpers.ts:664:11
+ ❯ staged.test.ts:45:18
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+   Start at  21:35:04
+   Duration  36.71s (tests 100%)
