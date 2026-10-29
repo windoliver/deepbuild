@@ -1,0 +1,106 @@
+#340 session flow (AC1-AC5): the suite run on the base commit 248c9695 (origin/main, the merge of #789 over fe593280),
+2026-10-28, Mac15,7 / Apple M3 Pro 36 GiB, 12 cores, 1-minute load 9.5 at the start and 11.3 at the end.
+Node 24.22.0; `npm ci`, `npm run build --workspaces`, `cargo build --locked -q -p deep-hook` (target/debug/deep-hook).
+
+  npx vitest run --root tests/acceptance/340/flow --no-file-parallelism --reporter verbose
+  Tests  12 failed | 1 passed | 1 skipped (14)
+
+Trimmed to each test's failing assertion (the full messages also list every user.ask of the session).
+
+---- AC1 #340.e5f83881 (compact.test.ts): the base already sends the brief; proven on plants
+ ✓ three open asks with twelve requirements: the SessionStart after /compact sends all twelve IDs in one block under 500 tokens
+   reading: [122] "DeepBuild is watching this session. …" | [139] "DeepBuild: the open asks in this thread and their requirements
+   (deep_status shows each one):\n- session:f201…#0: R1, R2, R3, R4, R5\n- session:f201…#1: R6, R7, R8, R9\n- session:f201…#2: R10, R11, R12"
+ × (wrong program) DEEP_HUB_PLANT=brief-full-text
+   → BLOCKED: the hub with the plant DEEP_HUB_PLANT=brief-full-text did not start: … DEEP_HUB_PLANT=brief-full-text names no planted program
+ × (wrong program) DEEP_HUB_PLANT=brief-at-startup-only
+   → BLOCKED: … DEEP_HUB_PLANT=brief-at-startup-only names no planted program
+
+---- AC2 #340.2dc7b69b (ack.test.ts): fails on the base
+ × three messages typed while Reads run in the desktop app: each is acknowledged in the chat within one tool call, and the chat line shows both waiting asks
+   → AC2 #340.2dc7b69b the message "also return 401 with a JSON error body when the token is malformed", typed while a Read ran, must get a
+     visible acknowledgement within one tool call: a line of the chat's message (systemMessage) from that call's PostToolUse through the next
+     call's naming it; the window shows PostToolUse: "" (exit 0 after 5 ms, stdout "", stderr ""); PreToolUse: "" (exit 0 after 6 ms,
+     stdout "", stderr ""); PostToolUse: "" (exit 0 after 7 ms, stdout "", stderr "")
+ × (wrong program) DEEP_HUB_PLANT=queue-shows-newest
+   → BLOCKED: … DEEP_HUB_PLANT=queue-shows-newest names no planted program
+
+---- AC3 #340.ff3d5215 (continuations.test.ts): both scenarios fail on the base
+ × the Claude desktop app's resume prompt, enqueued and dequeued by the app, is one user.ask from continuation that opens no task; your typed look-alike opens one
+   → AC3 #340.ff3d5215 the desktop app's resume prompt, with its queue pair must never be recorded as your ask: 1 user.ask of it from: person
+     (user.ask at log_pos 10 {"msg":1,"text":"The app was quit while you were working. Please continue from where you left off.",
+     "tasks":["session:a596…#1"],"from":"person"})
+     (the base reads the app's enqueue at the resume's SessionStart as your message typed mid-turn, opens a task for it, and drops the
+     prompt's own UserPromptSubmit as already seen)
+ × a Codex goal's continuation turn and a heartbeat are each one user.ask from continuation that opens no task; your typed Codex prompts open theirs
+   → AC3 #340.ff3d5215 the Codex goal's continuation turn (01a1d75b-…), which fires no prompt hook, must be recorded as one user.ask before
+     its first hook's events, from: continuation; between your first turn's stop and the heartbeat the session records 0 user.ask (none)
+     (the heartbeat's own check holds on the base: {"msg":1,"text":"<heartbeat>…","tasks":[],"from":"continuation"})
+ × (wrong program) DEEP_HUB_PLANT=continuation-as-person
+   → BLOCKED: … DEEP_HUB_PLANT=continuation-as-person names no planted program
+ × (wrong program) DEEP_HUB_PLANT=continuation-by-likeness
+   → BLOCKED: … DEEP_HUB_PLANT=continuation-by-likeness names no planted program
+
+---- AC4 #340.0abe1257 (queue.test.ts): fails on the base
+ × in a desktop-app replay where every prompt comes with the app's queue pair, each prompt is one user.ask with its origin, and the one message that waited counts once, at its hook
+   → AC4 #340.0abe1257 the background subagent's report, whose queue pair came during its SubagentHandback call, must never be recorded as
+     your ask: 2 user.ask of it from: person (user.ask at log_pos 26 {"msg":4,"text":"<agent-message from=\"aa655931df71547ef\">…",
+     "tasks":["session:bdf8…#4"],"from":"person"}; user.ask at log_pos 29 {"msg":5,…,"from":"person"})
+     (your two prompts, the message that waited, the scheduled task's prompt and the other session's message all held before it)
+ × (wrong program) DEEP_HUB_PLANT=counts-every-enqueue
+   → BLOCKED: … DEEP_HUB_PLANT=counts-every-enqueue names no planted program
+
+---- AC5 #340.ba97030c (budgets.test.ts)
+ × the perf lane has a task naming #340, timing the SessionStart hook after a compaction, valid against the merge base's budgets, and it runs
+   → AC5 #340.ba97030c benchmarks/budgets.json must have a task whose reason names issue #340, timing the SessionStart hook that sends the
+     open asks' requirement IDs again after a compaction
+ ↓ the SessionStart hook under 10 ms at p95 on top of process start, against the merge base's build (here the merge base is the base itself)
+   This run: INCONCLUSIVE the runs are neither all under 10 ms nor all over it by more than the 662% margin: SessionStart(compact) p95 over
+     process start, per run: 18.76, 3.95, 30.12, 19.29, 24.02 ms against 10 ms (hook p95 30.9, 42.9, 44.5, 65.0, 39.6 ms, floor p95 12.2,
+     39.0, 14.4, 45.7, 15.6 ms); p50 hook 19.7, 24.5, 30.9, 24.3, 25.8 ms against the merge base 248c9695's 21.6, 23.3, 22.0, 24.2, 29.9 ms;
+     Mac15,7 / Apple M3 Pro, 1-minute load 10.0 on 12 cores
+   An earlier run of the same test the same evening, alone (load 10.4), read FAIL:
+   → AC5 #340.ba97030c FAIL the SessionStart hook after a compaction is over 10 ms at p95 on top of process start in every run:
+     SessionStart(compact) p95 over process start, per run: 24.96, 32.71, 46.39, 45.96, 39.03 ms against 10 ms (hook p95 34.5, 42.0, 57.1,
+     53.7, 46.6 ms, floor p95 9.6, 9.3, 10.7, 7.7, 7.5 ms); p50 hook 26.6, 25.2, 26.9, 24.4, 31.3 ms against the merge base 248c9695's 26.3,
+     22.3, 24.5, 28.6, 22.1 ms; Mac15,7 / Apple M3 Pro, 1-minute load 10.4 on 12 cores
+   So the base's SessionStart after a compaction, which already sends the brief, reads about 20-45 ms over process start (README, Open
+   questions 5).
+ × (wrong program) DEEP_HUB_PLANT=slow-brief
+   → BLOCKED: … DEEP_HUB_PLANT=slow-brief names no planted program
+
+No run of this suite was affected by deep-hook dropping hooks at high load: every replay's hooks reached the hub (each failure above is
+an assertion on recorded events or hook replies; no BLOCKED but the missing plants).
+
+==== Added 2026-10-29: terminal.test.ts (AC2 and AC4 in the terminal), on the same base commit 248c9695
+deep-hook rebuilt (`cargo build --locked -q -p deep-hook`; the machine's cleanup had removed target/debug). The shared Mac was loaded:
+run at the owner's threshold, 1-minute load under 45.
+
+First run, load 42.4 at the start (27.7 at the end): it showed dropped hooks, so it doesn't count. A PostToolUse in AC2's window
+printed `deep-hook: could not spool 01M64D3VP1C7G08R0NAQC19597 within the hook's 50 ms`, and in AC4 the first message was recorded
+from person (its PostToolUse read the queue before its late UserPromptSubmit landed), while the second was recorded `unknown`.
+
+Re-run once, load 26.6 at the start and 31.0 at the end, with no hook dropped or spooled:
+
+  npx vitest run --root tests/acceptance/340/flow --no-file-parallelism --reporter verbose terminal
+  Tests  4 failed (4)
+
+---- AC2 #340.2dc7b69b (terminal.test.ts): fails on the base
+ × two messages typed while Reads run in the terminal: each is acknowledged in the chat within one tool call, and the chat line shows both waiting asks
+   → AC2 #340.2dc7b69b [terminal] the message "also return 401 with a JSON error body when the token is malformed", typed while a Read
+     ran, which fired UserPromptSubmit at once, must get a visible acknowledgement within one tool call: a line of the chat's message
+     (systemMessage) from its own UserPromptSubmit through the next call's PostToolUse naming it; the window shows UserPromptSubmit: ""
+     (exit 0 after 25 ms, stdout "", stderr ""); PostToolUse: "" (exit 0 after 12 ms, stdout "", stderr ""); PreToolUse: "" (exit 0 after
+     11 ms, stdout "", stderr ""); PostToolUse: "" (exit 0 after 11 ms, stdout "", stderr "")
+ × (wrong program) DEEP_HUB_PLANT=queue-shows-newest
+   → BLOCKED: … DEEP_HUB_PLANT=queue-shows-newest names no planted program
+
+---- AC4 #340.0abe1257 (terminal.test.ts): fails on the base
+ × each of two messages typed while Reads run in the terminal is one user.ask from person, not two
+   → AC4 #340.0abe1257 [terminal] the message "also return 401 with a JSON error body when the token is malformed", typed while a Read
+     ran (its enqueue and its UserPromptSubmit), must be counted once, as one user.ask from person; the session holds 1 with its text:
+     user.ask at log_pos 5 {"msg":1,"text":"also return 401 with a JSON error body when the token is malformed","tasks":[],"from":"unknown"}
+     (the base counts it once but reads it `unknown`: no transcript entry places its UserPromptSubmit, and the enqueue that waited is
+     not taken as a person's; README, Open questions 9)
+ × (wrong program) DEEP_HUB_PLANT=counts-every-enqueue
+   → BLOCKED: … DEEP_HUB_PLANT=counts-every-enqueue names no planted program
