@@ -1,0 +1,65 @@
+Acceptance tests for #23 (budgets/) on the base debda22 (origin/main, no implementation), run on 2026-10-28 on an
+Apple silicon Mac (on battery, load average 38 to 53 from other sessions; nothing here is timed), Node 24.22.0,
+Vitest 5.0.5, after npm ci and npm run build --workspaces:
+
+  npx vitest run tests/acceptance/23/budgets
+
+Trimmed to each failure's reason. <repo> is the checkout; run:…, ask:…, decision:… and budget IDs stand for ULIDs.
+
+== The base
+
+ Test Files  2 failed (2)
+      Tests  no tests
+
+FAIL  budgets.test.ts, plants.test.ts
+      Error: Cannot find module '../../../../packages/resolver-decisions/src/index.ts' imported from
+      <repo>/tests/acceptance/23/budgets/helpers.ts
+  (Expected: the extension doesn't exist, so none of the 4 tests can load.)
+
+  npx tsc -p tests/acceptance/23, the budgets/ lines: 4 errors, all the missing surface: resolver-decisions' module (1);
+  Delivery.budget (1); Card.budget (2). With the sample fix below: 0 errors for the whole folder.
+
+
+== A program that does nothing for budgets, standing in for the base
+
+So that each criterion test is seen failing at an assertion rather than at the import: the match job's sample fix
+(the shared surface in ../README.md, with resolver-decisions matching saved decisions) and the base ledger, with
+nothing that answers a paid run's request: resolver-decisions takes the ledger and never uses it; Delivery.budget and
+Card.budget are absent. Copied in from outside the checkout and removed afterwards.
+
+  Test Files 2 failed (2), Tests 4 failed (4)
+  budgets  #23.67403f66   run run:…, $4 asked in repoA, inside budget … ($10): ask:… is decided for you, without
+                          reaching you (decided for you by []; refusals []; delivered []): expected 'unanswered' to be
+                          'decided_for_you'
+           #23.d3776517   run run:…, $2 asked in repoA, inside budget … ($12): ask:… is decided for you, without
+                          reaching you (decided for you by []; …): expected 'unanswered' to be 'decided_for_you'
+  plants   (both)         the scenario fails, but at the same first assertion as above, not at the plant's message:
+                          on a program that answers nothing, the plants have nothing to make wrong.
+
+
+== The sample fix
+
+A sample fix kept outside this checkout (on top of the match job's sample) passed 4/4:
+
+  Test Files  2 passed (2)
+       Tests  4 passed (4)
+
+With it applied, tests/acceptance/86 still passed 24/24, and npx tsc -p tests/acceptance/23 had 0 errors.
+
+
+== The wrong programs (plants.ts), on the sample fix
+
+Each criterion's scenario run on its plant fails with the message plants.test.ts names; plants.test.ts passes 2/2.
+
+  repoIgnored (#23.67403f66): a resolver that never reads which repo a paid run was asked in.
+    run run:…, $1 asked in repoB, which no budget you approved covers: ask:… reaches you, not decided for you by
+    [decision:…]; refusals []; delivered ["approve"]: expected 'decided_for_you' to be 'unanswered'
+
+  chargedOnly (#23.d3776517): a resolver that answers from its own count of what was charged.
+    run run:…, $2 asked in repoA, inside budget … ($12): the answer handed to the agent names budget … and says $10
+    is left in it: expected { …(2) } to deeply equal { …(2) }
+  (It says $12 left, its own count, where the ledger holds $10. Run once more, outside the kept tests, with only its
+  resolve half planted, so that what it says comes from the core: it lets the $4 run through.)
+    run run:…, $4, against budget … with $3 left counting run run:…'s $7 reserved and not yet charged ($10 counting
+    only what was charged): ask:… reaches you, not decided for you by [decision:…]; refusals []; delivered
+    ["approve"]: expected 'decided_for_you' to be 'unanswered'
