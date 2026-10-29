@@ -1,0 +1,45 @@
+Base commit: debda22a (origin/main, merge of #773), workspaces built (npm ci; npm run build --workspaces), Node 24.22.0,
+target/debug/deep-hook and target/debug/deep-app built (cargo build --locked -q -p deep-hook; -p deep-app --bin
+deep-app), macOS (Darwin 25.6), October 27, 2026.
+
+Command:
+  npx vitest run --root tests/acceptance/326/setup --no-file-parallelism
+
+Result:
+  Test Files  3 failed (3)
+       Tests  3 failed | 9 passed (12)
+    Duration  184 s
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/326/setup/tsconfig.json reports no errors.
+
+The three tagged tests (#326.523de34e) fail at an assertion, for the missing surface:
+
+click.test.ts  "#326.523de34e the Set up click says one line; then ..."
+  AssertionError: #326 the Set up click (deep-app --set-up) must exit 0 once it set DeepBuild up: exit 101, stdout "",
+  stderr "thread 'main' panicked at crates/deep-app/src/main.rs:122:22: unknown argument --set-up"
+  The base app has no Set up action.
+
+first-command.test.ts  "#326.523de34e the first deep status in a fresh home sets DeepBuild up ..."
+  AssertionError: #326 after the first deep command (deep status) the hooks must be in place: there is no
+  /private/tmp/da326s-XcFXhe/h/.claude/settings.json
+  The base `deep status` sets nothing up. It exits 3: no hub could be read.
+
+same.test.ts  "#326.523de34e the Set up click and the first deep command each leave what deep setup leaves, ..."
+  AssertionError: #326 the Set up click (deep-app --set-up) must exit 0 once it set DeepBuild up: exit 101, ...
+  unknown argument --set-up
+  The same missing click, the first way in this test tries.
+
+The nine untagged tests pass at the base, by design. They run the same checks on planted twins (twins/), built
+from merged code, so they need nothing of #326:
+
+controls, which must pass the checks (so a failure on the real program is the program's):
+  click.test.ts          #326 (control right-set-up)
+  first-command.test.ts  #326 (control deep-sets-up-once)
+  same.test.ts           #326 (control right-set-up, deep-sets-up-once)
+wrong programs, each of which must fail the checks with its own message (each toMatch held):
+  click.test.ts          chatty-set-up            "... must say what it did in one line; it said <n> lines"
+  click.test.ts          no-hub-set-up            "... must start the hub through its login service"
+  click.test.ts          gating-set-up            "... the hub held / a verdict blocked the Stop of session ..."
+  click.test.ts          watch-rules-set-up       "... with the hub up DeepBuild let the agent's pkill -f vite through"
+  first-command.test.ts  deep-sets-up-every-time  "... the second deep command (deep status) said so again"
+  same.test.ts           partial-set-up           "... must leave the same state as deep setup: statusLine differs"
