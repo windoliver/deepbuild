@@ -165,6 +165,28 @@ pub enum Planted {
     FrameIndexI64Product,
     /// #488: `rate`'s index divides truncating toward 0.
     FrameIndexTruncatingDivision,
+    /// #401: the panel host lets a script's fetch reach the network and its program run.
+    PanelPolicyOpen,
+    /// #401: plug-in toasts keep showing while the question card does.
+    ToastsIgnoreCard,
+    /// #401: a script's focus, pop-out and clipboard write go through with no serial.
+    ScriptOpsNeedNoSerial,
+    /// #401: a placement verb or a suggestion moves any piece, yours too.
+    PlacementMovesYours,
+    /// #401: after a failed call the source serves its cached answer with the call's time as its as-of.
+    RefreshRestampsCached,
+    /// #401: a panel's words reach the session with no serial.
+    SendsWithoutSerial,
+    /// #401: a fresh serial lets every send through until it expires.
+    SerialCarriesManySends,
+    /// #401: a frame shows the readings of the latch a frame before its own.
+    BoundValueAFrameLate,
+    /// #401: install takes any keymap as it is.
+    KeymapUnchecked,
+    /// #401: two bindings of one chord in one context install with no conflict reported.
+    ConflictsUnreported,
+    /// #401: every key, the escape chord too, goes to the focused panel alone.
+    FocusedPanelTakesEscape,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -485,6 +507,8 @@ pub enum Call {
         actual: PathBuf,
         tolerance: Value,
     },
+    /// The trusted ring's calls (#401).
+    Ring(Box<crate::ring::RingCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -597,6 +621,8 @@ pub struct Hub<'a> {
     pub scopes: BTreeMap<String, crate::input::PanelScope>,
     /// The input router's last serial.
     pub serial: u64,
+    /// The plug-ins' panels in the trusted ring (#401).
+    pub ring: crate::ring::Ring,
     /// When each revision of a document that isn't shared became current, by doc ID.
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
     /// The messages each session was sent from an ask box, by session ID (#384).
@@ -699,6 +725,9 @@ impl<'a> Hub<'a> {
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
+            ring: crate::ring::Ring::new(
+                scenario.panels.iter().map(|(id, p)| (id.clone(), p.rect)),
+            ),
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
@@ -1015,7 +1044,10 @@ impl<'a> Hub<'a> {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
             Call::Kit(k) => self.kit(k),
-            Call::Input { panel, event } => self.input(panel, event),
+            Call::Input { panel, event } => match self.ring_input(panel, event) {
+                Some(reply) => reply,
+                None => self.input(panel, event),
+            },
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {
@@ -1083,6 +1115,7 @@ impl<'a> Hub<'a> {
                 actual,
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
+            Call::Ring(r) => self.ring_call(r),
         };
         self.stamp(&mut reply);
         reply

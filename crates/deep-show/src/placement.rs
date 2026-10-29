@@ -234,6 +234,9 @@ pub struct Planted {
     pub presents_hidden: bool,
     /// A hidden window presents nothing but still evaluates its sessions at its latches.
     pub evaluates_hidden: bool,
+    /// #401: a pop-out takes any serial in the writer's ring, however old and from whichever
+    /// of its panels.
+    pub accepts_any_ring_serial: bool,
 }
 
 /// What happened to a window: it opened or was dragged to a rect, or came to the top of the
@@ -284,8 +287,8 @@ pub struct Placement {
     events: Vec<(i64, String, Event)>,
     /// Your inputs: when, and the window the panel was in.
     inputs: Vec<(i64, String)>,
-    /// The input router's serials, each the panel it was delivered to.
-    serials: BTreeMap<u64, String>,
+    /// The input router's serials, each the panel it was delivered to and when.
+    serials: BTreeMap<u64, (String, i64)>,
     reports: Reports,
     next_id: u32,
     planted: Planted,
@@ -537,7 +540,7 @@ impl Placement {
     /// Your input to a panel at `at`, with the serial the router gave it: its window comes to
     /// the top.
     pub fn input(&mut self, at: i64, panel: &str, serial: u64) {
-        self.serials.insert(serial, panel.to_string());
+        self.serials.insert(serial, (panel.to_string(), at));
         if let Some(id) = self.window_of(panel).map(|w| w.id.clone()) {
             self.inputs.push((at, id.clone()));
             self.events.push((at, id, Event::Raised));
@@ -558,9 +561,29 @@ impl Placement {
         let Some(serial) = serial else {
             return refused("no_serial");
         };
-        if self.serials.get(&serial).map(String::as_str) != Some(panel) {
-            return refused("serial_not_in_panel");
+        match self.serials.get(&serial) {
+            Some(_) if self.planted.accepts_any_ring_serial => {}
+            Some((p, _)) if p != panel => return refused("serial_not_in_panel"),
+            // #401: a serial lets a pop-out through only while fresh (`expires ≤ 30 s`).
+            Some((_, when)) if at - when >= crate::ring::TOKEN_LIFE => {
+                return refused("serial_expired")
+            }
+            Some(_) => {}
+            None => return refused("serial_not_in_panel"),
         }
+        self.open_view(at, panel, display, full_screen, size)
+    }
+
+    /// Opens `panel`'s view in a window of its own on `display`: the step of a pop-out after
+    /// its serial is checked.
+    pub fn open_view(
+        &mut self,
+        at: i64,
+        panel: &str,
+        display: &str,
+        full_screen: bool,
+        size: [f64; 2],
+    ) -> Value {
         let Some(d) = self.display(display).cloned() else {
             return refused("unknown_display");
         };

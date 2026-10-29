@@ -1588,6 +1588,8 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
+                    // A plug-in's panel scripts run up to the call (#401).
+                    self.advance_ring(at);
                     self.now = at;
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);
