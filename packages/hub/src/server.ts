@@ -4,11 +4,12 @@
 // credential it presents in its first line, and every event takes its writer from that role.
 import { execFileSync } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { shipped, type HookRequestLine } from '@deepbuild/adapters';
+import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
@@ -36,7 +37,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
@@ -78,6 +79,7 @@ function agentReply(agent: string, reply: ExtensionReply): string {
 const contextReply = (event: string, text: string): string => line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' });
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
+
 
 interface CoreLink {
   post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' }): void;
@@ -227,7 +229,7 @@ class Hub {
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
   readonly start = ulid(Date.now());
-  private readonly helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES });
+  private helloLine = '';
 
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {}
 
@@ -259,6 +261,9 @@ class Hub {
       this.exit(1);
     };
     const asking = (sessions: string[]) => { this.asking = new Set(sessions); };
+    // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
+    // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
+    this.helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES, generation: writerGeneration(this.root.ledger) });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking) : coreWorker(options, frame, fatal, asking);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
@@ -766,6 +771,12 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   const lock = takeLock(root.lock);
   if (!lock) {
     process.stderr.write(`deep hub: a hub is already running on ${root.dir}: it holds the lock\n`);
+    return 1;
+  }
+  // A restore cut off midway may have put back the record without its evidence and wiki, or the reverse (#572).
+  if (existsSync(root.restoring)) {
+    lock.release();
+    process.stderr.write(`deep hub: a restore didn't finish: run deep restore ${readFileSync(root.restoring, 'utf8').trim()} again, then start the hub\n`);
     return 1;
   }
   // A hangup isn't a stop: closing the terminal or SSH session that started the hub leaves it running.

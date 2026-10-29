@@ -5,9 +5,9 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces } from 'node:os';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
@@ -38,7 +38,7 @@ import { aboutCall, aboutPermission, standingRules, type About } from './standin
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
-import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
+import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
 const HOUR = 3_600_000;
@@ -1766,6 +1766,7 @@ export class Core {
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
+      case 'record.backup': return this.backup(params);
       case 'env.up': return this.envUp(params);
       case 'env.down': return this.envDown(params);
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
@@ -1775,6 +1776,45 @@ export class Core {
       case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => ({ reported: true }));
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
+  }
+
+  /**
+   * `deep backup <folder>` (#572): the record through SQLite's online backup on the writer's connection, which runs
+   * here, off the hub's event loop, so hooks are answered while it copies; then the evidence and wiki folders. Evidence
+   * is written before the event that cites it commits, so a copy taken after the record's holds every file it cites.
+   * The record's copy is named ledger.db only once the folders are copied, so a folder with one holds a whole backup.
+   */
+  private async backup(params: Obj): Promise<Obj> {
+    const folder = params.folder;
+    if (typeof folder !== 'string' || !isAbsolute(folder)) throw new Refused(refusal('type', '/params/folder', 'Name the backup folder by its absolute path.', folder));
+    const ledger = join(folder, 'ledger.db');
+    const partial = `${ledger}.partial`;
+    // Checked before anything is made: the folder's nearest part that exists, with its links resolved.
+    let nearest = folder;
+    while (!existsSync(nearest)) nearest = dirname(nearest);
+    const [real, own] = [await realpath(nearest), await realpath(this.root.dir)];
+    if (real === own || real.startsWith(`${own}/`)) throw new Refused(refusal('conflict', '/params/folder', `Back up outside DeepBuild's own folder ${own}, which the backup copies.`, folder));
+    // Only an empty folder, made yours alone: nothing in it is read or written through, and no one else reads the copy.
+    if (existsSync(folder) && readdirSync(folder).length > 0) throw new Refused(refusal('conflict', '/params/folder', `${folder} isn't empty; back up into an empty folder, or one that doesn't exist yet.`, folder));
+    await mkdir(folder, { recursive: true, mode: 0o700 });
+    await chmod(folder, 0o700);
+    const copies = [[this.root.evidence, 'evidence'], [this.root.wiki, 'wiki']] as const;
+    try {
+      await this.record.backup(partial);
+      await chmod(partial, 0o600);
+      await synced(partial);
+      for (const [from, name] of copies) await copySynced(from, join(folder, name));
+      // ledger.db names a whole backup only once all of it is on disk, and lasts once its folder is synced.
+      await synced(folder);
+      renameSync(partial, ledger);
+    } catch (error) {
+      rmSync(partial, { force: true });
+      for (const [, name] of copies) rmSync(join(folder, name), { recursive: true, force: true });
+      throw error;
+    }
+    // After the rename the backup is whole, so a failed sync here leaves it as it is.
+    await synced(folder);
+    return { folder };
   }
 
   async health(): Promise<Obj> {
