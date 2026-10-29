@@ -1,0 +1,7 @@
+#!/bin/sh
+# Positive control for the app's Set up click (README: Wrong programs): a right program built from merged code. It runs
+# `deep setup`'s steps and says so in one line. The checks must pass on it, so a failure on the real click is the
+# click's, not the test's.
+[ "$1" = --set-up ] || { echo "usage: $0 --set-up" >&2; exit 2; }
+out=$(deep setup 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }
+echo "DeepBuild added its hooks in watch-only mode and started the hub; deep setup --undo removes it."
