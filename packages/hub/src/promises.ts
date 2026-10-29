@@ -118,7 +118,7 @@ export function clockTime(ms: number): string {
 }
 /** What the agent reads when its promised check comes due, naming the quote and its due time. */
 export function wakeText(state: PromiseState): string {
-  return `DeepBuild: your promised check is due (${clockTime(state.due)}): "${state.quote}" Do it now, and report what you find; this wake-up sets itself no further.`;
+  return `DeepBuild: your promised check is due (${clockTime(state.due)}): "${state.quote}" Do it now, and report what you find; this wake-up sets itself no further. (promise:${state.id})`;
 }
 /** The session's row while a due promise waits for its next prompt or stop. */
 export function dueReading(state: PromiseState): string {
