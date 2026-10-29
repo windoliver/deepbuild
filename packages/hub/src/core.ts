@@ -1388,7 +1388,7 @@ export class Core {
     const asked = await this.holds.asked(offer.meta, offer.about);
     // Its answer is yours, given here: nothing is delivered to the session.
     this.prompts.add(asked.ask);
-    if (!asked.decision) await this.asks.answer(as, asked.ask, { option: 'approve', plan_hash: null, token: `os-confirm:${ulid(this.now())}` }).catch((error: unknown) => { throw asRefused(error); });
+    if (!asked.decision) await this.asks.answer(as, asked.ask, { option: 'approve', plan_hash: (await this.asks.card(asked.ask)).plan?.hash ?? null, token: `os-confirm:${ulid(this.now())}` }).catch((error: unknown) => { throw asRefused(error); });
     await this.syncStanding().catch(() => undefined);
     const [saved] = (await this.record.raw(`SELECT id, data FROM events WHERE kind = 'decision.created' AND subject = '${sql(asked.ask)}' ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
     return { offer: handle, ask: asked.ask, decision: saved ? `decision:${saved.id}` : asked.decision ?? null, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : offer.scope };
@@ -2271,6 +2271,8 @@ export class Core {
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
+    // `deep inbox answer` names an option, and its prompt named the plan the card shows: an approval binds that one (#69).
+    if (context.role === 'cli' && chosen?.decision === 'allow' && input.plan_hash === undefined) input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];

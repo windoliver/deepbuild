@@ -13,7 +13,7 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. The sorter #84 builds takes the
 // planted one's place (DEEP_HUB_TEST_SORTER, only tests set it).
 import { readFileSync } from 'node:fs';
-import { AskRefused, type Asks } from '@deepbuild/asks';
+import { AskRefused, type Asks, type PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { countMcp, toolLists, type Listed } from './mcp-servers.js';
@@ -35,6 +35,15 @@ export interface HoldOptions {
   /** The core's connection for a session's events. */
   connection(session: string, agent: string): Connection;
   pin(cwd: string, question: string): Promise<Obj>;
+}
+
+/**
+ * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
+ * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
+ */
+function planFor(source: string, does: string, changes: string[]): PlanInput {
+  const undo = /^effect\.(push|merge)$/.test(source) ? 'Revert it with a new commit' : null;
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0 }], diff: key({ source, does, changes }) };
 }
 
 const DOES: Record<string, string> = { push: 'pushes', merge: 'merges', dispatch: 'dispatches', send: 'sends', delete: 'deletes' };
@@ -84,13 +93,15 @@ export class Holds {
     return row;
   }
   /** Raises one authority ask from `source` (a choice that approves, for the hold-as-choice plant); its handle. */
-  private async raise(session: string, agent: string, cwd: string, source: string, k: string, question: string, [yes, no]: [string, string]): Promise<string> {
+  private async raise(session: string, agent: string, cwd: string, source: string, k: string, question: string, [yes, no]: [string, string], plan: PlanInput): Promise<string> {
     const pinned_to = await this.o.pin(cwd, question);
     const options = [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }];
     const ask = this.o.plant === 'hold-as-choice'
       ? { kind: 'choice', question, options, recommended: 'approve', default: 'approve', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to }
       : { kind: 'authority', question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', key: k, pinned_to };
-    return this.o.asks().raise(this.o.connection(session, agent), this.o.plant === 'hold-as-choice' ? 'deep_ask.choice' : source, ask);
+    return this.o.plant === 'hold-as-choice'
+      ? this.o.asks().raise(this.o.connection(session, agent), 'deep_ask.choice', ask)
+      : this.o.asks().raise(this.o.connection(session, agent), source, ask, plan);
   }
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
   private async waiting(handle: string, label: string): Promise<string> {
@@ -121,7 +132,7 @@ export class Holds {
     const asked = await this.askOf(k);
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
     const question = `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`;
-    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!);
+    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label]));
   }
 
   /**
@@ -134,7 +145,7 @@ export class Holds {
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
       kind: 'authority', question: about.question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', subject: about.subject, pinned_to,
-    });
+    }, planFor(about.source, `${about.options[0]}: ${about.subject.target.ref}`, [about.subject.target.ref]));
     return { ask, ...(await this.applied(ask)) };
   }
   /** The decision that answered an ask for you, with the option it chose; nothing when none did. */
@@ -197,7 +208,8 @@ export class Holds {
           const question = `${list.server} (${list.scope} config${list.version ? `, version ${list.version}` : ''}) has new or changed tools that can change or destroy: ${names.join(', ')}. Let ${list.server} run them?${claims.length ? ` The server says, as its own claims: ${claims.join('; ')}.` : ''}`;
           const k = key({ source: 'mcp.tool_changed', server: list.server, tools: fresh.map((t) => [t.name, t.digest]) });
           // An ask that can't be raised leaves each tool to hold itself at its first call.
-          const ask = await this.raise(session, agent, cwd, 'mcp.tool_changed', k, question, ['Allow them', 'Keep them held']).catch(() => undefined);
+          const ask = await this.raise(session, agent, cwd, 'mcp.tool_changed', k, question, ['Allow them', 'Keep them held'],
+            planFor('mcp.tool_changed', `Let ${list.server} run ${names.join(', ')}, which can change or destroy`, names.map((n) => `${list.server}/${n}`))).catch(() => undefined);
           if (ask) held = { ask, tools: names };
         }
       }
@@ -223,6 +235,7 @@ export class Holds {
     const k = key({ source: 'mcp.tool_changed', server, tools: [[tool, listed?.digest ?? null]] });
     const asked = await this.askOf(k);
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
-    return this.raise(meta.session, meta.agent, meta.cwd, 'mcp.tool_changed', k, `${server} has a tool no update's ask holds yet, ${tool}, which can change or destroy. Let ${server} run ${tool}?`, ['Allow it', 'Keep it held']);
+    return this.raise(meta.session, meta.agent, meta.cwd, 'mcp.tool_changed', k, `${server} has a tool no update's ask holds yet, ${tool}, which can change or destroy. Let ${server} run ${tool}?`, ['Allow it', 'Keep it held'],
+      planFor('mcp.tool_changed', `Let ${server} run ${tool}, which can change or destroy`, [`${server}/${tool}`]));
   }
 }
