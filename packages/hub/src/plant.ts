@@ -22,7 +22,13 @@ export type Plant =
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
   | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
   // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
-  | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice';
+  | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice'
+  // #668's: a status that leaves out a session's commits, a doctor that trusts setup's record, and a `deep on` that keeps the gates off.
+  | 'status-omits-commit' | 'doctor-misses-hooks' | 'on-stays-off'
+  // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
+  // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
+  | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
+  | 'runs-disk-bytes';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -42,6 +48,9 @@ const PLANTS: readonly string[] = [
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
   'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
+  'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
+  'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
+  'runs-disk-bytes',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

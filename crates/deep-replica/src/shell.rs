@@ -2,6 +2,7 @@
 
 use deep_app::views::{Layout, Shell};
 use gpui_kit::base::dock::{DockArea, DockPlacement};
+use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::*;
 use gpui_shell::{dock::ScriptPanel, ScriptView};
 
@@ -46,6 +47,54 @@ pub fn open_shell_with(
         cx.new(|cx| Shell::new(layout, window, cx))
     })
     .expect("the shell window opens")
+}
+
+/// Issue #326: the shell with the question card shown at `card`, and the sidebar's slot holding `panel`, a panel
+/// package mounted past install, or, with none, the shipped sidebar. Answers the window and the slot's rect, in
+/// window points. A panel that doesn't load leaves its slot empty.
+pub fn open_with_card(
+    cx: &mut App,
+    card: Bounds<Pixels>,
+    panel: Option<&std::path::Path>,
+) -> (AnyWindowHandle, Bounds<Pixels>) {
+    // The sidebar's slot clips whatever fills it: the panel, or the shipped sidebar.
+    let layout = Layout {
+        sidebar: deep_app::views::EXTENSION.into(),
+        ..Layout::shipped("needs-you")
+    };
+    let (handle, _) = open_shell(&layout, cx, |window, cx| match panel {
+        Some(dir) => {
+            let runtime = deep_app::new_runtime().expect("the panel runtime");
+            if let Ok(view) = deep_app::mount_panel(&runtime, dir, window, cx) {
+                deep_app::views::place_extension(view.into());
+            }
+            // The runtime outlives the window, as the app's does: its mounted views keep their state.
+            std::mem::forget(runtime);
+        }
+        None => deep_app::views::place_extension(deep_app::views::shipped(
+            deep_app::views::Kind::Sidebar,
+            cx,
+        )),
+    });
+    let question = deep_app::record::with_view(|view| {
+        view.events
+            .iter()
+            .find(|event| event["kind"] == "ask.created")
+            .and_then(|ask| ask["data"]["question"].as_str())
+            .map(str::to_owned)
+    })
+    .flatten()
+    .unwrap_or_else(|| "Nothing needs you.".into());
+    handle
+        .update(cx, |_, window, cx| {
+            deep_app::card::present(card, &question, &["Yes", "No"], window, cx)
+        })
+        .expect("the shell window takes the card");
+    handle
+        .update(cx, |_, window, cx| window.render_frame(cx))
+        .expect("the shell window draws");
+    let slot = deep_app::views::slot_bounds().expect("the sidebar's slot was drawn");
+    (handle, slot)
 }
 
 /// The panels in one region, in tree order, by name.
