@@ -332,6 +332,9 @@ class Table implements LeaseTable {
       const end = await this.ended(h);
       const { running, proof } = this.processes(h.run);
       if (end && !running.length) await this.end(h, [end, ...proof]);
+      // A package's lease on a run ends once the supervisor proved each process of the run gone; the supervisor ends
+      // its own run's leases itself, after its kind's cleanup check.
+      else if (h.lease.holder.startsWith('ext:') && proof.length && !running.length) await this.end(h, proof);
     }
   }
   /** The event that says the lease's holder session has ended, recording its agent's end when it is proven gone. */
@@ -362,6 +365,8 @@ class Table implements LeaseTable {
     await this.end(h, proof);
   }
   private async end(h: Held, proof: string[]): Promise<void> {
+    // A tick and its holder's release can each reach a lease across an await: it ends once.
+    if (!this.held.has(h.lease.id)) return;
     const now = this.options.now();
     this.held.delete(h.lease.id);
     this.endedAt.set(keyOf(h.lease.resource), now);

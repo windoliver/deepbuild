@@ -936,7 +936,8 @@ class Host implements ExtensionHost {
   /**
    * Its leases end with it (#44, design: Lease): the ones this load was granted end at its unload, and a sandboxed
    * one's only once the supervisor proved every process of its run gone, each release citing those process.ended
-   * events. One whose run left a process running stays held, stale past its expiry; a later load never ends it.
+   * events. One whose run left a process running stays held, its key refused to the package's later runs, until the
+   * supervisor's later checks prove each of its processes gone and the lease table ends it citing them.
    */
   private async releaseLeases(ext: Ext): Promise<void> {
     ext.leasesEnded = true;
