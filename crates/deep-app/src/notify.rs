@@ -145,6 +145,6 @@ fn ask_text(events: &[Value], ask: &Value, now: u64) -> String {
         states::title(events, ask["session"].as_str().unwrap_or_default()),
         states::State::NeedsYou.word(),
         data["question"].as_str().unwrap_or_default(),
-        states::span(deadline.saturating_sub(now)),
+        states::span_until(deadline, now),
     )
 }

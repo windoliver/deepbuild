@@ -97,6 +97,20 @@ impl State {
     }
 }
 
+/// How long until `deadline` from `now`, as a card or a notification says when a default applies: whole days once a
+/// day or more is left ("3 d"), else [`span`]. Read to the nearest minute first, so a deadline a second short of
+/// three days away still reads "3 d".
+pub fn span_until(deadline: u64, now: u64) -> String {
+    const MINUTE: u64 = 60_000;
+    const DAY: u64 = 86_400_000;
+    let left = (deadline.saturating_sub(now) + MINUTE / 2) / MINUTE * MINUTE;
+    if left >= DAY {
+        format!("{} d", left / DAY)
+    } else {
+        span(left)
+    }
+}
+
 /// A span of time as a person reads it: "4 min", "2 h", "12 s".
 pub fn span(ms: u64) -> String {
     match ms / 1000 {
@@ -132,7 +146,8 @@ pub fn mark(state: &State, now: u64) -> String {
     format!("{} {}", glyph(state.entry()), state.text(now))
 }
 
-const CLOSING: [&str; 6] = [
+const CLOSING: [&str; 7] = [
+    "decision.applied",
     "ask.answered",
     "ask.defaulted",
     "ask.escalated",
@@ -146,9 +161,19 @@ pub fn handle(ask: &Value) -> String {
     format!("ask:{}", ask["id"].as_str().unwrap_or_default())
 }
 
-/// Whether an event closed the ask `handle`.
+/// Whether an event closed the ask `handle`, as the core reads it: a decision applied names its ask in its data,
+/// and no agent closes an ask.
 pub fn closes(event: &Value, handle: &str) -> bool {
-    CLOSING.contains(&event["kind"].as_str().unwrap_or_default()) && event["subject"] == handle
+    let writer = event["writer"].as_str().unwrap_or_default();
+    let ask = if event["kind"] == "decision.applied" {
+        &event["data"]["ask"]
+    } else {
+        &event["subject"]
+    };
+    CLOSING.contains(&event["kind"].as_str().unwrap_or_default())
+        && ask == handle
+        && writer != "hook"
+        && !writer.starts_with("mcp:")
 }
 
 /// The open asks, oldest first; of one session when `session` names one. Events carry their session as the
@@ -317,4 +342,46 @@ pub fn menu(events: &[Value], now: u64) -> Vec<String> {
             )
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn ask(id: &str) -> Value {
+        json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn a_decision_the_core_applied_closes_the_ask_it_names() {
+        let events = vec![
+            ask("a1"),
+            ask("a2"),
+            json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a1",
+                   "data": {"decision": "d1", "ask": "ask:a2"}}),
+        ];
+        let open: Vec<&str> = open_asks(&events, None)
+            .iter()
+            .map(|ask| ask["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(open, ["a1"]);
+    }
+
+    #[test]
+    fn no_agent_closes_an_ask() {
+        let events = vec![
+            ask("a1"),
+            ask("a2"),
+            ask("a3"),
+            json!({"kind": "ask.answered", "writer": "hook", "subject": "ask:a1", "data": {}}),
+            json!({"kind": "ask.cancelled", "writer": "mcp:agent", "subject": "ask:a2", "data": {}}),
+            json!({"kind": "ask.cancelled", "writer": "core", "subject": "ask:a3", "data": {}}),
+        ];
+        let open: Vec<&str> = open_asks(&events, None)
+            .iter()
+            .map(|ask| ask["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(open, ["a1", "a2"]);
+    }
 }
