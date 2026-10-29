@@ -32,6 +32,7 @@ const DOCS = {
   'deep.registerResolver': 'Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask\'s kind and scope; otherwise the ask reaches you.',
   'deep.registerSource': 'A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read.',
   'deep.registerEnvironment': 'An environment a check runs against: up(spec, lease, checkout) starts it and returns a handle, down(handle) stops it.',
+  'deep.lease': 'Leases a resource of a declared lease.kind@1 kind, the core\'s or one a manifest declares, exclusive or shared, held by the package itself: the grant, or the refusal naming the holder.',
   'deep.registerView': 'A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild\'s modules.',
   'deep.readNow': 'Reads every source a view binds again now, each through its own quota.',
   'deep.registerIndex': 'An index over the wiki: upsert claims, search with hits that name their sources, drop a source and rebuild from pages. The hub re-attaches each hit\'s provenance from the claim records, never from the index.',

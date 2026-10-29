@@ -1,0 +1,18 @@
+{
+  "name": "says done",
+  "state": "a stop that claims done, its three checks still running, about 4 minutes expected",
+  "plant": {
+    "outcome": null,
+    "requirements": [
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R1", "outcome": "pending", "check": "unit" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R2", "outcome": "pending", "check": "typecheck" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R3", "outcome": "pending", "check": "journey:checkout" }
+    ],
+    "running": [
+      { "check": "unit", "about_s": 30 },
+      { "check": "typecheck", "about_s": 45 },
+      { "check": "journey:checkout", "about_s": 240 }
+    ]
+  },
+  "line": "says done · 3 checks running · about 4 min · next: DeepBuild · receipt"
+}
