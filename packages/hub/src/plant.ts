@@ -26,7 +26,11 @@ export type Plant =
   // #23's: the agent's "always allow" picked, typed words saved as a decision, a
   // decision over the permission mode or before the guards, a rule's answer without its reason, and no rule copied.
   | 'permission-always-allow' | 'typed-saves-decision' | 'decision-over-mode' | 'decision-before-guard'
-  | 'rule-without-reason' | 'copies-no-standing-rules';
+  | 'rule-without-reason' | 'copies-no-standing-rules'
+  // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
+  // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
+  | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
+  | 'runs-disk-bytes';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -48,6 +52,8 @@ const PLANTS: readonly string[] = [
   'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
+  'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
+  'runs-disk-bytes',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

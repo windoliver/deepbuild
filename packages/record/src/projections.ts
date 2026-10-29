@@ -35,7 +35,7 @@ const T = (name: string, pk: string[], columns: string, indexes?: string[]): Tab
 const TABLES: readonly TableDef[] = [
   T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT'),
   T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT'),
-  T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
+  T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, deliverables TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
   T('attempts', ['task_ref', 'attempt'], 'task_ref TEXT, attempt INTEGER, session_id TEXT, child_id TEXT, worktree TEXT, base TEXT'),
   T('checks', ['id'], 'id TEXT, project_id TEXT, name TEXT, type TEXT, spec_hash TEXT, lane TEXT, min_runs INTEGER, owner TEXT, protected INTEGER'),
   T('runs', ['id'], 'id TEXT, check_id TEXT, claim_id TEXT, host TEXT, needs TEXT, commit_sha TEXT, env_fingerprint TEXT, started INTEGER, ended INTEGER, outcome TEXT, tests_run INTEGER, passed INTEGER, evidence TEXT, assertion TEXT, expected TEXT, actual TEXT, step TEXT, points_to TEXT'),
@@ -564,7 +564,7 @@ export class Projector {
   }
 
   private definition(d: Obj, state: string, lockedAt: number | null): Row {
-    return { task_ref: str(d.task_ref), id: bare(d.definition), base_commit: str(d.base_commit), requirements: json(d.requirements), budget: json(d.budget), hash: str(d.hash), state, locked_at: lockedAt };
+    return { task_ref: str(d.task_ref), id: bare(d.definition), issue_rev: str(d.issue_rev), base_commit: str(d.base_commit), requirements: json(d.requirements), deliverables: json(d.deliverables), budget: json(d.budget), hash: str(d.hash), state, locked_at: lockedAt };
   }
 
   // ---- Turns (design: Hooks are evidence, not a state machine: Order).
