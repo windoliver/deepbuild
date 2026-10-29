@@ -1,0 +1,43 @@
+{
+  "#83.8a03aacc": [
+    "stop-without-line"
+  ],
+  "#83.5bcede40": [
+    "status-reaches-model"
+  ],
+  "#83.fd11082e": [
+    "pass-without-verdict"
+  ],
+  "#83.4b0836ba": [
+    "answers-any-origin",
+    "plant-ignored"
+  ],
+  "#83.87a5093c": [
+    "owner-swapped"
+  ],
+  "#83.eb2dc033": [
+    "status-without-where"
+  ],
+  "#83.28c3309c": [
+    "pr-always-open"
+  ],
+  "#83.89bfa3a4": [
+    "paths-dropped"
+  ],
+  "#83.e8038389": [
+    "lowest-open-issue",
+    "next-never-named"
+  ],
+  "#83.09932b63": [
+    "count-first"
+  ],
+  "#83.15ee3b42": [
+    "keeps-whole-cause",
+    "dot-dropped"
+  ],
+  "#83.b4c17e65": [
+    "lanes-without-83",
+    "every-prompt-answered",
+    "status-reaches-model"
+  ]
+}
