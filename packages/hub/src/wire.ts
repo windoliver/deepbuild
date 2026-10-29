@@ -77,6 +77,8 @@ export interface HookMeta {
   matched: string[];
   /** What deep-hook read of the call for a matched entry, by name, shown with that entry's denial. */
   notes?: Record<string, string>;
+  /** The folders a delete whose reach can't be worked out names, by the entry that matched it, for the hub to stage (#347). */
+  stage?: Record<string, string[]>;
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
@@ -94,6 +96,8 @@ export interface HookMeta {
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
+  pr?: string;
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }
@@ -104,7 +108,16 @@ export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']
  * A PreToolUse held for the core: its label, the effect classes that need your authority, an MCP tool, and the
  * classes a standing rule decides (#23) with the shell command they're read from.
  */
-export interface Gated { label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string }
+export interface Gated {
+  label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
+  /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
+  stage?: string[] | null;
+}
+/**
+ * How long the hub holds a call it stages (#347): under Claude Code's 60 s PreToolUse timeout with room for the reply,
+ * so the stage or the ask comes before the agent runs the call anyway. The seconds ceiling is held below it.
+ */
+export const STAGE_HOLD_MS = 45_000;
 /** A parser's answer for one line. */
 export type Parsed =
   | { kind: 'control'; value: Record<string, unknown> }

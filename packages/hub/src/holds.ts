@@ -103,8 +103,27 @@ export class Holds {
       ? this.o.asks().raise(this.o.connection(session, agent), 'deep_ask.choice', ask)
       : this.o.asks().raise(this.o.connection(session, agent), source, ask, plan);
   }
+  /** The key an ask is raised under: what it is about, hashed. */
+  keyOf(about: unknown): string {
+    return key(about);
+  }
+  /** The ask raised under `k`: 'allow' once you said yes, its handle while it waits or after a no; undefined when none was. */
+  async prior(k: string): Promise<string | undefined> {
+    const asked = await this.askOf(k);
+    return asked && (asked.decision === 'allow' ? 'allow' : `ask:${asked.id}`);
+  }
+  /** A delete whose reach is unknown and couldn't be staged (#347): held by one authority ask that says so, raised under `k`. */
+  async holdUnstaged(meta: HookMeta, k: string, label: string, question: string): Promise<string> {
+    try {
+      const ask = await this.raise(meta.session, meta.agent, meta.cwd, 'command.unstageable', k, question, ['Run it unstaged', 'Don\'t run it']);
+      return `DeepBuild is holding this: ${question} It waits for your answer to ${ask}; once you say yes, run the same call again.`;
+    } catch (error) {
+      if (!(error instanceof AskRefused)) throw error;
+      return `DeepBuild held this: \`${label}\`'s reach is unknown and it can't be staged, and no ask could be raised for it (${error.message}).`;
+    }
+  }
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
-  private async waiting(handle: string, label: string): Promise<string> {
+  async waiting(handle: string, label: string): Promise<string> {
     const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = '${sql(handle.slice(4))}'`) as { key: string }[])[0]?.key ?? '');
     return row && row.status !== 'open' && row.status !== 'later'
       ? `DeepBuild held this: you said no to \`${label}\` (${handle}, ${row.status}); it doesn't run.`

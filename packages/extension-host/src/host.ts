@@ -120,6 +120,8 @@ export interface ExtensionHost {
   trustKey(connection: Connection, id: string, key: string): Promise<void>;
   /** Runs its conformance on its files now; the result is kept for that digest. */
   check(pkg: Installed): Promise<Conformance>;
+  /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
+  checked(pkg: Installed): boolean;
   load(pkg: Installed): Promise<Load>;
   loaded(): Promise<Loaded[]>;
   checks(): Promise<{ kind: string; extension: string }[]>;
@@ -631,6 +633,9 @@ class Host implements ExtensionHost {
     return Object.values(this.entries).map((e) => this.installedOf(e));
   }
 
+  checked(pkg: Installed): boolean {
+    return `${pkg.id}@${pkg.version}` in this.results;
+  }
   async check(pkg: Installed): Promise<Conformance> {
     if (this.closed) throw Error('the host is closed: it runs no conformance');
     const run = this.checkNow(pkg);
