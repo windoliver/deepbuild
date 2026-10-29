@@ -28,8 +28,6 @@ use serde_json::{json, Map, Value};
 use crate::hub::{Hub, Planted};
 use crate::shared::FLICKS;
 
-/// Input router: a token lives at most 30 s (`token: {serial, writer, kind, expires ≤ 30 s}`).
-pub const TOKEN_LIFE: i64 = 30 * FLICKS;
 /// How long a plug-in's toast stays up; the design names no number.
 const TOAST_LIFE: i64 = 4 * FLICKS;
 const TOAST: [f64; 2] = [320.0, 64.0];
@@ -81,8 +79,6 @@ pub enum Placer {
     You(u64),
     /// An agent's suggestion.
     Suggestion,
-    /// A call that names neither.
-    Nobody,
 }
 
 /// The calls this issue adds to `deep-show run`.
@@ -144,7 +140,6 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<RingCall> {
                     v.as_str()?;
                     Placer::Suggestion
                 }
-                (None, None) => Placer::Nobody,
                 _ => return None,
             },
         },
@@ -242,8 +237,6 @@ pub struct Ring {
     sources: BTreeMap<String, Source>,
     /// Each source's readings, each with the time the hub made it.
     readings: BTreeMap<String, Vec<(i64, Reading)>>,
-    /// Your presses (a click's press, or a key the panel got), by panel: serial and time.
-    presses: BTreeMap<String, Vec<(u64, i64)>>,
     /// The serial of each panel's last send, which spent it and every serial before it.
     spent: BTreeMap<String, u64>,
     /// How many sends each panel made, for the kind each next one takes.
@@ -282,20 +275,17 @@ impl Ring {
         self.panels.contains_key(panel)
     }
 
-    /// The newest serial of your press in `panel` still fresh at `now`; with `unspent`, one no
-    /// send of the panel's has spent.
-    fn fresh(&self, panel: &str, now: i64, unspent: bool) -> Option<u64> {
-        let spent = if unspent {
-            self.spent.get(panel).copied().unwrap_or(0)
-        } else {
-            0
-        };
-        self.presses
-            .get(panel)?
-            .iter()
-            .rev()
-            .find(|(s, at)| *s > spent && *at <= now && now - at < TOKEN_LIFE)
-            .map(|(s, _)| *s)
+    /// Your press moved keyboard focus to `panel`, a plug-in's or not.
+    pub fn focus(&mut self, panel: &str) {
+        self.kb_focus = Some(panel.to_string());
+    }
+
+    /// Where the piece is laid out in the main window, once something placed it.
+    pub fn rect_of(&self, piece: &str) -> Option<[f64; 4]> {
+        self.pieces
+            .get(piece)
+            .filter(|p| p.by != "default")
+            .map(|p| p.rect)
     }
 
     /// The source's reading the hub had made by `t`.
@@ -381,6 +371,40 @@ impl Ring {
             })
             .collect()
     }
+}
+
+/// A chord in one spelling: its modifiers in a fixed order, then its key; `esc` is `escape`.
+fn canonical_chord(chord: &str) -> Option<String> {
+    const MODS: [&str; 4] = ["cmd", "ctrl", "alt", "shift"];
+    let parts: Vec<String> = chord
+        .split('+')
+        .map(|p| p.trim().to_lowercase())
+        .map(|p| match p.as_str() {
+            "command" | "meta" | "super" | "⌘" => "cmd".to_string(),
+            "control" | "⌃" => "ctrl".to_string(),
+            "option" | "opt" | "⌥" => "alt".to_string(),
+            "⇧" => "shift".to_string(),
+            "esc" => ESCAPE.to_string(),
+            _ => p,
+        })
+        .collect();
+    let (key, mods) = parts.split_last()?;
+    if key.is_empty()
+        || MODS.contains(&key.as_str())
+        || mods.iter().any(|m| !MODS.contains(&m.as_str()))
+    {
+        return None;
+    }
+    let mut out: Vec<&str> = MODS
+        .iter()
+        .copied()
+        .filter(|m| mods.iter().any(|x| x == m))
+        .collect();
+    if out.len() != mods.len() {
+        return None;
+    }
+    out.push(key);
+    Some(out.join("+"))
 }
 
 /// A duration in flicks as a seconds literal the canvas's time grammar reads (up to five
@@ -489,7 +513,8 @@ fn check_binding(
     actions: &BTreeMap<String, String>,
 ) -> Result<(), Value> {
     let refuse = |code: &str| Err(refusal(code, ("chord", chord)));
-    if chord == ESCAPE {
+    // The escape chord is the shell's, with any modifier.
+    if chord.rsplit('+').next() == Some(ESCAPE) {
         return refuse("escape_chord");
     }
     match (
@@ -517,6 +542,10 @@ fn fetch(url: &str) -> bool {
         Some((h, p)) => (h, format!("/{p}")),
         None => (rest, "/".to_string()),
     };
+    // Even the wrong program reaches only this machine.
+    if !host.starts_with("127.0.0.1:") && !host.starts_with("localhost:") {
+        return false;
+    }
     let Ok(mut stream) = std::net::TcpStream::connect(host) else {
         return false;
     };
@@ -525,8 +554,13 @@ fn fetch(url: &str) -> bool {
     stream.write_all(request.as_bytes()).is_ok() && stream.read_to_end(&mut Vec::new()).is_ok()
 }
 
-/// The wrong program `panel_policy_open`: the script's own program, run.
+/// The wrong program `panel_policy_open`: the script's own program, run, if it is the Node the
+/// tests run under (the only program any scenario names).
 fn run_program(argv: &[String]) -> bool {
+    let named = std::path::Path::new(&argv[0]);
+    if named.file_name().and_then(|n| n.to_str()) != Some("node") || !named.is_absolute() {
+        return false;
+    }
     std::process::Command::new(&argv[0])
         .args(&argv[1..])
         .status()
@@ -570,20 +604,14 @@ impl Hub<'_> {
                 json!({ "toasts": list })
             }
             RingCall::Place { piece, rect, by } => match by {
-                Placer::You(serial) => {
-                    let yours = self.ring.presses.get(piece).is_some_and(|p| {
-                        p.iter().any(|(s, at)| s == serial && now - at < TOKEN_LIFE)
-                    });
-                    match yours {
-                        true => self.ring.place(piece, *rect, "you", false),
-                        false => json!({"code": "serial_not_fresh_in_piece"}),
-                    }
-                }
+                Placer::You(serial) => match self.placement.serial_fresh_in(*serial, piece, now) {
+                    true => self.ring.place(piece, *rect, "you", false),
+                    false => json!({"code": "serial_not_fresh_in_piece"}),
+                },
                 Placer::Suggestion => {
                     let moves = self.planted_is(Planted::PlacementMovesYours);
                     self.ring.place(piece, *rect, "suggestion", moves)
                 }
-                Placer::Nobody => json!({"code": "no_serial"}),
             },
             RingCall::Pieces => {
                 let list: Vec<Value> = self
@@ -740,9 +768,14 @@ impl Hub<'_> {
                 ) else {
                     return bad(&format!("keymap/{i}"));
                 };
-                let chord = chord.trim().to_lowercase();
+                let written = chord;
+                let Some(chord) = canonical_chord(written) else {
+                    return bad(&format!("keymap/{i}/chord"));
+                };
                 if !self.planted_is(Planted::KeymapUnchecked) {
-                    if let Err(refused) = check_binding(&chord, command, &kinds) {
+                    // Judged in its one spelling; the refusal names it as the plug-in wrote it.
+                    if let Err(mut refused) = check_binding(&chord, command, &kinds) {
+                        refused["chord"] = json!(written);
                         return refused;
                     }
                 }
@@ -760,7 +793,7 @@ impl Hub<'_> {
         for (id, p) in panels {
             // A panel takes the scenario's slot of its ID when there is one; one with none is
             // installed and laid out nowhere.
-            if self.ring.owns(id) {
+            if self.ring.owns(id) || self.panel_doc(id).is_some() {
                 return refusal("panel_unavailable", ("path", &format!("panels/{id}")));
             }
             let Some(def) = self.panel_def(plugin, p, &fresh_for) else {
@@ -818,11 +851,12 @@ impl Hub<'_> {
             ) {
                 return None;
             }
+            // A binding never shows a reading as live past the source's own freshness.
+            let fresh = *fresh_for.get(&source)?;
             let stale_after = match bind.get("stale_after") {
-                None => *fresh_for.get(&source)?,
-                Some(s) => s.as_i64()?,
+                None => fresh,
+                Some(s) => s.as_i64().filter(|s| *s > 0)?.min(fresh),
             };
-            fresh_for.get(&source)?;
             let b = Bound {
                 element,
                 bind: bind.clone(),
@@ -927,7 +961,7 @@ impl Hub<'_> {
                 text,
             } => self.say(&plugin, panel, session, kinds, text),
             _ => {
-                let serial = self.ring.fresh(panel, now, false);
+                let serial = self.placement.fresh_serial(panel, now, 0);
                 let unguarded = self.planted_is(Planted::ScriptOpsNeedNoSerial)
                     && matches!(op, Op::Focus | Op::PopOut(_) | Op::Clipboard(_));
                 match serial.is_some() || unguarded {
@@ -976,10 +1010,14 @@ impl Hub<'_> {
                 });
             }
             Op::PopOut(display) => {
-                let Some(spec) = self.scenario.panels.get(panel) else {
+                let Some(rect) =
+                    self.ring
+                        .rect_of(panel)
+                        .or(self.scenario.panels.get(panel).map(|p| p.rect))
+                else {
                     return false;
                 };
-                let size = [spec.rect[2], spec.rect[3]];
+                let size = [rect[2], rect[3]];
                 let reply = match serial {
                     Some(_) => self
                         .placement
@@ -1020,7 +1058,11 @@ impl Hub<'_> {
         let kind = kinds[*n % kinds.len()].clone();
         *n += 1;
         let many = self.planted_is(Planted::SerialCarriesManySends);
-        let serial = self.ring.fresh(panel, now, !many);
+        let spent = match many {
+            true => 0,
+            false => self.ring.spent.get(panel).copied().unwrap_or(0),
+        };
+        let serial = self.placement.fresh_serial(panel, now, spent);
         let by = json!({"plugin": plugin, "panel": panel});
         if serial.is_some() || self.planted_is(Planted::SendsWithoutSerial) {
             if let Some(s) = serial {
@@ -1056,16 +1098,12 @@ impl Hub<'_> {
         }
         self.serial += 1;
         let (serial, now) = (self.serial, self.now);
-        self.placement.input(now, panel, serial);
+        self.placement.input(now, panel);
         let mut reply = json!({ "serial": serial });
         match event {
             Event::Down { .. } => {
-                self.ring.kb_focus = Some(panel.to_string());
-                self.ring
-                    .presses
-                    .entry(panel.to_string())
-                    .or_default()
-                    .push((serial, now));
+                self.ring.focus(panel);
+                self.placement.gesture(now, panel, serial);
             }
             Event::Key { key, cmd } => {
                 let escape = !cmd && key.eq_ignore_ascii_case(ESCAPE);
@@ -1077,9 +1115,8 @@ impl Hub<'_> {
                     .filter(|_| !escape || self.planted_is(Planted::FocusedPanelTakesEscape));
                 let reached = match focused {
                     Some(f) => {
-                        let to = format!("panel:{f}");
-                        self.ring.presses.entry(f).or_default().push((serial, now));
-                        to
+                        self.placement.gesture(now, &f, serial);
+                        format!("panel:{f}")
                     }
                     None => "shell".to_string(),
                 };
@@ -1139,23 +1176,25 @@ impl Hub<'_> {
 mod tests {
     use super::*;
 
-    /// A serial of your press lets a panel's script through only while under 30 s old, only in
-    /// the panel it was delivered to, and for words into a session only until a send spends it.
     #[test]
-    fn a_serial_is_fresh_under_thirty_seconds_in_its_own_panel_until_a_send_spends_it() {
-        let mut ring = Ring::default();
-        ring.presses.insert("p".into(), vec![(7, 10 * FLICKS)]);
-        assert_eq!(ring.fresh("p", 39 * FLICKS, false), Some(7), "29 s old");
-        assert_eq!(ring.fresh("p", 40 * FLICKS, false), None, "30 s old");
-        assert_eq!(ring.fresh("p", 41 * FLICKS, false), None, "31 s old");
-        assert_eq!(ring.fresh("q", 11 * FLICKS, false), None, "another panel");
-        assert_eq!(ring.fresh("p", 9 * FLICKS, false), None, "before the press");
-        ring.spent.insert("p".into(), 7);
-        assert_eq!(ring.fresh("p", 11 * FLICKS, true), None, "spent by a send");
+    fn a_chord_has_one_spelling_and_the_escape_chord_is_known_in_any() {
         assert_eq!(
-            ring.fresh("p", 11 * FLICKS, false),
-            Some(7),
-            "spent only for sends"
+            canonical_chord("shift+cmd+K").as_deref(),
+            Some("cmd+shift+k")
         );
+        assert_eq!(
+            canonical_chord("Command+Shift+k").as_deref(),
+            Some("cmd+shift+k")
+        );
+        assert_eq!(canonical_chord("Esc").as_deref(), Some("escape"));
+        assert_eq!(
+            canonical_chord("shift+esc").as_deref(),
+            Some("shift+escape")
+        );
+        assert_eq!(canonical_chord("cmd+"), None);
+        assert_eq!(canonical_chord("hyper+k"), None);
+        let none = BTreeMap::new();
+        let change = json!({"core": "session.send"});
+        assert!(check_binding("shift+escape", &change, &none).is_err());
     }
 }
