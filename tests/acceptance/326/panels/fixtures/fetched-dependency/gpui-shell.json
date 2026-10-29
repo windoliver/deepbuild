@@ -1,0 +1,11 @@
+{
+  "id": "fixture-326-dependency",
+  "name": "A panel with a fetched dependency",
+  "entry": "main.js",
+  "dependencies": {
+    "pad-326": {
+      "git": "http://127.0.0.1:__PORT__/pad-326.git",
+      "branch": "main"
+    }
+  }
+}

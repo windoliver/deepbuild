@@ -1,0 +1,115 @@
+Acceptance tests for #23 (match/) on the base debda22 (origin/main, no implementation), run on 2026-10-27/28 on an
+Apple silicon Mac (not a reference Mac, on battery, load average 10 to 65 from other sessions), Node 24.22.0,
+Vitest 5.0.5, after npm ci and npm run build --workspaces:
+
+  npx vitest run tests/acceptance/23/match
+
+Trimmed to each failure's reason. <repo> is the checkout; ask:… and decision:… stand for ULID handles.
+
+== The base
+
+ Test Files  8 failed (8)
+      Tests  no tests
+
+FAIL  budgets, cites, join, keys, merge, plants, repeat, scope (.test.ts)
+      Error: Cannot find module '../../../../packages/resolver-decisions/src/index.ts' imported from
+      <repo>/tests/acceptance/23/match/helpers.ts
+  (Expected: the extension doesn't exist, so none of the 40 tests can load.)
+
+  npx tsc -p tests/acceptance/23: 16 errors, all the missing surface: resolver-decisions' module (1); Card.suggested (3),
+  Card.conflict (2, plus 2 implicit-any from it), Card.needs_person (2); InboxRow.decision (2); Delivery.because (2);
+  Asks.overrule (1); Asks.widen (1). Against the surface in README.md (with the sample fix below): 0 errors.
+
+
+== A program that does nothing, standing in for the base
+
+So that each test is seen failing at an assertion rather than at the import: the README's surface present and doing
+nothing. The asks core takes a subject and drops it (each ask gets a key of its own), saves your answer for its repo as
+the base's hub does, and leaves suggested null, conflict and needs_person empty, InboxRow.decision and Delivery.because
+null; overrule and widen resolve to nothing; resolver-decisions' resolver answers nothing; no fixture file, no perf
+task. Copied in from outside the checkout and removed afterwards.
+
+  Test Files 8 failed (8), Tests 36 failed | 3 passed (39)   (run before the 40th test, a second d5c718b3 plant, was added)
+  repeat   #23.9d16cbb5   "Keep the store …?" asked again in another session of repoA: ask:… is decided for you, without
+                          reaching you (decided for you by []; …): expected 'unanswered' to be 'decided_for_you'
+           #23.6b5caf42   the card of ask:… suggests the nearest decision, decision:…, saved for repoA: expected null to
+                          deeply equal { …(3) }
+  cites    #23.6477f693   "Keep the store …?" asked again …: expected 'unanswered' to be 'decided_for_you'
+           property       Property failed after 1 tests: ask:…, a question you had answered in repoA, is answered for you
+                          with one: expected [ 'answered', [ 'one' ] ] to deeply equal [ 'decided_for_you', [ 'one' ] ]
+  scope    #23.d5c718b3   the card of ask:… suggests decision:…: expected null to deeply equal { …(3) }
+           #23.6ab3f608   "Read secrets …?" in repoA, covered by decision:…: ask:… is decided for you …: expected
+                          'unanswered' to be 'decided_for_you'
+           #23.86908fce   the card of ask:… shows both decisions: expected [] to deeply equal [ [ …(2) ], [ …(2) ] ]
+           #23.86908fce   the card of ask:… shows both resolvers' answers: expected [] to deeply equal [ … ]
+  merge    #23.cf7a32f5   "Merge #215?", a 30-line fix your thread opened: … expected 'unanswered' to be 'decided_for_you'
+           #23.eba26419   the same, at its control: your own 30-line fix is answered for you
+           #23.b439b4e7   "Merge #215?" for a 30-line fix: … expected 'unanswered' to be 'decided_for_you'
+           property eba   Property failed after 40 tests: "Merge #213?", a 1-line fix thread T1 opened is answered for you
+           property b43   Property failed after 1 tests: the card of ask:… names the CI files: expected [] to deeply equal
+                          [ '.github/workflows/a.yml' ]
+  join     #23.6d3abd93   sessions S1 and S2 raise "Which header colour?" on screen:checkout pinned to one commit: Needs
+                          you shows one card (…): expected [ …(2) ] to have a length of 1 but got 2
+  keys     #23.2395159c   the pair 'Use tabs or spaces here?' / 'Should this file indent with tabs?' pinned to req:… share
+                          one key: expected '…' to be '…'
+           5 sharing pairs  "<kind> pair (<why>): … share one key: expected '…' to be '…'"
+           7 near-misses    "<kind> pair (<why>): '<a>' asked again: ask:… is decided for you …: expected 'unanswered' to
+                          be 'decided_for_you'" (each near-miss also proves a's own question is still answered there)
+           fixture file   ENOENT packages/resolver-decisions/fixtures/keys.json
+  budgets  #23.d8c645da   benchmarks/budgets.json has a task resolver-match-10k: expected undefined to be defined
+           #23.d8c645da   ask:…, covered by a saved decision, is answered naming it: expected null to deeply equal
+                          StringMatching /^decision:/
+  plants   7 fail, each because its scenario fails before its plant matters. 3 pass only because their scenario fails
+           at the very assertion the plant is expected to trip (keyed on text: the pair's key; keyed on the PR number:
+           #215 not decided; saved for all repos: … would be saved at all). Plants are judged on the sample fix below.
+
+
+== The sample fix
+
+A sample fix kept outside this checkout, overlaid onto it for the runs and removed afterwards (the worktree ends with
+changes only under tests/acceptance/23/): the asks core and two schema files changed, the resolver-decisions package
+with its fixture file, and the perf task with its script.
+
+  npx vitest run tests/acceptance/23/match   Test Files 8 passed, Tests 39 passed | 1 skipped (40); about 6.5 minutes
+  npx tsc -p tests/acceptance/23             0 errors
+  The skipped test is the timing reading, INCONCLUSIVE here, with its readings:
+    seeded 10,000 decisions in 150.1 s; warm-up 1.836 ms at p95 (discarded)
+    #23 match an ask against 10,000 decisions, p95 (ms): 1.655, 1.654, 1.833, 1.573, 1.799 against 10 (margin 16%)
+    second run, under heavier load: seeded in 195.2 s; p95 (ms): 1.879, 2.474, 3.122, 4.029, 3.705 against 10
+    INCONCLUSIVE (reading only: not on mains power: Now drawing from 'Battery Power'); no socket, fetch or child
+    process started while matching.
+  The same sample also left tests/acceptance/318, tests/acceptance/320 and tests/acceptance/86/ledger.test.ts passing
+  (13 files, 43 tests).
+
+  (An earlier draft of the key pairs raised a near-miss's control with the same words and pin as the open near-miss,
+  so the base's in-thread join took it; 4 tests failed on the sample for that reason. Each raise of a pair now shows a
+  commit of its own, and all pass.)
+
+
+== The wrong programs (plants.ts), each run on the sample fix
+
+Each criterion's scenario fails on its plant with the message plants.test.ts names (10 of 10 pass):
+
+  keyedOnText      the pair 'Use tabs or spaces here?' / 'Should this file indent with tabs?' pinned to req:… share one
+                   key: expected '8759…' to be 'a5ed…'
+  keyedOnKind      the pair … pinned to req:…: 'Use tabs or spaces here?' pinned to another requirement, req:…B, has a
+                   key of its own: expected '41b1…' not to be '41b1…'
+  keyedOnNumber    "Merge #215?", a 30-line fix your thread opened: ask:… is decided for you …: expected 'unanswered' to
+                   be 'decided_for_you'
+  ownerIgnored     "Merge #216?", a 30-line fix thread T2 opened, asked in thread T1: ask:… reaches you, not decided for
+                   you by [decision:…]; delivered ["merge"]
+  sizeIgnored      "Merge #217?", a 4,000-line fix past the size bound: ask:… reaches you, not decided for you by
+                   [decision:…]; delivered ["merge"]
+  boundsOnly       "Merge #215?" for the same fix plus one changed line in .github/workflows/release.yml: ask:… reaches
+                   you, not decided for you by [decision:…]; delivered ["merge"]
+  oldDecisionKept  the next "Read secrets …?" in repoA, after you overruled decision:X on ask:…: ask:… is decided for you
+                   … refusals [resolver-decisions named decision:X …, whose scope all doesn't cover ask:…'s session]
+                   (the test checks the message names X, the decision saved for all repos)
+  savedForAll      decision:…, your answer to ask:…, is saved for its repo: expected 'all' to be 'repo:repoA'
+  answersElsewhere "Keep the store …?" in repoB, before you confirm the wider scope of decision:X: ask:… reaches you,
+                   not decided for you by [decision:X]
+  firstAnswerWins  ask:…, which resolver-one answers prettier from decision:… and resolver-two answers dprint from
+                   decision:…: ask:… reaches you, not decided for you by [decision:…]; delivered ["prettier"]
+
+Not run: mutants of the sample fix, and the perf lane itself (scripts/perf.mjs) against the merge base; the budget test
+only checks the task is valid against the merge base's budgets and that its command exits 0 (it did, on the sample).
