@@ -161,11 +161,13 @@ struct Guard {
     next_step: String,
 }
 
-/// What deep-hook reads of rules.json: its entries, and what each tool the hub counted counts as.
+/// What deep-hook reads of rules.json: its entries, what each tool the hub counted counts as, and the cloud owners
+/// (such as `aws:<account>`) your standing rules let create a resource with the hub down.
 #[derive(Default)]
 struct Rules {
     guards: Vec<Guard>,
     classes: Vec<(String, String)>,
+    standing: Vec<String>,
 }
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
@@ -195,7 +197,59 @@ fn rules() -> Result<Rules, String> {
     Ok(Rules {
         guards,
         classes: classes(member(&rules, "classes"))?,
+        standing: standing(member(&rules, "standing")),
     })
+}
+
+/// A `standing` member the hub copies your standing rules into (#23), `[{"effect": "cloud-resource", "owner": ...}]`:
+/// the owners they cover. One it can't read covers nothing, so the floor stays.
+fn standing(value: Option<&Value>) -> Vec<String> {
+    let Some(Value::Array(rules)) = value else {
+        return Vec::new();
+    };
+    rules
+        .iter()
+        .filter(|r| matches!(member(r, "effect"), Some(Value::String(e)) if e == "cloud-resource"))
+        .filter_map(|r| match member(r, "owner") {
+            Some(Value::String(owner)) if !owner.is_empty() => Some(owner.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The cloud owner a command creates its resource under, as the hub names it: an AWS command's account, by its
+/// `--profile`'s `sso_account_id` in ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
+fn cloud_owner(command: &str) -> Option<String> {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    if words.first().map(|w| w.trim_matches(['"', '\''])) != Some("aws") {
+        return None;
+    }
+    let profile = words
+        .iter()
+        .position(|w| *w == "--profile" || w.starts_with("--profile="))
+        .and_then(|i| match words[i].strip_prefix("--profile=") {
+            Some(p) => Some(p),
+            None => words.get(i + 1).copied(),
+        })
+        .unwrap_or("default")
+        .trim_matches(['"', '\'']);
+    let config = fs::read_to_string(
+        PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
+    )
+    .unwrap_or_default();
+    let mut section = String::new();
+    for line in config.lines().map(str::trim) {
+        if let Some(head) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            section = head.trim_start_matches("profile ").trim().to_string();
+        } else if section == profile {
+            if let Some((key, value)) = line.split_once('=') {
+                if key.trim() == "sso_account_id" {
+                    return Some(format!("aws:{}", value.trim()));
+                }
+            }
+        }
+    }
+    Some(format!("aws-profile:{profile}"))
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
@@ -854,10 +908,21 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             .collect(),
         None => Vec::new(),
     };
+    // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
+    let command = parsed
+        .as_ref()
+        .and_then(|p| member(p, "tool_input"))
+        .and_then(|i| member(i, "command"));
+    let covered = match command {
+        Some(Value::String(c)) => {
+            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
+        }
+        _ => false,
+    };
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
     let denials: Vec<String> = matched
         .iter()
-        .filter(|(g, _)| g.fail_closed)
+        .filter(|(g, _)| g.fail_closed && !(covered && g.pattern == "effect:cloud-resource"))
         .map(|(guard, hit)| {
             let detail = hit
                 .detail
@@ -1161,6 +1226,64 @@ const WAITER_LOOK: Duration = Duration::from_millis(500);
 
 extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
+    #[cfg(target_os = "macos")]
+    fn sysctl(
+        name: *const i32,
+        namelen: u32,
+        oldp: *mut u8,
+        oldlenp: *mut usize,
+        newp: *const u8,
+        newlen: usize,
+    ) -> i32;
+}
+
+/// A process's arguments, as it was started: macOS's KERN_PROCARGS2 (argc, the executable's path, padding, then
+/// argc strings), or Linux's /proc cmdline. Empty when they can't be read.
+fn args_of(pid: u32) -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    let raw = {
+        // CTL_KERN, KERN_PROCARGS2; 1 MiB holds the largest argument area the kernel allows.
+        let mib = [1, 49, pid as i32];
+        let mut buf = vec![0u8; 1 << 20];
+        let mut len = buf.len();
+        // SAFETY: the buffer is len bytes long and the kernel writes at most len into it.
+        let read = unsafe {
+            sysctl(
+                mib.as_ptr(),
+                3,
+                buf.as_mut_ptr(),
+                &mut len,
+                std::ptr::null(),
+                0,
+            )
+        };
+        if read != 0 || len < 4 {
+            return Vec::new();
+        }
+        buf.truncate(len);
+        let argc = i32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]).max(0) as usize;
+        let rest = &buf[4..];
+        // Past the executable's path and the NULs after it.
+        let path = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        let start = rest[path..]
+            .iter()
+            .position(|&b| b != 0)
+            .map_or(rest.len(), |at| path + at);
+        rest[start..]
+            .split(|&b| b == 0)
+            .take(argc)
+            .map(<[u8]>::to_vec)
+            .collect::<Vec<_>>()
+    };
+    #[cfg(target_os = "linux")]
+    let raw = fs::read(format!("/proc/{pid}/cmdline"))
+        .unwrap_or_default()
+        .split(|&b| b == 0)
+        .map(<[u8]>::to_vec)
+        .collect::<Vec<_>>();
+    raw.into_iter()
+        .map(|arg| String::from_utf8_lossy(&arg).into_owned())
+        .collect()
 }
 
 /// Whether a process still runs: signal 0 reaches it, or would but for permission.
@@ -1248,6 +1371,15 @@ fn waiter() -> ExitCode {
         quoted(&field("cwd"))
     );
     let agent = std::os::unix::process::parent_id();
+    // A print run (`claude -p`) has no later turn to wake, and it waits for its async Stop entries before it exits,
+    // while this waits for it to exit: under one, the waiter is done at once (#668).
+    if args_of(agent)
+        .iter()
+        .skip(1)
+        .any(|arg| arg == "-p" || arg == "--print")
+    {
+        return ExitCode::SUCCESS;
+    }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
     let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
     let gone = || watched && (std::os::unix::process::parent_id() != agent || !alive(agent));

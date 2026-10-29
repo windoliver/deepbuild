@@ -168,9 +168,12 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
+  if ((request.event === 'PreToolUse' || request.event === 'PermissionRequest' || request.event === 'PostToolUse') && tool) {
+    meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
+  }
   // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
-  const replies = request.event === 'Stop' || (request.event === 'PreToolUse' && request.matched.length > 0);
+  const replies = request.event === 'Stop' || request.event === 'PermissionRequest' || (request.event === 'PreToolUse' && request.matched.length > 0);
   const version = replies ? versionOf(meta.transcript) : undefined;
   if (version) meta.version = version;
   if (version && !coveredBy(agent, version)) meta.watchOnly = true;
@@ -232,9 +235,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     }
     case 'agent.stop':
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
-      data = { turn: 0, did_work: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
+      // Whether it is a claim is the core's stop rule's to read.
+      data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
       fill = 'turn';
-      v = 3;
+      v = 4;
       break;
     case 'permission.request':
       data = {

@@ -1,8 +1,40 @@
 // Where a hub keeps its files, and the one setting every client reads the hub's address from.
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const repos = new Map<string, string | undefined>();
+/**
+ * The repo a folder is in, as a decision's scope names it (`repo:<id>`, #23): its main checkout's folder name and a
+ * digest of its path, the same from every worktree of it. Undefined outside a git repo. Read once per folder.
+ */
+export function repoOf(cwd: string): string | undefined {
+  if (!cwd) return undefined;
+  if (repos.has(cwd)) return repos.get(cwd);
+  let found: string | undefined;
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    const git = join(dir, '.git');
+    try {
+      if (statSync(git).isDirectory()) found = dir;
+      else {
+        // A worktree's .git names its folder under the main checkout's .git/worktrees.
+        const gitdir = resolve(dir, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? '');
+        found = /[\\/]worktrees[\\/][^\\/]+$/.test(gitdir) ? dirname(dirname(dirname(gitdir))) : dir;
+      }
+    } catch { /* not here: look further up */ }
+    if (found || dirname(dir) === dir) break;
+  }
+  let id: string | undefined;
+  if (found) {
+    let real = found;
+    try { real = realpathSync(found); } catch { /* as found */ }
+    id = `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
+  }
+  repos.set(cwd, id);
+  return id;
+}
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
@@ -26,6 +58,8 @@ export interface Root {
   wiki: string;
   /** The devices you paired, whose signatures answer for you (#34). */
   devices: string;
+  /** Present while `deep restore` swaps a backup in, naming its folder: no hub starts until a restore finishes (#572). */
+  restoring: string;
 }
 export function rootOf(dir: string): Root {
   const at = resolve(dir);
@@ -43,6 +77,7 @@ export function rootOf(dir: string): Root {
     transcripts: join(at, 'transcripts.json'),
     wiki: join(at, 'wiki'),
     devices: join(at, 'devices.json'),
+    restoring: join(at, 'restore.pending'),
   };
 }
 

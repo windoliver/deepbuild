@@ -111,7 +111,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 \u00b5s at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 µs at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "corpus-replay",
@@ -169,6 +169,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "resolver-match-10k",
+      "command": [
+        "node",
+        "benchmarks/resolver.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #23 first measurement: the merge base has no resolver-decisions. One process records 10,000 saved decisions over ten repos and hands the resolver 200 asks, failing unless each is answered exactly when a decision covers it, so p50 includes the seeding and Node's start; the issue's 10 ms p95 per match stays in tests/acceptance/23/match/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "verdict-1000-runs",
@@ -259,6 +269,17 @@
       "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-prompt",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "prompt"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #303 first measurement: the merge base's prompt hook opens no ask-task and has no task for it. One process starts the hub on a temp home and sends 1,000 UserPromptSubmit requests, each a new prompt that asks for a change, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 5 ms added to the prompt hook against the merge base stays in tests/acceptance/303/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "otlp-receive-20k-spans",
       "command": [
         "node",
@@ -301,6 +322,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #304 first measurement: the merge base's deep-hook has no check mode and its rules.json no planted calls or tool classes. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls with every shipped default entry in rules.json and 200 with none, interleaved, then deep-hook's check mode on one default's planted call and twin, 200 each, all from spawn to exit, so p50 includes Node's start and the release build; the issue's 2 ms added for matching and 10 ms over process start stay in tests/acceptance/304/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-hook-during-backup",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "backup"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #572 first measurement: the merge base has no deep backup. One process grows a temp record past 100 MB through @deepbuild/record, starts the hub on it and times 200 forwarded PreToolUse calls interleaved with a native no-op, each from spawn to exit and each answered while deep backup copies the record, so p50 includes the seeding, Node's start and the release build; the issue's 10 ms p95 over process start during a backup of a 1 GB record stays in tests/acceptance/572/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "canvas-patch-apply",

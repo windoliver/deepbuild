@@ -576,3 +576,67 @@ fn the_shipped_rules_carry_a_workflow_dispatch_to_the_authority_gate() {
         assert!(!matched(other), "`{other}` dispatches nothing");
     }
 }
+
+/// The waiter under an agent with `flag` in its argv: a shell that runs it as its child and stays (`exit $?` keeps the
+/// shell from exec'ing it), with the Stop payload on stdin and no hub. Returns the shell and when it started.
+fn waiter_under(home: &std::path::Path, flag: &str) -> (std::process::Child, std::time::Instant) {
+    use std::io::Write;
+    let bin = env!("CARGO_BIN_EXE_deep-hook");
+    let mut agent = Command::new("/bin/sh")
+        .args([
+            "-c",
+            &format!("'{bin}' claude-code waiter; exit $?"),
+            "claude",
+            flag,
+        ])
+        .env_clear()
+        .env("HOME", home)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = agent.stdin.take().unwrap();
+    stdin
+        .write_all(br#"{"session_id":"s668","cwd":"/tmp","hook_event_name":"Stop"}"#)
+        .unwrap();
+    drop(stdin);
+    (agent, std::time::Instant::now())
+}
+
+#[test]
+fn a_print_mode_agents_waiter_exits_at_once() {
+    // `claude -p` waits for its async Stop entries before it exits, and a waiter waits for its agent to exit: a print
+    // run has no later turn to wake, so its waiter must not wait, hub or no hub (#668).
+    let home = short_home("print");
+    for flag in ["-p", "--print"] {
+        let (mut agent, started) = waiter_under(&home, flag);
+        let exited = loop {
+            if let Some(status) = agent.try_wait().unwrap() {
+                break Some(status);
+            }
+            if started.elapsed() > std::time::Duration::from_secs(3) {
+                break None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        if exited.is_none() {
+            let _ = agent.kill();
+            let _ = agent.wait();
+        }
+        assert_eq!(
+            exited.and_then(|s| s.code()),
+            Some(0),
+            "under `claude {flag}` the waiter must exit 0 at once; it was still waiting after 3 s"
+        );
+    }
+    // An interactive agent's waiter keeps waiting for an answer to wake its session.
+    let (mut agent, _) = waiter_under(&home, "--model");
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    let waiting = agent.try_wait().unwrap().is_none();
+    let _ = agent.kill();
+    let _ = agent.wait();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        waiting,
+        "under an interactive `claude` the waiter must keep waiting"
+    );
+}
