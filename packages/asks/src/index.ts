@@ -690,8 +690,9 @@ class AsksCore implements Asks {
         await this.sync();
         this.hand(rider, chosen!.id, null, false, decision);
       }
-      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim.
-      const scope = chosen && !ask.fold ? this.scopeOf(ask) : null;
+      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
+      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
+      const scope = chosen && !ask.fold && !ask.block ? this.scopeOf(ask) : null;
       if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
@@ -1688,7 +1689,7 @@ class AsksCore implements Asks {
       if (stop.owner === 'you' || (stop.cause === 'plan_window_spent' && stop.resets !== null)) {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
-        else this.fresh.add(session); // BLOCKED on the settings: read again when the hub next ticks the core, once they declare the deadline.
+        else this.fresh.add(session); // BLOCKED on the settings: kept for the core's next tick, once they declare the deadline.
       } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
