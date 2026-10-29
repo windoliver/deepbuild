@@ -989,8 +989,11 @@ export class Core {
     p.status = 'woken';
     const agent = this.sessions.get(session)?.agent ?? 'claude-code';
     // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check itself.
-    const woke = via === 'next_prompt' && p.handed === true && prompt.includes(`promise:${p.id}`);
+    // Only a handed wake text carries the token, so a late wake (its prompt after the grace) still proves the route.
+    const woke = via === 'next_prompt' && prompt.includes(`promise:${p.id}`);
     clearTimeout(p.timer);
+    const r = this.routes.get(session);
+    if (woke && r) r.wakes = true;
     await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: woke ? 'waiter' : via }).catch(() => undefined);
     this.askingSoon();
     return woke ? undefined : wakeText(p);
@@ -1456,7 +1459,8 @@ export class Core {
       // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
       const p = this.promises.get(session);
       if (p?.status === 'due' && !p.handed) {
-        await this.appendSession(session, this.sessions.get(session)?.agent ?? 'claude-code', 'promise.due', { promise: p.id, due: p.due, route: 'wake' }).catch(() => undefined);
+        // The hand follows its recorded route, or not at all.
+        await this.appendSession(session, this.sessions.get(session)?.agent ?? 'claude-code', 'promise.due', { promise: p.id, due: p.due, route: 'wake' });
         return this.handPromise(session, p, r);
       }
       const rows = await this.waitingFor(session);

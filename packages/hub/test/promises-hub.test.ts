@@ -124,6 +124,12 @@ describe('promised checks through the hub', () => {
       const typed = await hook('UserPromptSubmit', { prompt: 'anything new?', prompt_id: 'p2' });
       expect(JSON.stringify(typed)).toContain('I\'ll check again in 2 seconds and report.');
       expect((await until(() => events(root, 'promise.woken'), (e) => e.length > 0))[0]).toMatchObject({ via: 'next_prompt' });
+      // The route is now known not to wake: the next promise goes by the next hook at once, its waiter handed nothing.
+      await hook('Stop', { stop_hook_active: false, last_assistant_message: 'Still deploying. I\'ll check again in 1 second and report.', prompt_id: 'p2' });
+      const again = waiter(root, id, s.work).catch(() => undefined);
+      const rows = await until(() => events(root, 'promise.due'), (e) => e.length > 2, 15_000);
+      expect(rows[2]).toMatchObject({ route: 'next_hook' });
+      expect(await Promise.race([again, sleep(1500).then(() => 'not handed')])).toBe('not handed');
     });
   }, 60_000);
 
