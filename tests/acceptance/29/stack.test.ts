@@ -1,7 +1,7 @@
 // #29 AC33 (the tree a stack served) and AC34 (a stack's start in the lanes). README sections 6 and 7, rules 2, 3, 11, 12.
 import { describe, expect, it } from 'vitest';
 import {
-  attributeStack, simulate, type CheckDef, type Scenario, type SchedulerPlant, type StackDef, type StackRecords, type Trees,
+  attributeStack, simulate, type CheckDef, type RunRecord, type Scenario, type SchedulerPlant, type StackDef, type StackRecords, type Trace, type Trees,
 } from '../../../packages/gate/src/index.ts';
 import { check, edit, mustFail, prompt, runsOf, script, stop, stopOf } from './helpers.ts';
 
@@ -59,72 +59,104 @@ describe('AC33 the tree a stack served, from the supervisor\'s records', () => {
 });
 
 // ---- AC33 in the scheduler: a journey on a stack its environment starts.
+// The scheduler, not the test, chooses the checkout and the worktree it hands `start`; every path the assertions expect is read back from
+// what `start` was given. A planted environment misbehaves by what it is handed (`kept_product`, `attempt`, `worktree`), never by constants.
 type Mode = 'good' | 'warm-from-worktree' | 'always-worktree';
-function stackFor(mode: Mode): StackDef {
-  return {
+interface StartCall { attempt: number; kept_product: boolean; checkout: string; worktree: string; cwd: string }
+const J = 'journey:checkout';
+function stackScenario(mode: Mode, plant?: SchedulerPlant) {
+  const calls: StartCall[] = [];
+  const stack: StackDef = {
     steps: [{ name: 'install', median_ms: 5000, inputs: ['package-lock.json'] }], per_run_ms: 1000, kept: true,
     start: ({ attempt, kept_product, checkout, worktree }) => {
-      const fromWorktree = mode === 'always-worktree' || (mode === 'warm-from-worktree' && attempt === 1 && kept_product);
-      const cwd = fromWorktree ? `${worktree}/web` : `${checkout}/web`;
+      const fromWorktree = mode === 'always-worktree' || (mode === 'warm-from-worktree' && kept_product);
+      const cwd = `${fromWorktree ? worktree : checkout}/web`;
+      calls.push({ attempt, kept_product, checkout, worktree, cwd });
       return { processes: [{ name: 'dev-server', pid: 5000 + attempt, cwd, reads: [] }], containers: [] };
     },
   };
-}
-function stackScenario(mode: Mode, plant?: SchedulerPlant) {
-  const journey: CheckDef = check('journey:checkout', 300_000, { inputs: ['src/**'], stack: stackFor(mode), worktree_fails_on: 'B', ends: 'passed' });
+  // The journey reads the cart total from the tree it runs on: $18.00 on A, $18.01 on B, and it passes on $18.00. A run that ends on
+  // B's tree (the live worktree, after the agent's edit) reads $18.01 and fails.
+  const journey: CheckDef = check(J, 300_000, {
+    inputs: ['src/**'], stack,
+    run: (ctx) => ({ took_ms: 300_000, outcome: ctx.snapshot === 'A' ? 'passed' : 'failed' }),
+  });
+  // Stop A is green and its reply ends the turn (the unit check ends at 3 s); the journey starts then and runs on for 300 s. At 4 s a new
+  // prompt starts the next turn, and at 4.5 s the agent's edit leaves the live worktree on B, long before the journey ends.
   const sc: Scenario = {
     config: { slots: 2 },
     sessions: [script('V', 'claude', [check('unit', 2000, { inputs: ['src/**'] }), journey],
-      [prompt(0), edit(500, 'A'), stop(1000, 'A', { id: 'A' }), edit(1500, 'B')])],
+      [prompt(0), edit(500, 'A'), stop(1000, 'A', { id: 'A' }), prompt(4000), edit(4500, 'B')])],
   };
-  return simulate(sc, plant ? { plant } : {});
+  return { t: simulate(sc, plant ? { plant } : {}), calls };
 }
-const J = 'journey:checkout';
+const runName = (r: RunRecord): string => `run ${r.run}`;
+function warmChecks(t: Trace, calls: StartCall[]): void {
+  const rs = runsOf(t, J);
+  const first = rs[0]!;
+  expect(first.outcome, `${runName(first)}: its warm stack served the live worktree, so it is uncounted`).toBe('uncounted');
+  expect(rs.length, 'two runs on A: the first uncounted, the next counted').toBe(2);
+  const next = rs[1]!;
+  expect(calls[0]!.kept_product, 'the first run got the warm stack').toBe(true);
+  expect(calls[0]!.cwd, 'the planted environment started it from the worktree it was handed').toBe(`${calls[0]!.worktree}/web`);
+  expect(first.reason, `${runName(first)}: names the process's working folder`).toContain(calls[0]!.cwd);
+  expect(first.reason, `${runName(first)}: and the worktree`).toContain(calls[0]!.worktree);
+  expect(first.stack?.served.served).toBe('other');
+  expect(next.snapshot, 'the next run is on the same snapshot').toBe('A');
+  expect(next.stack?.attempt).toBe(2);
+  expect(calls[1]!.attempt).toBe(2);
+  expect(calls[1]!.kept_product, 'the next run gets a stack with no kept product').toBe(false);
+  expect(calls[1]!.cwd, 'started from its own checkout, not the worktree').toBe(`${calls[1]!.checkout}/web`);
+  expect(calls[1]!.checkout).not.toBe(calls[1]!.worktree);
+  expect(next.outcome, `${runName(next)}: counts`).toBe('passed');
+  expect(next.stack?.served).toEqual({ served: 'checkout' });
+  expect(t.claims[0]!.checks[J]!.outcome).toBe('PASS');
+  expect(t.claims[0]!.verdict).toBe('PASS');
+}
+function alwaysChecks(t: Trace, calls: StartCall[]): void {
+  const rs = runsOf(t, J);
+  const first = rs[0]!;
+  expect(first.outcome, `${runName(first)}: its stack served the live worktree, so it is uncounted`).toBe('uncounted');
+  expect(rs.length, 'two runs on A: uncounted, then missing').toBe(2);
+  const next = rs[1]!;
+  expect(next.outcome, `${runName(next)}: the next stack served the worktree too, so the run is missing`).toBe('missing');
+  expect(calls[1]!.kept_product, 'the next run got a stack with no kept product').toBe(false);
+  expect(calls[1]!.cwd, 'the planted environment started it from the worktree it was handed').toBe(`${calls[1]!.worktree}/web`);
+  expect(next.reason, `${runName(next)}: names the process's working folder`).toContain(calls[1]!.cwd);
+  expect(t.claims[0]!.checks[J]!.outcome, 'the check is BLOCKED, never INCONCLUSIVE, PASS or FAIL').toBe('BLOCKED');
+  expect(t.claims[0]!.verdict).toBe('BLOCKED');
+}
 describe('AC33 the scheduler: a journey runs on a stack from its own checkout', () => {
   it('AC33 the journey runs on a stack started from A\'s checkout, reads A\'s value, and its run records A\'s tree as served', () => {
-    const t = stackScenario('good');
+    const { t, calls } = stackScenario('good');
     const [r, ...more] = runsOf(t, J);
     expect(more, 'one run').toEqual([]);
     expect(r!.snapshot).toBe('A');
     expect(r!.result_snapshot).toBe('A');
     expect(r!.ran_in).toBe('checkout');
-    expect(r!.outcome, 'the run reads $18.00 (A\'s), though the worktree now holds B').toBe('passed');
-    expect(r!.stack?.served).toEqual({ served: 'checkout' });
+    expect(calls.length, 'one stack started').toBe(1);
+    expect(calls[0]!.checkout, 'started from a checkout of its own, never the live worktree').not.toBe(calls[0]!.worktree);
+    expect(calls[0]!.cwd).toBe(`${calls[0]!.checkout}/web`);
+    expect(r!.outcome, 'the run reads $18.00 (A\'s), though the worktree now holds B, and passes').toBe('passed');
     expect(r!.stack?.from).toBe('checkout');
+    expect(r!.stack?.served).toEqual({ served: 'checkout' });
     expect(t.claims[0]!.verdict).toBe('PASS');
   });
   it('AC33 a warm stack a planted environment started from the live worktree: the run is uncounted naming the process\'s folder and the worktree; the next run, from A\'s checkout with no kept product, counts', () => {
-    const t = stackScenario('warm-from-worktree');
-    const rs = runsOf(t, J);
-    expect(rs.map((r) => r.outcome), 'uncounted, then counted').toEqual(['uncounted', 'passed']);
-    expect(rs[0]!.reason).toContain(`${W}/web`);
-    expect(rs[0]!.reason).toContain(W);
-    expect(rs[0]!.stack?.served.served).toBe('other');
-    expect(rs[0]!.stack?.attempt).toBe(1);
-    expect(rs[1]!.stack?.attempt, 'the next run on that snapshot').toBe(2);
-    expect(rs[1]!.stack?.kept_product, 'gets a stack with no kept product').toBe(false);
-    expect(rs[1]!.stack?.served).toEqual({ served: 'checkout' });
-    expect(rs[1]!.snapshot).toBe('A');
-    expect(t.claims[0]!.checks[J]!.outcome).toBe('PASS');
-    expect(t.claims[0]!.verdict).toBe('PASS');
+    const { t, calls } = stackScenario('warm-from-worktree');
+    warmChecks(t, calls);
   });
   it('AC33 a planted environment that always starts from the worktree makes the run missing and the check BLOCKED, naming the process\'s folder, never INCONCLUSIVE, PASS or FAIL', () => {
-    const t = stackScenario('always-worktree');
-    const rs = runsOf(t, J);
-    expect(rs.map((r) => r.outcome)).toEqual(['uncounted', 'missing']);
-    expect(rs[1]!.reason).toContain(`${W}/web`);
-    expect(t.claims[0]!.checks[J]!.outcome).toBe('BLOCKED');
-    expect(t.claims[0]!.verdict).toBe('BLOCKED');
+    const { t, calls } = stackScenario('always-worktree');
+    alwaysChecks(t, calls);
   });
   it('AC33 a gate runner that takes the environment\'s word counts the planted runs and fails, naming the run', async () => {
-    await mustFail('takes-environments-word, warm', () => {
-      const t = stackScenario('warm-from-worktree', 'takes-environments-word');
-      for (const r of runsOf(t, J)) expect(r.outcome, `run ${r.run} served ${JSON.stringify(r.stack?.served)}`).not.toBe('passed');
-    }, ['run ']);
-    await mustFail('takes-environments-word, always', () => {
-      const t = stackScenario('always-worktree', 'takes-environments-word');
-      for (const r of runsOf(t, J)) expect(['uncounted', 'missing'], `run ${r.run}`).toContain(r.outcome);
-    }, ['run ']);
+    for (const [mode, checks] of [['warm-from-worktree', warmChecks], ['always-worktree', alwaysChecks]] as const) {
+      const { t, calls } = stackScenario(mode, 'takes-environments-word');
+      const first = runsOf(t, J)[0];
+      expect(first, `${mode}: the planted runner ran the journey`).toBeDefined();
+      await mustFail(`takes-environments-word, ${mode}`, () => checks(t, calls), [runName(first!)]);
+    }
   });
 });
 

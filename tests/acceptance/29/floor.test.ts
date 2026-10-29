@@ -35,7 +35,7 @@ function input(dir: string, message: string, session: SessionLog = READ_ALL, def
 }
 const findings = (r: FloorResult) => (r.ok ? [] : r.findings);
 function sentBackNaming(r: FloorResult, kind: string, ref: string, what: string): void {
-  expect(r.ok, `${what}: the claim goes back (claim:01K74G1Z3X5V7T9R1P3N5M7K9H)`).toBe(false);
+  expect(r.ok, `${what} \`${ref}\`: the claim goes back (claim:01K74G1Z3X5V7T9R1P3N5M7K9H)`).toBe(false);
   if (r.ok) return;
   expect(r.action, `${what}: a validity-gate failure is a send-back`).toBe('send_back');
   const f = r.findings.find((x) => x.ref.includes(ref));
@@ -72,7 +72,7 @@ describe('AC3 a claim citing a test, file or run the session never read or ran g
     expect(floor(input(dir, 'I changed `src/cart.ts:2`, and `test/cart.test.ts › rounds tax` and `pnpm test` ran; also src/never-read.ts in prose'))).toEqual({ ok: true });
   });
   it('AC3 a gate that does not check reads fails the first assertion', async () => {
-    await mustFail('no-read-check', () => unread({ plant: 'no-read-check' }), ['src/cart.ts']);
+    await mustFail('no-read-check', () => unread({ plant: 'no-read-check' }), ['a file `src/cart.ts`']);
   });
 });
 
@@ -91,7 +91,7 @@ describe('AC4 a claim missing a deliverable its definition names goes back namin
     expect(floor(input(dir, 'Done.'))).toEqual({ ok: true });
   });
   it('AC4 a gate that skips the deliverable check fails', async () => {
-    await mustFail('no-deliverable-check', () => missing({ plant: 'no-deliverable-check' }), ['docs/receipt.md']);
+    await mustFail('no-deliverable-check', () => missing({ plant: 'no-deliverable-check' }), ['a missing deliverable `docs/receipt.md`']);
   });
 });
 
@@ -154,7 +154,7 @@ describe('AC6 a claim citing a run whose command masked its exit status goes bac
     expect(floor(input(checkout(), 'I ran `pnpm test`; its output shows 1 failed test'))).toEqual({ ok: true });
   });
   it('AC6 a gate that checks only that the cited run happened lets the first through and fails', async () => {
-    await mustFail('run-happened-only', () => masked({ plant: 'run-happened-only' }), ['pnpm test || true']);
+    await mustFail('run-happened-only', () => masked({ plant: 'run-happened-only' }), ['the masked run `pnpm test || true`']);
   });
   it('AC6 every mask the core names goes back with the mask maskIn returns', () => {
     const list = ['pnpm test || exit 0', 'pnpm test; true', 'set +e; pnpm test', 'pnpm test || :', 'pnpm test || echo ok', 'pnpm test; exit 0', '! pnpm test', 'pnpm test --passWithNoTests', 'pnpm test &', 'pnpm test | tee out.log'];
