@@ -56,6 +56,8 @@ export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string 
 export function ulidTime(id: string): number {
   return [...id.slice(0, 10)].reduce((ms, c) => ms * 32 + CROCKFORD.indexOf(c), 0);
 }
+/** A ULID at `ms` whose random part is a hash of `key`, so the same source always gets the same ID and the record holds it once. */
+export const derivedId = (ms: number, key: string): string => ulid(ms, createHash('sha256').update(key).digest('hex').slice(0, 20));
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }

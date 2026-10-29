@@ -13,13 +13,13 @@
 //   definition that carries such text locks only after one ask about it.
 // - At each claim the hash is recomputed from the stored definition and the checks' bytes on disk; a check changed
 //   since the lock is a proposal naming its file, never a new definition.
-import { readFile } from 'node:fs/promises';
-import { isAbsolute, join, normalize } from 'node:path';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { ulid, type Connection, type EventInput } from '@deepbuild/record';
+import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { headOf } from './session-facts.js';
-import type { Plant } from './wire.js';
+import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const sql = (s: string) => s.replace(/'/g, "''");
@@ -54,7 +54,7 @@ export interface WorkItem { source_id: string; link: string; title: string; body
 type Reading = WorkItem;
 /** A definition as locked, without its hash: what the hash covers. */
 interface Definition { task_ref: string; requirements: Requirement[]; deliverables: string[]; issue_rev: string; base_commit: string; budget: JsonValue }
-interface Pending { session: string; agent: string; definition: Definition; handed: string; outside: string[] }
+interface Pending { session: string; agent: string; definition: Definition; handed: string; outside: string[]; at: number }
 
 /** The roles whose text can remove or waive a requirement. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
@@ -110,17 +110,21 @@ export class AskTasks {
   }
 
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */
-  async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; item?: Reading }): Promise<void> {
+  async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: Reading }): Promise<void> {
     // A work item's task is opened once, whichever prompt names it again.
     if (t.item && (await this.o.raw(`SELECT 1 FROM tasks WHERE task_ref = '${sql(t.task_ref)}' LIMIT 1`)).length) return;
-    const ts = this.o.now();
     const connection = this.o.connection(t.session, t.agent);
-    await this.o.append(connection, { v: 1, id: ulid(ts), kind: 'task.created', ts, data: { task_ref: t.task_ref, thread: t.thread, owner: connection.actor, title: (t.item?.title ?? t.text).slice(0, 200) || '-' } });
-    void this.lock(t).catch((error: unknown) => process.stderr.write(`deep hub: the definition of ${t.task_ref} was not locked: ${error instanceof Error ? error.message : String(error)}\n`));
+    // The task's ID follows from its prompt's event, and its lock's from the task's: the same hook replayed appends
+    // the same events, which the record holds once.
+    await this.o.append(connection, { v: 1, id: derivedId(t.at, `${t.prompt}:task`), kind: 'task.created', ts: t.at, data: { task_ref: t.task_ref, thread: t.thread, owner: connection.actor, title: (t.item?.title ?? t.text).slice(0, 200) || '-' } });
+    void this.lock(t).catch((error: unknown) => this.unlocked(t.task_ref, error));
+  }
+  private unlocked(task_ref: string, error: unknown): void {
+    process.stderr.write(`deep hub: the definition of ${task_ref} was not locked: ${error instanceof Error ? error.message : String(error)}\n`);
   }
 
   /** Locks the definition handed for a task, or asks you first when outside text is in it; with none handed it waits. */
-  private async lock(t: { session: string; agent: string; cwd: string; task_ref: string; text: string; item?: Reading }): Promise<void> {
+  private async lock(t: { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: Reading }): Promise<void> {
     const handed = (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => (t.item ? d.issue === t.item.source_id : d.ask === t.text));
     if (!handed) return;
     const head = await headOf(t.cwd).catch(() => undefined);
@@ -164,7 +168,7 @@ export class AskTasks {
       issue_rev: revision ?? sha256Hex(new TextEncoder().encode(t.text)), base_commit: head.sha, budget: handed.budget ?? null,
     };
     const digest = sha256Hex(canonicalize(handed as unknown as JsonValue));
-    if (!outside.length && !waived) return this.record(t.session, t.agent, definition, digest);
+    if (!outside.length && !waived) return this.record(t.session, t.agent, definition, digest, t.at);
     const who = [...new Set(requirements.filter((r) => outside.includes(r.id)).map((r) => r.author.handle))];
     const question = `The definition of ${t.task_ref} carries text from outside the repo${who.length ? ` (${who.join(', ')})` : ''}: ${outside.length ? `it adds ${outside.join(', ')}` : 'it asks to waive a requirement, which it can\'t'}. Lock it with what the outside text added?`;
     const raised = {
@@ -174,7 +178,7 @@ export class AskTasks {
       key: sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: t.task_ref, digest })), pinned_to: await this.o.pin(t.cwd, question),
     };
     const ask = await this.o.asks().raise(this.o.connection(t.session, t.agent), 'definition.draft', raised);
-    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, outside });
+    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, outside, at: t.at });
   }
   /** Your one answer about outside text: the definition locks, with the outside additions or without them. */
   answered(delivery: Delivery): void {
@@ -182,14 +186,28 @@ export class AskTasks {
     if (!p) return;
     this.pending.delete(delivery.ask);
     const definition = delivery.option === 'leave-out' ? { ...p.definition, requirements: p.definition.requirements.filter((r) => !p.outside.includes(r.id)) } : p.definition;
-    void this.record(p.session, p.agent, definition, p.handed).catch(() => undefined);
+    void this.record(p.session, p.agent, definition, p.handed, p.at).catch((error: unknown) => this.unlocked(definition.task_ref, error));
   }
-  private async record(session: string, agent: string, definition: Definition, handed: string): Promise<void> {
+  /** The task whose locked definition stands on a definition ask's answer, by the ask's key; undefined when none locked on it. */
+  async lockedOn(ask: string): Promise<string | undefined> {
+    const [row] = (await this.o.raw(`SELECT key FROM asks WHERE id = '${sql(ask.replace(/^ask:/, ''))}' AND kind = 'definition'`)) as { key: string }[];
+    if (!row) return undefined;
+    const locked = (await this.o.raw("SELECT task_ref, id FROM definitions WHERE state = 'locked'")) as { task_ref: string; id: string }[];
+    return locked.find((d) => sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: d.task_ref, digest: d.id })) === row.key)?.task_ref;
+  }
+  private async record(session: string, agent: string, definition: Definition, handed: string, at: number): Promise<void> {
+    // A definition with nothing to meet locks nothing: a claim on it would pass with no check run.
+    if (!definition.requirements.length) throw Error('it has no requirements left to lock');
     const ts = this.o.now();
-    await this.o.append(this.o.connection(session, agent), {
-      v: 2, id: ulid(ts), kind: 'definition.locked', ts,
-      data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
-    });
+    try {
+      await this.o.append(this.o.connection(session, agent), {
+        v: 2, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
+      });
+    } catch (error) {
+      // The lock is in the log already, from the same prompt: a replayed hook, or a second lock racing the first.
+      if (!(error instanceof RecordError && error.code === 'conflict')) throw error;
+    }
   }
 
   /** The definition's hash: every field it holds, each check's approved bytes by digest among them. */
@@ -198,15 +216,23 @@ export class AskTasks {
       : this.o.plant === 'hash-check-paths' ? d.requirements.map(({ check_sha256: _bytes, ...r }) => r) : d.requirements;
     return sha256Hex(canonicalize({ ...d, requirements } as unknown as JsonValue));
   }
-  /** A check file's bytes in the session's folder, kept by digest; null for one that isn't there. */
-  private async approve(cwd: string, check: string): Promise<string | null> {
+  /** A check file's bytes in the session's folder, kept by digest; a check the folder doesn't hold as a file refuses the lock. */
+  private async approve(cwd: string, check: string): Promise<string> {
     const bytes = await this.bytesOf(cwd, check);
-    return bytes ? this.o.keep(bytes, check) : null;
+    if (!bytes) throw Error(`its check ${check} is not a file under the session's folder (a path or link out of it, a folder, nothing there, or the folder itself gone)`);
+    return this.o.keep(bytes, check);
   }
+  /** The bytes of a file the folder holds, by its real path: a link out of the folder, a folder and a missing file are undefined. */
   private async bytesOf(cwd: string, check: string): Promise<Uint8Array | undefined> {
     const path = normalize(check);
-    if (isAbsolute(path) || path.startsWith('..')) return undefined;
-    return readFile(join(cwd, path)).then((b) => new Uint8Array(b), () => undefined);
+    if (isAbsolute(path) || path === '..' || path.startsWith(`..${sep}`)) return undefined;
+    try {
+      const [root, file] = await Promise.all([realpath(cwd), realpath(join(cwd, path))]);
+      if (!file.startsWith(root + sep) || !(await stat(file)).isFile()) return undefined;
+      return new Uint8Array(await readFile(file));
+    } catch {
+      return undefined;
+    }
   }
 
   /** The open tasks of a session's thread with their locked definitions, as the store holds them. */
