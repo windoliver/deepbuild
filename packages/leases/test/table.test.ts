@@ -51,6 +51,28 @@ describe('a table opened again on the log', () => {
     expect((released?.data as { proof?: string[] }).proof).toHaveLength(2);
   });
 
+  it('ends only the lease a release names, when its holder holds another on the same key', async () => {
+    const table = await openLeases({ record, now });
+    await table.declare('env-local', PORT);
+    const a = await table.lease({ holder: 'ext:acme/x' }, port, 'exclusive');
+    const b = await table.lease({ holder: 'ext:acme/x' }, port, 'exclusive');
+    if (a.status !== 'granted' || b.status !== 'granted') throw Error('both are granted to one holder');
+    await table.release(b.lease.id, []);
+    expect((await table.leases()).map((v) => v.lease.id), 'the other lease is still held').toEqual([a.lease.id]);
+    const again = await openLeases({ record, now });
+    expect((await again.leases()).map((v) => v.lease.id), 'and so it reads from the log').toEqual([a.lease.id]);
+  });
+
+  it("refuses one holder's run an exclusive key another of its runs holds, and grants it to the same run", async () => {
+    const table = await openLeases({ record, now });
+    await table.declare('env-local', PORT);
+    const [a, b] = [`run:${ulid(T0)}`, `run:${ulid(T0 + 1)}`];
+    expect((await table.lease({ holder: 'ext:acme/x', run: a }, port, 'exclusive')).status).toBe('granted');
+    const refused = await table.lease({ holder: 'ext:acme/x', run: b }, port, 'exclusive');
+    expect(refused.status === 'refused' && refused.message, 'a process of the other run may still use it').toMatch(/held by ext:acme\/x/);
+    expect((await table.lease({ holder: 'ext:acme/x', run: a }, port, 'exclusive')).status).toBe('granted');
+  });
+
   it('holds a lease the supervisor recorded for a run, until the supervisor releases it', async () => {
     const run = `run:${ulid(T0)}`;
     const lease = { resource: port, holder: 'core', mode: 'exclusive', expires: T0 + 60_000 };

@@ -29,7 +29,7 @@ import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, Environm
 import { canonicalize, checkManifest, frozenDigests, hubSlots, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
-import type { Supervisor } from '@deepbuild/supervisor';
+import type { Cleanup, Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
@@ -260,6 +260,12 @@ interface Ext {
   /** How the host asks the running package: its in-process side, or its socket. Unset until it runs. */
   ask?: Ask;
   stop?: () => Promise<void>;
+  /** A sandboxed one's run, as the supervisor's cleanup left it once stopped: its leases end only on a clean one. */
+  cleaned?: Cleanup | undefined;
+  /** The leases granted to this load of it: its unload ends these, never another load's under the same holder. */
+  leased: string[];
+  /** Set once its unload ends its leases: one granted after, to a call already under way, ends at its grant. */
+  leasesEnded?: boolean;
   server?: HttpServer;
 }
 
@@ -684,7 +690,7 @@ class Host implements ExtensionHost {
     return {
       entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(),
-      adapters: new Set(), hubBound: this.hubBound(entry, folder, digest),
+      adapters: new Set(), leased: [], hubBound: this.hubBound(entry, folder, digest),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -802,7 +808,8 @@ class Host implements ExtensionHost {
     for (const kind of fresh.values()) await table.declare(id, kind);
   }
   /** `deep.lease(resource, mode)`: a lease held by the package itself, `ext:<id>`, on this host, whatever its arguments name. */
-  private async lease(id: string, resource: unknown, mode: unknown): Promise<LeaseResult> {
+  private async lease(ext: Ext, resource: unknown, mode: unknown): Promise<LeaseResult> {
+    const id = ext.entry.id;
     const table = this.options.leases;
     if (!table) throw Error(`deep.lease: this host has no lease table`);
     const { kind, key, holder } = (resource ?? {}) as { kind?: unknown; key?: unknown; holder?: unknown };
@@ -812,8 +819,13 @@ class Host implements ExtensionHost {
     if (plant === 'declares-kind-on-first-lease' && !(await table.kinds()).some((k) => k.name === kind)) {
       await table.declare(id, { name: kind, match: 'exact', cap: 100, cooldown: 0, cost: 0 });
     }
-    const caller = { holder: plant === 'holder-from-arguments' && typeof holder === 'string' ? holder : `ext:${id}` };
-    return table.lease(caller, { host: 'local', kind, key }, plant === 'drops-mode' ? 'exclusive' : mode);
+    // A sandboxed one's lease names its run, so the table reads it held while a process of that run still runs.
+    // The planted wrong program builds its caller from the call's arguments alone.
+    const caller = plant === 'holder-from-arguments' && typeof holder === 'string' ? { holder } : { holder: `ext:${id}`, ...(ext.run ? { run: ext.run } : {}) };
+    const result = await table.lease(caller, { host: 'local', kind, key }, plant === 'drops-mode' ? 'exclusive' : mode);
+    if (result.status === 'granted') ext.leased.push(result.lease.id);
+    if (ext.leasesEnded) await this.releaseLeases(ext).catch(() => undefined);
+    return result;
   }
   private loadedOf(ext: Ext): Loaded {
     return { status: 'loaded', id: ext.entry.id, version: ext.entry.version, place: ext.place, run: ext.run };
@@ -856,7 +868,7 @@ class Host implements ExtensionHost {
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
-      ext.stop = async () => { await supervisor.cleanup(run).catch(() => undefined); };
+      ext.stop = async () => { ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
       // What it printed is the package's own words: only a release package's reach the refusal, and the hub's log.
       const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected${ext.released ? `: ${output.join('').trim()}` : ''}`)));
       early.catch(() => undefined);
@@ -873,7 +885,7 @@ class Host implements ExtensionHost {
       ext.ask = (method, params) => wire.call(method, params);
       ext.stop = async () => {
         socket.end();
-        await supervisor.cleanup(run).catch(() => undefined);
+        ext.cleaned = await supervisor.cleanup(run).catch(() => undefined);
       };
     } finally {
       server.close();
@@ -918,7 +930,26 @@ class Host implements ExtensionHost {
     await this.turnOff(ext.entry.id, ext);
     await Promise.all([...ext.reads].map((r) => r.catch(() => undefined)));
     await this.stopHandlers(ext);
+    await this.releaseLeases(ext).catch(() => undefined);
     rmSync(ext.folder, { recursive: true, force: true });
+  }
+  /**
+   * Its leases end with it (#44, design: Lease): the ones this load was granted end at its unload, and a sandboxed
+   * one's only once the supervisor proved every process of its run gone, each release citing those process.ended
+   * events. One whose run left a process running stays held, stale past its expiry; a later load never ends it.
+   */
+  private async releaseLeases(ext: Ext): Promise<void> {
+    ext.leasesEnded = true;
+    const table = this.options.leases;
+    const ids = ext.leased.splice(0);
+    if (!table || !ids.length) return;
+    let proof: string[] = [];
+    if (ext.run) {
+      if (ext.cleaned?.outcome !== 'clean') return;
+      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = '${ext.run}' ORDER BY log_pos`);
+      proof = (ended as { id: string }[]).map((e) => e.id);
+    }
+    for (const id of ids) await table.release(id, proof);
   }
   /** Its handlers stop: nothing more is asked of it, and a sandboxed one's process ends. */
   private async stopHandlers(ext: Ext): Promise<void> {
@@ -1127,7 +1158,7 @@ class Host implements ExtensionHost {
         return this.query(ext, args[0]);
       case 'deep.lease':
         quiet();
-        return this.lease(id, args[0], args[1]);
+        return this.lease(ext, args[0], args[1]);
       case 'deep.notices.send': {
         quiet();
         const readings = (args[0] as { readings?: unknown } | undefined)?.readings;
