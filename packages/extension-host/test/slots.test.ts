@@ -8,9 +8,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
-import { openAsks, type Asks, type Connection, type Delivery } from '@deepbuild/asks';
+import { openAsks, type Asks, type Delivery } from '@deepbuild/asks';
 import { fixtures } from '@deepbuild/contracts';
-import { openRecord, type RecordStore } from '@deepbuild/record';
+import { openRecord, type Connection, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ReleaseEntry } from '../src/index.js';
 
