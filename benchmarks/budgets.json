@@ -171,6 +171,16 @@
       "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "resolver-match-10k",
+      "command": [
+        "node",
+        "benchmarks/resolver.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #23 first measurement: the merge base has no resolver-decisions. One process records 10,000 saved decisions over ten repos and hands the resolver 200 asks, failing unless each is answered exactly when a decision covers it, so p50 includes the seeding and Node's start; the issue's 10 ms p95 per match stays in tests/acceptance/23/match/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "verdict-1000-runs",
       "command": [
         "node",

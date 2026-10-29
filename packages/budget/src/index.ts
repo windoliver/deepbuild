@@ -146,8 +146,25 @@ class BudgetLedger implements Ledger {
   /** For each check and inputs, where its paid run last failed, and where your yes to running it again landed, until a run takes it. */
   private readonly failed = new Map<string, number>();
   private readonly rerunYes = new Map<string, number>();
+  /** Each ask the core raised, by its key: how the ask a request is raising is found while it's being raised. */
+  private readonly created = new Map<string, string>();
+  /**
+   * The paid run's request whose ask is being raised, under this ledger's turn: the asks core consults the resolvers
+   * before the raise returns, so resolver-decisions' answer to that ask (#23), and its read of what's left, run in
+   * that turn instead of waiting behind it.
+   */
+  private raising: { key: string; waiting: Waiting } | undefined;
 
   constructor(private readonly options: LedgerOptions) {}
+
+  /** In the turn of the request raising this ask, or in a turn of its own. */
+  private async within<T>(ask: string | null, run: () => Promise<T>): Promise<T> {
+    if (this.raising) {
+      await this.sync();
+      if (ask === null || this.created.get(this.raising.key) === ask) return run();
+    }
+    return this.exclusive(run);
+  }
 
   /**
    * One decision at a time per record, across every ledger opened on it: each reads the log, then appends
@@ -204,6 +221,9 @@ class BudgetLedger implements Ledger {
       if (covering.length === 0) {
         const ask = await this.wait(connection, { run, usd: cost, because: 'uncovered', budgets: [] },
           `No budget covers ${run.issue}. Approve ${dollars(cost)} for ${run.check} (${run.run})?`, 'Approve it', "Don't run it");
+        // A resolver that named a budget with room while the ask was raised started the run.
+        const started = this.runs.get(run.run);
+        if (started?.ask === ask) return { run: run.run, status: 'started', reserved: started.budgets.map((b) => ({ ...b })) };
         return { run: run.run, status: 'asked', ask };
       }
       const short = covering.filter((b) => roomFor(b, run.run) < cost);
@@ -219,9 +239,10 @@ class BudgetLedger implements Ledger {
   }
 
   resolve(connection: Connection, ask: string, answer: { decision: string; budget: string }): Promise<Outcome> {
-    return this.exclusive(async () => {
+    return this.within(ask, async () => {
       await this.sync();
-      const waiting = this.waiting.get(ask);
+      // The ask being raised has no spend.asked yet: its request is what it waits on.
+      const waiting = this.waiting.get(ask) ?? (this.raising && this.created.get(this.raising.key) === ask ? this.raising.waiting : undefined);
       const run = waiting?.run.run;
       if (connection.writer !== RESOLVER) throw new BudgetRefused(`only ${RESOLVER} answers a paid run's request for you, not ${connection.writer}`, run ? { run } : {});
       if (!waiting || waiting.because !== 'uncovered') throw new BudgetRefused(`${ask} is no paid run's request a budget can answer`);
@@ -261,7 +282,7 @@ class BudgetLedger implements Ledger {
   }
 
   budget(id: string): Promise<BudgetView> {
-    return this.exclusive(async () => {
+    return this.within(null, async () => {
       await this.sync();
       const b = this.budgets.get(id);
       if (!b) throw new BudgetRefused(`${String(id)} is no budget`, { budget: id });
@@ -291,12 +312,18 @@ class BudgetLedger implements Ledger {
     const { run } = waiting;
     const now = this.options.now();
     const key = sha256Hex(canonicalize({ because: waiting.because, check: run.check, inputs: run.inputs, run: run.run, budgets: waiting.budgets }));
-    const ask = await this.options.asks.raise(this.core(connection), source, {
-      kind: 'authority', question,
-      options: [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }],
-      recommended: null, deadline: now + RAISE_WAIT, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
-      pinned_to: { kind: 'evidence', ref: run.inputs },
-    });
+    this.raising = { key, waiting };
+    let ask: string;
+    try {
+      ask = await this.options.asks.raise(this.core(connection), source, {
+        kind: 'authority', question,
+        options: [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }],
+        recommended: null, deadline: now + RAISE_WAIT, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
+        pinned_to: { kind: 'evidence', ref: run.inputs },
+      });
+    } finally {
+      this.raising = undefined;
+    }
     await this.append(this.core(connection), {
       v: 1, id: ulid(now), kind: 'spend.asked', subject: run.run, ts: now,
       data: {
@@ -336,6 +363,8 @@ class BudgetLedger implements Ledger {
     for (;;) {
       const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
       for (const e of page) {
+        // A read in the raising request's turn can overlap another: each event is folded once.
+        if (e.log_pos <= this.cursor) continue;
         this.fold(e);
         this.cursor = e.log_pos;
       }
@@ -390,6 +419,9 @@ class BudgetLedger implements Ledger {
         if (run && d.outcome !== PASSED) this.failed.set(sameInputs(run.check, run.inputs), e.log_pos);
         return;
       }
+      case 'ask.created':
+        if (e.writer === 'core' && typeof d.key === 'string') this.created.set(d.key, `ask:${e.id}`);
+        return;
       case 'decision.applied':
         if (e.writer !== 'core') return;
         if (!this.closed.has(String(d.ask))) this.decided.set(String(d.ask), String(d.decision));

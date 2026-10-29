@@ -8,6 +8,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, re
 import net from 'node:net';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { shipped, type HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
@@ -33,6 +34,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
+  // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
+  ['offer.save', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -51,6 +54,10 @@ const HOLD_MARGIN = 100;
 const CONTEXT_HOLD_MS = 2000;
 /** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
 const GATE_HOLD_MS = 10_000;
+/** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
+const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
+/** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
+const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
 const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
@@ -405,19 +412,24 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
-    const ruled = this.reply(meta);
-    // A call that may need your authority, and no guard entry blocks, is held for the core's gate first (#321).
+    // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
+    const ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
+    // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
+    // the core's gate first (#321, #23).
     const gated = ruled === EMPTY_REPLY ? this.gated(meta, parsed.drafts) : undefined;
+    // A permission prompt is held while the core reads whether a saved decision covers it (#23).
+    const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
     const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
-    const held = !before && !gated && parsed.drafts.length ? this.holdFor(meta) : null;
-    const hold = gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
-    if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data);
+    if (prompted) void this.permissionReply(conn, meta, hold!);
+    else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data);
     else if (before) void this.extensionReply(conn, meta, before.data, hold!);
     else if (held !== null) void this.coreReply(conn, meta, held);
   }
@@ -432,25 +444,56 @@ class Hub {
     const data = drafts.find((d) => d.kind === 'tool.before')?.data;
     if (!data) return undefined;
     const entries = this.rules();
-    const classes = meta.matched.flatMap((n) => /^effect:(\w+)$/.exec(String(entries[n]?.match ?? ''))?.slice(1) ?? []);
+    const classes = meta.matched.flatMap((n) => /^effect:([\w-]+)$/.exec(String(entries[n]?.match ?? ''))?.slice(1) ?? []);
     if (typeof data.effect === 'string') classes.push(data.effect);
     const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
+    const decided = [...new Set(meta.matched.filter((n) => DECIDED_MATCH.test(String(entries[n]?.match ?? ''))).map((n) => String(entries[n]!.match).slice('effect:'.length)))];
     const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
-    if (!authority.length && !mcp) return undefined;
+    if (!authority.length && !mcp && !decided.length) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : typeof data.command === 'string' ? data.command : String(data.kind);
-    return { label, classes: authority, ...(mcp ? { mcp } : {}) };
+    return { label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...(typeof data.command === 'string' ? { command: data.command } : {}) } : {}) };
+  }
+  /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
+  private prompted(meta: HookMeta): boolean {
+    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude') && !meta.watchOnly && !this.off && meta.call !== undefined;
+  }
+  /**
+   * The prompt's reply, written by its hold: the adapter's reply to the answer a saved decision gave; with none, no
+   * decision at all, so the agent's own prompt asks you (#18).
+   */
+  private async permissionReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<{ decision: 'none' }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
+    const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none' }>;
+    const { decision } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    if (!conn.sock.writable) return;
+    if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
+    const request = { payload: { permission_suggestions: meta.call?.suggestions ?? [] } } as unknown as HookRequestLine;
+    const reply = shipped().get('claude').permissionReply!({ ask: '', session: meta.session, option: null, label: null, decision, for: 'call', words: null, provisional: false, undoes: null }, request) as Obj;
+    // The planted wrong program picks the agent's own "always allow", writing a lasting rule into its settings.
+    if (this.plant === 'permission-always-allow' && decision === 'allow' && isObj(reply.hookSpecificOutput) && isObj(reply.hookSpecificOutput.decision)) {
+      reply.hookSpecificOutput.decision.updatedPermissions = meta.call?.suggestions ?? [];
+    }
+    conn.sock.end(line({ exit: 0, stdout: JSON.stringify(reply), stderr: '' }));
   }
   /** The gate's reply, written by its hold: a held call is denied with its ask; one the gate didn't decide in time too. */
   private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
-    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; failed?: string }>;
+    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
     const ruled = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
     const why = 'late' in ruled ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
-      : ruled.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${ruled.failed}). Run it again.` : ruled.held;
+      : ruled.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${ruled.failed}). Run it again.` : ruled.held ?? ruled.deny;
     if (why) return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
     if (before !== undefined) return this.extensionReply(conn, meta, before, hold);
+    // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call.
+    const allow = 'late' in ruled ? undefined : ruled.allow;
+    if (allow !== undefined && (meta.agent === 'claude-code' || meta.agent === 'claude')) {
+      const past = !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode';
+      const output = { hookEventName: 'PreToolUse', ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext: allow };
+      return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
+    }
     conn.sock.end(EMPTY_REPLY);
   }
 
@@ -529,7 +572,10 @@ class Hub {
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
     // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
-    const blocks = matched.filter((n) => mode(n) === 'block' && (!this.off || floor(n)));
+    // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
+    // standing rule or asked at the gate (#23), after every other guard.
+    const decided = (n: string) => !this.off && DECIDED_MATCH.test(String(entries[n]?.match ?? ''));
+    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
     if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     if (this.off) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
