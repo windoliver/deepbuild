@@ -7,8 +7,10 @@
 //   guards     (issue #304) 200 forwarded PreToolUse calls with rules.json holding every shipped default entry, and
 //              200 with it empty, interleaved, each from spawn to exit: the p95 matching every entry adds; then
 //              `deep-hook check` on one default's planted call and on its twin, 200 each: their p95s
+//   backup     (issue #572) a 100 MB record, then 200 forwarded PreToolUse calls interleaved with a native no-op, each
+//              from spawn to exit and each answered while `deep backup` copies the record: the p95 overhead
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -117,7 +119,75 @@ const modes = {
       await stop(hub);
     }
   },
+
+  async backup(home) {
+    await seed(join(home, '.deepbuild', 'ledger.db'), 100_000_000);
+    const { hub, cwd, call } = await setUp(home);
+    const env = { ...process.env, HOME: home };
+    const timed = (command, args, input) => {
+      const t0 = performance.now();
+      const r = spawnSync(command, args, { cwd, env, input });
+      if (r.status !== 0) throw Error(`${command} exited ${r.status}: ${r.stderr}`);
+      return performance.now() - t0;
+    };
+    try {
+      const hooks = [];
+      const floors = [];
+      for (let n = 0; hooks.length < 200; n++) {
+        const folder = join(home, `backup-${n}`);
+        const copying = spawn(process.execPath, [CLI, 'backup', folder], { env, stdio: 'ignore' });
+        let running = true;
+        const done = new Promise((resolve) => copying.on('exit', (code) => { running = false; resolve(code); }));
+        while (running && hooks.length < 200) {
+          const floor = timed('/usr/bin/true', []);
+          const hook = timed(HOOK, ['claude-code', 'PreToolUse'], call);
+          // Only a call answered while the backup ran counts.
+          if (!running) break;
+          floors.push(floor);
+          hooks.push(hook);
+        }
+        if ((await done) !== 0) throw Error('deep backup failed');
+        rmSync(folder, { recursive: true, force: true });
+      }
+      return { floorP95Ms: p95(floors), hookP95Ms: p95(hooks), overheadP95Ms: p95(hooks) - p95(floors) };
+    } finally {
+      await stop(hub);
+    }
+  },
 };
+
+/** A record grown past `bytes` through @deepbuild/record, before the hub starts: one session's shell calls, ~7 KB each. */
+async function seed(path, bytes) {
+  const { openRecord } = await import(join(REPO, 'packages/record/dist/index.js'));
+  let now = Date.now() - 86_400_000;
+  const record = await openRecord({ path, now: () => now });
+  const conn = { writer: 'hook', actor: 'you', scope: 'you', session: 'bench-572', agent: 'claude-code' };
+  const command = 'npm test -- src/cart/checkout.test.ts --reporter verbose '.repeat(120);
+  const size = () => ['', '-wal'].reduce((sum, f) => sum + (existsSync(path + f) ? statSync(path + f).size : 0), 0);
+  let n = 0;
+  try {
+    while (size() < bytes) {
+      const batch = [];
+      for (let i = 0; i < 2000; i++) {
+        now += 5;
+        batch.push(record.append(conn, { v: 1, id: ulid(now, ++n), kind: n % 2 ? 'tool.after' : 'tool.before', ts: now, seq: String(BigInt(now) * 1_000_000n + BigInt(n % 1_000_000)), data: { kind: 'shell', paths: [], command: `${command}${n}` } }));
+      }
+      await Promise.all(batch);
+      await record.sync();
+    }
+  } finally {
+    await record.close();
+  }
+}
+/** A ULID at `ms`, its random part the counter `n`, so every ID is new. */
+function ulid(ms, n) {
+  const crockford = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  let out = '';
+  for (let t = BigInt(ms), i = 0; i < 10; i++, t >>= 5n) out = crockford[Number(t & 31n)] + out;
+  let tail = '';
+  for (let r = BigInt(n), i = 0; i < 16; i++, r >>= 5n) tail = crockford[Number(r & 31n)] + tail;
+  return out + tail;
+}
 
 const mode = process.argv[2];
 if (!modes[mode]) throw Error(`Unknown mode ${mode}; one of: ${Object.keys(modes).join(', ')}`);

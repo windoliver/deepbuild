@@ -193,6 +193,14 @@
       "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
       "fail_closed": false
     },
+    "authority-dispatch": {
+      "match": "effect:dispatch",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "This call dispatches a workflow, which needs your authority: no \"proceed\" covers it, so in the turn a proceed starts it is held with an authority ask.",
+      "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
     "authority-send": {
       "match": "effect:send",
       "scope": "all_repos",

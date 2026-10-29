@@ -26,8 +26,9 @@
 //!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
 //!   the line can't know, so what it deletes can't be worked out before it runs), or one that needs your
-//!   authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `send` (`gh pr comment`, `gh issue comment`,
-//!   `gh pr review`) or `delete` (`gh repo delete`, `gh release delete`, `gh issue delete`).
+//!   authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `dispatch` (what `dispatch:workflow` reads),
+//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`) or `delete` (`gh repo delete`,
+//!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
 //!
@@ -75,6 +76,7 @@ const EFFECTS: &[&str] = &[
     "unknown-reach-delete",
     "push",
     "merge",
+    "dispatch",
     "send",
     "delete",
 ];
@@ -349,6 +351,7 @@ impl Call {
                 .iter()
                 .find(|r| r.is("git") && git_rest(r).first().map(String::as_str) == Some("push")),
             "merge" => self.runs.iter().find(|r| gh(r, &[&["pr", "merge"]])),
+            "dispatch" => self.runs.iter().find(|r| dispatch(r).is_some()),
             "send" => self.runs.iter().find(|r| {
                 gh(
                     r,
