@@ -117,8 +117,10 @@ export function clockTime(ms: number): string {
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 /** What the agent reads when its promised check comes due, naming the quote and its due time. */
+/** The token a wake-up's text carries, by which the wake's own prompt is known: this promise, this set of it. */
+export function promiseToken(state: PromiseState): string { return `promise:${state.id}:${state.set}`; }
 export function wakeText(state: PromiseState): string {
-  return `DeepBuild: your promised check is due (${clockTime(state.due)}): "${state.quote}" Do it now, and report what you find; this wake-up sets itself no further. (promise:${state.id})`;
+  return `DeepBuild: your promised check is due (${clockTime(state.due)}): "${state.quote}" Do it now, and report what you find; this wake-up sets itself no further. (${promiseToken(state)})`;
 }
 /** The session's row while a due promise waits for its next prompt or stop. */
 export function dueReading(state: PromiseState): string {

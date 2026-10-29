@@ -39,7 +39,7 @@ import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
-import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, wakeText, type PromiseState } from './promises.js';
+import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { checkArguments } from './tools.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -988,13 +988,17 @@ export class Core {
     if (!p || p.status !== 'due') return undefined;
     p.status = 'woken';
     const agent = this.sessions.get(session)?.agent ?? 'claude-code';
-    // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check itself.
-    // Only a handed wake text carries the token, so a late wake (its prompt after the grace) still proves the route.
-    const woke = via === 'next_prompt' && prompt.includes(`promise:${p.id}`);
+    // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check
+    // itself. Only a handed wake text carries this set's token, so a late wake (its prompt after the grace) still proves
+    // the route, and a typed prompt that lands while the wake is queued finds it in the transcript, as an ask's does.
+    const token = promiseToken(p);
+    const stalled = p.handed === false;
+    const woke = via === 'next_prompt' && (prompt.includes(token) || (p.handed !== undefined && await this.woken(session, token)));
     clearTimeout(p.timer);
     const r = this.routes.get(session);
     if (woke && r) r.wakes = true;
     await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: woke ? 'waiter' : via }).catch(() => undefined);
+    if (woke && stalled) await this.appendReading(session, agent, 'Claude Code woke this session for its promised check after all; the check goes with that wake\'s turn.').catch(() => undefined);
     this.askingSoon();
     return woke ? undefined : wakeText(p);
   }
@@ -1460,7 +1464,9 @@ export class Core {
       const p = this.promises.get(session);
       if (p?.status === 'due' && !p.handed) {
         // The hand follows its recorded route, or not at all.
-        await this.appendSession(session, this.sessions.get(session)?.agent ?? 'claude-code', 'promise.due', { promise: p.id, due: p.due, route: 'wake' });
+        const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+        await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'wake' });
+        await this.appendReading(session, agent, 'The promised check\'s wake-up is handed to this session\'s waiter.').catch(() => undefined);
         return this.handPromise(session, p, r);
       }
       const rows = await this.waitingFor(session);
@@ -1492,7 +1498,7 @@ export class Core {
     if (!handed) return;
     clearTimeout(handed.timer);
     this.handed.delete(ask);
-    if ((prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, ask)) {
+    if ((prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, `ask:${ask}`)) {
       const r = this.routes.get(session);
       if (r) r.wakes = true;
       return this.outcome(ask, 'next_prompt', 'delivered');
@@ -1503,12 +1509,12 @@ export class Core {
     if (r && r.wakes !== true) r.wakes = false;
     await this.appendReading(session, this.sessions.get(session)?.agent ?? 'claude-code', `Claude Code didn't wake this session with your answer to ask:${ask}: its waiter handed it over and no turn started. The answer goes with the session's next prompt.`).catch(() => undefined);
   }
-  /** Whether the transcript shows a turn carrying an ask's answer: a queued wake or a prompt naming it. */
-  private async woken(session: string, ask: string): Promise<boolean> {
+  /** Whether the transcript shows a turn carrying a waiter's text (an ask's answer, a promise's wake-up): a queued wake or a prompt naming its token. */
+  private async woken(session: string, token: string): Promise<boolean> {
     const transcript = this.sessions.get(session)?.transcript;
     if (!transcript) return false;
     return (await this.tail(transcript, 1 << 20)).split('\n').some((l) => {
-      if (!l.includes(`ask:${ask}`)) return false;
+      if (!l.includes(token)) return false;
       try {
         const e = JSON.parse(l) as Obj;
         return e.type === 'queue-operation' || (e.type === 'user' && isObj(e.message) && typeof e.message.content === 'string');
