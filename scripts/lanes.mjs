@@ -27,10 +27,11 @@ const alone = ['tests/acceptance/20/', 'tests/acceptance/24/', 'tests/acceptance
 /**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
  * minutes; #666's and #668's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
- * only the release preflight runs them (releaseLanes, below).
+ * only the release preflight runs them (releaseLanes, below). #112's live eval replays 20 real tasks you export from
+ * your archive, on your plan for up to two hours, so only you run it (tests/acceptance/112/README.md, The live run).
  */
 const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts',
-  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts'];
+  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts'];
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -77,6 +78,14 @@ export const checks = [
     name: 'verdict proofs', paths: ['packages/verdicts/src/**', 'packages/verdicts/model/**'],
     commands: [[process.execPath, 'scripts/verdict-proofs.mjs'], [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/684', 'lean.test.ts', '-t', 'AC3|AC4', '--silent=false']],
     fix: 'Repair the proof or build error each FAIL line names, keeping every theorem on Lean\'s standard axioms, or make the engine and packages/verdicts/model agree on the vector named; under BLOCKED, install the toolchain as its Fix line says.',
+  },
+  // Configuration evals (#112): a change to an instruction file, a skill or the agents' settings lands only with a
+  // replay of it on real past tasks that didn't regress. The replay spends plan usage, so you start it; this gate only
+  // reads the report it left.
+  {
+    name: 'config eval', paths: ['AGENTS.md', 'CLAUDE.md', 'skills/**', '.claude/**', '.codex/**'],
+    commands: [[process.execPath, 'scripts/config-eval.mjs', 'gate']],
+    fix: 'Under BLOCKED, run the two commands its Fix line names; under FAIL, the change broke the tasks named, so rework it and replay it again.',
   },
 ];
 

@@ -6,6 +6,7 @@
 import type { JsonValue } from '@deepbuild/contracts';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Statement } from 'better-sqlite3';
+import { compareReplay, type Comparison, type ReplayResult } from './replay.js';
 import type { Db } from './storage.js';
 
 /** Each connection's statements, prepared once: the layer's reads run several times per learned change. */
@@ -55,7 +56,7 @@ export const CHECKED = new Set(['learn.applied', 'learn.widened']);
 const IN_FORCE = "kind IN ('learn.applied', 'learn.widened') AND state = 'applied'";
 
 export interface Quote { at: string; quote: string }
-export interface LearnedChange { layer: string; target: string; diff: string; evidence: Quote[]; scope: string; applied_by: string | null }
+export interface LearnedChange { layer: string; target: string; diff: string; evidence: Quote[]; scope: string; applied_by: string | null; supersedes?: string | null }
 export interface Check { outcome: 'refused' | 'held'; reason: string }
 export interface SliceEntry { target: string; text: string }
 
@@ -276,7 +277,7 @@ export function loosens(target: string, diff: string): string | undefined {
  * handle or the check. The first failure decides. Quotes in the evidence store are the core's to read
  * (`readEvidence`), so here they count as found.
  */
-export function judge(db: Db, change: LearnedChange, writer: string): Check | undefined {
+export function judge(db: Db, change: LearnedChange, writer: string, kind = 'learn.applied'): Check | undefined {
   const refused = (reason: string): Check => ({ outcome: 'refused', reason });
   const { target, scope } = change;
   if (change.layer !== 'learned' && !YOURS.has(writer)) return refused(`${target} is in the base, which only you change, through the app or the CLI, not ${writer}`);
@@ -288,7 +289,10 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
   const by = change.applied_by;
   // Its session is one its evidence came from; evidence from no session (an evidence file) names none to hold it to.
   const sources = by === LOCAL_FIRST ? sourcesOf(db, change.evidence) : undefined;
-  if (sources && (!scope.startsWith('session:') || (sources.size > 0 && !sources.has(scope)))) return refused(`the local-first rule applies ${target} only to the session it came from; ${scope} needs your OK`);
+  if (sources && kind === 'learn.widened') {
+    const why = localWidening(db, change);
+    if (why) return refused(why);
+  } else if (sources && (!scope.startsWith('session:') || (sources.size > 0 && !sources.has(scope)))) return refused(`the local-first rule applies ${target} only to the session it came from; ${scope} needs your OK`);
   if (by === INSTALL) {
     const projects = projectsOf(db, change.evidence);
     const covered = !projects ? undefined : projects.size > 1 || projects.has(EVERY) ? 'all' : `repo:${[...projects][0]!}`;
@@ -319,6 +323,60 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
   }
   const loosening = loosens(target, change.diff);
   return loosening === undefined ? undefined : { outcome: 'held', reason: loosening };
+}
+
+/**
+ * Why the local-first rule can't widen a change from its session to the repo, from the record alone, or undefined.
+ * It widens only a change in force at its session, and only to that session's repo. Whether a replay it cites decides
+ * for it, the core reads at append (replayCheck): sessions where it helped again can't decide, so they never widen anything.
+ */
+function localWidening(db: Db, change: LearnedChange): string | undefined {
+  const { target, scope } = change;
+  const from = q(db, `SELECT scope FROM learned_layer WHERE handle = ? AND target = ? AND layer = 'learned' AND ${IN_FORCE}`).get(change.supersedes ?? '', target) as { scope: string | null } | undefined;
+  const session = /^session:([0-9A-Za-z]+)$/.exec(from?.scope ?? '')?.[1];
+  const project = session ? (q(db, 'SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined)?.project_id : undefined;
+  if (project && scope === `repo:${letters(project)}`) return undefined;
+  return `the local-first rule widens ${target} only from a change in force at its session (${change.supersedes ?? 'none named'}) to that session's repo; ${scope} needs your OK`;
+}
+
+/** Each replay a change cites: an `ev:` file holding a replay's plan and runs, read by the one comparison rule. */
+async function citedReplays(store: EvidenceStore | undefined, transcripts: Transcripts, evidence: readonly Quote[]): Promise<{ at: string; read: Comparison }[]> {
+  const out: { at: string; read: Comparison }[] = [];
+  for (const { at } of evidence) {
+    const sha = /^ev:([0-9a-f]{64})$/.exec(at)?.[1];
+    const entry = sha ? await readStored(store, transcripts, { sha }) : undefined;
+    let value: unknown;
+    try { value = entry ? JSON.parse(entry.text) : undefined; } catch { continue; }
+    if (!isObj(value) || !isObj(value.plan) || !Array.isArray(value.runs)) continue;
+    let read: Comparison;
+    try { read = compareReplay(value as unknown as ReplayResult); } catch (error) {
+      read = { outcome: 'refused', reason: `the rule can't read it: ${error instanceof Error ? error.message : String(error)}`, n: 0, measures: [], tasks: [], broke: [] };
+    }
+    out.push({ at, read });
+  }
+  return out;
+}
+/**
+ * The core's reading, at append, of the replays a change cites (design: The learned layer). The local-first rule's
+ * widening holds only on replays the one rule adopts; a rollback by rule that cites replays revokes only on one that
+ * regresses, so a cohort too small or noisy to decide doesn't by itself revoke a standing change.
+ */
+export async function replayCheck(store: EvidenceStore | undefined, change: LearnedChange, transcripts: Transcripts, kind: string, writer: string): Promise<Check | undefined> {
+  const refused = (reason: string): Check => ({ outcome: 'refused', reason: clip(reason, 8000) });
+  if (kind === 'learn.widened' && change.applied_by === LOCAL_FIRST) {
+    const replays = await citedReplays(store, transcripts, change.evidence);
+    if (!replays.length) return refused(`${change.target} cites no replay the store holds, so nothing decides its widening to ${change.scope}`);
+    const short = replays.find((r) => r.read.outcome !== 'adopt');
+    if (short) return refused(`${change.target} widens to ${change.scope} only on a replay the one comparison rule adopts; ${short.at} reads ${short.read.outcome}: ${short.read.reason}`);
+  }
+  if (kind === 'learn.rolled_back' && !YOURS.has(writer)) {
+    const replays = await citedReplays(store, transcripts, change.evidence);
+    if (replays.length && !replays.some((r) => r.read.outcome === 'regresses')) {
+      const r = replays[0]!;
+      return refused(`a rollback by rule revokes ${change.supersedes ?? change.target} only on a replay that regresses; ${r.at} reads ${r.read.outcome}: ${r.read.reason}`);
+    }
+  }
+  return undefined;
 }
 
 /** What the store holds at a location: a file as text, or one transcript message. Transcripts are parsed once, by hash. */
