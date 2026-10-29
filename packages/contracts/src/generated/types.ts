@@ -1838,6 +1838,27 @@ export interface ClaimStalled {
   evidence?: Array<string>;
 }
 
+/** command.staged@1 */
+export interface CommandStaged {
+  v: 1;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    until: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** commit.made@1 */
 export interface CommitMade {
   v: 1;
@@ -2440,6 +2461,7 @@ export interface HookRequestV3 {
   ppid: number;
   matched: Array<string>;
   notes?: { [key: string]: string };
+  stage?: { [key: string]: Array<string> };
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
