@@ -149,8 +149,6 @@ const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked',
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
 const LEARN_CHECK = 'learn_check.made';
-/** Parsed transcripts kept for the next learned change's reading, newest last. */
-const TRANSCRIPTS_KEPT = 4;
 /** The text field each kind keeps of a hook payload: scrubbed, then cut. */
 const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
 /** What content-free mode keeps of each text field: nothing its schema allows. */
@@ -318,7 +316,7 @@ class SqliteRecord implements RecordStore {
     });
   }
   private commitMeta(values: Record<string, string>): void {
-    const put = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
+    const put = this.stmt('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
     this.full(() => {
       for (const [key, value] of Object.entries(values)) put.run(key, value);
     });
@@ -524,7 +522,6 @@ class SqliteRecord implements RecordStore {
         });
         if (!this.queue.length && dependsOn(this.db, change) === before) break;
       }
-      while (this.transcripts.size > TRANSCRIPTS_KEPT) this.transcripts.delete(this.transcripts.keys().next().value!);
       if (found) {
         const ts = this.options.now();
         checked = this.sealed(this.prepare({ writer: 'core', actor: connection.actor, scope: connection.scope }, { v: 1, id: ulid(ts), kind: LEARN_CHECK, ts, data: { change: `doc:${input.id}`, reason: found.reason } }));
@@ -565,7 +562,7 @@ class SqliteRecord implements RecordStore {
    * session active again, though every event after it is lost in a cut.
    */
   private resumes(items: readonly Prepared[]): boolean {
-    const ended = this.db.prepare("SELECT 1 FROM sessions WHERE id = ? AND status IN ('finished', 'failed')");
+    const ended = this.stmt("SELECT 1 FROM sessions WHERE id = ? AND status IN ('finished', 'failed')");
     return items.some((p) => p.input.kind === 'user.ask' && p.session !== null && ended.get(p.session) !== undefined);
   }
 
@@ -627,7 +624,7 @@ class SqliteRecord implements RecordStore {
 
   async read({ after, limit = 1000, kinds }: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]> {
     const only = kinds ? ` AND kind IN (SELECT value FROM json_each(?))` : '';
-    const rows = this.db.prepare(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
+    const rows = this.stmt(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
       .all(after, ...(kinds ? [JSON.stringify(kinds)] : []), limit) as StoredRow[];
     return rows.map(toEvent);
   }

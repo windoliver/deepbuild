@@ -5,7 +5,7 @@
 // cut loses exactly what a power cut would: every NORMAL commit after the last FULL one.
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import Database from 'better-sqlite3';
+import Database, { type Statement } from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
 import type { VfsSettings } from './wire.js';
 
@@ -95,9 +95,18 @@ export function testVfs(settings: VfsSettings): Durable {
     probe: () => !refusing(),
     backend() {
       let file: string | undefined;
+      // Each database's statements, prepared once: every commit runs the same three.
+      const statements = new WeakMap<Db, Map<string, Statement>>();
+      const prepared = (db: Db, sql: string): Statement => {
+        let byText = statements.get(db);
+        if (!byText) statements.set(db, (byText = new Map()));
+        let s = byText.get(sql);
+        if (!s) byText.set(sql, (s = db.prepare(sql).pluck()));
+        return s;
+      };
       const scalar = (db: Db, sql: string): unknown => {
         try {
-          return db.prepare(sql).pluck().get();
+          return prepared(db, sql).get();
         } catch {
           return undefined;
         }
@@ -119,7 +128,7 @@ export function testVfs(settings: VfsSettings): Durable {
             // A refused write fails at the commit, after the body ran, as a disk's does.
             if (refusing()) throw Error('SQLITE_IOERR: the test VFS refuses writes');
           })();
-          const ids = db.prepare('SELECT id FROM events WHERE log_pos > ? ORDER BY log_pos').pluck().all(before) as string[];
+          const ids = prepared(db, 'SELECT id FROM events WHERE log_pos > ? ORDER BY log_pos').all(before) as string[];
           if (mode === 'full') {
             vfs.sync();
             // The image reaches ledger.db at once only when a cut is set up, the one way this process ends

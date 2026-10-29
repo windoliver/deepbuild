@@ -5,7 +5,18 @@
 // append and records as learn_check.made, so the layer stays a function of the log.
 import type { JsonValue } from '@deepbuild/contracts';
 import type { EvidenceStore } from '@deepbuild/evidence';
+import type { Statement } from 'better-sqlite3';
 import type { Db } from './storage.js';
+
+/** Each connection's statements, prepared once: the layer's reads run several times per learned change. */
+const prepared = new WeakMap<Db, Map<string, Statement<unknown[]>>>();
+function q(db: Db, sql: string): Statement<unknown[]> {
+  let statements = prepared.get(db);
+  if (!statements) prepared.set(db, (statements = new Map()));
+  let s = statements.get(sql);
+  if (!s) statements.set(sql, (s = db.prepare(sql)));
+  return s;
+}
 
 /** The base: a change of layer `learned` aimed at any of these is refused. A guard rule you add is `guard:<name>`. */
 const BASE = ['kernel:', 'invariant:', 'spec:', 'check:', 'decision:', 'rule:', 'guard:'];
@@ -111,18 +122,18 @@ type Located = { in: 'record'; entry: Entry } | { in: 'store'; sha: string; mess
 function locate(db: Db, handle: string): Located {
   const session = /^session:([0-9A-Za-z]+)#(.+)$/.exec(handle);
   if (session) {
-    const row = db.prepare('SELECT transcript FROM sessions WHERE id = ?').get(session[1]) as { transcript: string | null } | undefined;
+    const row = q(db, 'SELECT transcript FROM sessions WHERE id = ?').get(session[1]) as { transcript: string | null } | undefined;
     return row?.transcript ? { in: 'store', sha: row.transcript, message: session[2]! } : undefined;
   }
   const ev = /^ev:([0-9a-f]{64})$/.exec(handle);
   if (ev) return { in: 'store', sha: ev[1]! };
   const decision = /^decision:([0-9A-Za-z]+)$/.exec(handle);
   if (decision) {
-    const row = db.prepare("SELECT answer FROM decisions WHERE id = ? AND state = 'active'").get(decision[1]) as { answer: string | null } | undefined;
+    const row = q(db, "SELECT answer FROM decisions WHERE id = ? AND state = 'active'").get(decision[1]) as { answer: string | null } | undefined;
     return row ? { in: 'record', entry: { text: textOf(row.answer), outside: false } } : undefined;
   }
   // A learned change in force, by its handle: its diff.
-  const change = db.prepare(`SELECT diff FROM learned_layer WHERE handle = ? AND ${IN_FORCE}`).get(handle) as { diff: string | null } | undefined;
+  const change = q(db, `SELECT diff FROM learned_layer WHERE handle = ? AND ${IN_FORCE}`).get(handle) as { diff: string | null } | undefined;
   return change ? { in: 'record', entry: { text: change.diff ?? '', outside: false } } : undefined;
 }
 /** Text a reason names, cut so the reason stays within its schema's 8,192 characters. */
@@ -139,7 +150,7 @@ const EVERY = '*';
 function projectsOf(db: Db, evidence: readonly Quote[]): Set<string> | undefined {
   const projects = new Set<string>();
   const ofSession = (id: string): string | null =>
-    (db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(id) as { project_id: string | null } | undefined)?.project_id ?? null;
+    (q(db, 'SELECT project_id FROM sessions WHERE id = ?').get(id) as { project_id: string | null } | undefined)?.project_id ?? null;
   for (const { at } of evidence) {
     const session = /^session:([0-9A-Za-z]+)/.exec(at)?.[1];
     if (session) {
@@ -150,13 +161,13 @@ function projectsOf(db: Db, evidence: readonly Quote[]): Set<string> | undefined
     }
     const file = /^ev:([0-9a-f]{64})$/.exec(at)?.[1];
     if (file) {
-      const kept = db.prepare("SELECT project_id FROM events WHERE kind = 'evidence.stored' AND json_extract(data, '$.sha256') = ? AND project_id IS NOT NULL ORDER BY log_pos DESC LIMIT 1").get(file) as { project_id: string } | undefined;
+      const kept = q(db, "SELECT project_id FROM events WHERE kind = 'evidence.stored' AND json_extract(data, '$.sha256') = ? AND project_id IS NOT NULL ORDER BY log_pos DESC LIMIT 1").get(file) as { project_id: string } | undefined;
       if (kept) projects.add(kept.project_id);
       continue;
     }
     const decision = /^decision:([0-9A-Za-z]+)$/.exec(at)?.[1];
     if (decision) {
-      const row = db.prepare("SELECT scope FROM decisions WHERE id = ? AND state = 'active'").get(decision) as { scope: string | null } | undefined;
+      const row = q(db, "SELECT scope FROM decisions WHERE id = ? AND state = 'active'").get(decision) as { scope: string | null } | undefined;
       const scope = textOf(row?.scope ?? null);
       const project = scope === 'all' ? EVERY : scope.startsWith('repo:') ? scope.slice(5) : scope.startsWith('session:') ? ofSession(scope.slice(8)) : null;
       if (project) projects.add(project);
@@ -171,7 +182,7 @@ function sourcesOf(db: Db, evidence: readonly Quote[]): Set<string> {
   for (const { at } of evidence) {
     const session = /^session:([0-9A-Za-z]+)#/.exec(at)?.[1];
     if (session) sources.add(`session:${session}`);
-    const cited = db.prepare('SELECT scope FROM learned_layer WHERE handle = ?').get(at) as { scope: string | null } | undefined;
+    const cited = q(db, 'SELECT scope FROM learned_layer WHERE handle = ?').get(at) as { scope: string | null } | undefined;
     if (cited?.scope?.startsWith('session:')) sources.add(cited.scope);
   }
   return sources;
@@ -180,16 +191,16 @@ function sourcesOf(db: Db, evidence: readonly Quote[]): Set<string> {
 /** What the start slice always holds: each line of a rule you typed or a decision of yours, by the target that holds it. */
 function baseLines(db: Db): Map<string, string> {
   const held = new Map<string, string>();
-  for (const { target, text } of fold(db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND layer = 'base' AND target LIKE 'rule:%' ORDER BY log_pos`).all() as FoldRow[], () => true)) {
+  for (const { target, text } of fold(q(db, `SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND layer = 'base' AND target LIKE 'rule:%' ORDER BY log_pos`).all() as FoldRow[], () => true)) {
     for (const line of text.split('\n')) held.set(norm(line), target);
   }
-  for (const row of db.prepare("SELECT id, answer FROM decisions WHERE state = 'active'").all() as { id: string; answer: string | null }[]) held.set(norm(textOf(row.answer)), `decision:${row.id}`);
+  for (const row of q(db, "SELECT id, answer FROM decisions WHERE state = 'active'").all() as { id: string; answer: string | null }[]) held.set(norm(textOf(row.answer)), `decision:${row.id}`);
   return held;
 }
 
 /** Whether a check was named by a requirement of a FAIL verdict: it once caught a real bug. */
 function caughtABug(db: Db, check: string): boolean {
-  for (const row of db.prepare("SELECT requirements FROM verdicts WHERE outcome = 'FAIL'").all() as { requirements: string | null }[]) {
+  for (const row of q(db, "SELECT requirements FROM verdicts WHERE outcome = 'FAIL'").all() as { requirements: string | null }[]) {
     const requirements = row.requirements ? (JSON.parse(row.requirements) as JsonValue) : [];
     if (Array.isArray(requirements) && requirements.some((r) => isObj(r) && r.check === check)) return true;
   }
@@ -284,7 +295,7 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
     if (!covered) return refused(`${target} was learned at install from no session of a known repo`);
     if (covered !== 'all' && scope !== covered) return refused(`${target} claims ${scope}, but its evidence covers ${covered}`);
   } else if (by !== null && by !== 'you' && by !== LOCAL_FIRST
-    && !db.prepare(`SELECT 1 FROM learned_layer WHERE ${IN_FORCE} AND layer = 'base' AND target = ?`).get(by)) return refused(`${by}, which applied ${target}, is not a rule you approved`);
+    && !q(db, `SELECT 1 FROM learned_layer WHERE ${IN_FORCE} AND layer = 'base' AND target = ?`).get(by)) return refused(`${by}, which applied ${target}, is not a rule you approved`);
 
   // Every quote at its handle (design: Reading by reference).
   for (const quote of change.evidence) {
@@ -321,17 +332,49 @@ async function readStored(store: EvidenceStore | undefined, transcripts: Transcr
   }
   return (await parsedTranscript(store, transcripts, where.sha))?.get(where.message);
 }
-/** A transcript in the store, parsed once by hash. Only a parsed one is kept: a file the store doesn't hold yet, or a failed read, is asked for again. */
+/** The bytes of transcript files whose parses a cache keeps, at most: the newest one is kept whatever its size. */
+const TRANSCRIPT_BYTES_KEPT = 32 * 1024 * 1024;
+/** The size of each file a cache holds a parse of, once read. */
+const cachedBytes = new WeakMap<Transcripts, Map<string, number>>();
+/**
+ * A transcript in the store, parsed once by hash, the least recently read dropped first past the byte bound. Only a
+ * parsed one is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
+ */
 function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcripts, sha: string): Promise<Map<string, Entry> | undefined> {
+  let sizes = cachedBytes.get(transcripts);
+  if (!sizes) cachedBytes.set(transcripts, (sizes = new Map()));
+  const known = sizes;
   let parsed = transcripts.get(sha);
-  if (!parsed) {
-    parsed = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
-      if (!b) transcripts.delete(sha);
-      return b ? readTranscript(b) : undefined;
-    });
+  if (parsed) {
+    // Read again: now the newest.
+    transcripts.delete(sha);
     transcripts.set(sha, parsed);
-    parsed.catch(() => transcripts.delete(sha));
+    return parsed;
   }
+  const forget = (): void => {
+    if (transcripts.get(sha) === parsed) transcripts.delete(sha);
+    known.delete(sha);
+  };
+  parsed = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
+    if (!b) {
+      forget();
+      return undefined;
+    }
+    if (transcripts.get(sha) === parsed) {
+      known.set(sha, b.length);
+      let total = 0;
+      for (const size of known.values()) total += size;
+      for (const oldest of transcripts.keys()) {
+        if (total <= TRANSCRIPT_BYTES_KEPT || oldest === sha) break;
+        total -= known.get(oldest) ?? 0;
+        known.delete(oldest);
+        transcripts.delete(oldest);
+      }
+    }
+    return readTranscript(b);
+  });
+  transcripts.set(sha, parsed);
+  parsed.catch(forget);
   return parsed;
 }
 
@@ -342,7 +385,7 @@ export interface Message extends Entry { id: string }
  * links, and each message that holds text, in order. Undefined for a session no such event links.
  */
 export async function sessionTranscript(db: Db, store: EvidenceStore | undefined, transcripts: Transcripts, session: string): Promise<Message[] | undefined> {
-  const row = db.prepare('SELECT transcript FROM sessions WHERE id = ?').get(session) as { transcript: string | null } | undefined;
+  const row = q(db, 'SELECT transcript FROM sessions WHERE id = ?').get(session) as { transcript: string | null } | undefined;
   if (!row?.transcript) return undefined;
   const parsed = await parsedTranscript(store, transcripts, row.transcript);
   if (!parsed) return undefined;
@@ -392,7 +435,7 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
     if (!answer) {
       judged.set(handle, Promise.resolve({ outside: false, decisions: [] }));
       answer = (async () => {
-        const row = db.prepare('SELECT evidence FROM learned_layer WHERE handle = ?').get(handle) as { evidence: string | null } | undefined;
+        const row = q(db, 'SELECT evidence FROM learned_layer WHERE handle = ?').get(handle) as { evidence: string | null } | undefined;
         const quotes = row?.evidence ? (JSON.parse(row.evidence) as Quote[]) : [];
         const decisions = decisionsAmong(quotes);
         const sources = quotes.filter((q) => !q.at.startsWith('decision:'));
@@ -463,14 +506,14 @@ export function dependsOn(db: Db, change: LearnedChange): string {
       if (session !== undefined) sessions.add(session);
       else if (at.startsWith('doc:') && !seen.has(at)) {
         seen.add(at);
-        const row = db.prepare('SELECT evidence FROM learned_layer WHERE handle = ?').get(at) as { evidence: string | null } | undefined;
+        const row = q(db, 'SELECT evidence FROM learned_layer WHERE handle = ?').get(at) as { evidence: string | null } | undefined;
         if (row?.evidence) walk(JSON.parse(row.evidence) as Quote[]);
       }
     }
   };
   walk(change.evidence);
-  const of = db.prepare('SELECT transcript FROM sessions WHERE id = ?');
-  const newest = (db.prepare("SELECT MAX(log_pos) AS at FROM learned_layer WHERE kind <> 'learn.proposed'").get() as { at: number | null }).at ?? 0;
+  const of = q(db, 'SELECT transcript FROM sessions WHERE id = ?');
+  const newest = (q(db, "SELECT MAX(log_pos) AS at FROM learned_layer WHERE kind <> 'learn.proposed'").get() as { at: number | null }).at ?? 0;
   return [`@${newest}`, ...[...sessions].map((s) => `${s}=${(of.get(s) as { transcript: string | null } | undefined)?.transcript ?? ''}`)].join(' ');
 }
 
@@ -497,7 +540,7 @@ function fold(rows: readonly FoldRow[], covers: (scope: string) => boolean): Sli
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 /** Whether a scope covers a session: everywhere, the session, or the project its session.start was recorded under. */
 function coversSession(db: Db, session: string): (scope: string) => boolean {
-  const row = db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
+  const row = q(db, 'SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
   const scopes = new Set([`session:${letters(session)}`, 'all', ...(row?.project_id ? [`repo:${letters(row.project_id)}`] : [])]);
   return (scope) => scopes.has(scope);
 }
@@ -509,9 +552,9 @@ function coversSession(db: Db, session: string): (scope: string) => boolean {
  */
 export function startSlice(db: Db, session: string): SliceEntry[] {
   const covers = coversSession(db, session);
-  const rows = db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ((layer = 'base' AND target LIKE 'rule:%') OR (layer = 'learned' AND target LIKE 'slice:%')) ORDER BY log_pos`).all() as FoldRow[];
+  const rows = q(db, `SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ((layer = 'base' AND target LIKE 'rule:%') OR (layer = 'learned' AND target LIKE 'slice:%')) ORDER BY log_pos`).all() as FoldRow[];
   const slice = fold(rows, covers);
-  for (const d of db.prepare("SELECT id, scope, answer FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string; scope: string | null; answer: string | null }[]) {
+  for (const d of q(db, "SELECT id, scope, answer FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string; scope: string | null; answer: string | null }[]) {
     if (covers(textOf(d.scope))) slice.push({ target: `decision:${d.id}`, text: textOf(d.answer) });
   }
   return slice;
@@ -560,7 +603,7 @@ function matchesCommand(match: string, command: string): boolean | undefined {
 export function loadLearned(db: Db, session: string): LearnedLoad {
   const covers = coversSession(db, session);
   const inForce = (where: string): SliceEntry[] =>
-    fold(db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ${where} ORDER BY log_pos`).all() as FoldRow[], covers);
+    fold(q(db, `SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ${where} ORDER BY log_pos`).all() as FoldRow[], covers);
   const guards = inForce("layer = 'base' AND target LIKE 'guard:%'").map(({ target, text }) => {
     const fields = new Map(fieldsOf(text.split('\n')).map((f) => [f.field, f.value]));
     return { name: target.slice('guard:'.length), match: fields.get('match') ?? '', mode: fields.get('mode'), reason: fields.get('reason') ?? '' };
@@ -590,6 +633,6 @@ export function loadLearned(db: Db, session: string): LearnedLoad {
 export function toRollBack(db: Db, what: { change: string } | { since: number }): { id: string; layer: string; target: string; diff: string; scope: string; handle: string }[] {
   const columns = 'SELECT id, layer, target, diff, scope, handle FROM learned_layer';
   return ('change' in what
-    ? db.prepare(`${columns} WHERE id = ? AND layer = 'learned' AND ${IN_FORCE}`).all(what.change)
-    : db.prepare(`${columns} WHERE created >= ? AND layer = 'learned' AND ${IN_FORCE} ORDER BY log_pos DESC`).all(what.since)) as ReturnType<typeof toRollBack>;
+    ? q(db, `${columns} WHERE id = ? AND layer = 'learned' AND ${IN_FORCE}`).all(what.change)
+    : q(db, `${columns} WHERE created >= ? AND layer = 'learned' AND ${IN_FORCE} ORDER BY log_pos DESC`).all(what.since)) as ReturnType<typeof toRollBack>;
 }
