@@ -4,6 +4,9 @@
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
 import { randomBytes } from 'node:crypto';
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
+import { dirname } from 'node:path';
+import Database from 'better-sqlite3';
 import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
@@ -129,6 +132,11 @@ export interface RecordStore {
    * a learned change can cite it by its `ev:` handle and reach the repo the file is from (#355).
    */
   keep(connection: Connection, file: { bytes: Uint8Array; kind: string; source: string }): Promise<string>;
+  /**
+   * A copy of the record written to `path` through SQLite's online backup on this, the writer's, connection (#572):
+   * it holds every event committed before it began, while appends go on, and never a commit half landed.
+   */
+  backup(path: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -752,6 +760,29 @@ class SqliteRecord implements RecordStore {
     return rolled;
   }
 
+  async backup(path: string): Promise<void> {
+    if (this.closing) throw new RecordError('closed', 'the record is closed');
+    await this.db.backup(path);
+  }
+
+  /**
+   * Closes a record put back from a backup as one after a power cut (#572): its state running and nothing durable,
+   * so the next start judges every claim open in it INVALID, cause events lost, at `generation`; its next log
+   * position at `next`, above any the replaced record handed out. It closes out of WAL mode, as one file any storage
+   * opens; the record's own storage puts it back in WAL at its next open.
+   */
+  sealRestored(generation: number, next: number): void {
+    const put = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
+    this.backend.commit(this.db, 'full', () => {
+      put.run('generation', String(generation));
+      put.run('state', 'running');
+      put.run('durable', '0');
+      put.run('log_block_end', String(next));
+    });
+    this.db.pragma('journal_mode = DELETE');
+    this.backend.close(this.db);
+  }
+
   /** Waits for every queued stream event to commit or be refused. */
   private async settle(): Promise<void> {
     while (this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
@@ -829,4 +860,105 @@ export async function openRecord(options: RecordOptions): Promise<RecordStore> {
   if (record.stale) await record.rebuild();
   record.start();
   return record;
+}
+
+/**
+ * What a record's meta says (#572): its writer generation, 1 for a record no restore raised, and the first log
+ * position it may hand out next. A record whose meta can't be read is an error, never generation 1.
+ */
+function metaOf(path: string): { generation: number; next: number } {
+  const db = openReadOnly(path);
+  try {
+    const has = (table: string) => db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?").get(table) !== undefined;
+    const value = (key: string) => (has('meta') ? (db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined)?.value : undefined);
+    const positive = (key: string) => {
+      const said = value(key);
+      const n = said === undefined ? 1 : Number(said);
+      if (!Number.isSafeInteger(n) || n < 1) throw new RecordError('storage', `${path} names ${key} ${said}, not a positive integer`);
+      return n;
+    };
+    const last = has('events') ? Number((db.prepare('SELECT coalesce(max(log_pos), 0) AS last FROM events').get() as { last: number }).last) : 0;
+    return { generation: positive('generation'), next: Math.max(positive('log_block_end'), last + 1) };
+  } finally {
+    db.close();
+  }
+}
+
+/** The writer generation the record at `path` names (#572): 1 for one that doesn't exist or never named one. */
+export function writerGeneration(path: string): number {
+  return existsSync(path) ? metaOf(path).generation : 1;
+}
+
+/** Syncs a folder, so the names a rename put in it last. */
+function syncFolder(dir: string): void {
+  const fd = openSync(dir, 'r');
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** A backup made ready to put in place of the record: `put` swaps it in, `discard` drops it and leaves the record. */
+export interface PreparedRestore { generation: number; put(): void; discard(): void }
+
+/**
+ * Readies the backup at `from` to take the place of the record at `to` (#572), with the hub stopped and its lock held:
+ * the copy checked whole, every projection rebuilt from its log, the generation raised above the backup's and the
+ * replaced record's, and log positions kept above any the replaced record handed out. It counts as a record after a
+ * power cut, so the next start judges each claim open in it INVALID. Nothing of `to` changes before `put`, and the
+ * backup's files are only read.
+ */
+export async function prepareRestore(from: string, to: string): Promise<PreparedRestore> {
+  const tmp = `${to}.restoring`;
+  const discard = () => { for (const f of [tmp, `${tmp}-wal`, `${tmp}-shm`]) rmSync(f, { force: true }); };
+  discard();
+  try {
+    let replaced = { generation: 0, next: 1 };
+    if (existsSync(to)) {
+      try {
+        // A crashed hub leaves its last commits in the WAL, which `put` drops: into the file with them first, so a
+        // rerun after a cut inside `put` still reads every log position handed out.
+        const replacedDb = new Database(to, { fileMustExist: true });
+        try {
+          replacedDb.pragma('wal_checkpoint(TRUNCATE)');
+        } finally {
+          replacedDb.close();
+        }
+        replaced = metaOf(to);
+      } catch (error) {
+        throw new RecordError('storage', `the record at ${to} can't be read (${error instanceof Error ? error.message : String(error)}), so its generation is unknown: move it aside, then restore again`);
+      }
+    }
+    copyFileSync(from, tmp);
+    if (existsSync(`${from}-wal`)) copyFileSync(`${from}-wal`, `${tmp}-wal`);
+    const check = new Database(tmp, { fileMustExist: true });
+    try {
+      const said = (check.pragma('integrity_check') as { integrity_check: string }[]).map((r) => r.integrity_check).join('; ');
+      if (said !== 'ok') throw new RecordError('storage', `the backup at ${from} fails PRAGMA integrity_check: ${said.slice(0, 600)}`);
+      // A healthy database that isn't a record would open as a new, empty one in its place.
+      const tables = check.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table' AND name IN ('meta', 'events')").get() as { n: number };
+      if (tables.n !== 2) throw new RecordError('storage', `${from} isn't a DeepBuild record: it holds no meta and events tables`);
+    } finally {
+      check.close();
+    }
+    const copy = metaOf(tmp);
+    const generation = Math.max(copy.generation, replaced.generation) + 1;
+    const record = new SqliteRecord({ path: tmp, now: Date.now }, fileStorage());
+    await record.rebuild();
+    record.sealRestored(generation, Math.max(copy.next, replaced.next));
+    return {
+      generation,
+      put() {
+        // The replaced record's WAL would otherwise be read as the restored one's.
+        for (const f of [`${to}-wal`, `${to}-shm`]) rmSync(f, { force: true });
+        renameSync(tmp, to);
+        syncFolder(dirname(to));
+      },
+      discard,
+    };
+  } catch (error) {
+    discard();
+    throw error;
+  }
 }

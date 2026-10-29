@@ -27,7 +27,7 @@ describe('deep checkout command', () => {
   });
 
   it('refuses commands that have not been implemented, with the usage exit code', () => {
-    const result = run('backup');
+    const result = run('report');
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('Unsupported command');
     expect(result.stdout).toBe('');

@@ -26,6 +26,8 @@ export interface Root {
   wiki: string;
   /** The devices you paired, whose signatures answer for you (#34). */
   devices: string;
+  /** Present while `deep restore` swaps a backup in, naming its folder: no hub starts until a restore finishes (#572). */
+  restoring: string;
 }
 export function rootOf(dir: string): Root {
   const at = resolve(dir);
@@ -43,6 +45,7 @@ export function rootOf(dir: string): Root {
     transcripts: join(at, 'transcripts.json'),
     wiki: join(at, 'wiki'),
     devices: join(at, 'devices.json'),
+    restoring: join(at, 'restore.pending'),
   };
 }
 

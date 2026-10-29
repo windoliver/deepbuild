@@ -3,7 +3,8 @@
 // right after any one of them as by kill -9, every sync can be held, and every write can be refused, as on a
 // full disk. The ledger then lives in memory, and only what a FULL commit made durable reaches ledger.db, so a
 // cut loses exactly what a power cut would: every NORMAL commit after the last FULL one.
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { closeSync, constants, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync, type Dirent } from 'node:fs';
+import { copyFile, mkdir, open, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
@@ -70,6 +71,48 @@ export function syncPath(path: string): void {
   } finally {
     closeSync(fd);
   }
+}
+
+/** Syncs the file or folder at `path` without holding up the thread. */
+export async function synced(path: string): Promise<void> {
+  const handle = await open(path, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+const gone = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+/**
+ * Copies the folder `from` to `to`, which mustn't exist, each file and folder synced (#572). It copies plain files
+ * and folders only, so no link is followed; skips a file still being written (the evidence store's `.tmp-` files, the
+ * wiki's `.tmp` ones); and skips what retention removes mid-walk, as it would be gone a moment later anyway.
+ */
+export async function copySynced(from: string, to: string): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(from, { withFileTypes: true });
+  } catch (error) {
+    if (gone(error)) return;
+    throw error;
+  }
+  await mkdir(to, { mode: 0o700 });
+  for (const entry of entries) {
+    if (entry.name.startsWith('.tmp-') || entry.name.endsWith('.tmp')) continue;
+    const [src, dst] = [join(from, entry.name), join(to, entry.name)];
+    if (entry.isDirectory()) await copySynced(src, dst);
+    if (!entry.isFile()) continue;
+    try {
+      await copyFile(src, dst, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if (gone(error)) continue;
+      throw error;
+    }
+    await synced(dst);
+  }
+  await synced(to);
 }
 
 export function testVfs(settings: VfsSettings): Durable {
