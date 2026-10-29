@@ -138,47 +138,57 @@ export class Projector {
     this.turns.clear();
   }
 
-  private stmt(sql: string) {
-    let s = this.statements.get(sql);
+  private stmt(sql: string, key = sql) {
+    let s = this.statements.get(key);
     if (!s) {
       s = this.db.prepare(sql);
-      this.statements.set(sql, s);
+      this.statements.set(key, s);
     }
     return s;
   }
+  /** The statement `key` names, its SQL built only the first time: the row writers below run once per event. */
+  private built(key: string, build: () => string) {
+    return this.statements.get(key) ?? this.stmt(build(), key);
+  }
   /** Inserts the row, or updates the named columns of the row with its key. */
   private up(table: string, row: Row): void {
-    const def = byName.get(table)!;
     const cols = Object.keys(row);
-    const rest = cols.filter((c) => !def.pk.includes(c));
-    this.stmt(`${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`).run(...cols.map((c) => row[c] ?? null));
+    this.built(`up ${table} ${cols}`, () => {
+      const def = byName.get(table)!;
+      const rest = cols.filter((c) => !def.pk.includes(c));
+      return `${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`;
+    }).run(...cols.map((c) => row[c] ?? null));
   }
   /** Inserts the row, or fills only the columns still empty: the first value of each one stands. */
   private fill(table: string, row: Row): void {
-    const def = byName.get(table)!;
     const cols = Object.keys(row);
-    const rest = cols.filter((c) => !def.pk.includes(c));
-    this.stmt(`${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO UPDATE SET ${rest.map((c) => `${c} = COALESCE(${c}, excluded.${c})`).join(', ')}`).run(...cols.map((c) => row[c] ?? null));
+    this.built(`fill ${table} ${cols}`, () => {
+      const def = byName.get(table)!;
+      const rest = cols.filter((c) => !def.pk.includes(c));
+      return `${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO UPDATE SET ${rest.map((c) => `${c} = COALESCE(${c}, excluded.${c})`).join(', ')}`;
+    }).run(...cols.map((c) => row[c] ?? null));
   }
   /**
    * Inserts the row, or writes its columns only while `mark` is still empty: the first event of its kind owns
    * them all, empty ones included. A column in `keep` is filled only when empty, whichever event wrote it first.
    */
   private once(table: string, row: Row, mark: string, keep: readonly string[] = []): void {
-    const def = byName.get(table)!;
     const cols = Object.keys(row);
-    const set = cols.filter((c) => !def.pk.includes(c)).map((c) => (keep.includes(c) ? `${c} = COALESCE(${table}.${c}, excluded.${c})` : `${c} = excluded.${c}`));
-    this.stmt(`${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO UPDATE SET ${set.join(', ')} WHERE ${table}.${mark} IS NULL`).run(...cols.map((c) => row[c] ?? null));
+    this.built(`once ${table} ${cols} ${mark} ${keep}`, () => {
+      const def = byName.get(table)!;
+      const set = cols.filter((c) => !def.pk.includes(c)).map((c) => (keep.includes(c) ? `${c} = COALESCE(${table}.${c}, excluded.${c})` : `${c} = excluded.${c}`));
+      return `${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO UPDATE SET ${set.join(', ')} WHERE ${table}.${mark} IS NULL`;
+    }).run(...cols.map((c) => row[c] ?? null));
   }
   private add(table: string, row: Row): void {
     const cols = Object.keys(row);
-    this.stmt(`${insert(table, cols)} ON CONFLICT DO NOTHING`).run(...cols.map((c) => row[c] ?? null));
+    this.built(`add ${table} ${cols}`, () => `${insert(table, cols)} ON CONFLICT DO NOTHING`).run(...cols.map((c) => row[c] ?? null));
   }
   /** Updates the named columns of the rows the where clause names; a row that isn't there stays absent. */
   private set(table: string, values: Row, where: Row): void {
     const cols = Object.keys(values);
     const keys = Object.keys(where);
-    this.stmt(`UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE ${keys.map((k) => `${k} = ?`).join(' AND ')}`).run(...cols.map((c) => values[c] ?? null), ...keys.map((k) => where[k] ?? null));
+    this.built(`set ${table} ${cols} ${keys}`, () => `UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE ${keys.map((k) => `${k} = ?`).join(' AND ')}`).run(...cols.map((c) => values[c] ?? null), ...keys.map((k) => where[k] ?? null));
   }
   /** Adds an amount to a running reading: its value the sum so far, n how many added, as of the newest. */
   private accrue(reading: string | null, amount: number, unit: string, e: Projected): void {

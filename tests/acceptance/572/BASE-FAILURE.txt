@@ -1,0 +1,118 @@
+# #572 acceptance suite on the base commit
+# date: 2026-10-28 19:29 UTC
+# base: 7b39aa0d0c006301ee72a96c3ce9868181205803 (origin/main), no implementation of #572
+# node: v24.22.0; machine: Mac15,12 Apple M3 (a reference Mac: AC4's timing test ran past its gate)
+# command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/572 --no-file-parallelism --reporter=verbose
+# expected: 6 failed (AC1 backup, AC2, AC3 yours, AC4 x2, AC5: no deep backup / deep restore / generation / perf task);
+#           3 passed: AC1 (wrong program) is a negative control that holds on the base; AC3's two agent-denial tests
+#           pass because #317's no-deep-restore floor entry is already on main (regression guard).
+
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a854e2303140ebd8a/tests/acceptance/572
+
+ × backup.test.ts > AC1 #572.f4b300d0 deep backup while 30 scripted sessions append: the copy passes PRAGMA integrity_check and holds every event committed before the backup began; a plain copy of ledger.db taken mid-commit fails, naming the commit > AC1 `deep backup <folder>` under the load of 30 appending sessions exits 0; its ledger.db passes PRAGMA integrity_check and holds every event committed before it began, with the evidence and wiki folders 4433ms
+   → `deep backup /private/tmp/dh572-aX3WUY/backups/under-load` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ ✓ backup.test.ts > AC1 #572.f4b300d0 deep backup while 30 scripted sessions append: the copy passes PRAGMA integrity_check and holds every event committed before the backup began; a plain copy of ledger.db taken mid-commit fails, naming the commit > AC1 (wrong program) a backup that copies ledger.db while a commit lands, staged by the test VFS, fails the check, naming the commit 8883ms
+ × backup.test.ts > AC2 #572.98ee1d86 deep restore of that copy rebuilds every projection equal to the backup's, and each claim open at the copy is INVALID with the cause events lost > AC2 with the hub stopped and the OS confirming you, `deep restore <folder>` puts the backup's record, evidence and wiki back with every projection equal to the backup's; at the next start each claim open at the copy reads INVALID, cause events lost, and a settled verdict is kept 2ms
+   → AC1's `deep backup /private/tmp/dh572-aX3WUY/backups/under-load` must exit 0 before its copy can be restored: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ ✓ authority.test.ts > AC3 #572.5cfb15dd an agent's deep restore, directly and through sh -c, is denied with the hub up and down, naming the command for you to run, and yours changes nothing until the OS confirms you > AC3 the agent's `deep restore <folder>` is denied directly and through sh -c with the hub stopped, naming the command for you to run 1293ms
+ ✓ authority.test.ts > AC3 #572.5cfb15dd an agent's deep restore, directly and through sh -c, is denied with the hub up and down, naming the command for you to run, and yours changes nothing until the OS confirms you > AC3 the agent's `deep restore <folder>` is denied directly and through sh -c with the hub up, naming the command for you to run 851ms
+ × authority.test.ts > AC3 #572.5cfb15dd an agent's deep restore, directly and through sh -c, is denied with the hub up and down, naming the command for you to run, and yours changes nothing until the OS confirms you > AC3 your `deep restore <folder>` with the hub stopped asks the OS, and changes nothing while the OS hasn't confirmed you (prompt cancelled, stub cancelled); once it does, the backup is back 1755ms
+   → `deep backup /private/tmp/dh572-ieCorl/backups/yours` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ × budgets.test.ts > AC4 #572.3213724a budgets on the reference Mac in the local preflight, compared with the merge base: during a backup of a 1 GB record, hook replies stay within the hook overhead budget > AC4 the perf lane has a #572 task, valid against the merge base's budgets 218ms
+   → benchmarks/budgets.json has a task for hook replies during a backup, naming issue #572: expected [] to not deeply equal []
+ × budgets.test.ts > AC4 #572.3213724a budgets on the reference Mac in the local preflight, compared with the merge base: during a backup of a 1 GB record, hook replies stay within the hook overhead budget > AC4 while `deep backup` copies a 1 GB record, deep-hook's PreToolUse replies cost under 10 ms at p95 on top of process start (five runs of 200 calls after a warm-up) 1264ms
+   → `deep backup /private/tmp/dh572-ab1gGo/backups/probe` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ × generation.test.ts > AC5 #572.b961a7af after deep restore of a backup taken at generation 3 onto a record at generation 5, the hub reports generation 6 on every connection, to deep-hook, the app and the CLI > AC5 a generation-3 backup restored onto a generation-5 record: generation 6 on a hook, an app and a cli connection; 3 (the backup's kept) and 5 (the replaced record's kept) each fail 1127ms
+   → the hub reports no writer generation (an integer `generation`) on a hook connection: it said [{"v":1,"hello":"deep-hub","start":"01M61ZS1ZPKK512J58MX5EC5BB","features":[]},{"v":1,"ack":"01M61ZS2Q59S8PNPME4N2K4BD5","hold_until_ms":1793215730369}]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  authority.test.ts > AC3 #572.5cfb15dd an agent's deep restore, directly and through sh -c, is denied with the hub up and down, naming the command for you to run, and yours changes nothing until the OS confirms you > AC3 your `deep restore <folder>` with the hub stopped asks the OS, and changes nothing while the OS hasn't confirmed you (prompt cancelled, stub cancelled); once it does, the backup is back
+Error: `deep backup /private/tmp/dh572-ieCorl/backups/yours` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ ❯ backup helpers.ts:176:27
+    174| export async function backup(h: Home, folder: string, timeoutMs = 600_…
+    175|   const r = await deep(h, ['backup', folder], { timeoutMs });
+    176|   if (r.code !== 0) throw Error(`\`deep backup ${folder}\` must exit 0…
+       |                           ^
+    177|   return r;
+    178| }
+ ❯ authority.test.ts:47:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  backup.test.ts > AC1 #572.f4b300d0 deep backup while 30 scripted sessions append: the copy passes PRAGMA integrity_check and holds every event committed before the backup began; a plain copy of ledger.db taken mid-commit fails, naming the commit > AC1 `deep backup <folder>` under the load of 30 appending sessions exits 0; its ledger.db passes PRAGMA integrity_check and holds every event committed before it began, with the evidence and wiki folders
+AssertionError: `deep backup /private/tmp/dh572-aX3WUY/backups/under-load` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ backup.test.ts:68:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  backup.test.ts > AC2 #572.98ee1d86 deep restore of that copy rebuilds every projection equal to the backup's, and each claim open at the copy is INVALID with the cause events lost > AC2 with the hub stopped and the OS confirming you, `deep restore <folder>` puts the backup's record, evidence and wiki back with every projection equal to the backup's; at the next start each claim open at the copy reads INVALID, cause events lost, and a settled verdict is kept
+AssertionError: AC1's `deep backup /private/tmp/dh572-aX3WUY/backups/under-load` must exit 0 before its copy can be restored: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ backup.test.ts:121:122
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  budgets.test.ts > AC4 #572.3213724a budgets on the reference Mac in the local preflight, compared with the merge base: during a backup of a 1 GB record, hook replies stay within the hook overhead budget > AC4 the perf lane has a #572 task, valid against the merge base's budgets
+AssertionError: benchmarks/budgets.json has a task for hook replies during a backup, naming issue #572: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ budgets.test.ts:63:129
+     61|     validateBudgets(current, baseBudgets);
+     62|     const ours = current.tasks.filter((t) => /#572\b/.test(String(t.in…
+     63|     expect(ours.map((t) => t.id), 'benchmarks/budgets.json has a task …
+       |                                                                                                                                 ^
+     64|   });
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  budgets.test.ts > AC4 #572.3213724a budgets on the reference Mac in the local preflight, compared with the merge base: during a backup of a 1 GB record, hook replies stay within the hook overhead budget > AC4 while `deep backup` copies a 1 GB record, deep-hook's PreToolUse replies cost under 10 ms at p95 on top of process start (five runs of 200 calls after a warm-up)
+Error: `deep backup /private/tmp/dh572-ab1gGo/backups/probe` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ ❯ backup helpers.ts:176:27
+    174| export async function backup(h: Home, folder: string, timeoutMs = 600_…
+    175|   const r = await deep(h, ['backup', folder], { timeoutMs });
+    176|   if (r.code !== 0) throw Error(`\`deep backup ${folder}\` must exit 0…
+       |                           ^
+    177|   return r;
+    178| }
+ ❯ budgets.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  generation.test.ts > AC5 #572.b961a7af after deep restore of a backup taken at generation 3 onto a record at generation 5, the hub reports generation 6 on every connection, to deep-hook, the app and the CLI > AC5 a generation-3 backup restored onto a generation-5 record: generation 6 on a hook, an app and a cli connection; 3 (the backup's kept) and 5 (the replaced record's kept) each fail
+Error: the hub reports no writer generation (an integer `generation`) on a hook connection: it said [{"v":1,"hello":"deep-hub","start":"01M61ZS1ZPKK512J58MX5EC5BB","features":[]},{"v":1,"ack":"01M61ZS2Q59S8PNPME4N2K4BD5","hold_until_ms":1793215730369}]
+ ❯ generationEverywhere helpers.ts:656:50
+    654|   for (const role of ['hook', 'app', 'cli'] as Role[]) {
+    655|     const { generation, lines } = await generationOn(hub, role, h);
+    656|     if (!Number.isSafeInteger(generation)) throw Error(`the hub report…
+       |                                                  ^
+    657|     seen[role] = generation;
+    658|   }
+ ❯ generation.test.ts:37:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed | 3 passed (9)
+   Start at  12:28:27
+   Duration  21.47s (tests 96%, import 3%, transform 1%)
+
