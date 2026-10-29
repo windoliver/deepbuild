@@ -295,7 +295,7 @@ pub struct Placement {
 }
 
 /// Input router: a token lives at most 30 s (`token: {serial, writer, kind, expires ≤ 30 s}`).
-pub const TOKEN_LIFE: i64 = 30 * FLICKS;
+const TOKEN_LIFE: i64 = 30 * FLICKS;
 
 /// Whether a gesture at `when` is still fresh at `now` (#401).
 fn fresh(when: i64, now: i64) -> bool {
@@ -560,12 +560,12 @@ impl Placement {
         self.serials.insert(serial, (panel.to_string(), at));
     }
 
-    /// The newest of your gesture serials in `panel` fresh at `now` and newer than `after`.
-    pub fn fresh_serial(&self, panel: &str, now: i64, after: u64) -> Option<u64> {
+    /// The newest of your gesture serials in `panel` fresh at `now` that `usable` keeps.
+    pub fn fresh_serial(&self, panel: &str, now: i64, usable: impl Fn(u64) -> bool) -> Option<u64> {
         self.serials
-            .range(after + 1..)
+            .iter()
             .rev()
-            .find(|(_, (p, when))| p == panel && fresh(*when, now))
+            .find(|(s, (p, when))| p == panel && fresh(*when, now) && usable(**s))
             .map(|(s, _)| *s)
     }
 
@@ -855,11 +855,22 @@ mod tests {
         p.input(5 * FLICKS, "p");
         p.input(10 * FLICKS, "p");
         p.gesture(10 * FLICKS, "p", 7);
-        assert_eq!(p.fresh_serial("p", 39 * FLICKS, 0), Some(7), "29 s old");
-        assert_eq!(p.fresh_serial("p", 40 * FLICKS, 0), None, "30 s old");
-        assert_eq!(p.fresh_serial("q", 11 * FLICKS, 0), None, "another panel");
-        assert_eq!(p.fresh_serial("p", 9 * FLICKS, 0), None, "before the press");
-        assert_eq!(p.fresh_serial("p", 11 * FLICKS, 7), None, "spent by a send");
+        let any = |_| true;
+        assert_eq!(p.fresh_serial("p", 39 * FLICKS, any), Some(7), "29 s old");
+        assert_eq!(p.fresh_serial("p", 40 * FLICKS, any), None, "30 s old");
+        assert_eq!(p.fresh_serial("q", 11 * FLICKS, any), None, "another panel");
+        assert_eq!(
+            p.fresh_serial("p", 9 * FLICKS, any),
+            None,
+            "before the press"
+        );
+        p.input(12 * FLICKS, "p");
+        p.gesture(12 * FLICKS, "p", 8);
+        assert_eq!(
+            p.fresh_serial("p", 13 * FLICKS, |s| s != 8),
+            Some(7),
+            "two clicks, two sends"
+        );
         assert!(
             !p.serial_fresh_in(6, "p", 6 * FLICKS),
             "a hover is no gesture"

@@ -372,8 +372,8 @@ function ring(panels, manifest, calls) {
   }
 }
 
-// 600 readings of one source, each 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, then one
-// frame read of each surface; fails unless every surface shows the last price.
+// 600 readings of one source, each 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, each
+// surface's frame read after every reading; fails unless each frame shows the reading before it.
 workloads['panel-bound-value'] = () => {
   const bind = { source: 'reading:ticker', select: 'value', format: { unit: 'USD', precision: 2, notation: 'fixed' }, stale_after: 60 * SEC };
   const n = 600, every = SEC / 10;
@@ -385,11 +385,11 @@ workloads['panel-bound-value'] = () => {
       chart: { tree: [{ id: 'trend', component: 'chart', label: { bind } }] },
     },
   };
-  const end = SEC + n * every;
-  const drawn = ring({ quote: { rect: [0, 0, 400, 350] }, table: { rect: [400, 0, 400, 350] }, chart: { rect: [800, 0, 400, 350] } }, manifest,
-    ['quote', 'table', 'chart'].map((panel) => ({ call: 'drawn', at: end, panel })));
-  const last = (100 + (n - 1) / 4).toFixed(2);
-  if (!drawn.every((d) => d.bound?.[0]?.text?.includes(last))) throw Error(`a surface doesn't show ${last}: ${JSON.stringify(drawn)}`);
+  // Each surface's frame after each reading lands, so p50 holds every reading's draw on three surfaces.
+  const frames = Array.from({ length: n }, (_, k) => ['quote', 'table', 'chart'].map((panel) => ({ call: 'drawn', at: SEC + k * every + every / 2, panel }))).flat();
+  const drawn = ring({ quote: { rect: [0, 0, 400, 350] }, table: { rect: [400, 0, 400, 350] }, chart: { rect: [800, 0, 400, 350] } }, manifest, frames);
+  const missed = drawn.findIndex((d, i) => !d.bound?.[0]?.text?.includes((100 + Math.floor(i / 3) / 4).toFixed(2)));
+  if (missed >= 0) throw Error(`frame ${missed} doesn't show its reading: ${JSON.stringify(drawn[missed])}`);
 };
 
 // Six of your clicks, each in its own panel, and a pop-out of each onto the second display with its click's serial;

@@ -154,12 +154,7 @@ impl Hub<'_> {
     /// The panel's scope, made on first use from the revision it shows.
     pub(crate) fn panel_scope(&mut self, panel: &str) -> Result<&mut PanelScope, Value> {
         if !self.scopes.contains_key(panel) {
-            let rect = self
-                .scenario
-                .panels
-                .get(panel)
-                .ok_or_else(|| refused("unknown_panel"))?
-                .rect;
+            let rect = self.slot(panel).ok_or_else(|| refused("unknown_panel"))?;
             let (doc, _) = self
                 .panel_document(panel)
                 .ok_or_else(|| refused("not_presented"))?;
@@ -217,6 +212,26 @@ impl Hub<'_> {
         Some(([0.0, 0.0, w.rect[2], w.rect[3]], [d.bounds[2], d.bounds[3]]))
     }
 
+    /// Where a panel sits in the main window: where it was last placed, else its slot (#401).
+    pub(crate) fn slot(&self, panel: &str) -> Option<[f64; 4]> {
+        self.ring
+            .rect_of(panel)
+            .or_else(|| Some(self.scenario.panels.get(panel)?.rect))
+    }
+
+    /// A piece placed anew: its scope hit-tests and draws at its new rect (#401).
+    pub(crate) fn lay_out(&mut self, panel: &str) {
+        if self.placed(panel).is_some() {
+            return;
+        }
+        let display = self.main_display_size().or(self.scenario.display);
+        if let (Some(rect), Some(display), Some(s)) =
+            (self.slot(panel), display, self.scopes.get_mut(panel))
+        {
+            s.scope.placed(rect, display);
+        }
+    }
+
     /// `move_window`: your drag of a window, as the window server reports it (#400). A popped
     /// view's scope follows its window's display.
     pub fn move_window(&mut self, window: &str, rect: [f64; 4], agent: bool) -> Value {
@@ -241,7 +256,7 @@ impl Hub<'_> {
         for panel in panels {
             let at = self
                 .placed(&panel)
-                .or_else(|| Some((self.scenario.panels.get(&panel)?.rect, main?)));
+                .or_else(|| Some((self.slot(&panel)?, main?)));
             if let (Some((rect, display)), Some(s)) = (at, self.scopes.get_mut(&panel)) {
                 s.scope.placed(rect, display);
             }
@@ -266,7 +281,7 @@ impl Hub<'_> {
         let Some(spec) = self.scenario.panels.get(panel) else {
             return refused("unknown_panel");
         };
-        let rect = self.ring.rect_of(panel).unwrap_or(spec.rect);
+        let rect = self.slot(panel).unwrap_or(spec.rect);
         let size = [rect[2], rect[3]];
         let reply = self
             .placement
@@ -285,16 +300,12 @@ impl Hub<'_> {
         let Some((doc, _)) = self.panel_document(panel) else {
             return refused("not_presented");
         };
-        self.serial += 1;
-        let (serial, now) = (self.serial, self.now);
-        // Your latest input, for the card's display, and the serial a pop-out needs (#400): a
-        // press or a key, never a hover or a scroll (#401). A press moves keyboard focus here.
-        self.placement.input(now, panel);
-        if matches!(event, Event::Down { .. } | Event::Key { .. }) {
-            self.placement.gesture(now, panel, serial);
-        }
-        if matches!(event, Event::Down { .. }) {
-            self.ring.focus(panel);
+        // The router's serial, your latest input for the card's display, and the gesture a
+        // pop-out needs (#400, #401). A key goes to the panel that holds keyboard focus.
+        let (serial, reached) = self.route(panel, event);
+        let now = self.now;
+        if matches!(reached, Some(ref to) if to.as_deref() != Some(panel)) {
+            return json!({"serial": serial, "reached": [reached.flatten().map_or("shell".to_string(), |p| format!("panel:{p}"))]});
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));

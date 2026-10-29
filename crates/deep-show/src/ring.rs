@@ -34,6 +34,8 @@ const TOAST: [f64; 2] = [320.0, 64.0];
 const TOAST_MARGIN: f64 = 20.0;
 /// The escape chord: no plug-in binds it, and a focused panel never takes it from the shell.
 const ESCAPE: &str = "escape";
+/// A timer's shortest period: 1 ms.
+const MIN_EVERY: i64 = FLICKS / 1000;
 const SAY_KINDS: [&str; 3] = ["steer", "follow_up", "prompt"];
 
 /// One op a panel's script asks of its host (#401 acceptance README: Script).
@@ -237,8 +239,8 @@ pub struct Ring {
     sources: BTreeMap<String, Source>,
     /// Each source's readings, each with the time the hub made it.
     readings: BTreeMap<String, Vec<(i64, Reading)>>,
-    /// The serial of each panel's last send, which spent it and every serial before it.
-    spent: BTreeMap<String, u64>,
+    /// The serials sends spent, one each.
+    spent: std::collections::BTreeSet<u64>,
     /// How many sends each panel made, for the kind each next one takes.
     sends: BTreeMap<String, usize>,
     attempts: BTreeMap<String, Vec<Value>>,
@@ -270,6 +272,27 @@ impl Ring {
         }
     }
 
+    /// Where a key sent to `named` goes. While a plug-in's panel holds keyboard focus, keys are
+    /// its when it asked for raw input, and the shell's otherwise; the escape chord is always
+    /// the shell's (unless planted). Otherwise the core's own views, which the shell draws, take
+    /// the keys sent to them, Esc included. `None` is the shell.
+    pub fn key_to<'a>(
+        &'a self,
+        named: &'a str,
+        escape: bool,
+        takes_escape: bool,
+    ) -> Option<&'a str> {
+        match self
+            .kb_focus
+            .as_deref()
+            .and_then(|f| Some((f, self.panels.get(f)?)))
+        {
+            Some(_) if escape && !takes_escape => None,
+            Some((f, d)) => d.raw_input.then_some(f),
+            None => (!self.owns(named)).then_some(named),
+        }
+    }
+
     /// Whether a plug-in's install claimed the panel.
     pub fn owns(&self, panel: &str) -> bool {
         self.panels.contains_key(panel)
@@ -280,12 +303,9 @@ impl Ring {
         self.kb_focus = Some(panel.to_string());
     }
 
-    /// Where the piece is laid out in the main window, once something placed it.
+    /// Where the piece is laid out in the main window: its slot until something placed it.
     pub fn rect_of(&self, piece: &str) -> Option<[f64; 4]> {
-        self.pieces
-            .get(piece)
-            .filter(|p| p.by != "default")
-            .map(|p| p.rect)
+        self.pieces.get(piece).map(|p| p.rect)
     }
 
     /// The source's reading the hub had made by `t`.
@@ -558,7 +578,7 @@ fn fetch(url: &str) -> bool {
 /// tests run under (the only program any scenario names).
 fn run_program(argv: &[String]) -> bool {
     let named = std::path::Path::new(&argv[0]);
-    if named.file_name().and_then(|n| n.to_str()) != Some("node") || !named.is_absolute() {
+    if named.file_stem().and_then(|n| n.to_str()) != Some("node") || !named.is_absolute() {
         return false;
     }
     std::process::Command::new(&argv[0])
@@ -603,16 +623,22 @@ impl Hub<'_> {
                     .collect();
                 json!({ "toasts": list })
             }
-            RingCall::Place { piece, rect, by } => match by {
-                Placer::You(serial) => match self.placement.serial_fresh_in(*serial, piece, now) {
-                    true => self.ring.place(piece, *rect, "you", false),
-                    false => json!({"code": "serial_not_fresh_in_piece"}),
-                },
-                Placer::Suggestion => {
-                    let moves = self.planted_is(Planted::PlacementMovesYours);
-                    self.ring.place(piece, *rect, "suggestion", moves)
-                }
-            },
+            RingCall::Place { piece, rect, by } => {
+                let reply = match by {
+                    Placer::You(serial) => {
+                        match self.placement.serial_fresh_in(*serial, piece, now) {
+                            true => self.ring.place(piece, *rect, "you", false),
+                            false => json!({"code": "serial_not_fresh_in_piece"}),
+                        }
+                    }
+                    Placer::Suggestion => {
+                        let moves = self.planted_is(Planted::PlacementMovesYours);
+                        self.ring.place(piece, *rect, "suggestion", moves)
+                    }
+                };
+                self.lay_out(piece);
+                reply
+            }
             RingCall::Pieces => {
                 let list: Vec<Value> = self
                     .ring
@@ -805,6 +831,10 @@ impl Hub<'_> {
             }) else {
                 return bad(&format!("panels/{id}/script"));
             };
+            // Timers run on the scenario's clock; without one they would never fire.
+            if !script.is_empty() && self.scenario.clock.is_none() {
+                return refusal("no_clock", ("path", &format!("panels/{id}/script")));
+            }
             timers.extend(script);
             defs.insert(id.clone(), def);
         }
@@ -882,7 +912,8 @@ impl Hub<'_> {
         };
         list.iter()
             .map(|t| {
-                let every = t.get("every")?.as_i64().filter(|e| *e > 0)?;
+                // At most one tick a millisecond, so an hour's script stays a few million steps.
+                let every = t.get("every")?.as_i64().filter(|e| *e >= MIN_EVERY)?;
                 let mut next = t.get("first")?.as_i64().filter(|f| *f >= 0)?;
                 while next < self.now {
                     next += every;
@@ -961,7 +992,7 @@ impl Hub<'_> {
                 text,
             } => self.say(&plugin, panel, session, kinds, text),
             _ => {
-                let serial = self.placement.fresh_serial(panel, now, 0);
+                let serial = self.placement.fresh_serial(panel, now, |_| true);
                 let unguarded = self.planted_is(Planted::ScriptOpsNeedNoSerial)
                     && matches!(op, Op::Focus | Op::PopOut(_) | Op::Clipboard(_));
                 match serial.is_some() || unguarded {
@@ -1010,11 +1041,7 @@ impl Hub<'_> {
                 });
             }
             Op::PopOut(display) => {
-                let Some(rect) =
-                    self.ring
-                        .rect_of(panel)
-                        .or(self.scenario.panels.get(panel).map(|p| p.rect))
-                else {
+                let Some(rect) = self.ring.rect_of(panel) else {
                     return false;
                 };
                 let size = [rect[2], rect[3]];
@@ -1029,11 +1056,9 @@ impl Hub<'_> {
             }
             Op::Place { piece, rect } => {
                 let moves = self.planted_is(Planted::PlacementMovesYours);
-                return self
-                    .ring
-                    .place(piece, *rect, "plugin", moves)
-                    .get("piece")
-                    .is_some();
+                let placed = self.ring.place(piece, *rect, "plugin", moves);
+                self.lay_out(piece);
+                return placed.get("piece").is_some();
             }
             _ => return false,
         }
@@ -1058,15 +1083,14 @@ impl Hub<'_> {
         let kind = kinds[*n % kinds.len()].clone();
         *n += 1;
         let many = self.planted_is(Planted::SerialCarriesManySends);
-        let spent = match many {
-            true => 0,
-            false => self.ring.spent.get(panel).copied().unwrap_or(0),
-        };
-        let serial = self.placement.fresh_serial(panel, now, spent);
+        let spent = &self.ring.spent;
+        let serial = self
+            .placement
+            .fresh_serial(panel, now, |s| many || !spent.contains(&s));
         let by = json!({"plugin": plugin, "panel": panel});
         if serial.is_some() || self.planted_is(Planted::SendsWithoutSerial) {
             if let Some(s) = serial {
-                self.ring.spent.insert(panel.to_string(), s);
+                self.ring.spent.insert(s);
             }
             self.ring
                 .turns
@@ -1096,35 +1120,40 @@ impl Hub<'_> {
         if !self.ring.owns(panel) {
             return None;
         }
+        let (serial, reached) = self.route(panel, event);
+        let mut reply = json!({ "serial": serial });
+        if let Some(to) = reached {
+            reply["reached"] = json!([to.map_or("shell".to_string(), |p| format!("panel:{p}"))]);
+        }
+        Some(reply)
+    }
+
+    /// The input router (Input router, focus and gesture serial): your input to `panel` gets
+    /// the next serial and raises its window. A press moves keyboard focus to the panel and is a
+    /// gesture there; a key goes where focus is, as a gesture of that panel, and the escape chord
+    /// always to the shell, never as anyone's gesture. A hover or a scroll is no gesture. Returns
+    /// the serial, and for a key where it went (`None` for the shell).
+    pub fn route(&mut self, panel: &str, event: &Event) -> (u64, Option<Option<String>>) {
         self.serial += 1;
         let (serial, now) = (self.serial, self.now);
         self.placement.input(now, panel);
-        let mut reply = json!({ "serial": serial });
         match event {
             Event::Down { .. } => {
                 self.ring.focus(panel);
                 self.placement.gesture(now, panel, serial);
+                (serial, None)
             }
-            Event::Key { key, cmd } => {
-                let escape = !cmd && key.eq_ignore_ascii_case(ESCAPE);
-                let focused = self
-                    .ring
-                    .kb_focus
-                    .clone()
-                    .filter(|f| self.ring.panels.get(f).is_some_and(|d| d.raw_input))
-                    .filter(|_| !escape || self.planted_is(Planted::FocusedPanelTakesEscape));
-                let reached = match focused {
-                    Some(f) => {
-                        self.placement.gesture(now, &f, serial);
-                        format!("panel:{f}")
-                    }
-                    None => "shell".to_string(),
-                };
-                reply["reached"] = json!([reached]);
+            Event::Key { key, .. } => {
+                let escape = key.eq_ignore_ascii_case(ESCAPE);
+                let takes = self.planted_is(Planted::FocusedPanelTakesEscape);
+                let to = self.ring.key_to(panel, escape, takes).map(str::to_string);
+                if let Some(f) = &to {
+                    self.placement.gesture(now, f, serial);
+                }
+                (serial, Some(to))
             }
-            _ => {}
+            _ => (serial, None),
         }
-        Some(reply)
     }
 
     /// `drawn`: the frame on screen in the panel now, the newest vsync of its window's display,
