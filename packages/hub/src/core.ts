@@ -2466,6 +2466,7 @@ export class Core {
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
+        case 'deep_env': return await this.deepEnv(session!, String(args.action));
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3010,10 +3011,24 @@ export class Core {
     }
   }
   private envUp(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.inTurn(worktree, () => this.riseIn(worktree));
+    return this.upFor(this.worktreeOf(params));
   }
-  private async riseIn(worktree: string): Promise<Obj> {
+  private upFor(worktree: string, holder?: string): Promise<Obj> {
+    return this.inTurn(worktree, () => this.riseIn(worktree, holder));
+  }
+  /**
+   * deep_env (#331): the bound session's own worktree's stack, up or down, as `deep env up` and `deep env down` run
+   * there. The worktree is the session's, from its hooks, never from the call, so a child session in a worktree of its
+   * own leases its own ports there and never its parent's. Its leases name the session's deep mcp as their holder; a
+   * stack already up in that worktree is reused as it is, so the holder says who leased it, not who uses it.
+   */
+  private async deepEnv(session: string, action: string): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
+    const worktree = realpathSync(cwd);
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree);
+  }
+  private async riseIn(worktree: string, holder?: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
     // A stack is reused only while its process runs and its health route still answers 200.
     if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
@@ -3026,7 +3041,7 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
@@ -3043,7 +3058,9 @@ export class Core {
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
   private envDown(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
+    return this.downFor(this.worktreeOf(params));
+  }
+  private downFor(worktree: string): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
     if (rising) void downStack(this.host, rising);
