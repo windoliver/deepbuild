@@ -863,15 +863,16 @@ describe('round 15: run results, resumed sessions, answered plans and agent puts
   });
 });
 
+/** A FULL commit from another session: a start, a claim and its verdict, so everything before it is durable. */
+async function fullCommitElsewhere(r: RecordStore, at: number): Promise<void> {
+  const B = ulidAt(at);
+  await r.append(hook(B), event('session.start', at, undefined));
+  const cb = event('claim.made', at + 1, undefined);
+  await r.append(hook(B), cb);
+  const vid = ulidAt(at + 2);
+  await r.append(core(B), { ...event('verdict.made', at + 2, undefined, { claim: `claim:${cb.id}`, verdict: `verdict:${vid}` }, 1), id: vid });
+}
 describe('round 16: cut starts across restarts, late finishes, archived transcripts', () => {
-  async function fullCommitElsewhere(r: RecordStore, at: number): Promise<void> {
-    const B = ulidAt(at);
-    await r.append(hook(B), event('session.start', at, undefined));
-    const cb = event('claim.made', at + 1, undefined);
-    await r.append(hook(B), cb);
-    const vid = ulidAt(at + 2);
-    await r.append(core(B), { ...event('verdict.made', at + 2, undefined, { claim: `claim:${cb.id}`, verdict: `verdict:${vid}` }, 1), id: vid });
-  }
   it('a session whose start a cut lost reads INVALID at its claim after a later clean restart', async () => {
     const storage = testStorage();
     let r = await openRecord({ path: 'record.db', now: () => T0, storage });
@@ -941,5 +942,31 @@ describe('the decisions projection tells a revocation from an overrule', () => {
     await r.append(core(S), { v: 1, id: by, kind: 'decision.overruled', ts: T0 + 40, subject: `decision:${overruled}`, data: { decision: `decision:${overruled}` } });
     expect(await r.raw(`SELECT state, overruled_by FROM decisions WHERE id = '${revoked}'`)).toEqual([{ state: 'revoked', overruled_by: null }]);
     expect(await r.raw(`SELECT state, overruled_by FROM decisions WHERE id = '${overruled}'`)).toEqual([{ state: 'revoked', overruled_by: by }]);
+  });
+});
+
+describe('a prompt the core answered in the model\'s place (#83)', () => {
+  it('the core\'s finish after the claim and the answered prompt ends the session: a cut while it idles loses nothing, its claim stays open', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(S), event('user.ask', T0 - 900, seqAt(T0 - 900)));
+    await r.append(hook(S), { ...event('agent.stop', T0 - 800, seqAt(T0 - 800), { turn: 1 }), subject: `session:${S}` });
+    // The stop is judged: its claim lands behind it, and the core records the end again after the claim.
+    const claim = event('claim.made', T0 - 700, undefined);
+    await r.append(core(S), claim);
+    await r.append(core(S), { ...event('session.attention', T0 - 690, undefined, { state: 'finished' }), subject: `session:${S}` });
+    // A status question, answered from the record: its prompt runs no model, so no stop follows it.
+    await r.append(hook(S), event('user.ask', T0 - 600, seqAt(T0 - 600), { msg: 1 }));
+    await r.append(core(S), { ...event('session.attention', T0 - 590, undefined, { state: 'finished' }), subject: `session:${S}` });
+    await fullCommitElsewhere(r, T0 - 500);
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 100, storage });
+    open.push(r);
+    const row = (await r.table('claims')).rows.find((c) => c.id === claim.id);
+    // A record that reads the answered prompt as a turn still open reads the idle session as active, and its claim lost.
+    expect(row?.verdict_id, 'the session had ended before the cut: its claim is not INVALID').toBeNull();
+    expect((await r.session(S))?.turns.map((t) => t.stopped), 'the answered prompt\'s turn is ended').toEqual([true, true]);
   });
 });

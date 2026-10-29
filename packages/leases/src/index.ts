@@ -179,9 +179,10 @@ class Table implements LeaseTable {
   private fold(e: Event): void {
     const d = e.data as Record<string, unknown>;
     const resource = d.resource as Resource | undefined;
-    // A lease another writer recorded (the supervisor's, for a run) is named by its event; the table's own by its subject.
-    const find = (): Held | undefined => (e.subject && this.held.get(e.subject))
-      || [...this.held.values()].find((h) => keyOf(h.lease.resource) === keyOf(resource!) && h.lease.holder === d.holder);
+    // A lease another writer recorded (the supervisor's, for a run) is named by its event; the table's own by its subject,
+    // and only by it: one already ended here never stands for another its holder holds on the same key.
+    const find = (): Held | undefined => (e.subject?.startsWith('lease:') ? this.held.get(e.subject)
+      : [...this.held.values()].find((h) => keyOf(h.lease.resource) === keyOf(resource!) && h.lease.holder === d.holder));
     switch (e.kind) {
       case 'lease.acquired': {
         const id = e.subject?.startsWith('lease:') ? e.subject : `lease:${e.id}`;
@@ -294,7 +295,12 @@ class Table implements LeaseTable {
       const conflicts = (held: Mode): boolean => (this.plant === 'ignores-mode' ? true
         : this.plant === 'checks-held-mode-only' ? held === 'exclusive'
           : held === 'exclusive' || mode === 'exclusive');
-      const blocking = this.overlapping(kind, resource).filter((l) => l.holder !== caller.holder && conflicts(l.mode));
+      // A holder's own lease blocks it only from another run of its own, whose process may still use the key.
+      const other = (l: Lease): boolean => {
+        const run = this.held.get(l.id)?.run;
+        return l.holder !== caller.holder || (caller.run !== undefined && run !== undefined && run !== caller.run);
+      };
+      const blocking = this.overlapping(kind, resource).filter((l) => other(l) && conflicts(l.mode));
       if (blocking.length) return { status: 'refused', reason: 'held', holders: blocking, message: `${where} ${resource.key} is held by ${names(blocking)}` };
     }
     const all = this.onHost(kind, resource.host);
@@ -328,6 +334,9 @@ class Table implements LeaseTable {
       const end = await this.ended(h);
       const { running, proof } = this.processes(h.run);
       if (end && !running.length) await this.end(h, [end, ...proof]);
+      // A package's lease on a run ends once the supervisor proved each process of the run gone; the supervisor ends
+      // its own run's leases itself, after its kind's cleanup check.
+      else if (h.lease.holder.startsWith('ext:') && proof.length && !running.length) await this.end(h, proof);
     }
   }
   /** The event that says the lease's holder session has ended, recording its agent's end when it is proven gone. */
@@ -362,6 +371,8 @@ class Table implements LeaseTable {
     await this.end(h, proof);
   }
   private async end(h: Held, proof: string[]): Promise<void> {
+    // A tick and its holder's release can each reach a lease across an await: it ends once.
+    if (!this.held.has(h.lease.id)) return;
     const now = this.options.now();
     this.held.delete(h.lease.id);
     this.endedAt.set(keyOf(h.lease.resource), now);
