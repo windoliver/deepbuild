@@ -3026,7 +3026,7 @@ export class Core {
     const cwd = this.sessions.get(session)!.cwd;
     if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
     const worktree = realpathSync(cwd);
-    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree);
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' });
   }
   private async riseIn(worktree: string, holder?: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
@@ -3058,19 +3058,20 @@ export class Core {
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
   private envDown(params: Obj): Promise<Obj> {
-    return this.downFor(this.worktreeOf(params));
+    return this.downFor(this.worktreeOf(params), { path: '/params/worktree', remedy: 'deep env up' });
   }
-  private downFor(worktree: string): Promise<Obj> {
+  /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
+  private downFor(worktree: string, at: { path: string; remedy: string }): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
     if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, rising));
+    return this.inTurn(worktree, () => this.downIn(worktree, at, rising));
   }
-  private async downIn(worktree: string, interrupted?: string): Promise<Obj> {
+  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string): Promise<Obj> {
     const stack = this.stacks.get(worktree);
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
-    if (!stack) throw new Refused(refusal('not_found', '/params/worktree', `No stack runs for ${worktree}; start one with deep env up.`, worktree));
+    if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
     const ports = Object.values(stack.ports);
     const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
     const before = recorded.filter(running);
