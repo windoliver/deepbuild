@@ -73,6 +73,36 @@ describe('a table opened again on the log', () => {
     expect((await table.lease({ holder: 'ext:acme/x', run: a }, port, 'exclusive')).status).toBe('granted');
   });
 
+  it("ends a package's lease once every process of its run is proven gone, citing the proof; the supervisor's own waits for it", async () => {
+    const run = `run:${ulid(T0)}`;
+    await append(core, 'process.tracked', run, { run, pid: 4242, start: 'Sat Oct 24 12:00:00 2026', pgid: 4242, cwd: dir, token: null });
+    await append(core, 'lease.acquired', run, { resource: { ...port, key: '3001' }, holder: 'core', mode: 'exclusive', expires: T0 + 60_000 });
+    const table = await openLeases({ record, now });
+    await table.declare('env-local', PORT);
+    expect((await table.lease({ holder: 'ext:acme/x', run }, port, 'exclusive')).status).toBe('granted');
+    await table.tick();
+    expect((await table.leases()).map((v) => v.lease.holder), 'both held while pid 4242 runs').toEqual(['core', 'ext:acme/x']);
+    const ended = await append(core, 'process.ended', run, { run, pid: 4242 });
+    await table.tick();
+    expect((await table.leases()).map((v) => v.lease.holder), 'the supervisor releases its own').toEqual(['core']);
+    const after = await record.read({ after: ended.log_pos - 1 });
+    expect(after.filter((e) => e.kind === 'lease.released').map((e) => (e.data as { proof: string[] }).proof)).toEqual([[after[0]!.id]]);
+  });
+
+  it('ends a lease once when its holder releases it while a tick ends it too', async () => {
+    const run = `run:${ulid(T0)}`;
+    await append(core, 'process.tracked', run, { run, pid: 4242, start: 'Sat Oct 24 12:00:00 2026', pgid: 4242, cwd: dir, token: null });
+    const ended = await append(core, 'process.ended', run, { run, pid: 4242 });
+    let t = T0;
+    const table = await openLeases({ record, now: () => t, lease_ms: 1000 });
+    await table.declare('env-local', PORT);
+    const granted = await table.lease({ holder: 'ext:acme/x', run }, port, 'exclusive');
+    if (granted.status !== 'granted') throw Error('granted');
+    t = T0 + 2000;
+    await Promise.all([table.tick(), table.release(granted.lease.id, [])]);
+    expect((await record.read({ after: ended.log_pos })).filter((e) => e.kind === 'lease.released'), 'one lease.released').toHaveLength(1);
+  });
+
   it('holds a lease the supervisor recorded for a run, until the supervisor releases it', async () => {
     const run = `run:${ulid(T0)}`;
     const lease = { resource: port, holder: 'core', mode: 'exclusive', expires: T0 + 60_000 };
