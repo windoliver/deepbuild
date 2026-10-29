@@ -1,0 +1,5 @@
+#!/bin/sh
+# Planted twin of the app's Set up click (README: Wrong programs). It runs the same steps as `deep setup` and shows
+# everything `deep setup` printed: its summary and the timing relations' lines, not one line. Run as `<twin> --set-up`.
+[ "$1" = --set-up ] || { echo "usage: $0 --set-up" >&2; exit 2; }
+exec deep setup

@@ -115,7 +115,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const present = (event: string, command: string) => Array.isArray(hooks[event]) && (hooks[event] as unknown[]).some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((h) => isObj(h) && h.command === command));
   if (!record) add('claude.hooks', 'claude-code', 'hooks_missing', 'fail', `DeepBuild's hooks aren't installed: no setup has written them to ${file}`, 'Run `deep setup`, which adds them beside yours.');
   else {
-    const missing = Object.entries(record.hooks).filter(([event, groups]) => groups.some((g) => (g.hooks as Obj[]).some((h) => !present(event, String(h.command))))).map(([event]) => event);
+    // The planted wrong program takes setup's record as the installation and never reads your settings file.
+    const missing = plant() === 'doctor-misses-hooks' ? [] : Object.entries(record.hooks).filter(([event, groups]) => groups.some((g) => (g.hooks as Obj[]).some((h) => !present(event, String(h.command))))).map(([event]) => event);
     if (missing.length) add('claude.hooks', 'claude-code', 'hooks_missing', 'fail', `DeepBuild's ${missing.join(', ')} hook entr${missing.length === 1 ? 'y is' : 'ies are'} missing from ${file}, so those hooks don't reach the hub`, 'Run `deep setup`, which writes them back beside yours.');
     else add('claude.hooks', 'claude-code', 'healthy', 'ok', `DeepBuild's entries for ${Object.keys(record.hooks).join(', ')} are in ${file}`, 'Nothing to do.');
   }

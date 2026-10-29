@@ -16,9 +16,9 @@ import { resolve } from 'node:path';
 import { installedRoot } from './paths.js';
 import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
-import { relationItems, setupCommand, waiterCommand } from './setup.js';
+import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
-export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, relationItems, restoreCommand, runMcp, setupCommand, waiterCommand };
+export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, relationItems, restoreCommand, runMcp, setUpFirst, setupCommand, waiterCommand };
 export { statusCommand } from './status.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
