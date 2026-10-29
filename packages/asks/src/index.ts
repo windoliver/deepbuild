@@ -14,6 +14,12 @@
 // (decision.created, from your answer on the trusted path) that is active, of the ask's kind (its key) and at a scope
 // that covers the ask's session. The gate is here, never in the resolver: anything else is refused, kept as a
 // refusal (in memory, read back through `refusals`) naming the resolver and the decision, and the ask goes on to you.
+//
+// Decisions by kind and scope (#23): an ask that names its subject in structured fields (ask.created@4) is keyed
+// from the subject alone, never from its words. Your answer on the trusted path is saved for its repo, and also
+// answers each open ask it then covers. A decision covers an ask only within the bounds of the change it was saved
+// from, never a change touching a CI workflow file or a git hook script, and nowhere you overruled it. Resolvers
+// that disagree answer nothing: the ask reaches you showing each answer.
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,11 +53,50 @@ export interface Delivery {
   words: string | null;
   provisional: boolean;
   undoes: string | null;
+  /** For an automatic answer, the decision it reused; null otherwise. */
+  because: string | null;
+  /** For a paid run's request answered by naming a budget: that budget, and what's left in it once the run's price is reserved. null otherwise. */
+  budget: BudgetLeft | null;
 }
-/** A resolver's answer: the option it chooses and what covers the ask, a decision handle (`decision:<ULID>`), or null for nothing. */
-export interface ResolverAnswer { answer: string; because: string | null }
-/** What a resolver is asked: the card, the session the ask was raised in, its question class and its session's repo (null when unknown). */
-export type ResolverAsk = Card & { session: string; key: string; repo: string | null };
+/** A budget you approved, and what's left in it, counting runs reserved and not yet charged. */
+export interface BudgetLeft { budget: string; left_usd: number }
+/** What a standing rule is judged on: cases decided, and how many of them later broke. */
+export interface Tally { cases: number; broke: number }
+/** A standing rule's judgment. Rates are fractions: one-sided 95% Clopper-Pearson bounds, yours at its upper bound. */
+export interface Judgment {
+  verdict: 'widen' | 'undecided' | 'FAIL';
+  rule: { lower: number; upper: number };
+  yours: number;
+  /** Your bound times the margin. */
+  limit: number;
+  /** When it can't decide, the fewest more cases with no breakage that would let it widen; null otherwise. */
+  more: number | null;
+}
+/** A standing rule's state: active can widen, frozen keeps deciding at its scope but can't widen, revoked answers nothing. */
+export type RuleState = 'active' | 'frozen' | 'revoked';
+/** The change a push or a merge carries: its kind (fix, feature, …), its size in changed lines, and the paths it touches, relative to the repo root. */
+export interface Change { kind: string; lines: number; paths: string[] }
+/** An authority ask's subject: the effect class (push, merge, …), its target, and the change it carries. */
+export interface EffectSubject { effect: string; target: { kind: string; ref: string; owner: string }; change: Change | null }
+/** A taste call's subject: the screen or journey step, and the element's stable name. */
+export interface TasteSubject { screen: string; element: string }
+/** A choice's or a definition's subject: the requirement or decision point it is pinned to. */
+export interface PointSubject { point: string }
+export type Subject = EffectSubject | TasteSubject | PointSubject;
+/**
+ * A resolver's answer: the option it chooses and what covers the ask, a decision handle (`decision:<ULID>`), or null
+ * for nothing; and, when decisions that cover the ask disagree, each of the others in `also`, so none is applied.
+ */
+export interface ResolverAnswer {
+  answer: string; because: string | null; also?: { answer: string; because: string }[];
+  /**
+   * For a paid run's request, the budget the resolver named to the ledger (#86) and what's left in it: once the
+   * ledger applied the answer, the agent is told; when it refused, the card names it.
+   */
+  budget?: BudgetLeft;
+}
+/** What a resolver is asked: the card, the session the ask was raised in, its question class, its session's repo (null when unknown) and its subject. */
+export type ResolverAsk = Card & { session: string; key: string; repo: string | null; subject: Subject | null };
 export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;
 /** One refusal the core made of a resolver's answer. */
 export interface Refusal { ask: string; resolver: string; decision: string | null; reason: string }
@@ -72,6 +117,14 @@ export interface Card {
   undo: boolean;
   /** A task with a cost you pay: its price in USD. null on every other ask. */
   cost_usd: number | null;
+  /** The nearest saved decision, suggested and never applied, when none covers the ask. null otherwise. */
+  suggested: { decision: string; answer: string; scope: string } | null;
+  /** When resolvers' answers that cover the ask disagree: each answer, with the resolver and the decision it named. [] otherwise. */
+  conflict: { resolver: string; decision: string; answer: string }[];
+  /** The files in a push's or merge's change that need you whatever a decision says: CI workflow files and git hook scripts. [] otherwise. */
+  needs_person: string[];
+  /** On a paid run's request whose named budget the core refused: that budget, and what's left in it, which the run's price doesn't fit. null otherwise. */
+  budget: BudgetLeft | null;
 }
 
 /** Every refusal the core makes, naming what it refuses. */
@@ -112,6 +165,8 @@ export interface InboxRow {
   age: number;
   /** On a drafted request: the owner it's for, and the block it asks them to clear. null on every other row. */
   request: { to: string; block: string } | null;
+  /** For an ask decided for you, the decision it reused; null otherwise. */
+  decision: string | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -135,6 +190,22 @@ export interface Asks {
   revokeDecision(connection: Connection, decision: string): Promise<void>;
   /** The refusals the core made of resolvers' answers for an ask, in order. */
   refusals(ask: string): Promise<Refusal[]>;
+  /**
+   * The one-click overrule of an automatic answer, on the trusted path: another option for the ask a decision answered,
+   * saved as a decision at the ask's scope. The decision it overrules stops answering there and keeps answering
+   * wherever else it covers. Returns your new decision's handle.
+   */
+  overrule(connection: Connection, ask: string, input: { option: string; plan_hash?: string | null; token?: string }): Promise<string>;
+  /**
+   * Your confirmation of a wider match for the ask, on the trusted path: an active decision of its key, such as the
+   * one its card suggested, then covers all your repos and answers the ask. A frozen or revoked rule can't widen.
+   */
+  widen(connection: Connection, ask: string, decision: string): Promise<void>;
+  /**
+   * A standing rule's judgment, from resolver-decisions: the core sets its state from the verdict (widen: active,
+   * undecided: frozen, FAIL: revoked; revoked is final), records each change as decision.judged, and returns its state.
+   */
+  judged(connection: Connection, decision: string, judged: { rule: Tally; yours: Tally; margin: number; judgment: Judgment }): Promise<RuleState>;
 }
 
 /** What setup drafts into your config.json (design: the done.yaml asks block). */
@@ -316,7 +387,11 @@ interface Ask {
   /** On a drafted request: who it's for and the block it asks them to clear. */
   request?: { to: string; block: string };
   plan?: { hash: string; steps: PlanStep[] };
-  closed?: { outcome: string; at: number; answer?: string };
+  closed?: { outcome: string; at: number; answer?: string; decision?: string };
+  /** Resolvers' answers that covered it and disagreed, when they were last asked. */
+  conflict: Card['conflict'];
+  /** The budget a resolver named for it that the core refused, when it was last asked. */
+  budget?: BudgetLeft;
   approval?: { hash: string | null; token: string | null; decision: string };
   words: string[];
   /** For a provisional choice: the files its session edited while it went on with the recommended option. */
@@ -337,8 +412,15 @@ interface Ask {
 /** Batches every `every` ms since the epoch, showing at most `cap` asks a UTC day. */
 interface Batches { every: number; cap: number }
 
-/** A decision you saved: what it answers (its ask's key), where (its scope), with which option, and whether it still holds. */
-interface HeldDecision { handle: string; key: string; scope: string; answer: string; ask: string; state: 'active' | 'revoked' }
+/**
+ * A decision you saved: what it answers (its ask's key), where (its scope), with which option, and whether it still
+ * holds; the kind and subject of the ask it was saved from, the size bound of that ask's change, and the scopes you
+ * overruled it at.
+ */
+interface HeldDecision {
+  handle: string; key: string; scope: string; answer: string; ask: string; state: RuleState;
+  kind: string; subject: Obj | null; bound: number | null; overruled: Set<string>;
+}
 
 const CLOSING: Readonly<Record<string, string>> = {
   'ask.answered': 'answered', 'ask.defaulted': 'defaulted', 'ask.escalated': 'escalated', 'ask.cancelled': 'cancelled',
@@ -362,8 +444,11 @@ class AsksCore implements Asks {
   private readonly read = new Map<string, Obj>();
   /** Each block someone else owns, by handle, and the request drafted for it. */
   private readonly requested = new Map<string, string>();
-  /** The decisions the record holds, by handle. */
+  /** The decisions the record holds, by handle, and by the key they answer. */
   private readonly decisions = new Map<string, HeldDecision>();
+  private readonly byKey = new Map<string, HeldDecision[]>();
+  /** The decisions a near match is looked for among, by what must match for one (`nearOf`). */
+  private readonly byNear = new Map<string, HeldDecision[]>();
   /** The resolvers registered, in order, by name. */
   private readonly resolvers = new Map<string, Resolver>();
   /** The refusals made of resolvers' answers, by ask handle. */
@@ -387,7 +472,7 @@ class AsksCore implements Asks {
     // The resolvers go first, outside the core's lock, so one that reads the core as it answers doesn't wait on
     // itself: one that names a decision covering the ask answers it for you before it shows. Showing is a separate
     // step, so a tick in between may show the ask first; a question already open settles like any tick would.
-    if (fresh) await this.consult(handle, connection);
+    if (fresh) await this.consult(handle);
     await this.exclusive(async () => {
       await this.sync();
       await this.settle();
@@ -401,10 +486,14 @@ class AsksCore implements Asks {
       const row = askSources().find((r) => r.source === source);
       if (!row) throw new AskRefused(`${source} has no row in ask.sources@1, so it can't raise an ask`, { source });
       const now = this.options.now();
-      const input = this.fill(connection.session, raised, now);
+      const filled = this.fill(connection.session, raised, now);
       const id = ulid(now);
+      // An ask that names its subject is keyed from the subject alone: whatever key its raiser gave is replaced.
+      const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
+      const subjected = isObj(input) && 'subject' in input;
       // An unblock task is held to @3: at least one step and one thing it unblocks, and its price when you pay one.
-      const v = isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
+      // An ask that names its subject is held to @4.
+      const v = subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
       const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
       const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
@@ -470,8 +559,8 @@ class AsksCore implements Asks {
     });
   }
 
-  answer(connection: Connection, handle: string, input: unknown): Promise<void> {
-    return this.exclusive(async () => {
+  async answer(connection: Connection, handle: string, input: unknown): Promise<void> {
+    const saved = await this.exclusive(async (): Promise<string | null> => {
       await this.sync();
       const via = TRUSTED[connection.writer];
       if (via === undefined) throw new AskRefused(`an answer counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
@@ -530,6 +619,8 @@ class AsksCore implements Asks {
         await this.sync();
         this.hand(a, o.id, null, false, o.decision);
       }
+      // The same question from other threads, shown through this card, takes the same option.
+      const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
       await this.options.record.append(this.core(connection), {
         v: 2, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
@@ -539,8 +630,21 @@ class AsksCore implements Asks {
       });
       await this.sync();
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision);
+      for (const rider of riders) {
+        await this.options.record.append(this.core({ ...connection, ...rider.who }), {
+          v: 2, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
+          data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null },
+        });
+        await this.sync();
+        this.hand(rider, chosen!.id, null, false, decision);
+      }
+      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim.
+      const scope = chosen && !ask.fold ? this.scopeOf(ask) : null;
+      if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
+      return scope === null ? null : String(ask.data.key);
     });
+    if (saved !== null) await this.reconsult(saved);
   }
 
   tick(): Promise<void> {
@@ -562,7 +666,8 @@ class AsksCore implements Asks {
   needsYou(): Promise<Card[]> {
     return this.exclusive(async () => {
       await this.sync();
-      const shown = this.open().filter((a) => this.status(a) === 'shown');
+      // The same question from another thread shows through the older one's card.
+      const shown = this.open().filter((a) => this.status(a) === 'shown' && !this.rides(a));
       return Promise.all(shown.map((a) => this.cardOf(a)));
     });
   }
@@ -630,7 +735,7 @@ class AsksCore implements Asks {
       return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
-        request: a.request ? { ...a.request } : null,
+        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null,
       }));
     });
   }
@@ -651,8 +756,8 @@ class AsksCore implements Asks {
     return () => { if (this.resolvers.get(name) === resolver) this.resolvers.delete(name); };
   }
 
-  saveDecision(connection: Connection, handle: string, scope: DecisionScope): Promise<string> {
-    return this.exclusive(async () => {
+  async saveDecision(connection: Connection, handle: string, scope: DecisionScope): Promise<string> {
+    const saved = await this.exclusive(async () => {
       await this.sync();
       if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a decision is saved only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
       const ask = this.asks.get(bare(handle));
@@ -669,12 +774,72 @@ class AsksCore implements Asks {
         if (repo === null) throw new AskRefused(`${ask.handle}'s session started in no repo the record knows`, { field: 'scope', ask: ask.handle });
         at = `repo:${repo}`;
       }
-      const now = this.options.now();
-      const id = ulid(now);
-      await this.options.record.append(this.core(connection), { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope: at, answer, ask: ask.handle } });
-      await this.sync();
-      return `decision:${id}`;
+      // Saving at a scope overrules nothing by itself.
+      return { decision: await this.saveAt(connection, ask, at, answer, false), key: String(ask.data.key) };
     });
+    await this.reconsult(saved.key);
+    return saved.decision;
+  }
+
+  async overrule(connection: Connection, handle: string, input: { option: string; plan_hash?: string | null; token?: string }): Promise<string> {
+    const saved = await this.exclusive(async () => {
+      await this.sync();
+      if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`an overrule counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const ask = this.asks.get(bare(handle));
+      if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+      const old = ask.closed?.outcome === 'decided_for_you' ? ask.closed.decision : undefined;
+      if (old === undefined) throw new AskRefused(`${ask.handle} wasn't decided for you, so there's no automatic answer to overrule`, { ask: ask.handle });
+      const option = ask.options.find((o) => o.id === input.option);
+      if (!option) throw new AskRefused(`${ask.handle} has no option ${String(input.option)}`, { option: String(input.option) });
+      if (option.id === ask.closed!.answer) throw new AskRefused(`${old} already answered ${ask.handle} with ${option.id}`, { option: option.id });
+      // An approval binds to the plan it was shown and to your click's token, as on the card.
+      if (option.decision === 'allow') {
+        if ((input.plan_hash ?? null) !== (ask.plan?.hash ?? null)) throw new AskRefused(`${ask.handle}'s approval names a plan it didn't show`, { field: 'plan_hash' });
+        if (typeof input.token !== 'string' || !input.token) throw new AskRefused('an approval binds to its click token', { field: 'token' });
+      }
+      const scope = this.scopeOf(ask);
+      if (scope === null) throw new AskRefused(`${ask.handle} was raised in no session or repo to save your answer for`, { field: 'scope', ask: ask.handle });
+      // The decision that answered is overruled at the ask's scope, whatever else covers it there.
+      const decision = await this.saveAt(connection, ask, scope, option.id);
+      if (!this.decisions.get(old)?.overruled.has(scope)) {
+        const now = this.options.now();
+        await this.options.record.append(this.core(connection), { v: 2, id: ulid(now), kind: 'decision.overruled', subject: old, ts: now, data: { decision: old, at: scope } });
+        await this.sync();
+      }
+      // The agent hears your answer, which undoes the one the decision gave.
+      this.hand(ask, option.id, null, false, option.decision, null, ask.closed!.answer ?? null);
+      return { decision, key: String(ask.data.key) };
+    });
+    await this.reconsult(saved.key);
+    return saved.decision;
+  }
+
+  async widen(connection: Connection, handle: string, decision: string): Promise<void> {
+    const key = await this.exclusive(async () => {
+      await this.sync();
+      if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a wider scope is confirmed only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const ask = this.asks.get(bare(handle));
+      if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+      if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome, closed_at: ask.closed.at });
+      // Only an active decision of the ask's own key widens: wider, it then covers the ask. A frozen rule's evidence
+      // can't decide yet, and a revoked one answers nothing.
+      const held = this.decisions.get(decision);
+      if (!held) throw new AskRefused(`${decision} is no decision`, { field: 'decision', ask: ask.handle });
+      if (held.state !== 'active') throw new AskRefused(`${decision} is ${held.state}, so it can't widen`, { field: 'decision', ask: ask.handle });
+      if (held.key !== ask.data.key) throw new AskRefused(`${decision} answers another question than ${ask.handle}, so a wider scope wouldn't cover it`, { field: 'decision', ask: ask.handle });
+      const lines = linesOf(ask.data.subject);
+      if (needsPerson(ask.data).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
+      const option = ask.options.find((o) => o.id === held.answer);
+      if (!option) throw new AskRefused(`${ask.handle} has no option ${held.answer}`, { option: held.answer });
+      const widened = await this.saveAt(connection, ask, 'all', held.answer, false);
+      const now = this.options.now();
+      await this.options.record.append(this.core({ ...connection, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask.handle, ts: now, data: { decision: widened, ask: ask.handle } });
+      await this.sync();
+      this.hand(ask, option.id, null, false, option.decision, widened);
+      await this.settle();
+      return String(ask.data.key);
+    });
+    await this.reconsult(key);
   }
 
   revokeDecision(connection: Connection, handle: string): Promise<void> {
@@ -710,69 +875,138 @@ class AsksCore implements Asks {
   }
 
   /**
-   * Whether a decision's scope covers an ask: everywhere, its session, or its session's repo. A session scope names
-   * the session in letters and digits, as the hub writes it; one written with the ID as recorded reads the same.
+   * Every resolver, outside the lock, then their answers under it. An answer counts only when it names a decision
+   * that covers the ask (`uncovered`) and chooses that decision's option; anything else is refused, naming the
+   * resolver and the decision. The answers that count are applied when they agree, citing the decision; when they
+   * disagree nothing is applied, and the ask reaches you showing each. An ask closed meanwhile takes no answer.
    */
-  private covers(decision: HeldDecision, ask: Ask): boolean {
-    if (decision.scope === 'all') return true;
-    if (decision.scope.startsWith('session:')) return ask.session !== '' && letters(decision.scope.slice('session:'.length)) === letters(ask.session);
-    const repo = this.repoOf(ask.session);
-    return repo !== null && decision.scope === `repo:${repo}`;
-  }
-
-  /**
-   * Each resolver in turn, outside the lock, until one's answer is applied under it. An answer is applied only when
-   * it names a decision that is active, of the ask's kind (its key) and at a scope covering the ask's session, and
-   * chooses that decision's option; anything else is refused, naming the resolver and the decision, and the ask goes
-   * on to you. An ask closed meanwhile takes no answer.
-   */
-  private async consult(handle: string, connection: Connection): Promise<void> {
+  private async consult(handle: string): Promise<void> {
     // With no resolver there is nothing to ask, and no card (its diff of the worktree) to build.
     if (!this.resolvers.size) return;
     const asked = await this.exclusive(async (): Promise<ResolverAsk | null> => {
       await this.sync();
       const ask = this.asks.get(bare(handle));
-      return !ask || ask.closed ? null : { ...(await this.cardOf(ask)), session: ask.session, key: String(ask.data.key), repo: this.repoOf(ask.session) };
+      if (!ask || ask.closed) return null;
+      const subject = isObj(ask.data.subject) ? (ask.data.subject as unknown as Subject) : null;
+      return { ...(await this.cardOf(ask)), session: ask.session, key: String(ask.data.key), repo: this.repoOf(ask.session), subject };
     });
     if (!asked) return;
+    const refuse = (resolver: string, decision: string | null, reason: string): void => {
+      this.refused.set(handle, [...(this.refused.get(handle) ?? []), { ask: handle, resolver, decision, reason }]);
+    };
+    const answers: { resolver: string; answer: string; decision: string; budget?: BudgetLeft }[] = [];
     for (const [name, resolver] of [...this.resolvers]) {
-      const refuse = (decision: string | null, reason: string): void => {
-        this.refused.set(handle, [...(this.refused.get(handle) ?? []), { ask: handle, resolver: name, decision, reason }]);
-      };
-      let answer: unknown;
+      let reply: unknown;
       try {
-        answer = await resolver(structuredClone(asked));
+        reply = await resolver(structuredClone(asked));
       } catch (error) {
-        refuse(null, `${name} failed on ${handle}: ${(error as Error)?.message ?? String(error)}`);
+        refuse(name, null, `${name} failed on ${handle}: ${(error as Error)?.message ?? String(error)}`);
         continue;
       }
       // Nothing, from a resolver in the hub (undefined) or over the wire (null): the ask goes on.
-      if (answer === undefined || answer === null) continue;
-      if (!isObj(answer) || typeof answer.answer !== 'string') { refuse(null, `${name} answered ${handle} with no option`); continue; }
-      const named = typeof answer.because === 'string' ? answer.because : null;
-      if (named === null) { refuse(null, `${name} answered ${handle} without naming a decision that covers it`); continue; }
-      const chosen = answer.answer;
-      const applied = await this.exclusive(async () => {
-        await this.sync();
-        const ask = this.asks.get(bare(handle));
-        if (!ask || ask.closed) return true;
-        const decision = this.decisions.get(named);
-        if (!decision) { refuse(named, `${name} named ${named}, which the record holds no decision for`); return false; }
-        if (this.options.plant !== 'decision-exists-only') {
-          if (decision.state !== 'active') { refuse(named, `${name} named ${named}, which was revoked`); return false; }
-          if (decision.key !== ask.data.key) { refuse(named, `${name} named ${named}, a decision of another kind than ${handle}'s`); return false; }
-          if (!this.covers(decision, ask)) { refuse(named, `${name} named ${named}, whose scope ${decision.scope} doesn't cover ${handle}'s session`); return false; }
+      if (reply === undefined || reply === null) continue;
+      for (const answer of [reply, ...(isObj(reply) && Array.isArray(reply.also) ? reply.also : [])]) {
+        if (!isObj(answer) || typeof answer.answer !== 'string') { refuse(name, null, `${name} answered ${handle} with no option`); continue; }
+        if (typeof answer.because !== 'string') { refuse(name, null, `${name} answered ${handle} without naming a decision that covers it`); continue; }
+        const budget = isObj(answer.budget) && typeof answer.budget.budget === 'string' && typeof answer.budget.left_usd === 'number'
+          ? { budget: answer.budget.budget, left_usd: answer.budget.left_usd } : undefined;
+        answers.push({ resolver: name, answer: answer.answer, decision: answer.because, ...(budget ? { budget } : {}) });
+      }
+    }
+    if (!answers.length) return;
+    await this.exclusive(async () => {
+      await this.sync();
+      const ask = this.asks.get(bare(handle));
+      if (!ask) return;
+      // A paid run's request answered by naming a budget is applied by the ledger, the core's check of what's left
+      // (#86), never here: once its decision.applied closed the ask, the agent hears it, naming the budget.
+      const paid = answers.find((a) => a.budget && ask.closed?.outcome === 'decided_for_you' && ask.closed.decision === a.decision);
+      if (paid) {
+        const option = ask.options.find((o) => o.id === paid.answer && o.decision === 'allow');
+        if (option) {
+          ask.closed!.answer = option.id;
+          this.hand(ask, option.id, null, false, option.decision, paid.decision, null, paid.budget!);
         }
-        const option = ask.options.find((o) => o.id === chosen);
-        if (!option || option.id !== decision.answer) { refuse(named, `${name} answered ${chosen}, not what ${named} decided (${decision.answer})`); return false; }
-        const now = this.options.now();
-        await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.applied', subject: handle, ts: now, data: { decision: named, ask: handle } });
-        await this.sync();
-        this.hand(ask, option.id, null, false, option.decision);
+        return;
+      }
+      if (ask.closed) return;
+      // A budget the ledger refused is named on the card, with what's left in it; it answers nothing.
+      delete ask.budget;
+      for (const a of answers.filter((x) => x.budget)) {
+        ask.budget = a.budget!;
+        refuse(a.resolver, a.decision, `${a.resolver} named budget ${a.budget!.budget}, which the core refused: $${a.budget!.left_usd} is left in it`);
+      }
+      const counted = answers.filter((a) => !a.budget).filter(({ resolver, answer, decision: named }) => {
+        const decision = this.decisions.get(named);
+        if (!decision) { refuse(resolver, named, `${resolver} named ${named}, which the record holds no decision for`); return false; }
+        const why = this.options.plant === 'decision-exists-only' ? null : this.uncovered(decision, ask);
+        if (why !== null) { refuse(resolver, named, `${resolver} named ${named}, which ${why}`); return false; }
+        if (!ask.options.some((o) => o.id === answer) || answer !== decision.answer) { refuse(resolver, named, `${resolver} answered ${answer}, not what ${named} decided (${decision.answer})`); return false; }
         return true;
       });
-      if (applied) return;
+      // Answers that disagree answer nothing: the card shows each decision once, by the last resolver that named it.
+      ask.conflict = new Set(counted.map((a) => a.answer)).size > 1
+        ? [...new Map(counted.map((a) => [a.decision, { resolver: a.resolver, decision: a.decision, answer: a.answer }])).values()]
+        : [];
+      const [first] = counted;
+      if (!first || ask.conflict.length) return;
+      const option = ask.options.find((o) => o.id === first.answer)!;
+      const now = this.options.now();
+      await this.options.record.append(this.core({ ...CORE, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: handle, ts: now, data: { decision: first.decision, ask: handle } });
+      await this.sync();
+      this.hand(ask, option.id, null, false, option.decision, first.decision);
+    });
+  }
+
+  judged(connection: Connection, handle: string, judged: { rule: Tally; yours: Tally; margin: number; judgment: Judgment }): Promise<RuleState> {
+    return this.exclusive(async () => {
+      await this.sync();
+      if (!JUDGES.has(connection.writer)) throw new AskRefused(`a standing rule is judged by resolver-decisions, not ${connection.writer}`, { field: 'writer' });
+      const decision = this.decisions.get(handle);
+      if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
+      const { rule, yours, margin, judgment } = judged;
+      const next = VERDICT_STATE[judgment?.verdict];
+      if (!next) throw new AskRefused('a judgment says widen, undecided or FAIL', { field: 'verdict' });
+      // Revoked is final; a judgment that leaves the state as it is records nothing.
+      if (decision.state === 'revoked' || decision.state === next) return decision.state;
+      const now = this.options.now();
+      await this.options.record.append(this.core(connection), {
+        v: 1, id: ulid(now), kind: 'decision.judged', subject: handle, ts: now,
+        data: {
+          decision: handle, state: next, verdict: judgment.verdict,
+          rule: { cases: rule.cases, broke: rule.broke, lower: judgment.rule.lower, upper: judgment.rule.upper },
+          yours: { cases: yours.cases, broke: yours.broke, upper: judgment.yours }, margin, limit: judgment.limit, more: judgment.more,
+        },
+      });
+      await this.sync();
+      return decision.state;
+    });
+  }
+
+  /** After a decision is saved, each open ask of its key is offered to the resolvers again: one it covers closes as decided for you. */
+  private async reconsult(key: string): Promise<void> {
+    const open = await this.exclusive(async () => {
+      await this.sync();
+      return this.open().filter((a) => a.data.key === key).map((a) => a.handle);
+    });
+    for (const handle of open) await this.consult(handle);
+  }
+
+  /**
+   * Your answer saved as a decision at a scope, under the lock: and, when you chose an option that decisions covering
+   * the ask contradict, each of them overruled at that scope, where they keep answering elsewhere. Its handle.
+   */
+  private async saveAt(connection: Connection, ask: Ask, scope: string, answer: string, overrules = true): Promise<string> {
+    const contradicted = !overrules || needsPerson(ask.data).length ? [] : this.covering(ask).filter((d) => d.answer !== answer);
+    const now = this.options.now();
+    const id = ulid(now);
+    const as = this.core(connection);
+    await this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } });
+    for (const d of contradicted) {
+      await this.options.record.append(as, { v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } });
     }
+    await this.sync();
+    return `decision:${id}`;
   }
 
   private core(connection: Connection): Connection {
@@ -891,7 +1125,8 @@ class AsksCore implements Asks {
   private async show(): Promise<boolean> {
     // An ask you put off with Later waits for its Later, not for a batch.
     // A block someone else owns never shows: its drafted request does.
-    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined && !a.theirs);
+    // The same question from another thread shows through the older one's card, and is answered with it.
+    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined && !a.theirs && !this.rides(a));
     // A Later that ends shows its ask again, recorded like any showing; so does one that an ask joining the
     // exception since would outlast.
     const now = this.options.now();
@@ -935,12 +1170,86 @@ class AsksCore implements Asks {
     return (this.threads.get(thread) ?? []).filter((a) => !a.closed);
   }
 
-  private hand(ask: Ask, option: string | null, words: string | null, provisional: boolean, decision: Decision | null): void {
+  private hand(ask: Ask, option: string | null, words: string | null, provisional: boolean, decision: Decision | null, because: string | null = null, undid: string | null = null, budget: BudgetLeft | null = null): void {
     const chosen = ask.options.find((o) => o.id === option);
     const recommended = ask.data.recommended as string | null;
-    // A different answer undoes the option a provisional ask went on with.
-    const undoes = !provisional && ask.data.provisional === true && option !== null && option !== recommended ? recommended : null;
-    this.options.deliver({ ask: ask.handle, session: ask.session, option, decision: decision ?? chosen?.decision ?? 'none', words, provisional, undoes });
+    // A different answer undoes the option a provisional ask went on with, or the one an overruled decision gave.
+    const undoes = undid ?? (!provisional && ask.data.provisional === true && option !== null && option !== recommended ? recommended : null);
+    this.options.deliver({ ask: ask.handle, session: ask.session, option, decision: decision ?? chosen?.decision ?? 'none', words, provisional, undoes, because, budget });
+  }
+
+  /** Whether an open ask shows through an older open one from another thread: the same question, by key, pinned to the same thing. */
+  private rides(ask: Ask): Ask | undefined {
+    if (ask.closed || !JOINED_KINDS.has(String(ask.data.kind)) || !isObj(ask.data.subject)) return undefined;
+    const pin = sha256Hex(canonicalize(ask.data.pinned_to!));
+    return this.open().find((b) => b.pos < ask.pos && b.thread !== ask.thread && b.data.kind === ask.data.kind && b.data.key === ask.data.key
+      && !b.theirs && !b.fold && b.who.actor === ask.who.actor && b.who.scope === ask.who.scope && sha256Hex(canonicalize(b.data.pinned_to!)) === pin);
+  }
+
+  /** The scope your answer to an ask is saved at: its session's project, or its session when it started in none; null with neither. */
+  private scopeOf(ask: Ask): string | null {
+    const project = letters(this.sessions.get(ask.session)?.project ?? '');
+    return project ? `repo:${project}` : ask.session ? `session:${letters(ask.session)}` : null;
+  }
+
+  /** Whether a scope covers an ask: everywhere, its session, or its session's repo. */
+  private scopeCovers(scope: string, ask: Ask): boolean {
+    if (scope === 'all') return true;
+    if (scope.startsWith('session:')) return ask.session !== '' && letters(scope.slice('session:'.length)) === letters(ask.session);
+    const repo = this.repoOf(ask.session);
+    return repo !== null && scope === `repo:${repo}`;
+  }
+
+  /**
+   * Why a decision doesn't cover an ask, or null when it does: active, of its key, at a scope covering it, not
+   * overruled there, within the size bound of the change it was saved from, and no file in the ask's change needs you.
+   */
+  private uncovered(decision: HeldDecision, ask: Ask): string | null {
+    // A frozen rule keeps deciding at its scope; only widening waits on more evidence.
+    if (decision.state === 'revoked') return 'was revoked';
+    if (decision.key !== ask.data.key) return `is a decision of another kind than ${ask.handle}'s`;
+    if (!this.scopeCovers(decision.scope, ask)) return `is saved at ${decision.scope}, which doesn't cover ${ask.handle}'s session`;
+    const over = [...decision.overruled].find((at) => this.scopeCovers(at, ask));
+    if (over) return `was overruled at ${over}`;
+    const lines = linesOf(ask.data.subject);
+    if (decision.bound !== null && lines !== null && lines > decision.bound) return `covers changes up to ${decision.bound} lines, and ${ask.handle}'s is ${lines}`;
+    const person = needsPerson(ask.data);
+    if (person.length) return `can't cover a change to ${person.join(', ')}, which needs you`;
+    return null;
+  }
+
+  /** The decisions that cover an ask. */
+  private covering(ask: Ask): HeldDecision[] {
+    return (this.byKey.get(String(ask.data.key)) ?? []).filter((d) => this.uncovered(d, ask) === null);
+  }
+
+  /**
+   * The nearest saved decision to an ask none covers, to suggest and never apply: of its key at another scope or
+   * past a bound first, else of its ask kind with the most subject fields alike (an authority ask's effect, a
+   * choice's or a definition's point, and a taste call's screen or element must match); the latest among equals.
+   */
+  private suggest(ask: Ask): Card['suggested'] {
+    if (ask.closed || !isObj(ask.data.subject) || this.covering(ask).length) return null;
+    const subject = ask.data.subject;
+    const alike = (d: HeldDecision): number => {
+      const s = d.subject;
+      if (!s || d.kind !== ask.data.kind) return -1;
+      if (ask.data.kind === 'authority') {
+        if (s.effect !== subject.effect) return -1;
+        const [a, b] = [isObj(s.target) ? s.target : {}, isObj(subject.target) ? subject.target : {}];
+        const n = Number(a.kind === b.kind) + Number(a.owner === b.owner) + Number((isObj(s.change) ? s.change.kind : null) === (isObj(subject.change) ? subject.change.kind : null));
+        return n >= 2 ? n : -1;
+      }
+      if (ask.data.kind === 'taste') return Number(s.screen === subject.screen) + Number(s.element === subject.element) || -1;
+      return s.point === subject.point ? 1 : -1;
+    };
+    let best: { d: HeldDecision; score: number } | undefined;
+    for (const d of [...(this.byKey.get(String(ask.data.key)) ?? []), ...(this.byNear.get(nearOf(String(ask.data.kind), subject)) ?? [])]) {
+      if (d.state !== 'active' || [...d.overruled].some((at) => this.scopeCovers(at, ask))) continue;
+      const score = d.key === ask.data.key ? 100 : alike(d);
+      if (score >= 0 && (!best || score >= best.score)) best = { d, score };
+    }
+    return best ? { decision: best.d.handle, answer: best.d.answer, scope: best.d.scope } : null;
   }
 
   private async cardOf(ask: Ask): Promise<Card> {
@@ -954,6 +1263,10 @@ class AsksCore implements Asks {
       folded: ask.fold ? this.openIn(ask.thread).filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
       undo: ask.closed?.outcome === 'defaulted',
       cost_usd: typeof ask.data.cost_usd === 'number' ? ask.data.cost_usd : null,
+      suggested: this.suggest(ask),
+      conflict: ask.conflict.map((c) => ({ ...c })),
+      needs_person: needsPerson(ask.data),
+      budget: ask.budget && !ask.closed ? { ...ask.budget } : null,
     };
   }
 
@@ -1003,7 +1316,7 @@ class AsksCore implements Asks {
         const holder = fold || theirs ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], decided: new Set(), pending: {},
+          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], decided: new Set(), pending: {}, conflict: [],
           created: e.ts, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -1025,14 +1338,36 @@ class AsksCore implements Asks {
         if (ask && !ask.plan && e.writer === 'core') ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
         return;
       }
-      case 'decision.created':
-        if (e.writer === 'core') this.decisions.set(`decision:${e.id}`, { handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active' });
+      case 'decision.created': {
+        if (e.writer !== 'core') return;
+        // What it covers comes from the ask it was saved from: its kind, its subject and its change's size.
+        const from = this.asks.get(bare(String(d.ask)));
+        const subject = from && isObj(from.data.subject) ? from.data.subject : null;
+        const held: HeldDecision = {
+          handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active',
+          kind: String(from?.data.kind ?? ''), subject, bound: boundFor(linesOf(subject)), overruled: new Set(),
+        };
+        this.decisions.set(held.handle, held);
+        this.byKey.set(held.key, [...(this.byKey.get(held.key) ?? []), held]);
+        if (subject) {
+          const near = nearOf(held.kind, subject);
+          this.byNear.set(near, [...(this.byNear.get(near) ?? []), held]);
+        }
         return;
-      // Revoked or overruled (#667) on the trusted path: it covers nothing from then on.
+      }
+      // Revoked or overruled (#667) on the trusted path: it covers nothing from then on; overruled at one scope
+      // (decision.overruled@2), nothing there.
       case 'decision.revoked':
       case 'decision.overruled': {
         const decision = e.writer === 'core' ? this.decisions.get(String(d.decision)) : undefined;
-        if (decision) decision.state = 'revoked';
+        if (decision && e.kind === 'decision.overruled' && typeof d.at === 'string') decision.overruled.add(d.at);
+        else if (decision) decision.state = 'revoked';
+        return;
+      }
+      // A standing rule judged by what later broke: revoked is final.
+      case 'decision.judged': {
+        const decision = e.writer === 'core' ? this.decisions.get(String(d.decision)) : undefined;
+        if (decision && decision.state !== 'revoked' && STATES.has(String(d.state))) decision.state = d.state as RuleState;
         return;
       }
       case 'decision.applied':
@@ -1045,7 +1380,10 @@ class AsksCore implements Asks {
         const ask = e.kind === 'decision.applied' ? this.asks.get(bare(String(d.ask))) : target;
         // The first close to append decides, and no agent closes an ask.
         if (!ask || ask.closed || isAgent(e.writer)) return;
-        ask.closed = { outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts, ...(typeof d.answer === 'string' ? { answer: d.answer } : {}) };
+        ask.closed = {
+          outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts, ...(typeof d.answer === 'string' ? { answer: d.answer } : {}),
+          ...(e.kind === 'decision.applied' ? { decision: String(d.decision), answer: this.decisions.get(String(d.decision))?.answer ?? '' } : {}),
+        };
         if (e.kind === 'ask.answered') ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision) };
         // An ask the exception held but hadn't shown yet wasn't in what you closed: it gets its own card.
         if (ask.fold) for (const a of this.openIn(ask.thread)) if (a.folded === ask.handle && !a.shown) delete a.folded;
@@ -1226,6 +1564,50 @@ class AsksCore implements Asks {
 /** A question's text as it compares: NFC, case folded, white space collapsed, trailing punctuation dropped. */
 const normalize = (text: string): string => text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?]+$/u, '');
 
+/** A standing rule's states, and what each verdict moves it to. */
+const STATES = new Set<string>(['active', 'frozen', 'revoked']);
+const VERDICT_STATE: Readonly<Record<Judgment['verdict'], RuleState>> = { widen: 'active', undecided: 'frozen', FAIL: 'revoked' };
+/** Who judges a standing rule: resolver-decisions, or the core on its timer. */
+const JUDGES = new Set(['ext:resolver-decisions', 'core']);
+
+/** The ask kinds that name a subject, and so are keyed from it. */
+const SUBJECT_KINDS = new Set(['authority', 'taste', 'choice', 'definition']);
+/** The kinds whose same question from another thread, pinned to the same thing, shows through one card. */
+const JOINED_KINDS = new Set(['taste', 'choice', 'definition']);
+
+/**
+ * An ask's key, from its subject's structured fields alone, never its words: for an authority ask the effect class,
+ * the target's kind, its owner (a PR the asking thread opened is its own, whatever its number) and the kind of
+ * change; for a taste call the screen and the element; for a choice or a definition the point and its option IDs.
+ * The hub reads it too, to tell whether a saved decision covers a permission prompt before raising anything (#23).
+ */
+export function subjectKey(data: Obj, thread: string): string {
+  const s = data.subject as Obj;
+  const target = isObj(s.target) ? s.target : {};
+  const owner = String(target.owner);
+  const fields = data.kind === 'authority'
+    ? { effect: String(s.effect), target: String(target.kind), owner: owner === `thread:${thread}` ? 'self' : owner, change: isObj(s.change) ? String(s.change.kind) : null }
+    : data.kind === 'taste' ? { screen: String(s.screen), element: String(s.element) }
+      : { point: String(s.point), options: (Array.isArray(data.options) ? data.options : []).map((o) => String(isObj(o) ? o.id : o)).sort() };
+  return sha256Hex(canonicalize({ key: 1, kind: String(data.kind), ...fields } as JsonValue));
+}
+
+/** What a near match must share: an authority ask's effect, a choice's or a definition's point; any taste call. */
+const nearOf = (kind: string, subject: Obj): string =>
+  JSON.stringify([kind, kind === 'authority' ? subject.effect : kind === 'taste' ? null : subject.point]);
+
+/** CI workflow files and git hook scripts: a push or merge touching one needs you, whatever a decision says. */
+const PERSON_PATHS = /^(\.github\/workflows\/|\.gitlab-ci\.ya?ml$|\.git\/hooks\/|\.githooks\/|\.husky\/)/;
+/** The paths in an ask's change that need a person. */
+const needsPerson = (data: Obj): string[] => {
+  const change = isObj(data.subject) && isObj(data.subject.change) ? data.subject.change : undefined;
+  return Array.isArray(change?.paths) ? change.paths.filter((p): p is string => typeof p === 'string' && PERSON_PATHS.test(p.replace(/^\.\//, ''))) : [];
+};
+/** The size of an ask's change in lines, or null when it carries none. */
+const linesOf = (subject: unknown): number | null => (isObj(subject) && isObj(subject.change) && typeof subject.change.lines === 'number' ? subject.change.lines : null);
+/** The size bound a decision saved from a change of `lines` sets: up to twice its size, and at least 50 lines. */
+const boundFor = (lines: number | null): number | null => (lines === null ? null : Math.max(2 * lines, 50));
+
 /** The fold's exception is keyed on its thread, never on a session ID that /clear or /compact rotates. */
 const foldKey = (thread: string): string => sha256Hex(new TextEncoder().encode(`${FOLD_SOURCE}:${thread}`));
 
@@ -1244,5 +1626,6 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
+    overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };
 }

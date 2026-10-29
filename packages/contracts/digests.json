@@ -21,6 +21,7 @@
   "ask.created@1": "d1:622de634f309408e54470311e0aee5506cbe94eff307a2a91437fd992ae0be15",
   "ask.created@2": "d1:10197ee2333b20f078690412050c4d608fba0b8d608dcd96d23219324fc135a9",
   "ask.created@3": "d1:b9a204eb8c7fec23fb73329dd810d6aad25352d8ca579c5335b479e79620ee4d",
+  "ask.created@4": "d1:1bcb373ff25702bcd7ac48c8e16ce51c94e33d56c3a04d3328284c5fb6571ab7",
   "ask.defaulted@1": "d1:7a3361b3d2769e8f70957f076721a41da0be297e971f26f67c764e676780d6b2",
   "ask.escalated@1": "d1:068dabcb02b81c629785961682320cf98ccaa06e55b4f6f9aaa54e3475d7e2b6",
   "ask.later@1": "d1:10125b5ecc1a0edfa8ceddeb3c250b4b15e960d8844e86132adf15c75686e140",
@@ -40,7 +41,9 @@
   "commit.made@1": "d1:228d52dcb0d6b9e1a4b4c052c07a7f1eee09bd0d94a3db6f66498a19faf9ae24",
   "decision.applied@1": "d1:fe659c11198252d53232d70e72297f8bf5e98143d1d6456df69d4d84f817a64a",
   "decision.created@1": "d1:a113b8418e68ffc1714126e7fd74d9361e9c5b8c6668e11c4bf4761879ced141",
+  "decision.judged@1": "d1:c6d72748bde61e80d9963758f4f42ce6ecdcbc561c3461322c8a87a8f493f8fb",
   "decision.overruled@1": "d1:7e39fb93de4a6bfed9ad56725b5b612dcf8cea638e4b6344e6d063bc78ce3421",
+  "decision.overruled@2": "d1:3eacdb5c4548232a2c1d1c9508fb58b7aa84d181f546269bb0fad52084d316ac",
   "decision.revoked@1": "d1:d444e259a11340fb0ba3137a55d4c049ae8352f9a403c30df423b4def2323e20",
   "default.undone@1": "d1:0a6aad78e4f9f09f19633e11199f5ebb903ccd52fb09f46b86164036e4a084f1",
   "definition.drafted@1": "d1:0f56b04a27ebefe04d7e8aba1ca74d5747dbb3d7e0bf2d502673c2f2af035d83",
@@ -156,6 +159,7 @@
   "verdict.outcome@1": "d1:6141010fc46fc6b42fd1e34150d84a143104bbc1a9e558f3dffe8b892d294bd9",
   "verdict.stale@1": "d1:b274adce94522b0f05ac811d3acc024012303d8fcfe6be9d8564ed832d280f7b",
   "verdict@1": "d1:e48841a88319e4c1c3edbba78362c1a5a7c79cfd88272c66ce022cf52b8dc508",
+  "work.broke@1": "d1:d6fb16f7d3a7137641c50eb32bf6fdf55d8a903b20349ecbad5dcc1a343b8b02",
   "worktree.created@1": "d1:dea9b05ceff3089d338c4881262aa529524cc63c3161257eda6e2db5edc0f2e3",
   "worktree.removed@1": "d1:645f1b3b4d84d811073e3d08b3b053a46a0b127d9a237fca629bee48a9eb2939"
 }

@@ -1,0 +1,72 @@
+[
+  {
+    "kind": "authority", "same": true, "why": "another PR number",
+    "a": { "question": "Merge #301?", "options": ["merge", "hold"], "subject": { "effect": "merge", "target": { "kind": "pr", "ref": "pr:301", "owner": "thread:T1" }, "change": { "kind": "fix", "lines": 24, "paths": ["src/cart/sum.ts"] } } },
+    "b": { "question": "Merge #4410?", "options": ["merge", "hold"], "subject": { "effect": "merge", "target": { "kind": "pr", "ref": "pr:4410", "owner": "thread:T1" }, "change": { "kind": "fix", "lines": 9, "paths": ["src/api/retry.ts"] } } }
+  },
+  {
+    "kind": "authority", "same": true, "why": "a paraphrase",
+    "a": { "question": "Push fix/totals to origin?", "options": ["push", "hold"], "subject": { "effect": "push", "target": { "kind": "branch", "ref": "branch:fix/totals", "owner": "thread:T1" }, "change": { "kind": "fix", "lines": 12, "paths": ["src/totals.ts"] } } },
+    "b": { "question": "Can I send this branch up to the remote?", "options": ["push", "hold"], "subject": { "effect": "push", "target": { "kind": "branch", "ref": "branch:fix/totals", "owner": "thread:T1" }, "change": { "kind": "fix", "lines": 12, "paths": ["src/totals.ts"] } } }
+  },
+  {
+    "kind": "authority", "same": false, "why": "another owner",
+    "a": { "question": "Merge #301?", "options": ["merge", "hold"], "subject": { "effect": "merge", "target": { "kind": "pr", "ref": "pr:301", "owner": "thread:T1" }, "change": { "kind": "fix", "lines": 24, "paths": ["src/cart/sum.ts"] } } },
+    "b": { "question": "Merge #302?", "options": ["merge", "hold"], "subject": { "effect": "merge", "target": { "kind": "pr", "ref": "pr:302", "owner": "thread:T2" }, "change": { "kind": "fix", "lines": 24, "paths": ["src/cart/sum.ts"] } } }
+  },
+  {
+    "kind": "authority", "same": false, "why": "another kind of change",
+    "a": { "question": "Merge #301?", "options": ["merge", "hold"], "subject": { "effect": "merge", "target": { "kind": "pr", "ref": "pr:301", "owner": "thread:T1" }, "change": { "kind": "fix", "lines": 24, "paths": ["src/cart/sum.ts"] } } },
+    "b": { "question": "Merge #301?", "options": ["merge", "hold"], "subject": { "effect": "merge", "target": { "kind": "pr", "ref": "pr:301", "owner": "thread:T1" }, "change": { "kind": "feature", "lines": 24, "paths": ["src/cart/coupon.ts"] } } }
+  },
+  {
+    "kind": "authority", "same": false, "why": "another target kind",
+    "a": { "question": "Delete the build cache?", "options": ["delete", "keep"], "subject": { "effect": "delete", "target": { "kind": "cache", "ref": "cache:build", "owner": "thread:T1" }, "change": null } },
+    "b": { "question": "Delete the build cache?", "options": ["delete", "keep"], "subject": { "effect": "delete", "target": { "kind": "database", "ref": "db:build", "owner": "thread:T1" }, "change": null } }
+  },
+  {
+    "kind": "taste", "same": true, "why": "a paraphrase",
+    "a": { "question": "Rounded or square corners on the pay button?", "options": ["rounded", "square"], "subject": { "screen": "journey:checkout/pay", "element": "pay-button" } },
+    "b": { "question": "Should the pay button's corners be rounded?", "options": ["rounded", "square"], "subject": { "screen": "journey:checkout/pay", "element": "pay-button" } }
+  },
+  {
+    "kind": "taste", "same": false, "why": "another screen",
+    "a": { "question": "Rounded or square corners on the pay button?", "options": ["rounded", "square"], "subject": { "screen": "journey:checkout/pay", "element": "pay-button" } },
+    "b": { "question": "Rounded or square corners on the pay button?", "options": ["rounded", "square"], "subject": { "screen": "journey:subscribe/pay", "element": "pay-button" } }
+  },
+  {
+    "kind": "taste", "same": false, "why": "another element",
+    "a": { "question": "Rounded or square corners on the pay button?", "options": ["rounded", "square"], "subject": { "screen": "journey:checkout/pay", "element": "pay-button" } },
+    "b": { "question": "Rounded or square corners on the cancel button?", "options": ["rounded", "square"], "subject": { "screen": "journey:checkout/pay", "element": "cancel-button" } }
+  },
+  {
+    "kind": "choice", "same": true, "why": "a paraphrase",
+    "a": { "question": "Log in JSON or plain text?", "options": ["json", "text"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } },
+    "b": { "question": "Should the logs be structured JSON lines?", "options": ["json", "text"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } }
+  },
+  {
+    "kind": "choice", "same": true, "why": "the options in another order",
+    "a": { "question": "Log in JSON or plain text?", "options": ["json", "text"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } },
+    "b": { "question": "Plain text or JSON for the logs?", "options": ["text", "json"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } }
+  },
+  {
+    "kind": "choice", "same": false, "why": "one option changed",
+    "a": { "question": "Log in JSON or plain text?", "options": ["json", "text"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } },
+    "b": { "question": "Log in JSON or plain text?", "options": ["json", "logfmt"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } }
+  },
+  {
+    "kind": "choice", "same": false, "why": "another requirement",
+    "a": { "question": "Log in JSON or plain text?", "options": ["json", "text"], "subject": { "point": "req:01JREQLOGFORMAT0000000000A" } },
+    "b": { "question": "Log in JSON or plain text?", "options": ["json", "text"], "subject": { "point": "req:01JREQAUDITLOG000000000000A" } }
+  },
+  {
+    "kind": "definition", "same": true, "why": "a paraphrase",
+    "a": { "question": "Does done include the dark theme?", "options": ["keep", "drop"], "subject": { "point": "req:01JREQDARKTHEME00000000000A" } },
+    "b": { "question": "Is the dark theme part of this task's done?", "options": ["keep", "drop"], "subject": { "point": "req:01JREQDARKTHEME00000000000A" } }
+  },
+  {
+    "kind": "definition", "same": false, "why": "another decision point",
+    "a": { "question": "Does done include the dark theme?", "options": ["keep", "drop"], "subject": { "point": "req:01JREQDARKTHEME00000000000A" } },
+    "b": { "question": "Does done include the dark theme?", "options": ["keep", "drop"], "subject": { "point": "req:01JREQDARKTHEME00000000000B" } }
+  }
+]
