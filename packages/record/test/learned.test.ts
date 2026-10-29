@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openEvidenceStore } from '@deepbuild/evidence';
 import type { EvidenceStore } from '@deepbuild/evidence';
-import { openRecord, RecordError } from '../src/index.js';
+import { compareReplay, openRecord, planHash, RecordError } from '../src/index.js';
 import { dependsOn } from '../src/learned.js';
 import type { Connection, RecordStore } from '../src/index.js';
 
@@ -438,6 +438,36 @@ describe('the start slice holds every decision whose scope covers the session, a
     await record.append({ ...core, session: S }, { v: 1, id: D, kind: 'decision.created', ts: T0 + 500, data: { key: 'a'.repeat(64), scope: 'session:claude0001abcd', answer: 'approve the push to staging', ask: `ask:${ulidAt(T0 + 400)}` } });
     expect((await record.startSlice(S)).find((e) => e.target === `decision:${D}`)?.text).toBe('approve the push to staging');
     expect((await record.startSlice(other)).map((e) => e.target)).not.toContain(`decision:${D}`);
+    await record.close();
+  });
+});
+
+describe("the local-first rule widens a change only to its own session's repo (#112)", () => {
+  it('refuses a widening to another repo, or of a change not in force at a session, though its replay decides for it', async () => {
+    // Failed on a widener that read only the replay, which took a shop session's change into the blog.
+    const { record, store, S } = await world([said('m1', 'seed the db before e2e')]);
+    const id = await apply(record, core, { layer: 'learned', target: 'slice:seed', diff: '+ seed before e2e', evidence: [{ at: `session:${S}#m1`, quote: 'seed the db' }], scope: `session:${S}`, applied_by: 'rule:localfirst' });
+    const tasks = Array.from({ length: 20 }, (_, i) => `t${i + 1}`);
+    const plan = {
+      id: 'p1', cutoff: T0, tasks, fitted: [], variants: { base: { name: 'b', files: {} }, change: { name: 'c', files: {} } }, models: { agent: 'claude-sonnet-5-5', judge: 'gpt-reserve' },
+      repeats: 1, measures: [{ name: 'grade', better: 'higher' as const }], rule: 'paired-mean-one-sided-95' as const, budget: { ms: 1, plan_share: 1 },
+    };
+    const hash = planHash(plan);
+    const runs = tasks.flatMap((task, i) => [
+      { plan: hash, task, side: 'base' as const, repeat: 1, ok: true, metrics: { grade: 0.4 } },
+      { plan: hash, task, side: 'change' as const, repeat: 1, ok: true, metrics: { grade: 0.7 + (i % 3) / 100 } },
+    ]);
+    expect(compareReplay({ plan, runs }).outcome).toBe('adopt');
+    const put = await store.connect({ role: 'deepbuild', via: 'capture' }).put({ bytes: new Uint8Array(Buffer.from(JSON.stringify({ plan, runs }))), kind: 'replay', source: 'deepbuild', redaction: 'complete', license: { name: 'own', allows: [] } });
+    if (put.status !== 'stored') throw Error('replay not stored');
+    const widen = async (scope: string, supersedes: string, at: number): Promise<string> => {
+      const w = ulidAt(T0 + at);
+      await record.append(core, { v: 1, id: w, kind: 'learn.widened', ts: T0 + at, data: { replay: null, supersedes, layer: 'learned', target: 'slice:seed', diff: '+ seed before e2e', evidence: [{ at: `ev:${put.evidence.sha256}`, quote: '"p1"' }], scope, applied_by: 'rule:localfirst' } as never });
+      return w;
+    };
+    expect(await stateOf(record, await widen('repo:blog', `doc:${id}`, 2000))).toBe('refused');
+    expect(await stateOf(record, await widen('repo:shop', 'doc:01NOTACHANGE', 3000))).toBe('refused');
+    expect(await stateOf(record, await widen('repo:shop', `doc:${id}`, 4000))).toBe('applied');
     await record.close();
   });
 });
