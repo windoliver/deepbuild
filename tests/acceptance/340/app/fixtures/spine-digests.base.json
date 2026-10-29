@@ -1,0 +1,14 @@
+{
+  "readBy": "contract.test.ts: the d1 digests of #303's and #311's schemas on the verdict spine at the base commit fe593280, copied from its packages/contracts/digests.json; #340 adds `app` as a minor of user.ask@1 and leaves these as they are",
+  "base": "fe593280",
+  "digests": {
+    "task.created@1": "d1:33c367d66d791d43627c72da7aed93cb669719b4e45890064551fff597cd52f7",
+    "definition.locked@1": "d1:5e818beb9494de57d7221b24128e4d2a207894d156ac39b07c80b27e38aa6f57",
+    "definition.locked@2": "d1:5b042bde7b32f26c50ff88b37d08441d6736f19520e956535d4310ba640da024",
+    "claim.made@3": "d1:e6cd13e662e96611022468621977abbc72073fe0f0820502068d36e3c76dcff5",
+    "agent.stop@4": "d1:a57de60d915ce7d0d70eb3300a6b8bb02c01cb5f9c4edf0d7413f1f1a48aafc1",
+    "verdict@1": "d1:e48841a88319e4c1c3edbba78362c1a5a7c79cfd88272c66ce022cf52b8dc508",
+    "verdict.made@1": "d1:88ef24f19dc84da4e90fe1c2ab5a22850ca5f6e81762e4f979ff07d8870f866e",
+    "verdict.outcome@1": "d1:6141010fc46fc6b42fd1e34150d84a143104bbc1a9e558f3dffe8b892d294bd9"
+  }
+}
