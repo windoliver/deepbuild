@@ -72,9 +72,11 @@ function checkEnvironments(environments: unknown): ContractIssue[] {
 export function checkManifest(value: unknown): Validation {
   // Read beside extension.manifest@1, whose frozen shape doesn't list them: `templates` is hook.template@1's,
   // `environments` the environment slot's (#331), `conflicts` and `kernel` are extension.edges@1's and `signature` is
-  // package.signature@1's (#351). Each sits at the manifest's root, so its issues' paths are the manifest's.
+  // package.signature@1's (#351), and `leases` is an array here, each item held to lease.kind@1 and to the names
+  // other packages declared once the host declares it in the lease table (#44). Each sits at the manifest's root, so its
+  // issues' paths are the manifest's.
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, environments, conflicts, kernel, signature, ...rest } = object ? value as Record<string, unknown> : {};
+  const { templates, environments, conflicts, kernel, signature, leases, ...rest } = object ? value as Record<string, unknown> : {};
   const held = validate(MANIFEST, object ? rest : value);
   if (!held.ok) return held;
   const beside = (schema: string, fields: Record<string, unknown>): ContractIssue[] => {
@@ -87,6 +89,7 @@ export function checkManifest(value: unknown): Validation {
   const issues: ContractIssue[] = [
     ...(templates === undefined ? [] : checkTemplates(templates)),
     ...(environments === undefined ? [] : checkEnvironments(environments)),
+    ...(leases === undefined || Array.isArray(leases) ? [] : [issue('type', '/leases', leases)]),
     ...beside('extension.edges@1', { conflicts, kernel }),
     ...beside('package.signature@1', { signature }),
   ];
