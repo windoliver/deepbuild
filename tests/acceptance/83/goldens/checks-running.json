@@ -1,0 +1,22 @@
+{
+  "name": "checks running",
+  "state": "a stop whose fast-lane checks passed (2 of 4) and whose two slow checks still run, about 4 minutes expected; no verdict yet",
+  "plant": {
+    "outcome": null,
+    "requirements": [
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R1", "outcome": "PASS", "check": "unit" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R2", "outcome": "PASS", "check": "typecheck" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R3", "outcome": "pending", "check": "journey:checkout" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R4", "outcome": "pending", "check": "journey:receipt" }
+    ],
+    "ran": [
+      { "check": "unit", "outcome": "passed" },
+      { "check": "typecheck", "outcome": "passed" }
+    ],
+    "running": [
+      { "check": "journey:checkout", "about_s": 240 },
+      { "check": "journey:receipt", "about_s": 200 }
+    ]
+  },
+  "line": "says done 2/4 · 2 checks running · about 4 min · next: DeepBuild · receipt"
+}

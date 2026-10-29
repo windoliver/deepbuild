@@ -32,6 +32,8 @@ export const API = Object.freeze([
   { method: 'deep.provide', needs: null },
   { method: 'deep.use', needs: null },
   { method: 'deep.read', needs: null },
+  // #44: a lease from the kernel's one table, held by the package itself.
+  { method: 'deep.lease', needs: null },
 ].map((m) => Object.freeze(m)));
 
 /**
