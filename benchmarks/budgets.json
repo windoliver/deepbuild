@@ -291,6 +291,17 @@
       "initialReason": "Issue #303 first measurement: the merge base's prompt hook opens no ask-task and has no task for it. One process starts the hub on a temp home and sends 1,000 UserPromptSubmit requests, each a new prompt that asks for a change, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 5 ms added to the prompt hook against the merge base stays in tests/acceptance/303/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-compact",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "compact"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #340 first measurement: after a compaction the SessionStart hook sends the open asks' requirement IDs again. One process starts the hub on a temp home, starts a session, and sends 1,000 SessionStart requests with source compact, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 10 ms at p95 on top of process start stays in tests/acceptance/340/flow/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "otlp-receive-20k-spans",
       "command": [
         "node",
