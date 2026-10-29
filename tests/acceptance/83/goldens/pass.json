@@ -1,0 +1,20 @@
+{
+  "name": "PASS",
+  "state": "a PASS verdict on four requirements",
+  "plant": {
+    "outcome": "PASS",
+    "requirements": [
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R1", "outcome": "PASS", "check": "unit" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R2", "outcome": "PASS", "check": "typecheck" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R3", "outcome": "PASS", "check": "journey:checkout" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R4", "outcome": "PASS", "check": "journey:receipt" }
+    ],
+    "ran": [
+      { "check": "unit", "outcome": "passed" },
+      { "check": "typecheck", "outcome": "passed" },
+      { "check": "journey:checkout", "outcome": "passed" },
+      { "check": "journey:receipt", "outcome": "passed" }
+    ]
+  },
+  "line": "PASS 4/4 · next: you · receipt"
+}

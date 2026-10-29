@@ -970,6 +970,28 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     } else {
         format!(",\"notes\":{{{notes}}}")
     };
+    // The folders a delete whose reach can't be worked out names, for the hub to stage before it runs (#347); none
+    // when one can't be named, or written exactly.
+    let folders = called.as_ref().and_then(|c| c.stage()).and_then(|f| {
+        f.iter()
+            .map(|p| p.to_str().map(quoted))
+            .collect::<Option<Vec<_>>>()
+    });
+    let stage = matched
+        .iter()
+        .filter(|(g, _)| g.pattern == "effect:unknown-reach-delete")
+        .filter_map(|(g, _)| {
+            folders
+                .as_ref()
+                .map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let stage = if stage.is_empty() {
+        stage
+    } else {
+        format!(",\"stage\":{{{stage}}}")
+    };
     // At SessionStart, whether each billing key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
         let keys = BILLING_KEYS
@@ -999,7 +1021,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             ""
         };
         format!(
-            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{notes},\"payload\":{payload}{billing}{f_test}}}\n",
+            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{notes}{stage},\"payload\":{payload}{billing}{f_test}}}\n",
             quoted(agent),
             quoted(event),
             std::process::id(),
@@ -1398,15 +1420,88 @@ fn waiter() -> ExitCode {
     }
 }
 
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
+}
+
+/// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
+/// clonefile(2); the other platforms' staging isn't built yet, so they can't stage).
+fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let c = |p: &Path| {
+            std::ffi::CString::new(p.as_os_str().as_bytes())
+                .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
+        };
+        const CLONE_NOFOLLOW: u32 = 1;
+        // SAFETY: both are NUL-terminated paths that live through the call.
+        if unsafe { clonefile(c(from)?.as_ptr(), c(to)?.as_ptr(), CLONE_NOFOLLOW) } == 0 {
+            return Ok(());
+        }
+        Err(io::Error::last_os_error())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (from, to);
+        Err(io::Error::from(ErrorKind::Unsupported))
+    }
+}
+
+/// `deep-hook clone <from> <to>`: `from` cloned copy-on-write at `to` (#347). Into a folder that is there, each entry
+/// is cloned over the one of its name and nothing else there is touched, so a staged folder puts back what a run
+/// deleted. Exit 0 cloned, 3 when this file system can't make a copy-on-write copy there, 1 another failure.
+fn clone(from: &Path, to: &Path) -> ExitCode {
+    fn over(from: &Path, to: &Path) -> io::Result<()> {
+        let there = match fs::symlink_metadata(to) {
+            Err(e) if e.kind() == ErrorKind::NotFound => return clone_one(from, to),
+            other => other?,
+        };
+        if there.is_dir() && fs::symlink_metadata(from)?.is_dir() {
+            for entry in fs::read_dir(from)? {
+                let entry = entry?;
+                over(&entry.path(), &to.join(entry.file_name()))?;
+            }
+            return Ok(());
+        }
+        if there.is_dir() {
+            fs::remove_dir_all(to)?;
+        } else {
+            fs::remove_file(to)?;
+        }
+        clone_one(from, to)
+    }
+    match over(from, to) {
+        Ok(()) => ExitCode::SUCCESS,
+        // ENOTSUP and EXDEV: no copy-on-write on this volume, or not between these two.
+        Err(e)
+            if e.kind() == ErrorKind::Unsupported || matches!(e.raw_os_error(), Some(18 | 45)) =>
+        {
+            eprintln!("deep-hook clone: this file system can't make a copy-on-write copy of {} at {}: {e}", from.display(), to.display());
+            ExitCode::from(3)
+        }
+        Err(e) => {
+            eprintln!(
+                "deep-hook clone: {} at {}: {e}",
+                from.display(),
+                to.display()
+            );
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
+        [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {
             send(line);
             return ExitCode::SUCCESS;
