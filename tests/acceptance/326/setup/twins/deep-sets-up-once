@@ -1,0 +1,9 @@
+#!/bin/sh
+# Positive control for the deep CLI (README: Wrong programs): a right program built from merged code. The first `deep`
+# command in a home where DeepBuild isn't set up runs `deep setup`'s steps and says so in one line on stderr; every
+# command then runs as it is.
+if [ ! -e "$HOME/.deepbuild/setup.json" ]; then
+  out=$(deep setup 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }
+  echo "DeepBuild added its hooks in watch-only mode and started the hub; deep setup --undo removes it." >&2
+fi
+exec deep "$@"

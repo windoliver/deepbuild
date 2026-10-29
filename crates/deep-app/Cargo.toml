@@ -21,6 +21,8 @@ serde_json = "1"
 deep-text-gpui = { path = "../deep-text-gpui" }
 # Issue #380: the session line is a stroke of the canvas's marks, painted by deep-marks-gpui.
 deep-marks-gpui = { path = "../deep-marks-gpui" }
+# Issue #326: the look's status map, which every surface draws a state with.
+deep-canvas-marks = { path = "../deep-canvas-marks" }
 # Issue #377: the GPU layer, whose views the window shows in place.
 deep-gpu = { path = "../deep-gpu" }
 
