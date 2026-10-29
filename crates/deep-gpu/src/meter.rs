@@ -2,7 +2,9 @@
 //! frame's GPU time is the time its passes cover, each pass charged only the part of its interval
 //! after every earlier pass's ends; each writer layer keeps a 120-frame ring of its charges and a
 //! ladder that steps it, and only it, down after 30 consecutive frames over its class's frame
-//! limit and back up 120 frames after the view changes. Nothing here allocates per frame.
+//! limit and back up 120 frames after the view changes. The app keeps one more ring and count
+//! (issue #777): every window's frames summed against one budget, which steps down only the
+//! writer that cost the most while the app was over it. Nothing here allocates per frame.
 
 use deep_canvas::budget::Limits;
 
@@ -137,6 +139,10 @@ pub struct Planted {
     pub steps_on_first_slow_frame: bool,
     /// Steps two rungs at a time.
     pub skips_a_rung: bool,
+    /// Budgets each window alone: the app is over only when one window's frame is.
+    pub budgets_each_window: bool,
+    /// Steps down the main window's costliest writer, whichever window the costly one is in.
+    pub steps_main_window: bool,
 }
 
 /// One writer layer's ladder: the degrade level, a transition table stepped frame by frame.
@@ -205,8 +211,15 @@ impl Ladder {
     }
 
     /// One presented frame's charges against the layer's share, its class's frame limits: a
-    /// step down after 30 consecutive frames over, a climb after 120 under once allowed.
-    pub fn frame(&mut self, gpu_ms: f64, cpu_ms: f64, limits: &Limits) -> Option<Step> {
+    /// step down after 30 consecutive frames over, a climb after 120 under once allowed. While the
+    /// app is over its budget (`app_over`) nothing climbs.
+    pub fn frame(
+        &mut self,
+        gpu_ms: f64,
+        cpu_ms: f64,
+        limits: &Limits,
+        app_over: bool,
+    ) -> Option<Step> {
         let over =
             limits.gpu_ms.is_some_and(|l| gpu_ms > l) || limits.cpu_ms.is_some_and(|l| cpu_ms > l);
         if over {
@@ -218,15 +231,15 @@ impl Ladder {
                 DOWN_AFTER
             };
             if self.over >= after {
-                let rungs = if self.planted.skips_a_rung { 2 } else { 1 };
-                let to = self.below(rungs).or_else(|| self.below(1))?;
-                let step = self.go(to, Reason::FrameHealth);
-                self.view_changed = false;
-                return step;
+                return self.health_step();
             }
             return None;
         }
         self.over = 0;
+        if app_over {
+            self.under = 0;
+            return None;
+        }
         if self.climbs() {
             self.under += 1;
             if self.under >= UP_AFTER {
@@ -235,6 +248,16 @@ impl Ladder {
             }
         }
         None
+    }
+
+    /// A step down for frame health: one rung (two on the planted ladder), held until the view
+    /// changes. The app budget takes it for its costly writer.
+    pub fn health_step(&mut self) -> Option<Step> {
+        let rungs = if self.planted.skips_a_rung { 2 } else { 1 };
+        let to = self.below(rungs).or_else(|| self.below(1))?;
+        let step = self.go(to, Reason::FrameHealth);
+        self.view_changed = false;
+        step
     }
 
     /// Whether the rung may be climbed now: below the base, not on a low battery, not held by
@@ -343,6 +366,102 @@ impl Ring {
     pub fn oldest_first(&self) -> impl Iterator<Item = f64> + '_ {
         let start = (self.next + RING - self.len) % RING;
         (0..self.len).map(move |i| self.values[(start + i) % RING])
+    }
+}
+
+/// The app's one GPU budget across every window, on any display: each frame's GPU time is every
+/// window's views' charges summed, and after 30 consecutive frames over the limit the writer whose
+/// charges were the most over those frames is the one to step down. No window has a budget of its
+/// own.
+#[derive(Clone, Debug)]
+pub struct AppMeter {
+    pub ring: Ring,
+    over: u32,
+    /// Each session's charges over the current run of frames over the limit, by session index.
+    costs: Vec<f64>,
+    /// The last frame's limit, and whether it was over.
+    pub limit: Option<f64>,
+    pub last_over: bool,
+    planted: Planted,
+}
+
+impl AppMeter {
+    pub fn new(planted: Planted) -> AppMeter {
+        AppMeter {
+            ring: Ring::default(),
+            over: 0,
+            costs: Vec::new(),
+            limit: None,
+            last_over: false,
+            planted,
+        }
+    }
+
+    /// A session opens: the next index.
+    pub fn open(&mut self) {
+        self.costs.push(0.0);
+    }
+
+    /// A session closes: what it cost leaves the count, so it can't be the one stepped.
+    pub fn close(&mut self, session: usize) {
+        if let Some(c) = self.costs.get_mut(session) {
+            *c = 0.0;
+        }
+    }
+
+    /// One app frame: `views` are each drawn view's (session, window, charged GPU ms) in every
+    /// window, the main window 0. The session to step down, once 30 consecutive frames went over
+    /// `limit`.
+    pub fn frame<I>(&mut self, views: I, limit: Option<f64>) -> Option<usize>
+    where
+        I: Iterator<Item = (usize, usize, f64)> + Clone,
+    {
+        let total: f64 = views.clone().map(|(_, _, ms)| ms).sum();
+        self.ring.push(total);
+        self.limit = limit;
+        let over = limit.is_some_and(|l| {
+            if self.planted.budgets_each_window {
+                views.clone().any(|(_, w, _)| {
+                    let each: f64 = views.clone().filter(|v| v.1 == w).map(|v| v.2).sum();
+                    each > l
+                })
+            } else {
+                total > l
+            }
+        });
+        self.last_over = over;
+        if !over {
+            self.restart();
+            return None;
+        }
+        self.over += 1;
+        for (s, w, ms) in views {
+            if let Some(c) = self
+                .costs
+                .get_mut(s)
+                .filter(|_| !(self.planted.steps_main_window && w != 0))
+            {
+                *c += ms;
+            }
+        }
+        if self.over < DOWN_AFTER {
+            return None;
+        }
+        let costly = self
+            .costs
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| **c > 0.0)
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map(|(s, _)| s);
+        self.restart();
+        costly
+    }
+
+    /// The count restarts after a rung change.
+    pub fn restart(&mut self) {
+        self.over = 0;
+        self.costs.iter_mut().for_each(|c| *c = 0.0);
     }
 }
 
@@ -469,7 +588,7 @@ mod tests {
     ) -> Vec<(u32, Step)> {
         let l = Class::WorkProduct.limits();
         frames
-            .filter_map(|f| ladder.frame(ms, 0.0, &l).map(|s| (f, s)))
+            .filter_map(|f| ladder.frame(ms, 0.0, &l, false).map(|s| (f, s)))
             .collect()
     }
 
@@ -529,5 +648,66 @@ mod tests {
         }
         let v: Vec<f64> = r.oldest_first().collect();
         assert_eq!((v.len(), v[0], v[119]), (120, 180.0, 299.0));
+    }
+
+    fn meter_of(sessions: usize, planted: Planted) -> AppMeter {
+        let mut app = AppMeter::new(planted);
+        (0..sessions).for_each(|_| app.open());
+        app
+    }
+
+    /// Two windows, each a frame under 2 ms: the main one's two writers at 0.5 and 0.4 ms, the
+    /// other's one at `pop` ms.
+    fn two_windows(app: &mut AppMeter, frames: u32, pop: f64) -> Vec<(u32, usize)> {
+        (1..=frames)
+            .filter_map(|f| {
+                let views = [(0, 0, 0.5), (1, 0, 0.4), (2, 1, pop)];
+                app.frame(views.into_iter(), Some(2.0)).map(|s| (f, s))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn one_frame_under_or_a_restart_starts_the_count_again() {
+        let mut app = meter_of(3, Planted::default());
+        assert!(two_windows(&mut app, 29, 1.4).is_empty());
+        assert!(two_windows(&mut app, 1, 0.1).is_empty());
+        assert!(two_windows(&mut app, 20, 1.4).is_empty());
+        app.restart();
+        assert_eq!(two_windows(&mut app, 30, 1.4), vec![(30, 2)]);
+    }
+
+    #[test]
+    fn the_costly_writer_is_the_one_that_cost_most_over_the_run_not_in_the_last_frame() {
+        let mut app = meter_of(2, Planted::default());
+        for f in 1..=30 {
+            let (a, b) = if f == 30 { (0.1, 2.0) } else { (1.5, 1.0) };
+            let got = app.frame([(0, 0, a), (1, 1, b)].into_iter(), Some(2.0));
+            assert_eq!(got, (f == 30).then_some(0));
+        }
+    }
+
+    #[test]
+    fn nothing_climbs_while_the_app_is_over_its_budget() {
+        let (mut l, _) = Ladder::new(Planted::default());
+        run(&mut l, 1..=30, 3.0);
+        l.view_changed();
+        let limits = Class::WorkProduct.limits();
+        assert!((1..=300).all(|_| l.frame(1.0, 0.0, &limits, true).is_none()));
+        assert_eq!(l.rung(), Rung::EffectsOff);
+        let up = (1..=120).find_map(|f| l.frame(1.0, 0.0, &limits, false).map(|s| (f, s.to)));
+        assert_eq!(up, Some((120, Rung::Base)));
+    }
+
+    #[test]
+    fn a_session_that_closes_mid_run_is_never_the_one_stepped() {
+        let mut app = meter_of(3, Planted::default());
+        assert!(two_windows(&mut app, 20, 1.4).is_empty());
+        app.close(2);
+        let after = (21..=30).find_map(|f| {
+            app.frame([(0, 0, 1.5), (1, 0, 0.6)].into_iter(), Some(2.0))
+                .map(|s| (f, s))
+        });
+        assert_eq!(after, Some((30, 0)));
     }
 }
