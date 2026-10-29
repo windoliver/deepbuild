@@ -16,7 +16,8 @@ export async function envCommand(args: readonly string[]): Promise<number> {
   let usage = command !== 'up' && command !== 'down';
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--json') json = true;
-    else if (rest[i] === '--root' && rest[i + 1]) root = rest[++i];
+    // A flag where the folder goes is a usage error, not a folder named for it.
+    else if (rest[i] === '--root' && rest[i + 1] && !rest[i + 1]!.startsWith('--')) root = rest[++i];
     else usage = true;
   }
   if (usage) {
