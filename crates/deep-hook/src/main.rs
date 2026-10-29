@@ -161,11 +161,13 @@ struct Guard {
     next_step: String,
 }
 
-/// What deep-hook reads of rules.json: its entries, and what each tool the hub counted counts as.
+/// What deep-hook reads of rules.json: its entries, what each tool the hub counted counts as, and the cloud owners
+/// (such as `aws:<account>`) your standing rules let create a resource with the hub down.
 #[derive(Default)]
 struct Rules {
     guards: Vec<Guard>,
     classes: Vec<(String, String)>,
+    standing: Vec<String>,
 }
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
@@ -195,7 +197,59 @@ fn rules() -> Result<Rules, String> {
     Ok(Rules {
         guards,
         classes: classes(member(&rules, "classes"))?,
+        standing: standing(member(&rules, "standing")),
     })
+}
+
+/// A `standing` member the hub copies your standing rules into (#23), `[{"effect": "cloud-resource", "owner": ...}]`:
+/// the owners they cover. One it can't read covers nothing, so the floor stays.
+fn standing(value: Option<&Value>) -> Vec<String> {
+    let Some(Value::Array(rules)) = value else {
+        return Vec::new();
+    };
+    rules
+        .iter()
+        .filter(|r| matches!(member(r, "effect"), Some(Value::String(e)) if e == "cloud-resource"))
+        .filter_map(|r| match member(r, "owner") {
+            Some(Value::String(owner)) if !owner.is_empty() => Some(owner.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The cloud owner a command creates its resource under, as the hub names it: an AWS command's account, by its
+/// `--profile`'s `sso_account_id` in ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
+fn cloud_owner(command: &str) -> Option<String> {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    if words.first().map(|w| w.trim_matches(['"', '\''])) != Some("aws") {
+        return None;
+    }
+    let profile = words
+        .iter()
+        .position(|w| *w == "--profile" || w.starts_with("--profile="))
+        .and_then(|i| match words[i].strip_prefix("--profile=") {
+            Some(p) => Some(p),
+            None => words.get(i + 1).copied(),
+        })
+        .unwrap_or("default")
+        .trim_matches(['"', '\'']);
+    let config = fs::read_to_string(
+        PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
+    )
+    .unwrap_or_default();
+    let mut section = String::new();
+    for line in config.lines().map(str::trim) {
+        if let Some(head) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            section = head.trim_start_matches("profile ").trim().to_string();
+        } else if section == profile {
+            if let Some((key, value)) = line.split_once('=') {
+                if key.trim() == "sso_account_id" {
+                    return Some(format!("aws:{}", value.trim()));
+                }
+            }
+        }
+    }
+    Some(format!("aws-profile:{profile}"))
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
@@ -854,10 +908,21 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             .collect(),
         None => Vec::new(),
     };
+    // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
+    let command = parsed
+        .as_ref()
+        .and_then(|p| member(p, "tool_input"))
+        .and_then(|i| member(i, "command"));
+    let covered = match command {
+        Some(Value::String(c)) => {
+            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
+        }
+        _ => false,
+    };
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
     let denials: Vec<String> = matched
         .iter()
-        .filter(|(g, _)| g.fail_closed)
+        .filter(|(g, _)| g.fail_closed && !(covered && g.pattern == "effect:cloud-resource"))
         .map(|(guard, hit)| {
             let detail = hit
                 .detail
