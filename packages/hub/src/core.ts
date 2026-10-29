@@ -1851,7 +1851,16 @@ export class Core {
     try {
       if (key) await this.extensions.trustKey(this.connection('cli'), String(m.id), String(key));
       const pkg = await this.extensions.install({ from, builtBy: null });
-      return { status: 'installed', id: pkg.id, version: pkg.version, digest: pkg.digest };
+      const installed = { status: 'installed', id: pkg.id, version: pkg.version, digest: pkg.digest };
+      // Nothing loads before its conformance passes (#348): it runs now, and the package loads at once; its result,
+      // kept for these bytes, lets each later start load it. One that fails stays installed, and the reason is shown.
+      try {
+        const checked = await this.extensions.check(pkg);
+        const load = checked.passed ? await this.extensions.load(pkg) : { status: 'refused' as const, reason: `it failed conformance: ${checked.reasons.join('; ')}` };
+        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : installed;
+      } catch (error) {
+        return { ...installed, not_loaded: error instanceof Error ? error.message : String(error) };
+      }
     } catch (error) {
       return { status: 'refused', reason: error instanceof Error ? error.message : String(error) };
     }
