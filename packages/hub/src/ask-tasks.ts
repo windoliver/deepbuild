@@ -76,6 +76,8 @@ export interface AskTaskOptions {
   keep(bytes: Uint8Array, source: string): Promise<string>;
   /** Runs a claim's check from the bytes the store keeps under its approved digest. */
   run(r: { claim: string; check: string; approved: string; commit: string; cwd: string }): Promise<void>;
+  /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
+  invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
 
 export class AskTasks {
@@ -243,10 +245,17 @@ export class AskTasks {
       const id = ulid(ts);
       const connection = this.o.connection(session, agent);
       const commit = head?.sha ?? definition.base_commit;
+      const hash = this.hashOf(definition);
       await this.o.append(connection, {
         v: 3, id, kind: 'claim.made', ts,
-        data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash: this.hashOf(definition) },
+        data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash },
       });
+      // The core's floor (#29): a recomputed hash that differs from the locked one makes the claim INVALID, naming what
+      // changed, whatever done gate is installed and in safe mode.
+      if (hash !== String(row.hash)) {
+        const what = changed.length ? changed.map((c) => c.check) : ['the definition'];
+        await this.o.invalid(`claim:${id}`, commit, `the definition's hash differs from the one locked for ${task_ref}; changed: ${what.join(', ')}`);
+      }
       for (const c of changed) {
         const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
         const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = '${sql(diff)}' LIMIT 1`);

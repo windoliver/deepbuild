@@ -19,7 +19,8 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
-import { openLeases } from '@deepbuild/leases';
+import { slot } from '@deepbuild/gate';
+import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
@@ -217,6 +218,7 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -327,6 +329,7 @@ export class Core {
       raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runApproved(r),
+      invalid: (claim, commit, reason) => this.invalid(claim, commit, reason),
     });
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
@@ -375,7 +378,7 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
@@ -2444,6 +2447,18 @@ export class Core {
     if (claimed === 'agent' && session) return { role: 'agent', session };
     return fromCredential;
   }
+  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */
+  private async invalid(claim: string, commit: string, reason: string): Promise<void> {
+    const ts = this.now();
+    const id = ulid(ts);
+    await this.append(this.connection('core'), {
+      v: 1, id, kind: 'verdict.made', ts, subject: claim,
+      data: {
+        outcome: 'INVALID', verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
+        key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
+      },
+    });
+  }
   /** A drafted check's bytes as approved at its definition's lock, kept by digest for the claim's checks to run. */
   private async keep(bytes: Uint8Array, source: string): Promise<string> {
     const put = await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'unknown', license: { name: 'session', allows: [] } });
@@ -2554,9 +2569,18 @@ export class Core {
     return { run };
   }
 
+  /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
+  private async claimSession(claim: string): Promise<string> {
+    const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = '${sql(claim.slice(6))}' LIMIT 1`)) as { session_id: string | null }[];
+    return row?.session_id ? `session:${letters(row.session_id)}` : 'core';
+  }
   /** Starts a run through the host, sandboxed, with the hub's run token injected; its output becomes scrubbed evidence. */
   private async launch(run: Run): Promise<string> {
     this.writeJournal((runs) => { runs[run.run] = run; });
+    // Every check run takes a `cpu.slot` from the kernel's lease table first, held for the claim's session (#29):
+    // at most half the cores run checks, and the slot shows in the lease table under that session.
+    const holder = await this.claimSession(run.claim);
+    const lease = await slot(this.leases, holder, run.run);
     await this.appendCore('run.started', { run: run.run, check: run.check, claim: run.claim, commit: run.commit }, { subject: run.run });
     const token = randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
@@ -2626,7 +2650,7 @@ export class Core {
       await this.finish(run, outcome, findings, evidence);
     });
     this.runs.set(run.run, { run, done, stop });
-    void done.finally(() => this.runs.delete(run.run));
+    void done.finally(() => this.leases.release(lease.id, []).catch(() => undefined)).finally(() => this.runs.delete(run.run));
     return run.run;
   }
   private async finish(run: Run, outcome: string, findings: string[], evidence: string[]): Promise<void> {
