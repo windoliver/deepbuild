@@ -38,7 +38,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::shell::{self, glob, lexical, real, Run};
+use crate::shell::{self, glob, lexical, real, Arg, Run};
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
@@ -249,6 +249,45 @@ impl Call {
         }
     }
 
+    /// The folders a delete whose reach can't be worked out names, for the hub to stage before it runs (#347): each
+    /// path it deletes, the folder a pattern's literal part ends in, and for `git clean` or a `find` with no starting
+    /// point the folder it runs in. None when one of them is a value the line can't know, or the folder it runs in is.
+    pub fn stage(&self) -> Option<Vec<PathBuf>> {
+        let mut folders: Vec<PathBuf> = Vec::new();
+        for run in self.runs.iter().filter(|r| unknown_reach(r)) {
+            let cwd = run.cwd.as_ref()?;
+            let named = targets(run);
+            if run.is("git") || (run.is("find") && named.is_empty()) {
+                folders.push(lexical(cwd));
+                continue;
+            }
+            if named.is_empty() {
+                return None;
+            }
+            for arg in named {
+                let text = arg.text.as_deref()?;
+                let text = if arg.glob {
+                    let cut = text.find(['*', '?', '[']).unwrap_or(text.len());
+                    &text[..text[..cut].rfind('/').map_or(0, |k| k + 1)]
+                } else {
+                    text
+                };
+                let path = match text.strip_prefix("~/") {
+                    Some(rest) => self.home.join(rest),
+                    None if text == "~" => self.home.clone(),
+                    None => cwd.join(text),
+                };
+                folders.push(lexical(&path));
+            }
+        }
+        // A folder inside another one named is staged with it.
+        folders.sort();
+        folders.dedup();
+        let all = folders.clone();
+        folders.retain(|f| !all.iter().any(|g| g != f && f.starts_with(g)));
+        Some(folders)
+    }
+
     /// Whether a run is `deep hub stop` aimed at the installed hub, `~/.deepbuild`, not a dev hub's `--root`.
     fn stops_installed_hub(&self, run: &Run) -> bool {
         let words = run.words();
@@ -306,9 +345,7 @@ impl Call {
             "cloud-resource" => self.runs.iter().find(|r| creates_cloud(r)),
             "dependency" => self.runs.iter().find(|r| adds_dependency(r)),
             "service" => self.runs.iter().find(|r| starts_service(r)),
-            "unknown-reach-delete" => self.runs.iter().find(|r| {
-                deletes(r) && (r.scripted || r.args.iter().any(|a| a.glob || a.text.is_none()))
-            }),
+            "unknown-reach-delete" => self.runs.iter().find(|r| unknown_reach(r)),
             "push" => self
                 .runs
                 .iter()
@@ -550,6 +587,40 @@ fn pgid(pid: i64) -> Option<i64> {
 }
 
 /// A command that deletes files git may not restore: rm, unlink, shred, `find -delete`, `git clean`, `rsync --delete`.
+/// A delete whose reach can't be worked out before it runs: a script file runs it, or it names a pattern or a value
+/// the line can't know.
+fn unknown_reach(run: &Run) -> bool {
+    deletes(run) && (run.scripted || run.args.iter().any(|a| a.glob || a.text.is_none()))
+}
+
+/// The arguments a delete deletes: rm's paths, find's starting points, rsync's destination; git clean's is its folder.
+fn targets(run: &Run) -> Vec<&Arg> {
+    let mut plain = Vec::new();
+    let mut options = true;
+    for a in &run.args {
+        match a.text.as_deref() {
+            Some("--") if options => options = false,
+            Some(t) if options && t.starts_with('-') && t.len() > 1 => {}
+            _ => plain.push(a),
+        }
+    }
+    if run.is("find") {
+        return run
+            .args
+            .iter()
+            .take_while(|a| {
+                !a.text
+                    .as_deref()
+                    .is_some_and(|t| t.starts_with('-') || t == "(" || t == "!")
+            })
+            .collect();
+    }
+    if run.is("rsync") {
+        return plain.last().copied().into_iter().collect();
+    }
+    plain
+}
+
 fn deletes(run: &Run) -> bool {
     let words = run.words();
     ["rm", "unlink", "shred", "srm"].iter().any(|n| run.is(n))

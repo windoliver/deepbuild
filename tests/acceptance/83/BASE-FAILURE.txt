@@ -1,0 +1,320 @@
+tests/acceptance/83 at the base commit (nothing of #83 implemented)
+===================================================================
+
+Base commit : 7b39aa0d0c006301ee72a96c3ce9868181205803 (origin/main, "Merge pull request #778")
+Date        : 2026-10-28
+Node        : v24.22.0
+tsc         : node node_modules/typescript/bin/tsc -p tests/acceptance/83/tsconfig.json -> exit 0 (clean)
+Command     : node node_modules/vitest/vitest.mjs run --root tests/acceptance/83 --reporter=verbose --no-file-parallelism
+Machine     : not the reference Mac; 1-minute load far above 8 cores during the run (see AC12 below)
+Result      : 23 failed | 4 passed | 1 skipped (28)
+
+Why each test fails here (its criterion assertion, not a load error)
+--------------------------------------------------------------------
+line.test.ts
+  AC1 Claude Code  : "a judged stop's reply carries the line (systemMessage, or a send-back's reason)" -> the Stop
+                     entry replies with an empty stdout, so no line is shown in the chat.
+  AC1 Codex        : "Codex's judged stop carries the line in its reply" -> deep-hook codex Stop prints nothing.
+  AC3, AC5, AC10   : BLOCKED: the hub serves no method test.verdict (unknown_method), so no verdict can be planted;
+                     the suite reports BLOCKED rather than PASS (README: Additions, 1).
+  AC3 wrong program: the line check cannot run without the planted verdict -> BLOCKED as above.
+  AC10 wrong prog. : passes (a pure string check on the line format; proves the check itself rejects a wrong line).
+status.test.ts
+  AC2              : "\"still going?\" is answered from the record (the UserPromptSubmit reply blocks the prompt
+                     with the answer as its reason)" -> the reply does not block; the hook log shows model:true.
+  AC4              : "the same words a person typed are answered from the record" -> same: model:true, no answer.
+  AC4 wrong program: "the planted hub must fail the unplaced-prompt check" -> at base nothing is answered from the
+                     record, so the planted hub cannot be shown to answer an unplaced prompt either.
+  AC6              : "the question is answered from the record" -> model:true, no block reason.
+receipt.test.ts
+  AC7              : "the receipt shows the claim's ask: {}" -> changes.read returns no ask/PR state for the claim.
+  AC8              : "the receipt has what the ask produced: {}" -> no produced section in the receipt.
+  AC9 (both)       : BLOCKED: test.verdict unknown_method (a PASS verdict must be planted before next_issue is read).
+goldens.test.ts
+  shape            : passes (fixtures fit 80 columns; a pure fixture check).
+  per-golden (5)   : BLOCKED: test.verdict unknown_method.
+  wrong program    : passes (a string check that a wrong line is rejected).
+budgets.test.ts
+  lanes            : "some lane must run tests/acceptance/83/budgets.test.ts with --no-file-parallelism" -> no lane
+                     in scripts/lanes.mjs runs this file.
+  reference Mac    : skipped, INCONCLUSIVE (heavy contention: 1-minute load 214.7 on 8 cores; not a reference Mac).
+                     Even so its measurement found 20/20 status prompts reaching the model (model:true).
+  instrument       : passes (a work prompt is shown reaching the model; proves the timing harness sees model calls).
+
+Full output
+-----------
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/83
+
+ × budgets.test.ts > AC12 #83.b4c17e65 Budgets, on the reference Mac in the local preflight, compared with the merge base: a status question is answered from the record in under 100 ms, with no model call > AC12 #83.b4c17e65 the local preflight runs tests/acceptance/83/budgets.test.ts: a check lane in scripts/lanes.mjs runs it with Vitest, one file at a time, not excluded 176ms
+   → some lane must run tests/acceptance/83/budgets.test.ts with --no-file-parallelism (it starts hubs and times them); the lanes' Vitest commands are:
+unit: run --exclude tests/acceptance/20/** --exclude tests/acceptance/24/** --exclude tests/acceptance/26/** --exclude tests/acceptance/389/** --exclude tests/acceptance/390/** --exclude tests/acceptance/391/** --exclude tests/acceptance/392/** --exclude tests/acceptance/393/** --exclude tests/acceptance/
+unit: run --no-file-parallelism tests/acceptance/20/ tests/acceptance/24/ tests/acceptance/26/ tests/acceptance/389/ tests/acceptance/390/ tests/acceptance/391/ tests/acceptance/392/ tests/acceptance/393/ tests/acceptance/394/ tests/acceptance/305/ tests/acceptance/387/ tests/acceptance/488/ tests/accepta
+verdict proofs: run --root tests/acceptance/684 lean.test.ts -t AC3|AC4 --silent=false: expected [] to not deeply equal []
+stdout | budgets.test.ts > AC12 #83.b4c17e65 Budgets, on the reference Mac in the local preflight, compared with the merge base: a status question is answered from the record in under 100 ms, with no model call > AC12 #83.b4c17e65 on the reference Mac, "still going?" is answered from the record in under 100 ms at p95 with no model call, over a warm-up and five runs of 20 sessions, compared with the merge base
+INCONCLUSIVE (heavy contention: 1-minute load 214.7 on 8 cores): this checkout: answered  ms; 20 failure(s): 2c65329e-d248-47b3-a7d1-f577a0b3275e: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; 34d419d7-c4e3-4258-b09f-205fbc2a1514: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; ef9ccb55-0d71-473e-bed6-4a1c4cd40094: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; ab50c912-be8f-4ae3-8578-153227ba3378: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; d88d5d09-7e90-43dc-a5f7-4fa1e4c64a56: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<home>/private/deepbuild-core/.claude/worktrees/is; load 192.0 to 214.7 on 8 cores
+
+ ↓ budgets.test.ts > AC12 #83.b4c17e65 Budgets, on the reference Mac in the local preflight, compared with the merge base: a status question is answered from the record in under 100 ms, with no model call > AC12 #83.b4c17e65 on the reference Mac, "still going?" is answered from the record in under 100 ms at p95 with no model call, over a warm-up and five runs of 20 sessions, compared with the merge base 11170ms [INCONCLUSIVE (heavy contention: 1-minute load 214.7 on 8 cores): this checkout: answered  ms; 20 failure(s): 2c65329e-d248-47b3-a7d1-f577a0b3275e: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; 34d419d7-c4e3-4258-b09f-205fbc2a1514: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; ef9ccb55-0d71-473e-bed6-4a1c4cd40094: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; ab50c912-be8f-4ae3-8578-153227ba3378: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}; d88d5d09-7e90-43dc-a5f7-4fa1e4c64a56: "still going?" wasn't answered from the record (this checkout): {"model":true,"runs":[{"command":"'<home>/private/deepbuild-core/.claude/worktrees/is; load 192.0 to 214.7 on 8 cores]
+ ✓ budgets.test.ts > AC12 #83.b4c17e65 Budgets, on the reference Mac in the local preflight, compared with the merge base: a status question is answered from the record in under 100 ms, with no model call > AC12 #83.b4c17e65 (instrument) a prompt that asks for work ("Now add the tests.") shows as a model call in the hook log, so a status answer that woke the model would be caught 1696ms
+ ✓ goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 the goldens cover says done, sent back, PASS, BLOCKED and checks running, and one with a long cause 2ms
+ × goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 BLOCKED: a BLOCKED verdict: one requirement's check couldn't run for a secret only you hold, three passed → "not verified: R1 · BLOCKED 3/4: secret STRIPE_KEY missing · next: you · receipt" 1415ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 checks running: a stop whose fast-lane checks passed (2 of 4) and whose two slow checks still run, about 4 minutes expected; no verdict yet → "says done 2/4 · 2 checks running · about 4 min · next: DeepBuild · receipt" 1031ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 long cause: a FAIL verdict on the second send-back with a 150-character cause and one requirement not verified: the line keeps "not verified" and the outcome, and shortens the cause first 1146ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 PASS: a PASS verdict on four requirements → "PASS 4/4 · next: you · receipt" 1748ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 says done: a stop that claims done, its three checks still running, about 4 minutes expected → "says done · 3 checks running · about 4 min · next: DeepBuild · receipt" 1597ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 sent back: a FAIL verdict, the first send-back of three, its smallest failing case and where it points → "sent back 1/3: receipt shows $18.00 · total.ts:42 · next: agent · receipt" 1193ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ✓ goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 (wrong program) a line that drops "not verified" to fit the width, or keeps the whole cause past 80 columns, fails 1ms
+ × receipt.test.ts > AC7 #83.28c3309c Each ask the receipt shows carries its PR state (open, checks running, merged, released) and its link > AC7 #83.28c3309c the receipt's ask carries PR #7's link and its state as the forge shows it: checks running, then open, then merged, then released once a release is recorded 2465ms
+   → the receipt shows the claim's ask: {}: expected 0 to be greater than 0
+ × receipt.test.ts > AC8 #83.89bfa3a4 The receipt links what the ask produced: the PR, the files it wrote, and the pages or deploys the record saw > AC8 #83.89bfa3a4 the receipt's produced block links PR #7 and lists total.ts, the file the session wrote 2136ms
+   → the receipt has what the ask produced: {}: expected undefined to be defined
+ × receipt.test.ts > AC9 #83.e8038389 When an ask passes, the receipt names the next unblocked issue in its epic, by dependency order > AC9 #83.e8038389 before a PASS the receipt names no next issue; once the claim's verdict is PASS it names #42, the issue in epic #3 that #41 unblocks, not #43 (blocked by #99) nor #99 (another epic) 2345ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × receipt.test.ts > AC9 #83.e8038389 When an ask passes, the receipt names the next unblocked issue in its epic, by dependency order > AC9 #83.e8038389 (wrong program) a receipt that names the lowest open issue of the epic regardless of dependencies would name #42 here too, so the order is tested where they differ: with #42 depending on #43 as well, the next unblocked issue is none of them 2767ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × line.test.ts > AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop > AC1 #83.8a03aacc Claude Code: a stop whose turn edited a file is judged, and its Stop reply carries one line the chat shows, at most 80 columns, naming a state; a stop right after startup carries none 1273ms
+   → a judged stop's reply carries the line (systemMessage, or a send-back's reason): {"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"'<worktree>/target/debug/deep-hook' claude","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ × line.test.ts > AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop > AC1 #83.8a03aacc Codex: a stop whose turn ran a command is judged, and its Stop reply carries the line; a verdict that lands after the hold is delivered on the next prompt 1039ms
+   → Codex's judged stop carries the line in its reply (systemMessage or a block's reason): exit 0, stdout "", stderr "": expected undefined to be defined
+ × line.test.ts > AC3 #83.fd11082e The line never says PASS without a verdict > AC3 #83.fd11082e a judged stop with no verdict in the record (no verdict.made for its claim) never says PASS; one whose checks still run says so; only once a PASS verdict is recorded does the line say PASS 1392ms
+   → the judged stop carries a line: {"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"'<worktree>/target/debug/deep-hook' claude","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ × line.test.ts > AC3 #83.fd11082e The line never says PASS without a verdict > AC3 #83.fd11082e (wrong program) a line that says PASS from the agent's own words (its last message says "all checks pass") fails: the record holds no verdict 1661ms
+   → the judged stop carries a line: {"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"'<worktree>/target/debug/deep-hook' claude","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ × line.test.ts > AC5 #83.87a5093c The line names the next step's owner, and the receipt names the proof-bar checks it ran > AC5 #83.87a5093c a send-back: the line names the next step's owner (agent), and the receipt lists the checks that ran with their outcomes 1408ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × line.test.ts > AC5 #83.87a5093c The line names the next step's owner, and the receipt names the proof-bar checks it ran > AC5 #83.87a5093c a BLOCKED verdict: the line names the next step's owner (you), and the receipt lists the checks that ran with their outcomes 1545ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × line.test.ts > AC5 #83.87a5093c The line names the next step's owner, and the receipt names the proof-bar checks it ran > AC5 #83.87a5093c a PASS: the line names the next step's owner (you), and the receipt lists the checks that ran with their outcomes 1255ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ × line.test.ts > AC10 #83.09932b63 When a requirement wasn't verified, the line says so first, before any PASS count > AC10 #83.09932b63 a verdict with one requirement INCONCLUSIVE (its check never ran) and two PASS: the line starts with "not verified", names the requirement, and any count comes after it; with every requirement PASS the line says nothing of the kind 1811ms
+   → BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ✓ line.test.ts > AC10 #83.09932b63 When a requirement wasn't verified, the line says so first, before any PASS count > AC10 #83.09932b63 (wrong program) a line that puts the PASS count first, "PASS 2/3 · not verified: R2", fails: "not verified" must come before any count 1ms
+ × status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 each of "still going?", "all done?", "what's next?", "anything for me?" typed after a judged stop is answered from the record: the reply blocks the prompt with the answer, naming a state, a time, the next step and the Needs-you count, and the hook log shows no model call; a prompt that isn't a status question reaches the model 1578ms
+   → "still going?" is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ × status.test.ts > AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged > AC4 #83.4b0836ba "still going?" from a scheduled task, a subagent's report, another session, a prompt the adapter can't place reaches the model unchanged (no block, a model call in the hook log); the same words a person typed are answered from the record 1593ms
+   → the same words a person typed are answered from the record: {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ × status.test.ts > AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged > AC4 #83.4b0836ba (wrong program) a hub that reads an unplaced prompt as a person's (DEEP_HUB_PLANT=unplaced-is-person) answers a status question nobody typed from the record, and fails this check naming the prompt 2109ms
+   → the planted hub must fail the unplaced-prompt check: expected null not to be null
+ × status.test.ts > AC6 #83.eb2dc033 Where the work is, which session holds it, how to resume it and its link are answered from the record > AC6 #83.eb2dc033 "what's next?" typed into the session that holds the work is answered from the record with the worktree the work is in, the session that holds it, a resume command naming that session, and its link 1427ms
+   → the question is answered from the record: {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC12 #83.b4c17e65 Budgets, on the reference Mac in the local preflight, compared with the merge base: a status question is answered from the record in under 100 ms, with no model call > AC12 #83.b4c17e65 the local preflight runs tests/acceptance/83/budgets.test.ts: a check lane in scripts/lanes.mjs runs it with Vitest, one file at a time, not excluded
+AssertionError: some lane must run tests/acceptance/83/budgets.test.ts with --no-file-parallelism (it starts hubs and times them); the lanes' Vitest commands are:
+unit: run --exclude tests/acceptance/20/** --exclude tests/acceptance/24/** --exclude tests/acceptance/26/** --exclude tests/acceptance/389/** --exclude tests/acceptance/390/** --exclude tests/acceptance/391/** --exclude tests/acceptance/392/** --exclude tests/acceptance/393/** --exclude tests/acceptance/
+unit: run --no-file-parallelism tests/acceptance/20/ tests/acceptance/24/ tests/acceptance/26/ tests/acceptance/389/ tests/acceptance/390/ tests/acceptance/391/ tests/acceptance/392/ tests/acceptance/393/ tests/acceptance/394/ tests/acceptance/305/ tests/acceptance/387/ tests/acceptance/488/ tests/accepta
+verdict proofs: run --root tests/acceptance/684 lean.test.ts -t AC3|AC4 --silent=false: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ budgets.test.ts:72:185
+     70|         && command.some((a, i) => covers(a) && command[i - 1] !== '--e…
+     71|     const vitest = checks.flatMap((lane) => lane.commands.filter((c) =…
+     72|     expect(runs.map((r) => r.lane), `some lane must run ${FILE} with -…
+       |                                                                                                                                                                                         ^
+     73|   });
+     74|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 BLOCKED: a BLOCKED verdict: one requirement's check couldn't run for a secret only you hold, three passed → "not verified: R1 · BLOCKED 3/4: secret STRIPE_KEY missing · next: you · receipt"
+ FAIL  goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 checks running: a stop whose fast-lane checks passed (2 of 4) and whose two slow checks still run, about 4 minutes expected; no verdict yet → "says done 2/4 · 2 checks running · about 4 min · next: DeepBuild · receipt"
+ FAIL  goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 long cause: a FAIL verdict on the second send-back with a 150-character cause and one requirement not verified: the line keeps "not verified" and the outcome, and shortens the cause first
+ FAIL  goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 PASS: a PASS verdict on four requirements → "PASS 4/4 · next: you · receipt"
+ FAIL  goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 says done: a stop that claims done, its three checks still running, about 4 minutes expected → "says done · 3 checks running · about 4 min · next: DeepBuild · receipt"
+ FAIL  goldens.test.ts > AC11 #83.15ee3b42 Golden lines fit the set width (80 columns); the long-cause fixture keeps "not verified" and the outcome and shortens the cause first > AC11 #83.15ee3b42 sent back: a FAIL verdict, the first send-back of three, its smallest failing case and where it points → "sent back 1/3: receipt shows $18.00 · total.ts:42 · next: agent · receipt"
+Error: BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ❯ plant helpers.ts:579:11
+    577|     return await control(hub, (conn) => conn.call('test.verdict', p));
+    578|   } catch (error) {
+    579|     throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HU…
+       |           ^
+    580|   }
+    581| }
+ ❯ goldens.test.ts:32:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  line.test.ts > AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop > AC1 #83.8a03aacc Claude Code: a stop whose turn edited a file is judged, and its Stop reply carries one line the chat shows, at most 80 columns, naming a state; a stop right after startup carries none
+AssertionError: a judged stop's reply carries the line (systemMessage, or a send-back's reason): {"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"'<worktree>/target/debug/deep-hook' claude","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ ❯ line.test.ts:31:123
+     29|     const fired = await stop(claude, s);
+     30|     const line = lineOf(fired);
+     31|     expect(line, `a judged stop's reply carries the line (systemMessag…
+       |                                                                                                                           ^
+     32|     expect(widthOf(line!), `the line fits ${WIDTH} columns: ${JSON.str…
+     33|     expect(stateWord(line!), `the line names a state with one of the d…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  line.test.ts > AC1 #83.8a03aacc The line appears in the Claude Code and Codex chats at every judged stop > AC1 #83.8a03aacc Codex: a stop whose turn ran a command is judged, and its Stop reply carries the line; a verdict that lands after the hold is delivered on the next prompt
+AssertionError: Codex's judged stop carries the line in its reply (systemMessage or a block's reason): exit 0, stdout "", stderr "": expected undefined to be defined
+ ❯ line.test.ts:52:253
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  line.test.ts > AC3 #83.fd11082e The line never says PASS without a verdict > AC3 #83.fd11082e a judged stop with no verdict in the record (no verdict.made for its claim) never says PASS; one whose checks still run says so; only once a PASS verdict is recorded does the line say PASS
+AssertionError: the judged stop carries a line: {"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"'<worktree>/target/debug/deep-hook' claude","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ ❯ line.test.ts:78:75
+     76|     const first = await stop(claude, s);
+     77|     const line1 = lineOf(first);
+     78|     expect(line1, `the judged stop carries a line: ${firedShown(first)…
+       |                                                                           ^
+     79|     const verdicts = (await allEvents(hub)).filter((e) => e.kind === '…
+     80|     expect(verdicts, 'no verdict was made yet for the claim').toEqual(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  line.test.ts > AC3 #83.fd11082e The line never says PASS without a verdict > AC3 #83.fd11082e (wrong program) a line that says PASS from the agent's own words (its last message says "all checks pass") fails: the record holds no verdict
+AssertionError: the judged stop carries a line: {"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"'<worktree>/target/debug/deep-hook' claude","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ ❯ line.test.ts:108:74
+    106|     const fired = await stop(claude, s, 'Done. All checks pass: PASS 4…
+    107|     const line = lineOf(fired);
+    108|     expect(line, `the judged stop carries a line: ${firedShown(fired)}…
+       |                                                                          ^
+    109|     expect((await allEvents(hub)).filter((e) => e.kind === 'verdict.ma…
+    110|     expect(line, `the agent's word is never evidence: the line never s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  line.test.ts > AC5 #83.87a5093c The line names the next step's owner, and the receipt names the proof-bar checks it ran > AC5 #83.87a5093c a send-back: the line names the next step's owner (agent), and the receipt lists the checks that ran with their outcomes
+ FAIL  line.test.ts > AC5 #83.87a5093c The line names the next step's owner, and the receipt names the proof-bar checks it ran > AC5 #83.87a5093c a BLOCKED verdict: the line names the next step's owner (you), and the receipt lists the checks that ran with their outcomes
+ FAIL  line.test.ts > AC5 #83.87a5093c The line names the next step's owner, and the receipt names the proof-bar checks it ran > AC5 #83.87a5093c a PASS: the line names the next step's owner (you), and the receipt lists the checks that ran with their outcomes
+Error: BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ❯ plant helpers.ts:579:11
+    577|     return await control(hub, (conn) => conn.call('test.verdict', p));
+    578|   } catch (error) {
+    579|     throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HU…
+       |           ^
+    580|   }
+    581| }
+ ❯ line.test.ts:130:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  line.test.ts > AC10 #83.09932b63 When a requirement wasn't verified, the line says so first, before any PASS count > AC10 #83.09932b63 a verdict with one requirement INCONCLUSIVE (its check never ran) and two PASS: the line starts with "not verified", names the requirement, and any count comes after it; with every requirement PASS the line says nothing of the kind
+Error: BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ❯ plant helpers.ts:579:11
+    577|     return await control(hub, (conn) => conn.call('test.verdict', p));
+    578|   } catch (error) {
+    579|     throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HU…
+       |           ^
+    580|   }
+    581| }
+ ❯ line.test.ts:155:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  receipt.test.ts > AC7 #83.28c3309c Each ask the receipt shows carries its PR state (open, checks running, merged, released) and its link > AC7 #83.28c3309c the receipt's ask carries PR #7's link and its state as the forge shows it: checks running, then open, then merged, then released once a release is recorded
+AssertionError: the receipt shows the claim's ask: {}: expected 0 to be greater than 0
+ ❯ receipt.test.ts:63:98
+     61|     const { hub, forge, c, claude } = await opened();
+     62|     const first = await receipt(hub, c);
+     63|     expect(first.asks?.length ?? 0, `the receipt shows the claim's ask…
+       |                                                                                                  ^
+     64|     const pr = prOf(first);
+     65|     expect(pr, `the ask carries its PR: ${receiptShown(first)}`).not.t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  receipt.test.ts > AC8 #83.89bfa3a4 The receipt links what the ask produced: the PR, the files it wrote, and the pages or deploys the record saw > AC8 #83.89bfa3a4 the receipt's produced block links PR #7 and lists total.ts, the file the session wrote
+AssertionError: the receipt has what the ask produced: {}: expected undefined to be defined
+ ❯ receipt.test.ts:83:85
+     81|     const { hub, forge, c, claude } = await opened();
+     82|     const r = await receipt(hub, c);
+     83|     expect(r.produced, `the receipt has what the ask produced: ${recei…
+       |                                                                                     ^
+     84|     expect(r.produced?.pr, 'it links the PR').toBe(prUrl(forge.spec, P…
+     85|     expect((r.produced?.files ?? []).some((f) => f === 'total.ts' || f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  receipt.test.ts > AC9 #83.e8038389 When an ask passes, the receipt names the next unblocked issue in its epic, by dependency order > AC9 #83.e8038389 before a PASS the receipt names no next issue; once the claim's verdict is PASS it names #42, the issue in epic #3 that #41 unblocks, not #43 (blocked by #99) nor #99 (another epic)
+Error: BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ❯ plant helpers.ts:579:11
+    577|     return await control(hub, (conn) => conn.call('test.verdict', p));
+    578|   } catch (error) {
+    579|     throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HU…
+       |           ^
+    580|   }
+    581| }
+ ❯ receipt.test.ts:96:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  receipt.test.ts > AC9 #83.e8038389 When an ask passes, the receipt names the next unblocked issue in its epic, by dependency order > AC9 #83.e8038389 (wrong program) a receipt that names the lowest open issue of the epic regardless of dependencies would name #42 here too, so the order is tested where they differ: with #42 depending on #43 as well, the next unblocked issue is none of them
+Error: BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1 (README: Additions, 1): test.verdict refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method test.verdict.","path":"/method","actual":"test.verdict","evidence":[]}
+ ❯ plant helpers.ts:579:11
+    577|     return await control(hub, (conn) => conn.call('test.verdict', p));
+    578|   } catch (error) {
+    579|     throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HU…
+       |           ^
+    580|   }
+    581| }
+ ❯ receipt.test.ts:107:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 each of "still going?", "all done?", "what's next?", "anything for me?" typed after a judged stop is answered from the record: the reply blocks the prompt with the answer, naming a state, a time, the next step and the Needs-you count, and the hook log shows no model call; a prompt that isn't a status question reaches the model
+AssertionError: "still going?" is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ ❯ status.test.ts:62:159
+     60|       const fired = await ask(claude, s, q, 'person');
+     61|       const answer = answerOf(fired);
+     62|       expect(answer, `"${q}" is answered from the record (the UserProm…
+       |                                                                                                                                                               ^
+     63|       expect(modelCalled(h, s, q), `"${q}" never reached the model (no…
+     64|       expect(STATE_WORDS.some((w) => answer!.includes(w)), `the answer…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  status.test.ts > AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged > AC4 #83.4b0836ba "still going?" from a scheduled task, a subagent's report, another session, a prompt the adapter can't place reaches the model unchanged (no block, a model call in the hook log); the same words a person typed are answered from the record
+AssertionError: the same words a person typed are answered from the record: {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ ❯ status.test.ts:97:113
+     95|     const typed = 'still going? (person)';
+     96|     const fired = await ask(claude, s, typed, 'person');
+     97|     expect(answerOf(fired), `the same words a person typed are answere…
+       |                                                                                                                 ^
+     98|     expect(modelCalled(h, s, typed), 'and never reach the model').toBe…
+     99|     await claude.end();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  status.test.ts > AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged > AC4 #83.4b0836ba (wrong program) a hub that reads an unplaced prompt as a person's (DEEP_HUB_PLANT=unplaced-is-person) answers a status question nobody typed from the record, and fails this check naming the prompt
+AssertionError: the planted hub must fail the unplaced-prompt check: expected null not to be null
+ ❯ status.test.ts:113:80
+    111|       expect(answerOf(fired), `"${q}" from a prompt the adapter can't …
+    112|     } catch (error) { failure = (error as Error).message; }
+    113|     expect(failure, 'the planted hub must fail the unplaced-prompt che…
+       |                                                                                ^
+    114|     expect(failure, 'the failure names the prompt').toContain(q);
+    115|     await claude.end();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  status.test.ts > AC6 #83.eb2dc033 Where the work is, which session holds it, how to resume it and its link are answered from the record > AC6 #83.eb2dc033 "what's next?" typed into the session that holds the work is answered from the record with the worktree the work is in, the session that holds it, a resume command naming that session, and its link
+AssertionError: the question is answered from the record: {"model":true,"runs":[{"command":"'<worktree>/target/debug/deep-hook' claude","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+ ❯ status.test.ts:128:86
+    126|     const fired = await ask(holding, holder, q, 'person');
+    127|     const answer = answerOf(fired);
+    128|     expect(answer, `the question is answered from the record: ${firedS…
+       |                                                                                      ^
+    129|     expect(answer, `the answer says where the work is (the worktree ${…
+    130|     expect(answer, `the answer names the session that holds it (${hold…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  23 failed | 4 passed | 1 skipped (28)
+   Start at  12:27:59
+   Duration  51.12s (tests 99%, import 1%)
+
+vitest exit=1

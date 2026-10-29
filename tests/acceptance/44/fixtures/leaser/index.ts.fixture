@@ -1,0 +1,25 @@
+// A TypeScript test package (#44). The test copies it under several ids (test/alpha, test/beta, ...) and writes its
+// manifest's `checks` and `leases`. It registers one check kind, ext.<plugin>.report; running it calls
+// `deep.lease(resource, mode)` with the request the test put in the spec's `runner` (JSON), and reports what came
+// back, or the error the call rejected with, as its one failure message (README, Readings: the probe).
+import { readFileSync } from 'node:fs';
+
+const manifest = JSON.parse(readFileSync(new URL('./deepbuild.json', import.meta.url), 'utf8')) as { id: string };
+const plugin = manifest.id.slice(manifest.id.indexOf('/') + 1);
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+export default function (deep: any): void {
+  deep.registerCheck(`ext.${plugin}.report`, async (spec: { runner: string }) => {
+    const seen: Record<string, unknown> = {};
+    try {
+      const { resource, mode } = JSON.parse(spec.runner) as { resource: unknown; mode: unknown };
+      seen.result = (await deep.lease(resource, mode)) ?? null;
+    } catch (e) {
+      seen.error = message(e);
+    }
+    return {
+      outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify(seen) }],
+    };
+  });
+}
