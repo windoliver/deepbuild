@@ -396,6 +396,42 @@
     }
   },
   {
+    "source": "host.root_plan",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Run this root plan on build-01? It installs nvidia-driver-550 and enables lingering for your user.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Run it as root",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't run it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "7e2a9c4b1d3f5e6a8b0c2d4e6f8a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e2f4a",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "service.beyond_localhost",
     "kind": "authority",
     "fixture": {
