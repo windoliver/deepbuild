@@ -45,7 +45,7 @@ export function reply(socket: string, line: string): Promise<{ exit: number; std
 
 /** A hub `withHub` started: it can be restarted (with its own environment), and waited on when it kills itself. */
 /** `between` runs with the hub stopped, before it starts again. */
-export interface Hub { restart: (env?: Record<string, string>, between?: () => void) => Promise<void>; exited: (within?: number) => Promise<void> }
+export interface Hub { restart: (env?: Record<string, string>, between?: () => void | Promise<void>) => Promise<void>; exited: (within?: number) => Promise<void> }
 
 /** Runs `body` against a hub started on a temp home with `env` added, then stops the hub and removes the home. */
 export async function withHub(body: (root: string, home: string, hub: Hub) => Promise<void>, env: Record<string, string> = {}): Promise<void> {
@@ -78,7 +78,7 @@ export async function withHub(body: (root: string, home: string, hub: Hub) => Pr
   };
   try {
     await start(env);
-    await body(root, home, { restart: async (extra = {}, between) => { await stop(); between?.(); await start(extra); }, exited });
+    await body(root, home, { restart: async (extra = {}, between) => { await stop(); await between?.(); await start(extra); }, exited });
   } finally {
     await stop();
     rmSync(home, { recursive: true, force: true });
