@@ -1,0 +1,52 @@
+{
+  "v": 4,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.created",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "authority",
+    "question": "Merge #215?",
+    "options": [
+      {
+        "id": "merge",
+        "label": "Merge it",
+        "decision": "allow"
+      },
+      {
+        "id": "hold",
+        "label": "Hold it",
+        "decision": "deny"
+      }
+    ],
+    "recommended": null,
+    "deadline": 1760099851123,
+    "fallback": "you",
+    "default": "hold",
+    "provisional": false,
+    "owner": "you",
+    "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba",
+    "pinned_to": {
+      "kind": "commit",
+      "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212a"
+    },
+    "subject": {
+      "effect": "merge",
+      "target": {
+        "kind": "pr",
+        "ref": "pr:215",
+        "owner": "thread:T1"
+      },
+      "change": {
+        "kind": "fix",
+        "lines": 30,
+        "paths": [
+          "src/checkout/total.ts",
+          "src/checkout/total.test.ts"
+        ]
+      }
+    }
+  }
+}
