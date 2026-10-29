@@ -189,7 +189,11 @@ const READS = new Set(['read', 'search', 'fetch']);
  * its app showed a wake working.
  */
 interface Routes {
-  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number;
+  /**
+   * `ended`: when a StopFailure last ended the newest turn (wall ms); the session is idle from then until a hook
+   * shows work. `prompt`: the newest prompt's id, the turn a StopFailure must name to end it.
+   */
+  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined;
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
 }
@@ -1142,7 +1146,7 @@ export class Core {
   /** What a session has shown of the routes back into it since it last started, its holds, waiter and continuations. */
   private routesOf(session: string, cwd = ''): Routes {
     let r = this.routes.get(session);
-    if (!r) this.routes.set(session, r = { cwd, shown: new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] });
+    if (!r) this.routes.set(session, r = { cwd, shown: new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] });
     return r;
   }
   /**
@@ -1155,7 +1159,7 @@ export class Core {
     if (meta.event === 'SessionStart') {
       // What a session has shown resets only when it starts again.
       const before = this.options.plant === 'routes-kept-across-sessions' ? [...this.routes.values()].reverse().find((r) => r.cwd === meta.cwd) : undefined;
-      const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] };
+      const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] };
       const old = this.routes.get(meta.session);
       if (old?.waiter) fresh.waiter = old.waiter;
       this.routes.delete(meta.session);
@@ -1171,7 +1175,13 @@ export class Core {
     if (meta.event === 'SessionEnd') {
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
+    } else if (meta.event === 'StopFailure') {
+      // A turn that ends on an API error ends like a Stop, and starts no waiter of its own: the one its session's
+      // earlier stop started still waits, and may wake the idle session (#85). Only the newest turn's: a prompt you
+      // queued may start before the failed turn's hook is stamped, and one that names no turn ends none.
+      if (!meta.fields?.agent_id && meta.fields?.prompt_id !== undefined && meta.fields.prompt_id === r.prompt) r.ended = Math.max(r.ended, ulidTime(meta.id));
     } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart') r.busy = Math.max(r.busy, ulidTime(meta.id));
+    if (meta.event === 'UserPromptSubmit') r.prompt = meta.fields?.prompt_id;
   }
   /** Claude Code's cap on stop-hook continuations in one turn, from its facts. */
   private cap(): number {
@@ -1254,13 +1264,13 @@ export class Core {
   /**
    * Hands what waits for an idle session to its waiter, which exits 2 with it and so wakes the session. Claude Code
    * starts the waiter at a stop, so the session is idle while no stop of it is held (the hold takes the answer) and no
-   * hook started since shows a turn running; never past the turn's cap (the next prompt does), or once its app has
-   * shown it doesn't wake.
+   * hook started since the waiter, or since a StopFailure ended a later turn, shows a turn running; never past the
+   * turn's cap (the next prompt does), or once its app has shown it doesn't wake.
    */
   private offer(session: string): void {
     const r = this.routes.get(session);
     if (!r) return;
-    const idle = () => r.waiter !== undefined && !r.holding && r.busy < r.waiter.since;
+    const idle = () => r.waiter !== undefined && !r.holding && r.busy < Math.max(r.waiter.since, r.ended);
     if (!r.covered || !r.shown.has('waiter') || r.capped || r.wakes === false || !idle()) return;
     void this.queue(async () => {
       const waiter = r.waiter;
@@ -1314,7 +1324,7 @@ export class Core {
       return;
     }
     const waiter = r.waiter;
-    if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < waiter.since) {
+    if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < Math.max(waiter.since, r.ended)) {
       r.waiter = undefined;
       waiter.give({ session, text });
       return;
