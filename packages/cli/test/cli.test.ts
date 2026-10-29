@@ -1,4 +1,7 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -32,4 +35,18 @@ describe('deep checkout command', () => {
     expect(result.stderr).toContain('Unsupported command');
     expect(result.stdout).toBe('');
   });
+
+  it('acts on the dev hub --root names without setting the home up first (#331: deep env up --root in a fresh home)', () => {
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-home-')));
+    try {
+      const env = { ...process.env, HOME: home };
+      for (const key of Object.keys(env)) if (key.startsWith('DEEP_') || key.startsWith('CLAUDE')) delete env[key];
+      // The timeout outlives the 15 s a wrong program spends waiting for the home's hub to start.
+      const result = spawnSync(process.execPath, [cli, 'env', 'up', '--root', join(home, 'dev-hub'), '--json'], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      expect(existsSync(join(home, '.deepbuild')), `deep env up --root set the home up (${result.stderr.trim().slice(0, 300)})`).toBe(false);
+      expect(result.status, 'BLOCKED: the dev hub at --root is not running').toBe(3);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
 });
