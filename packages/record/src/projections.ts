@@ -220,6 +220,12 @@ export class Projector {
         const id = e.writer === 'hook' || (e.session && named === e.session.replace(/[^0-9A-Za-z]/g, '')) ? e.session : named ?? e.session;
         const state = str(d.state);
         if (id) this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
+        // The core's end of its own session ends a turn no stop will: the prompt it answered in the model's place (#83).
+        if (id && id === e.session && e.writer === 'core' && state && ENDED.has(state)) {
+          const turns = this.turnsOf(id);
+          const open = turns[turns.length - 1];
+          if (open && !open.stopped) { open.stopped = true; this.saveTurn(id, open); }
+        }
         break;
       }
       case 'session.child_started': {

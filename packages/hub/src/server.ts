@@ -33,7 +33,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
@@ -67,8 +67,18 @@ function agentReply(agent: string, reply: ExtensionReply): string {
   const additionalContext = reply.context.map((b) => `[${b.extension}] ${b.text}`).join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
-/** Context Claude Code adds to the session: at a session's start or a prompt, never a decision. */
-const contextReply = (event: string, text: string): string => line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' });
+/**
+ * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
+ * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
+ * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
+ */
+function coreReplyLine(event: string, reply: { context?: string; block?: string; message?: string }): string {
+  const out: Record<string, unknown> = {};
+  if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
+  else if (reply.context) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
+  if (reply.message) out.systemMessage = reply.message;
+  return Object.keys(out).length ? line({ exit: 0, stdout: JSON.stringify(out), stderr: '' }) : EMPTY_REPLY;
+}
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
@@ -84,15 +94,15 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; cl
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
-    if (m.op === 'asking') return onAsking(m.sessions ?? []);
+    if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? []);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -112,7 +122,7 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame, onAsking);
@@ -249,7 +259,7 @@ class Hub {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
     };
-    const asking = (sessions: string[]) => { this.asking = new Set(sessions); };
+    const asking = (sessions: string[], judged: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); };
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking) : coreWorker(options, frame, fatal, asking);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
@@ -455,16 +465,21 @@ class Hub {
   private holdFor(meta: HookMeta): number | null {
     const now = Date.now();
     if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
-    if (meta.event !== 'Stop' || meta.agent === 'codex') return null;
+    if (meta.event !== 'Stop') return null;
+    // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
+    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && this.worked.has(meta.session) ? now + STOP_HOLD_MS : null;
     const relation = this.stopHold();
     if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
     if (meta.watchOnly || !relation.holds || this.off) return null;
     // Until you approve a repo's checks no verdict holds a stop: only an answer on its way back does (design: How it
-    // installs). The planted wrong program holds every stop, as gates on unapproved checks would.
+    // installs), and a stop whose turn did work is held for the one line the chat shows of it (#83), which the core
+    // reads from the record at once. The planted wrong program holds every stop, as gates on unapproved checks would.
     // A test's planted sorter (#321) may answer any stop "proceed".
-    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
+    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
+  /** The sessions whose current turn a person's prompt opened and that did work, as the core tells it beside `asking`: their stops are judged (#83). */
+  private worked = new Set<string>();
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {
@@ -480,12 +495,12 @@ class Hub {
   private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string } | null>;
+    const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string; message?: string } | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
-    if (reply?.block) conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ decision: 'block', reason: reply.block }), stderr: '' }));
-    else if (reply?.context) conn.sock.end(contextReply(meta.event, reply.context));
-    else conn.sock.end(EMPTY_REPLY);
+    // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
+    const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
+    conn.sock.end(shown ? coreReplyLine(meta.event, shown) : EMPTY_REPLY);
   }
 
   /**
@@ -598,7 +613,7 @@ class Hub {
     const method = value.method;
     if (typeof method !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', method) });
     const allowed = ALLOWED.get(method);
-    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
+    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {
       return conn.write({ id, error: refusal('role', '/method', `A ${conn.name} connection can't call ${method}: its credential allows ${allowed.join(' or ')} connections only.`, method) });
     }
