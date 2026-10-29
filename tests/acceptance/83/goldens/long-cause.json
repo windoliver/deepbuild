@@ -1,0 +1,20 @@
+{
+  "name": "long cause",
+  "state": "a FAIL verdict on the second send-back with a 150-character cause and one requirement not verified: the line keeps \"not verified\" and the outcome, and shortens the cause first",
+  "plant": {
+    "outcome": "FAIL",
+    "round": 2,
+    "requirements": [
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R1", "outcome": "FAIL", "check": "unit", "smallest": "receipt shows $18.00 where $17.64 was expected after the 2% member discount on the subtotal of $18.00 before tax, with tax then added at 8% on the discounted amount", "points_to": "total.ts:42" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R2", "outcome": "INCONCLUSIVE", "check": "journey:checkout" },
+      { "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R3", "outcome": "PASS", "check": "typecheck" }
+    ],
+    "ran": [
+      { "check": "unit", "outcome": "failed" },
+      { "check": "typecheck", "outcome": "passed" }
+    ]
+  },
+  "line": null,
+  "keeps": ["not verified: R2", "sent back 2/3", "total.ts:42", "next: agent", "receipt"],
+  "shortened": "receipt shows $18.00 where $17.64 was expected after the 2% member discount on the subtotal of $18.00 before tax, with tax then added at 8% on the discounted amount"
+}

@@ -2,8 +2,9 @@
 // once the OS confirms you: a cancelled prompt installs nothing, and the installer's refusal comes back named.
 import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { canonicalize } from '@deepbuild/contracts';
@@ -40,7 +41,89 @@ const installed = (root: string): string[] => {
   return existsSync(file) ? Object.keys(JSON.parse(readFileSync(file, 'utf8')) as object) : [];
 };
 
+/** The holders of the leases on record, in order: each load of the leasing package below adds one. */
+function leaseHolders(root: string): string[] {
+  const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+  try {
+    return (db.prepare("SELECT json_extract(data, '$.holder') AS h FROM events WHERE kind = 'lease.acquired' ORDER BY log_pos").all() as { h: string }[]).map((r) => r.h);
+  } finally {
+    db.close();
+  }
+}
+
 describe('deep install', () => {
+  it('a package it installs passes conformance and loads at once, and loads again at the next start, without a step of yours between', async () => {
+    const confirm = join('/tmp', `deep-install-load-${process.pid}`);
+    writeFileSync(confirm, 'confirmed');
+    try {
+      await withHub(async (root, home, hub) => {
+        // Each time it loads, it leases a key of its own kind: the record shows every load.
+        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }] });
+        writeFileSync(join(from, 'index.ts'), "export default async function (deep: any): Promise<void> {\n  await deep.lease({ kind: 'acme.rig', key: `rig-${Date.now()}` }, 'exclusive').catch(() => undefined);\n}\n");
+        const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
+        writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...m, digest: packageDigest(from) }));
+        const done = install(home, from);
+        expect(done.stdout).toContain('Installed acme/leaser@1.2.0');
+        expect(done.status, done.stderr).toBe(0);
+        expect(leaseHolders(root), 'it loaded once installed').toEqual(['ext:acme/leaser']);
+        await hub.restart();
+        for (const until = Date.now() + 5000; Date.now() < until && leaseHolders(root).length < 2; await new Promise((r) => setTimeout(r, 50)));
+        expect(leaseHolders(root), 'it loaded again at the start').toEqual(['ext:acme/leaser', 'ext:acme/leaser']);
+      }, { DEEP_HUB_TEST_CONFIRM: confirm });
+    } finally {
+      rmSync(confirm, { force: true });
+    }
+  }, 120_000);
+
+  it('a package installed before its conformance was kept is checked at the next start, and loads', async () => {
+    const confirm = join('/tmp', `deep-install-unchecked-${process.pid}`);
+    writeFileSync(confirm, 'confirmed');
+    try {
+      await withHub(async (root, home, hub) => {
+        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }] });
+        writeFileSync(join(from, 'index.ts'), "export default async function (deep: any): Promise<void> {\n  await deep.lease({ kind: 'acme.rig', key: `rig-${Date.now()}` }, 'exclusive').catch(() => undefined);\n}\n");
+        const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
+        writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...m, digest: packageDigest(from) }));
+        const done = install(home, from);
+        expect(done.status, done.stderr).toBe(0);
+        expect(leaseHolders(root)).toEqual(['ext:acme/leaser']);
+        // Installed by a hub that kept no conformance result: the next start has none for it.
+        await hub.restart(undefined, () => rmSync(join(root, 'extensions', 'checked.json'), { force: true }));
+        for (const until = Date.now() + 5000; Date.now() < until && leaseHolders(root).length < 2; await new Promise((r) => setTimeout(r, 50)));
+        expect(leaseHolders(root), 'the start ran its conformance and loaded it').toEqual(['ext:acme/leaser', 'ext:acme/leaser']);
+        const checked = join(root, 'extensions', 'checked.json');
+        const kept = JSON.parse(readFileSync(checked, 'utf8')) as Record<string, { passed: boolean }>;
+        expect(Object.entries(kept).map(([k, v]) => [k, v.passed]), 'the result is kept for the next start').toEqual([['acme/leaser@1.2.0', true]]);
+        // Once: the next start loads from the kept result and runs no conformance, so the file isn't written again.
+        const written = statSync(checked).mtimeMs;
+        await hub.restart();
+        for (const until = Date.now() + 5000; Date.now() < until && leaseHolders(root).length < 3; await new Promise((r) => setTimeout(r, 50)));
+        expect([leaseHolders(root).length, statSync(checked).mtimeMs], 'loaded again from the result kept, not checked again').toEqual([3, written]);
+      }, { DEEP_HUB_TEST_CONFIRM: confirm });
+    } finally {
+      rmSync(confirm, { force: true });
+    }
+  }, 120_000);
+
+  it('a package that fails conformance is installed but not loaded, and the reason is shown', async () => {
+    const confirm = join('/tmp', `deep-install-fails-${process.pid}`);
+    writeFileSync(confirm, 'confirmed');
+    try {
+      await withHub(async (_root, home) => {
+        const from = pkg(home, 'acme/broken', { conflicts: [] });
+        writeFileSync(join(from, 'index.ts'), "export default function (deep: any): void {\n  deep.registerCheck('ext.broken.undeclared', () => null);\n}\n");
+        const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
+        writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...m, digest: packageDigest(from) }));
+        const done = install(home, from);
+        expect(done.stdout).toContain('Installed acme/broken@1.2.0');
+        expect(done.stderr).toMatch(/not loaded: .*ext\.broken\.undeclared/);
+        expect(done.status).toBe(1);
+      }, { DEEP_HUB_TEST_CONFIRM: confirm });
+    } finally {
+      rmSync(confirm, { force: true });
+    }
+  }, 120_000);
+
   it('shows the source and permissions, and installs nothing until the OS confirms you; then it installs, and a refusal is named', async () => {
     const confirm = join('/tmp', `deep-install-confirm-${process.pid}`);
     writeFileSync(confirm, 'cancelled');
