@@ -9,10 +9,15 @@ a check runs against; Extension API, `deep.registerEnvironment` and `deep.lease`
 #314 for their conventions and surfaces, and `packages/supervisor`, `packages/conformance`, `packages/hub` and
 `packages/cli` as they are at the base commit `bddb8099fd259985b5e3155247a99b62d938e47c`, by a job that never saw
 an implementation of #331. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a
-blind redraft of this job. One redraft has happened: on October 26, 2026, with #348 (the extension host) and #349
+blind redraft of this job. Two redrafts have happened. On October 26, 2026, with #348 (the extension host) and #349
 (extension slots) on main at `bc765d2`, a blind job wrote AC4's "at install" half (`install.test.ts`) against the
-surfaces those issues' acceptance READMEs publish, reading no implementation of any of the three; AC9's child-session
-half stays in `blocked.test.ts`.
+surfaces those issues' acceptance READMEs publish, reading no implementation of any of the three. On October 28,
+2026, with #18 (the Claude Code adapter: sessions, child sessions as `session.child_started@1`) and #26 (`deep mcp`)
+on main at `5a6d09a4`, a blind job replaced `blocked.test.ts` with AC9's child-session half (`child.test.ts`),
+written from the issue, the design (`deep_env` in the Building blocks table's Environment and lease row; "A
+worktree for each session you start"; "a child in a worktree of its own takes its own" leases), `AGENTS.md`, this
+folder, the READMEs, helpers and fixtures of #26's and #18's suites (the agent stand-in, hooks over the socket, how a
+call binds to a session) and the `session.child_started@1` schema, reading no implementation of #331, #18 or #26.
 
 The issue has 11 checkbox criteria, AC1 to AC11 in the body's order.
 
@@ -95,6 +100,25 @@ The stack runs through env-local in the hub, every process through the superviso
 token, `process.starting@1` before each process exists and `process.tracked@1` once it does, and stopped only when
 proven the run's. Teardown releases each lease only once every process recorded for the run is proven gone
 (`process.ended@1` before `lease.released@1`), never for a process it couldn't prove.
+
+### `deep_env` in `deep mcp` (the second redraft's invention)
+
+The design names the tool (`deep_env`, the Environment and lease row of the Building blocks table, "Agents, through
+MCP") and the issue says env.up runs "from an agent's `deep_env` call through `deep mcp`", and neither gives its
+arguments or result. The smallest shape that reaches AC9, invented by the October 28 redraft:
+
+```ts
+// tools/call deep_env, listed in tools/list; the call acts on the bound session's worktree (the session's cwd), as
+// `deep env up` acts on the current folder. Bound as every deep_* call is (#26, #18): the PreToolUse Claude Code
+// fires for it (`tool_name: "mcp__deep__deep_env"`, `tool_input` the arguments) from the session's agent process,
+// which is also the parent of its `deep mcp`; the test sends the stamp before each call, as Claude Code does.
+{ action: 'up' }     // -> the Up line `deep env up --json` prints: { status: 'ready', run, worktree, ports } or { status: 'BLOCKED', worktree, cause }
+{ action: 'down' }   // -> the Down line: { run, stopped, left }
+```
+
+The value is the result's `structuredContent`, or else the JSON in its first text block (#26's reading). A refusal is
+a tool result with `isError: true` holding error@2 (#26's rule); `child.test.ts` reads none, since the criterion is
+proven on what the child is leased, not on a refusal (How each criterion is read, AC9).
 
 ### The hub
 
@@ -183,7 +207,7 @@ fails that test.
 | AC6 `#331.6e85fa63` | a port another program listens on is never leased | `stacks.test.ts` AC6 (3): the test's listener on 127.0.0.1, `0.0.0.0` and `::` at the port the hub would lease first | fails: no `deep env` |
 | AC7 `#331.cba94b5d` | a hub killed mid-start reaps or reports on restart | `crash.test.ts` (2): killed before the spawn; killed after the spawn, before tracking | fails: no `deep env` |
 | AC8 `#331.18b679cd` | `deep env up` under 1 s beyond the repo's start; teardown under 5 s; reference Mac, vs the merge base | `budgets.test.ts` (4): perf-lane tasks `env-up`, `env-down` valid against the merge base; `benchmarks/env.mjs up` and `down` run; the numbers on the reference Mac | fail: no tasks, no bench, no `deep env`; off the reference Mac the timing test fails BLOCKED, naming why |
-| AC9 `#331.b23ec100` | a child agent in its own worktree can't use its parent's port | `stacks.test.ts` AC9 (1): the child's worktree gets another port while the parent's stack holds its own; `blocked.test.ts` AC9 (1): a child session through `deep_env` | fails: no `deep env`; the session half BLOCKED on #18, #26 |
+| AC9 `#331.b23ec100` | a child agent in its own worktree can't use its parent's port | `stacks.test.ts` AC9 (1): the child's worktree gets another port while the parent's stack holds its own; `child.test.ts` AC9 (1): a child session (an agent the parent's agent started, in its own worktree, `session.child_started@1`) calling `deep_env` through its `deep mcp` gets none of its parent's ports, both stacks answer, both leases are recorded under different holders, and its down leaves the parent's lease held | fails: no `deep env`; at the second redraft's base (`5a6d09a4`) `deep mcp` lists no `deep_env` (BASE-FAILURE-AC9.txt) |
 | AC10 `#331.43266bc3` | escaped helper on 3000 reported, never stopped; lease ends; next up leases another | `leases.test.ts` AC10 (4): the run; three wrong programs | fail: no `deep env`; the plants don't exist, so the hub refuses to start (BLOCKED) |
 | AC11 `#331.14c365a0` | two compose projects from run tokens on leased ports; down removes only its own | `compose.test.ts` (2): the run; the default-project wrong program | BLOCKED here: the Docker daemon isn't running on this Mac |
 
@@ -224,9 +248,25 @@ fails that test.
   anywhere else it fails BLOCKED naming why. "Compared with the merge base" is the perf lane's: tasks `env-up`
   (`["node","benchmarks/env.mjs","up"]`) and `env-down` (`[..., "down"]`) in `benchmarks/budgets.json`, each
   with an `initialReason` naming #331, valid by `validateBudgets` against the merge base's file.
-- **AC9.** At this base a child agent can't be made (#18 maps no child sessions; #26's `deep mcp` has no
-  `deep_env`), so the half tested now is the worktree's: the child's own worktree (a worktree of the same repo
-  made after the parent's stack came up) gets another port, and the parent's stack keeps answering on its own.
+- **AC9.** Two halves. The worktree's (`stacks.test.ts`, the first draft, when no child agent could be made): the
+  child's own worktree (a worktree of the same repo made after the parent's stack came up) gets another port, and
+  the parent's stack keeps answering on its own. The session's (`child.test.ts`, the second redraft): a **child
+  agent** is a process the parent session's agent process starts (the design: "An agent that another agent starts
+  ... is linked as its child"), here the agent stand-in spawning another stand-in in worktree B, which establishes
+  its own Claude Code session through hooks whose parent is that process; the test is BLOCKED unless the child's
+  process is a child of the parent's, and fails unless the record holds `session.child_started@1` whose `parent`
+  and `child` name the two sessions (a `session:` handle names a session by its ID; Claude Code's IDs are UUIDs and
+  the handle's pattern takes no dashes, so the test compares them with dashes dropped). "**Can't use a port its
+  parent leased**" is read on what the child is leased, since `deep_env` is the only way an agent asks for a port
+  and the design gives it no port to name: with the parent's stack up on its leased port through its own
+  `deep_env`, the child's `deep_env` up in B must come up ready with a port of its own for every name in `ports`,
+  none of them a port the parent's call leased, as a run of its own, in B; both health routes must answer from
+  their own worktrees; the record must hold `lease.acquired` for both ports with different `holder`s (the design:
+  "a child in a worktree of its own takes its own" leases; a hub that let the child share the parent's lease, as a
+  child inside the parent's worktree does, would show one holder or one port); and the child's `deep_env` down
+  must leave the parent's stack answering and its lease unreleased (no `lease.released` for the parent's port),
+  after which the parent's own down ends it. The first draft's phrase "a lease it asks for on one is refused
+  naming the parent" has no surface: an agent names no port, so no refusal is asked for or read.
 - **AC10.** `fixtures/escape.c` listens on the leased port, then double-forks: the middle process exits at once,
   the grandchild calls `setsid` and execs itself with an empty environment, keeping the listening socket. The
   test checks the scenario formed (the first lease is 3000; the helper's PPID is 1, it leads its own group, has no
@@ -259,8 +299,11 @@ command, no env-local, a `run.start` that ignores `environment`, and a kit whose
 
 ## What depends on other issues
 
-- **#18, child sessions**, and **#26, `deep_env` in `deep mcp`**: AC9's child agent. BLOCKED until they land; the
-  worktree half is tested here through `deep env up`.
+- **#18, child sessions**, and **#26, `deep mcp`**: AC9's child agent, `child.test.ts`, written once both were on
+  main (October 28, 2026). It needs #18's `session.child_started@1` for an agent another agent's process started,
+  #26's `deep mcp` and its binding of a call to its session (the PreToolUse stamp from the session's agent process,
+  which is the `deep mcp`'s parent), and the `deep_env` tool, which #331 builds (The surface under test). The
+  worktree half is tested through `deep env up`.
 - **#237, the lease table**: not built at this base (the supervisor of #236 keeps fixed pools). These tests demand
   the lease behavior the issue names regardless, through the record's `lease.*@1` events; #331 can't pass
   without it.
@@ -268,22 +311,27 @@ command, no env-local, a `run.start` that ignores `environment`, and a kit whose
   BLOCKED.
 - **The reference Mac**: AC8's numbers count only there, in the local preflight.
 
-So a PR for #331 that passes everything else says `Part of #331` and lists AC9's child-session half and (until it
-runs where Docker is up) AC11 as open. AC4's install half is testable now that #348 and #349 are on main
-(`install.test.ts`).
+So a PR for #331 that passes everything else says `Part of #331` and lists (until it runs where Docker is up) AC11
+as open. AC4's install half is testable now that #348 and #349 are on main (`install.test.ts`), and AC9's
+child-session half now that #18 and #26 are (`child.test.ts`).
 
 ## Files
 
 - `helpers.ts`: temp folders, test repos and worktrees, the escape fixture's build, PID files and `ps`/`lsof`, ports
   and listeners, the hub as a process and its line protocol, `deep env up`/`down` as a person runs them, Docker's
   reachability, the reference-Mac gate and the timing judge.
-- `stacks.test.ts` (AC1, AC2, AC6, AC9), `health.test.ts` (AC3), `kit.test.ts` and `install.test.ts` (AC4),
-  `leases.test.ts` (AC5, AC10), `crash.test.ts` (AC7), `budgets.test.ts` (AC8), `compose.test.ts` (AC11),
-  `blocked.test.ts` (AC9).
+- `agents.ts`: the agent stand-in as the hub sees it (sessions, hooks over the socket, the PreToolUse stamp, its
+  `deep mcp` as an MCP client speaks it, `deep_env`), and an agent the agent starts in another worktree.
+- `stacks.test.ts` (AC1, AC2, AC6, AC9), `child.test.ts` (AC9, the session half), `health.test.ts` (AC3),
+  `kit.test.ts` and `install.test.ts` (AC4), `leases.test.ts` (AC5, AC10), `crash.test.ts` (AC7), `budgets.test.ts`
+  (AC8), `compose.test.ts` (AC11).
 - `fixtures/server.mjs` (the repo's dev server: a child, a long build, an unhealthy route), `fixtures/check.mjs`
   (AC3's check that needs the app), `fixtures/escape.c` (AC10's escaping helper), `fixtures/environment` and
   `fixtures/env-local` (AC4's extension packages; their `index.ts.fixture` is renamed `index.ts` in the copy the
-  test installs, so neither Vitest nor the type check picks the packages' code up).
+  test installs, so neither Vitest nor the type check picks the packages' code up), `fixtures/agent.mjs` (AC9's
+  agent stand-in, adapted from #26's: hooks and `deep mcp` as its children, and another agent it spawns, driven
+  over a socket of its own).
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`; at this base its only error is
   the missing `packages/env-local`.
-- `BASE-FAILURE.txt`: the run on the base commit. `BASE-FAILURE-AC4.txt`: `install.test.ts` on the redraft's base.
+- `BASE-FAILURE.txt`: the run on the base commit. `BASE-FAILURE-AC4.txt`: `install.test.ts` on the first redraft's
+  base. `BASE-FAILURE-AC9.txt`: `child.test.ts` on the second redraft's base.
