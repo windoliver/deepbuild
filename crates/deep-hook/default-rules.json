@@ -485,7 +485,7 @@
       "planted": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "rm -rf build/*"
+          "command": "rm -rf \"$OUT\"/*"
         }
       },
       "twin": {
