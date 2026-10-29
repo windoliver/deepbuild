@@ -1610,6 +1610,29 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** call.overrun@1 */
+export interface CallOverrun {
+  v: 1;
+  id: string;
+  kind: "call.overrun";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    kind: string;
+    command: string | null;
+    expected_ms: number;
+    ran_ms: number;
+    deadline: "attached" | "recorded" | "none";
+  };
+  evidence?: Array<string>;
+}
+
 /** capability.refused@1 */
 export interface CapabilityRefused {
   v: 1;
@@ -3213,6 +3236,90 @@ export interface ProcessTracked {
     pgid: number;
     cwd: string;
     token: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.blocked@1 */
+export interface PromiseBlocked {
+  v: 1;
+  id: string;
+  kind: "promise.blocked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    status: "BLOCKED";
+    quote: string;
+    cause: "set_again" | "past_end";
+    owner: "service" | "you";
+    ask: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.due@1 */
+export interface PromiseDue {
+  v: 1;
+  id: string;
+  kind: "promise.due";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    due: number;
+    route: "wake" | "next_hook";
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.set@1 */
+export interface PromiseSet {
+  v: 1;
+  id: string;
+  kind: "promise.set";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    quote: string;
+    due: number;
+    times_set: number;
+    end: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.woken@1 */
+export interface PromiseWoken {
+  v: 1;
+  id: string;
+  kind: "promise.woken";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    via: "waiter" | "next_prompt" | "stop_hold";
   };
   evidence?: Array<string>;
 }
