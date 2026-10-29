@@ -167,10 +167,8 @@ interface Live {
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
    * one that lands later goes with the next prompt; and how far its transcript was read for `gh pr create` calls.
    */
-  turn: number; turnTask?: string | undefined; judged: boolean; stopAt?: number; claiming?: Promise<unknown> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined; scanned: { first?: unknown; entries: number; calls: Set<string> };
+  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined; scanned: { first?: unknown; entries: number; calls: Set<string> };
 }
-/** The tool kinds whose call changes code, after which a turn's standing claim is made anew (#83). */
-const WORK = new Set(['edit', 'write', 'shell']);
 /**
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
  * its end (its monotonic clock).
@@ -704,17 +702,22 @@ export class Core {
         // answer, a turn begun by a prompt you typed that opened no task, with no edit, write or ask in it.
         data.claim = this.stopRule(count);
         if (data.claim && verified) claimed = true;
-        // The stop is judged (#83): the turn's claim stands until a prompt opens the next turn.
-        if (data.claim && verified) { live.judged = true; live.stopAt = draft.ts; }
+        // The stop is judged as the rule reads it (#83): a turn's claim stands until a prompt opens the next turn,
+        // and a stop with work the rule reads as no claim (an answer) is not judged, whatever was told ahead.
+        if (verified && count.worked) live.judged = Boolean(data.claim);
         count.worked = false;
         count.changed = false;
       }
       if (draft.kind === 'tool.after') {
         count.worked = true;
-        if (!READS.has(String(data.kind))) count.changed = true;
-        // What the rule would read of a stop now, told ahead so the stop is held for its line (#83).
-        if (verified && !live.judged && this.stopRule(count)) { live.judged = true; this.askingSoon(); }
+        if (!READS.has(String(data.kind))) {
+          count.changed = true;
+          // A call of DeepBuild's own tools (the claim itself, a run, an ask) changes no code: the turn's claim stands (#83).
+          if (!(data.kind === 'mcp' && data.server === 'deep')) live.workedSinceClaim = true;
+        }
       }
+      // What the rule would read of a stop now, told ahead so the stop is held for its line (#83).
+      if (verified && draft.fill !== 'turn' && !live.judged && this.stopRule(count)) { live.judged = true; this.askingSoon(); }
       // A session's events carry the repo it works in, so your answer there is saved for the repo (#23).
       const project = repoOf(meta.cwd);
       if (project && meta.session) this.projects.set(meta.session, project);
@@ -737,7 +740,7 @@ export class Core {
     });
     settled.catch(() => undefined);
     // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record.
-    if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown) => process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
+    if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
     if (session && call) {
@@ -952,7 +955,6 @@ export class Core {
       else if (draft.kind === 'tool.before' || draft.kind === 'tool.after') {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
-        if (draft.kind === 'tool.after' && WORK.has(String(draft.data.kind))) live.workedSinceClaim = true;
         if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
       } else if (draft.kind === 'agent.stop') {
@@ -1194,8 +1196,8 @@ export class Core {
   private askingQueued = false;
   private askingSent = '';
   /**
-   * Sends the event loop the sessions with an ask still to deliver, and those whose current turn a person's prompt
-   * opened and that did work, so their next stop is held for its line (#83); once per turn of appends, when it changed.
+   * Sends the event loop the sessions with an ask still to deliver, and those whose next stop the stop rule would read
+   * as a claim, so it is held for its line (#83); once per turn of appends, when it changed.
    */
   private askingSoon(): void {
     if (this.askingQueued) return;
@@ -1574,8 +1576,8 @@ export class Core {
     return claimState((q) => this.record.raw(q), claim.replace(/^claim:/, ''), this.expected);
   }
   /**
-   * A stop that is judged (design: Every stop is judged): the stop of a turn a person's prompt opened that did
-   * work, two stops with no new work included; undefined for any other. The pull request the turn opened is
+   * A stop that is judged (design: Every stop is judged): one the stop rule (#303) reads as a claim, and a later
+   * stop of the same turn with nothing changed since; undefined for any other. The pull request the turn opened is
    * recorded, and a turn with no claim yet gets one, as the agent's claim for the task its prompt named, at the
    * worktree's commit, or at the record's no-commit value (forty zeros) where the folder has none.
    */
@@ -1583,14 +1585,14 @@ export class Core {
     const live = this.live.get(meta.session);
     if (!live?.judged) return undefined;
     await this.recordPr(meta.session, live);
-    // The turn's claim stands while no work came after it: a stop after a send-back that changed code claims anew.
-    if (live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) return live;
-    // The claim the rule made at this stop for a locked ask-task (#303) is the one the line reads; with none locked,
-    // the turn's own task is claimed here.
-    await live.claiming?.catch(() => undefined);
+    // The claims the rule made at this stop, for the locked ask-tasks (#303): the newest is the one the line reads.
+    const made = (await live.claiming) ?? [];
     live.claiming = undefined;
-    const [made] = (await this.record.raw(`SELECT id FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'claim.made' AND ts >= ${live.stopAt ?? 0} ORDER BY log_pos DESC LIMIT 1`)) as { id: string }[];
-    if (made) { this.claimed(meta.session, `claim:${made.id}`); return live; }
+    const newest = made[made.length - 1];
+    if (newest) { this.claimed(meta.session, newest); return live; }
+    // With none, the turn's claim stands while nothing changed since it: a stop after a send-back that changed code
+    // claims anew, for the turn's own task.
+    if (live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) return live;
     // The head as the turn's last commits left it, read by the chain follow() started.
     await live.reading?.catch(() => undefined);
     const commit = live.head ?? (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
@@ -2724,7 +2726,6 @@ export class Core {
     }
     await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd });
   }
-  /** A session's counter, its messages numbered on from its last recorded one, so a restarted hub never reuses a handle. */
   /**
    * The stop rule (#303, design: Every stop is judged): a stop whose turn did work is a claim, other than one right
    * after startup, a resume or /clear, or an answer, a turn begun by a prompt you typed that opened no task, with no
@@ -2734,9 +2735,20 @@ export class Core {
     const answer = count.prompt?.person === true && !count.prompt.opened && !count.changed;
     return this.options.plant === 'claim-on-tool-calls' ? count.worked : count.worked && !count.fresh && !answer;
   }
+  /**
+   * A session's counter, its messages numbered on from its last recorded one, so a restarted hub never reuses a
+   * handle; with what the stop rule reads of the turn under way: its prompt, and whether a start came after it.
+   */
   private async counterOf(session: string): Promise<Counter> {
     const [row] = session ? await this.record.raw(`SELECT MAX(json_extract(data, '$.msg')) AS msg FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask'`).catch(() => []) as { msg: number | null }[] : [];
-    const count = this.counters.get(session) ?? { msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: false };
+    // The newest prompt stands for the turn's: a mid-turn message after the one that opened a task reads, until
+    // the next prompt, as a prompt that opened none.
+    const [prompt] = session ? await this.record.raw(`SELECT json_extract(data, '$.from') AS f, json_extract(data, '$.tasks[0]') AS task, log_pos FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask' ORDER BY log_pos DESC LIMIT 1`).catch(() => []) as { f: string | null; task: string | null; log_pos: number }[] : [];
+    const [started] = prompt ? await this.record.raw(`SELECT 1 AS one FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.start' AND log_pos > ${prompt.log_pos} LIMIT 1`).catch(() => []) as { one: number }[] : [];
+    const count = this.counters.get(session) ?? {
+      msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: false,
+      ...(prompt ? { prompt: { person: prompt.f === 'person', opened: prompt.task !== null }, fresh: started !== undefined } : {}),
+    };
     this.counters.set(session, count);
     return count;
   }
