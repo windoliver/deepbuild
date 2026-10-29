@@ -151,7 +151,7 @@ async function debugBundle(): Promise<number> {
 // so a set-up home starts as fast as before (#24's budget). deep env with --root names a dev hub and acts on it alone
 // (#331), so it sets nothing up in the home.
 const yours = ['status', 'inbox', 'off', 'on', 'env', 'install', 'guard'];
-const devHub = args[0] === 'env' && args.includes('--root') && args[args.indexOf('--root') + 1] !== undefined;
+const devHub = args[0] === 'env' && args.includes('--root');
 if (yours.includes(args[0] ?? '') && !devHub && !existsSync(join(homedir(), '.deepbuild'))) {
   const { setUpFirst } = await import('@deepbuild/hub');
   const code = await setUpFirst(fileURLToPath(import.meta.url));
