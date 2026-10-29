@@ -7,7 +7,7 @@ export type JsonObject = { [key: string]: JsonValue };
 /** deep-hook's request line, a hook.request@3 instance as it crosses the wire: seq is its decimal string. */
 export interface HookRequestLine {
   v: 1; agent: string; event: string; seq: string; id: string; pid: number; ppid: number; matched: string[]; payload: JsonValue;
-  late?: boolean; billing?: Record<string, boolean>; notes?: Record<string, string>;
+  late?: boolean; billing?: Record<string, boolean>; notes?: Record<string, string>; stage?: Record<string, string[]>;
 }
 
 /** One event an adapter mapped (adapter.event@1): rule is the JSON Pointer of the facts entry that decided it. */

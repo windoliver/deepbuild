@@ -186,6 +186,17 @@ An environment a check runs against: up(spec, lease, checkout) starts it and ret
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9_.-]*$` | yes |
 
+### `deep.lease`
+
+In R1 · preview · `d1:72f80c99488b577be1da72993587eced73bc5fe76185dec9159ede0ac6513665`
+
+Leases a resource of a declared lease.kind@1 kind, the core's or one a manifest declares, exclusive or shared, held by the package itself: the grant, or the refusal naming the holder.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `resource` | object | yes |
+| `mode` | `exclusive` · `shared` | yes |
+
 ### `deep.registerAdapter`
 
 In R1 · stable · `d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27`
