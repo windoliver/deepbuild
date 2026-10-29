@@ -659,7 +659,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels or bound values in them. One process installs a plug-in whose source answers 600 readings, 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, plays them on the virtual clock through `deep-show run` and reads each surface's frame, failing unless all three show the last price; p50 includes Node's and the binary's start. The issue's one frame per reading stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels or bound values in them. One process installs a plug-in whose source answers 600 readings, 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, plays them on the virtual clock through `deep-show run` and reads each surface's frame after every reading, failing unless each shows the reading before it; p50 includes Node's and the binary's start. The issue's one frame per reading stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "panel-pop-out",
