@@ -1,14 +1,13 @@
-// The child processes the core starts beside a session's hooks (`ps`, `git`, an MCP server for its tool list),
-// started from a thread of their own (design: Numbers version 0 has to hold, Hot path). Starting a process holds the
-// thread that starts it until the exec, 25 to 40 ms on a loaded Mac whose endpoint scanner checks each exec; on the
-// core's thread every hook reply queued behind it would wait that long.
+// The child processes the core starts beside a session's hooks (`ps`, `git`), started from a thread of their own
+// (design: Numbers version 0 has to hold, Hot path). Starting a process holds the thread that starts it until the
+// exec, 25 to 40 ms on a loaded Mac whose endpoint scanner checks each exec; on the core's thread every hook reply
+// queued behind it would wait that long.
 import { Worker } from 'node:worker_threads';
 
-type Obj = Record<string, unknown>;
 /** What execFile's callback gets, as plain data: its error's code and message, and the output as text. */
 interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string }
 interface RunOptions { env?: NodeJS.ProcessEnv; cwd?: string; timeout?: number; maxBuffer?: number }
-export type ChildJob = { op: 'exec'; file: string; args: string[]; options: RunOptions } | { op: 'list'; config: Obj; cwd: string };
+export interface ChildJob { file: string; args: string[]; options: RunOptions }
 
 let worker: Worker | undefined;
 let n = 0;
@@ -16,12 +15,11 @@ const waiting = new Map<number, { resolve(v: unknown): void; reject(e: Error): v
 function ask(job: ChildJob): Promise<unknown> {
   if (!worker) {
     const started = worker = new Worker(new URL('./children-worker.js', import.meta.url));
-    started.on('message', (m: { n: number; result?: unknown; error?: string }) => {
+    started.on('message', (m: { n: number; result: unknown }) => {
       const w = waiting.get(m.n);
       waiting.delete(m.n);
       if (!waiting.size) started.unref();
-      if (m.error !== undefined) w?.reject(Error(m.error));
-      else w?.resolve(m.result);
+      w?.resolve(m.result);
     });
     // A thread that died fails what it held; the next job starts another.
     const gone = (error: Error) => {
@@ -43,11 +41,7 @@ function ask(job: ChildJob): Promise<unknown> {
 
 /** execFile, run from the children's thread; a thread that can't run it reads as a failed run. */
 export const run = (file: string, args: string[], options: RunOptions = {}): Promise<Ran> =>
-  (ask({ op: 'exec', file, args, options }) as Promise<Ran>).catch((error: Error) => ({ error: { message: error.message }, stdout: '', stderr: '' }));
-
-/** One stdio MCP server's version and tools, read by starting it from the children's thread. */
-export const toolList = (config: Obj, cwd: string): Promise<{ version: string | null; tools: { name: string; digest: string; hints: Obj }[] }> =>
-  ask({ op: 'list', config, cwd }) as Promise<{ version: string | null; tools: { name: string; digest: string; hints: Obj }[] }>;
+  (ask({ file, args, options }) as Promise<Ran>).catch((error: Error) => ({ error: { message: error.message }, stdout: '', stderr: '' }));
 
 const C = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: 'C' });
 /** A process's start time, as wire.ts's startOf reads it (`ps -o lstart=`), or undefined when it can't be read. */
