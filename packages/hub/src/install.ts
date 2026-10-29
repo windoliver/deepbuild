@@ -68,5 +68,9 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     return 1;
   }
   process.stdout.write(`Installed ${String(reply.result.id)}@${String(reply.result.version)}\n`);
+  if (typeof reply.result.not_loaded === 'string') {
+    process.stderr.write(`It is not loaded: ${reply.result.not_loaded}\n`);
+    return 1;
+  }
   return 0;
 }
