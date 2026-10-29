@@ -17,6 +17,7 @@ import { AskRefused, type Asks } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { countMcp, toolLists, type Listed } from './mcp-servers.js';
+import type { About } from './standing.js';
 import { AUTHORITY, type Gated, type HookMeta, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -121,6 +122,36 @@ export class Holds {
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
     const question = `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`;
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!);
+  }
+
+  /**
+   * A call of a class a standing rule decides (#23), or a permission prompt: one authority ask about what it does,
+   * raised from its subject so a saved decision that covers it answers it at once, as decided for you. Its handle,
+   * and the decision that answered it with its option, if one did.
+   */
+  async asked(meta: HookMeta, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
+    const pinned_to = await this.o.pin(meta.cwd, about.question);
+    const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
+    const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
+      kind: 'authority', question: about.question, options, recommended: null, default: 'decline', fallback: 'you', provisional: false, owner: 'you', subject: about.subject, pinned_to,
+    });
+    return { ask, ...(await this.applied(ask)) };
+  }
+  /** The decision that answered an ask for you, with the option it chose; nothing when none did. */
+  async applied(ask: string): Promise<{ decision?: string; option?: string }> {
+    const [applied] = (await this.o.raw(`SELECT json_extract(data, '$.decision') AS decision FROM events WHERE kind = 'decision.applied' AND json_extract(data, '$.ask') = '${sql(ask)}' ORDER BY log_pos LIMIT 1`)) as { decision: string }[];
+    if (!applied) return {};
+    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND id = '${sql(applied.decision.slice('decision:'.length))}'`)) as { answer: string }[];
+    return saved ? { decision: applied.decision, option: saved.answer } : {};
+  }
+
+  /** A call a standing rule decides: allowed or denied by your rule, naming it; held by an ask when none covers it. */
+  async decide(meta: HookMeta, about: About): Promise<{ held?: string; allow?: string; deny?: string }> {
+    const { ask, decision, option } = await this.asked(meta, about);
+    const why = this.o.plant === 'rule-without-reason' ? '' : ` by your standing rule ${decision}`;
+    if (decision && option === 'approve') return { allow: `DeepBuild allowed this${why}: ${about.question.replace(/\? No plan names it\.$/, '.')}` };
+    if (decision) return { deny: `DeepBuild denied this${why}: you said no to it. ${about.question}` };
+    return { held: `DeepBuild is holding this: ${about.question} It waits for your answer to ${ask}; once you say yes, run the same call again.` };
   }
 
   /** Every list recorded for `server`, oldest first. */
