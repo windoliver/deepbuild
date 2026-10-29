@@ -1472,8 +1472,10 @@ class AsksCore implements Asks {
           // A session's task folded into the shared one: the shared task covers its stop from then on.
           const into = e.kind === 'ask.superseded' ? this.asks.get(bare(String(d.by))) : undefined;
           if (into?.block) for (const [session, id] of ask.block.stops) into.block.stops.set(session, id);
-          // Closed on its check: its sessions resume. A default leaves them blocked, as its option says.
-          if (e.kind === 'ask.moot') this.resumes.add(ask);
+          // Closed on its check, or by your "I did it" (its done option; until the done gate re-runs the check on that
+          // answer, #323, the next turn is the check: a block that holds stops the session again): its sessions
+          // resume. "Leave it blocked" and a default leave them stopped, as the option says.
+          if (e.kind === 'ask.moot' || (e.kind === 'ask.answered' && d.answer === 'done')) this.resumes.add(ask);
         }
         // An ask the exception held but hadn't shown yet wasn't in what you closed: it gets its own card.
         if (ask.fold) for (const a of this.openIn(ask.thread)) if (a.folded === ask.handle && !a.shown) delete a.folded;
@@ -1683,10 +1685,10 @@ class AsksCore implements Asks {
       this.fresh.delete(session);
       const stop = this.newest(session);
       if (!stop || this.wasContinued(stop) || this.typedAfter(stop)) continue;
-      if (stop.owner === 'you' || stop.cause === 'plan_window_spent') {
+      if (stop.owner === 'you' || (stop.cause === 'plan_window_spent' && stop.resets !== null)) {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
-        else this.fresh.add(session); // BLOCKED on the settings: read again at the next tick, once they declare the deadline.
+        else this.fresh.add(session); // BLOCKED on the settings: read again when the hub next ticks the core, once they declare the deadline.
       } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
@@ -1716,8 +1718,9 @@ class AsksCore implements Asks {
    * The task for a stop's block, from ask.sources@1's stop.block row: keyed on the block's signature, pinned to it,
    * owned by the person it stopped, unblocking the session, proved by the block's check. With a task of the same block
    * open, the session's joins it (superseded by it as soon as it's recorded). The deadline comes from your settings, as
-   * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the next tick) and the session
-   * stays stopped with its cause on its row.
+   * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the hub's next tick) and the
+   * session stays stopped with its cause on its row. A spent window with no reset in its stop raises nothing: nothing
+   * could close its task.
    */
   private async raiseBlock(stop: Stop, now: number): Promise<boolean> {
     const template = askSources().find((r) => r.source === BLOCK_SOURCE)!.fixture.ask as Obj;

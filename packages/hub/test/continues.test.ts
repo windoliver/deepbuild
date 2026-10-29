@@ -68,6 +68,9 @@ describe('a continue recorded as the hub opens', () => {
       const carried = await until(() => rows<{ r: string }>(root, "SELECT json_extract(data, '$.reading') AS r FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE 'DeepBuild continues this session%'", SESSION), 5_000);
       expect(carried.map((c) => c.r), 'the hub carried the continue it found on opening').toEqual([`DeepBuild continues this session (task_closed, task ask:${task!.id}), but no route into it is open now: the continue goes with its next prompt.`]);
       expect(rows(root, "SELECT 1 FROM events WHERE kind = 'ask.moot' AND subject = ?", `ask:${task!.id}`), 'the task is moot').toHaveLength(1);
+      await new Promise((r) => setTimeout(r, 1500));
+      expect(rows(root, "SELECT 1 FROM events WHERE kind = 'session.continued' AND session_id = ?", SESSION), 'continued once, carried once').toHaveLength(1);
+      expect(rows(root, "SELECT 1 FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE 'DeepBuild continues this session%'", SESSION)).toHaveLength(1);
     });
   }, 60_000);
 });
