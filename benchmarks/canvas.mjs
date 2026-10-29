@@ -354,6 +354,57 @@ workloads.class = () => {
   }
 };
 
+// #401: a plug-in's panels in the ring through `deep-show run`, on #400's two displays and the virtual clock.
+const RING_DISPLAYS = [
+  { uuid: 'A', bounds: [0, 0, 1512, 982], scale: 2, refresh_hz: 120, next_vsync: 5_880_000, color_space: 'p3' },
+  { uuid: 'B', bounds: [1512, 0, 1920, 1080], scale: 1, refresh_hz: 60, next_vsync: 2_116_800, color_space: 'srgb' },
+];
+const SEC = 705_600_000;
+function ring(panels, manifest, calls) {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const install = { call: 'install', at: 1, plugin: 'bench', manifest };
+    const [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, clock: { lead: 1_411_200, check: 352_800 }, displays: RING_DISPLAYS, window: [1200, 700], panels, calls: [install, ...calls] })]);
+    if (answer.ok !== true || answer.replies[0].installed !== true) throw Error(`the run failed: ${JSON.stringify(answer).slice(0, 2000)}`);
+    return answer.replies.slice(1);
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+}
+
+// 600 readings of one source, each 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, then one
+// frame read of each surface; fails unless every surface shows the last price.
+workloads['panel-bound-value'] = () => {
+  const bind = { source: 'reading:ticker', select: 'value', format: { unit: 'USD', precision: 2, notation: 'fixed' }, stale_after: 60 * SEC };
+  const n = 600, every = SEC / 10;
+  const manifest = {
+    sources: { ticker: { fresh_for: 60 * SEC, replay: Array.from({ length: n }, (_, k) => ({ value: 100 + k / 4, unit: 'USD' })) } },
+    panels: {
+      quote: { tree: [{ id: 'price', component: 'text', bind }], script: { timers: [{ first: SEC, every, until: SEC + (n - 1) * every, do: [{ op: 'read', source: 'ticker' }] }] } },
+      table: { tree: [{ id: 'grid', component: 'sheet', cells: [{ id: 'price', bind }] }] },
+      chart: { tree: [{ id: 'trend', component: 'chart', label: { bind } }] },
+    },
+  };
+  const end = SEC + n * every;
+  const drawn = ring({ quote: { rect: [0, 0, 400, 350] }, table: { rect: [400, 0, 400, 350] }, chart: { rect: [800, 0, 400, 350] } }, manifest,
+    ['quote', 'table', 'chart'].map((panel) => ({ call: 'drawn', at: end, panel })));
+  const last = (100 + (n - 1) / 4).toFixed(2);
+  if (!drawn.every((d) => d.bound?.[0]?.text?.includes(last))) throw Error(`a surface doesn't show ${last}: ${JSON.stringify(drawn)}`);
+};
+
+// Six of your clicks, each in its own panel, and a pop-out of each onto the second display with its click's serial;
+// fails unless every pop-out opens its window.
+workloads['panel-pop-out'] = () => {
+  const ids = ['v0', 'v1', 'v2', 'v3', 'v4', 'v5'];
+  const panels = Object.fromEntries(ids.map((id, i) => [id, { rect: [(i % 3) * 400, Math.floor(i / 3) * 350, 400, 350] }]));
+  const manifest = { panels: Object.fromEntries(ids.map((id) => [id, { tree: [{ id: 'title', component: 'text', text: id }] }])) };
+  const clicks = ids.map((id, i) => ({ call: 'input', at: SEC + i * SEC, panel: id, event: { type: 'down', pos: [10, 10] } }));
+  // The router numbers your inputs in order, from 1.
+  const pops = ids.map((id, i) => ({ call: 'pop_out', at: 10 * SEC + i * SEC, panel: id, display: 'B', serial: i + 1 }));
+  const replies = ring(panels, manifest, [...clicks, ...pops]);
+  if (!replies.slice(ids.length).every((r) => r.window)) throw Error(`a pop-out didn't open: ${JSON.stringify(replies.slice(ids.length))}`);
+};
+
 workloads.judge = () => {
   const { current, base } = JSON.parse(readFileSync(0, 'utf8'));
   const cls = current.class;
