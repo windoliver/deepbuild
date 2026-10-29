@@ -1,0 +1,110 @@
+#303 acceptance suite on the base commit c92864d1 (origin/main), 2026-10-28 18:11 UTC, before any #303 code.
+Run: npx vitest run --root tests/acceptance/303 --no-file-parallelism   (Node 24.22.0; 1-minute load 16-23 on 12 cores,
+5-minute load 72 falling to 27 during the run)
+Result: Test Files 11 failed (11); Tests 21 failed (21); 466 s. Every test fails at a named assertion, or BLOCKED on a
+plant the base doesn't list. None crashes the runner. Trimmed to each test's failing assertion.
+
+What the base does: it records a user.ask for every prompt and every message typed mid-turn, with its from, and names a
+task (session:<id>#<msg>) in `tasks` for every prompt a person typed, a question and a rename included. It appends no
+task.created, no definition.locked, no stop-rule reading and no recomputed hash, and reads neither DEEP_HUB_TEST_DRAFTS
+nor DEEP_HUB_TEST_WORK.
+
+first.test.ts (AC7 #303.1bdbea79)
+  x AC7 "explain how the auth middleware checks expiry" as a first prompt opens no task ...
+    Error: AC7 #303.1bdbea79 the prompt "explain how the auth middleware checks expiry" must open no task, its user.ask
+    recording tasks: [], yet it opened ["session:67162b32980d46faab2ed14e25eb4c9a#0"]
+  x AC7 (wrong program) ... (DEEP_HUB_PLANT=first-prompt-always-task) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=first-prompt-always-task did not start ...
+    Error: DEEP_HUB_PLANT=first-prompt-always-task names no planted program
+
+midturn.test.ts (AC2 #303.c7678fa6, AC8 #303.0ca34012)
+  x AC2 "also return 401 with a JSON error body when the token is malformed", typed while a Read runs, is a task ...
+    Error: AC2 #303.c7678fa6 the prompt "also return 401 ..." must open one task under the session's thread (...): a
+    task.created with task_ref session:5921cd03e5cc44adbe4d3f340abe1aec#1; the thread holds no task.created
+  x AC8 "why did you pick bcrypt?" opens no task; "also add a test for expired tokens" opens one within one hook
+    Error: AC8 #303.0ca34012 the prompt "why did you pick bcrypt?" must open no task, its user.ask recording tasks: [],
+    yet it opened ["session:2fe2e49a32454d6fab88a47229b57fe3#1"]
+  x AC8 (wrong program) ... (DEEP_HUB_PLANT=midturn-always-task) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=midturn-always-task names no planted program
+
+rename.test.ts (AC3 #303.64edb131)
+  x AC3 "Rename the getUser function to fetchUser." opens no task ...
+    Error: AC3 #303.64edb131 the prompt "Rename the getUser function to fetchUser." must open no task, its user.ask
+    recording tasks: [], yet it opened ["session:57727beb6e184c4788f3fe4c9ccb1a7a#1"]
+
+survive.test.ts (AC4 #303.01978d67)
+  x AC4 after a compaction and after a resume on a restarted hub, SessionStart names the open ask's requirement IDs ...
+    Error: AC4 #303.01978d67 the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): a task.created with task_ref session:90af05b00ddb40abaee6f0089603f677#0; the thread holds
+    no task.created
+
+outside.test.ts (AC5 #303.c870ae54)
+  x AC5 drive-by's comment "skip the e2e test" ... leaves R2 in, marks drive-by on R3, ... locks only after your answer
+    Error: AC5 #303.c870ae54 [unsigned] the session started from https://work.test/acme/shop/issues/7 must open one
+    task, keyed by the issue, under its thread: no task.created
+  x AC5 the same comment signed "the repo owner" in its text still waits for one answer ...
+    Error: AC5 #303.c870ae54 [signed "the repo owner"] the session started from https://work.test/acme/shop/issues/7
+    must open one task, keyed by the issue, under its thread: no task.created
+  x AC5 (wrong program) ... (DEEP_HUB_PLANT=role-from-text) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=role-from-text names no planted program
+
+origins.test.ts (AC6 #303.f3b51cf5)
+  x AC6 a /loop iteration (from scheduled), a background subagent's report (from subagent) and another session's message
+    (from session) each fire UserPromptSubmit and open nothing; your typed "..." opens a task
+    Error: AC6 #303.f3b51cf5 the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): a task.created with task_ref session:65f6130bcc864eafbf8a0c648bf14b92#0; the thread holds
+    no task.created
+    -> the three automatic prompts pass at the base (from scheduled, subagent, session; tasks: []); the control fails.
+
+lock.test.ts (AC9 #303.8c347a59)
+  x AC9 the newest definition.locked schema the contracts publish requires the hash, the issue's revision and the base commit
+    Error: AC9 #303.8c347a59 definition.locked@1's fixture must carry issue_rev: {"definition":"9f86d0...", ...}
+  x AC9 the recorded definition.locked passes its schema ...; the claim's recomputed hash equals the locked one ...
+    Error: AC9 #303.8c347a59 the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): ...; the thread holds no task.created
+  x AC9 (wrong program) ... (DEEP_HUB_PLANT=hash-ids-only) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=hash-ids-only names no planted program
+
+stops.test.ts (AC10 #303.fd687f1e)
+  x AC10 stops right after startup, a resume and /clear, and the answer ... are no claim; ... with an edit is a claim
+    Error: AC10 #303.fd687f1e [turn D] the prompt "explain how the auth middleware checks expiry" must open no task, its
+    user.ask recording tasks: [], yet it opened ["session:63193d808a4a41d08944c3581f67a9df#0"]
+    -> the test's precondition (the question opened no task) fails before the stop readings; the base's agent.stop
+       carries did_work but no `claim` either.
+  x AC10 (wrong program) ... (DEEP_HUB_PLANT=claim-on-tool-calls) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=claim-on-tool-calls names no planted program
+
+budgets.test.ts (AC11 #303.447eb97a)
+  x AC11 the perf lane has a task naming #303, timing the prompt hook, valid against the merge base's budgets, and it runs
+    Error: AC11 #303.447eb97a benchmarks/budgets.json must have a task whose reason names issue #303, timing the prompt
+    hook that turns a message into a task
+  x AC11 turning a message into a task adds under 5 ms to the prompt hook, against the merge base's build
+    Error: AC11 #303.447eb97a the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): ...; the thread holds no task.created
+    -> the proof that the timed prompt becomes a task comes before the merge base is built, so no timing was taken.
+
+checkfile.test.ts (AC12 #303.323ca6a1)
+  x AC12 .deepbuild/checks/expired-token.sh changed by python -c after the lock: ...
+    Error: AC12 #303.323ca6a1 the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): ...; the thread holds no task.created
+  x AC12 (wrong program) ... (DEEP_HUB_PLANT=hash-check-paths) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=hash-check-paths names no planted program
+
+Redraft, AC12 only (2026-10-28 20:17 UTC, base c92864d1, 1-minute load 18-25 on 12 cores):
+Run: npx vitest run --root tests/acceptance/303 --no-file-parallelism checkfile
+Result: Tests 3 failed (3); 32 s.
+  x AC12 ... and the claim's run of R1's check records the approved check's outcome
+    Error: AC12 #303.323ca6a1 the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): a task.created with task_ref session:0c2688fbdf804be5944b20fc402f1fd6#0; the thread holds
+    no task.created
+    -> the scenario stops at the task before any claim; the base records no claim, run.started or run.finished at a stop.
+  x AC12 (wrong program) ... (DEEP_HUB_PLANT=hash-check-paths) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=hash-check-paths names no planted program
+  x AC12 (wrong program) a claim whose checks run the file on disk (DEEP_HUB_PLANT=runs-disk-bytes) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=runs-disk-bytes names no planted program
+
+Also checked on the base during drafting: deep-hook's PreToolUse allows AC12's
+`python3 -c "open('.deepbuild/checks/expired-token.sh', ...).write(...)"` (the guard reads no write in its text), and
+events.read returns each event with v, writer, actor, scope, ts and data, so AC9 validates recorded events as they are.
+
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/303/tsconfig.json passes with no output.
