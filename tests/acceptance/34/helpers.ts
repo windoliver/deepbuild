@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { canonicalize, type JsonValue } from '../../../packages/contracts/src/index.ts';
 import { openRecord } from '../../../packages/record/src/index.ts';
 import { askSources, openAsks } from '../../../packages/asks/src/index.ts';
+import { shownPlanHash, withPlans } from '../plans.ts';
 import { Conn, fromHere, hookRequest, newSession, openAs, result, sendHook, sleep, tempDir, tokenOf, type Line, type Session } from '../16/helpers.ts';
 
 export {
@@ -23,7 +24,7 @@ export const sha256 = (text: string): string => createHash('sha256').update(text
 
 // ---- Asks in the record before the hub starts (the hub's asks core reads them from the log at its start).
 
-export interface Seeded { handle: string; question: string; options: { id: string; label: string; decision: string }[]; kind: string }
+export interface Seeded { handle: string; question: string; options: { id: string; label: string; decision: string }[]; kind: string; plan_hash: string | null }
 /**
  * Raises each ask through the asks core (#318) on the hub root's ledger, as the core would, before any hub runs
  * there: `source` is a row of ask.sources@1, and the ask is that row's fixture with its own question, key,
@@ -33,7 +34,7 @@ export async function seedAsks(root: string, asks: { source: string; question: s
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const now = () => Date.now();
   const record = await openRecord({ path: join(root, 'ledger.db'), now });
-  const core = await openAsks({ record, now, deliver: () => undefined });
+  const core = withPlans(await openAsks({ record, now, deliver: () => undefined }));
   const out: Seeded[] = [];
   for (const { source, question } of asks) {
     const row = askSources().find((r) => r.source === source);
@@ -41,7 +42,7 @@ export async function seedAsks(root: string, asks: { source: string; question: s
     const ask: Line = { ...(row.fixture.ask as Line), question, key: sha256(`#34 ${question}`), deadline: now() + 86_400_000 };
     ask.pinned_to = { ...(ask.pinned_to as Line), ref: (ask.pinned_to as Line).kind === 'commit' ? sha256(question).slice(0, 40) : sha256(question) };
     const handle = await core.raise({ writer: 'core', actor: 'you', scope: 'you' }, source, ask);
-    out.push({ handle, question, options: ask.options as Seeded['options'], kind: row.kind });
+    out.push({ handle, question, options: ask.options as Seeded['options'], kind: row.kind, plan_hash: await shownPlanHash(core, handle) });
   }
   await record.close();
   return out;
