@@ -450,6 +450,10 @@ export class Core {
     const trust = await openTrust({ record: this.record, now: this.now });
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases });
     for (const pkg of await extensions.installed()) {
+      // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
+      // package loads from its result at this start and each later one, as one installed since #785 does. A check
+      // that can't run (an untrusted project) is left to the load's refusal, which names it.
+      if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
     }
