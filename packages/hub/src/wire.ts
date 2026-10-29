@@ -88,7 +88,7 @@ export interface HookMeta {
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
   /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; file_path?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.

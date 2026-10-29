@@ -16,8 +16,12 @@ export const HOLD_MARGIN_MS = 5_000;
 /** Claude Code's own timeouts, unless an entry sets one (its facts' hookTimeouts). */
 const DEFAULT_TIMEOUT_S: Record<string, number> = { Stop: 600, UserPromptSubmit: 30 };
 const DEFAULT_TIMEOUT = 60;
-/** The hooks the adapter maps (#18), each one entry; Stop also carries the waiter. */
-export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd'];
+/**
+ * The hooks the adapter maps (#18), each one entry; Stop also carries the waiter. FileChanged maps to no event: it is
+ * the route a line takes into the terminal while a call still runs (#120), fired by the session's ticker file, which
+ * the SessionStart reply names in `watchPaths`.
+ */
+export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd', 'FileChanged'];
 const TOOL_HOOKS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
 
 export const claudeSettings = (): string => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json');
