@@ -177,6 +177,16 @@ describe('ask-tasks hardening', () => {
         expect(undo.status, `the undo of a default a definition locked on is refused: ${undo.stdout}${undo.stderr}`).toBe(1);
         expect(undo.stderr, 'the refusal names the definition that locked on it').toMatch(new RegExp(`definition of ${s.handle(1).replace('#', '\\#')} locked on it`));
         expect(l.events('ask.defaulted').length, 'the ask stays defaulted').toBe(2);
+
+        // The emptied one's default can be undone, and your answer then locks the definition with the outside text in.
+        const emptied = asks.find((a) => String(a.question).includes(s.handle(0)));
+        expect(emptied, 'the ask about the definition the default emptied').toBeDefined();
+        const reopen = spawnSync(process.execPath, [CLI, 'inbox', 'undo', `ask:${emptied!.id}`], { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 60_000 });
+        expect(reopen.status, `the undo of a default that locked nothing counts: ${reopen.stdout}${reopen.stderr}`).toBe(0);
+        const keep = spawnSync(process.execPath, [CLI, 'inbox', 'answer', `ask:${emptied!.id}`, 'keep'], { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 60_000 });
+        expect(keep.status, `your answer keep counts: ${keep.stdout}${keep.stderr}`).toBe(0);
+        await l.settle(() => l.locked(s.handle(0)).length > 0);
+        expect((l.locked(s.handle(0))[0]?.requirements as Obj[] | undefined)?.map((r) => r.id), 'the definition locks with the outside requirement in, after the undo').toEqual(['R1']);
       } finally {
         l.db.close();
       }
