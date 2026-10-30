@@ -12,6 +12,7 @@ pub mod answer;
 pub mod arming;
 pub mod canvas;
 pub mod card;
+pub mod cells;
 pub mod confirm;
 pub mod events;
 pub mod gpu_view;
