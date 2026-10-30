@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { captureRejected, reaches, rejectedDirections, revives } from '../src/memory.js';
+import { captureRejected, dropKept, reaches, rejectedDirections, revives } from '../src/memory.js';
 import { ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
 import type { Connection, Message, RecordStore } from '@deepbuild/record';
@@ -39,6 +39,15 @@ describe('rejected directions', () => {
     const messages = [message('m1', 'No. rejected: `kafka`.'), message('m2', '# AGENTS.md instructions\nrejected: `pnpm`'), message('m3', '<user_instructions>\nrejected: `git`\n</user_instructions>'), message('m4', 'was it rejected: `redis` then?')];
     await captureRejected(record, { actor: 'you', scope: 'x' } as unknown as Connection, () => 1, [{ session: 's', project: 'p', messages, from: 0 }]);
     expect(saved).toEqual(['rejected: `kafka`']);
+  });
+
+  it('overruling a keep takes that lesson\'s guard out of rules.json, and only its guard', async () => {
+    await withHub(async (root) => {
+      const file = join(root, 'rules.json');
+      writeFileSync(file, JSON.stringify({ v: 1, entries: { 'memory-abc': { match: 'run:x' }, 'memory-def': { match: 'run:y' }, mine: { match: 'run:z' } } }));
+      dropKept(root, createHash('sha256').update('memory lesson-abc').digest('hex'));
+      expect(Object.keys((JSON.parse(readFileSync(file, 'utf8')) as { entries: object }).entries).sort()).toEqual(['memory-def', 'mine']);
+    });
   });
 
   it('leaves a guard you added under a free-text repo: scope reaching everywhere; only its own entries are held to their repo', () => {

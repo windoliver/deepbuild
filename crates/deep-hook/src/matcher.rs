@@ -87,10 +87,11 @@ const EFFECTS: &[&str] = &[
 const HUB_LABEL: &str = "com.deepbuild.hub";
 const HUB_UNIT: &str = "deepbuild-hub";
 
-/// Whether `line` holds `key` with no letter, digit, `_`, `-`, `.` or `/` against either end of it.
+/// Whether `line` holds `key`, in any case, with no letter, digit, `_`, `-`, `.` or `/` against either end of it.
 fn holds_word(line: &str, key: &str) -> bool {
     let word = |c: char| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/');
-    line.match_indices(key).any(|(at, _)| {
+    let (line, key) = (line.to_lowercase(), key.to_lowercase());
+    line.match_indices(&key).any(|(at, _)| {
         !line[..at].chars().next_back().is_some_and(word)
             && !line[at + key.len()..].chars().next().is_some_and(word)
     })
@@ -1161,6 +1162,7 @@ mod tests {
     fn a_word_is_whole_and_no_part_of_a_path() {
         let m = "word:kafka";
         assert!(bash("npm install kafka").matches(m).is_some());
+        assert!(bash("npm install Kafka").matches(m).is_some());
         assert!(bash("npm install kafka-lite").matches(m).is_none());
         assert!(bash("cat src/kafka/a.ts").matches(m).is_none());
     }

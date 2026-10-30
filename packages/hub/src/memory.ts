@@ -12,7 +12,7 @@ import { ulid, type Connection, type Message, type RecordStore } from '@deepbuil
 import { startOf } from './wire.js';
 import { call, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
-import { writeRejected } from './guards.js';
+import { dropEntries, writeRejected } from './guards.js';
 
 export type LessonKind = 'guard' | 'shared-rule' | 'removal';
 export interface Lesson {
@@ -143,19 +143,26 @@ export async function revives(raw: Raw, change: string, project: string | undefi
   const named = new Set([...change.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
   return (await rejectedDirections(raw)).find((r) => (r.said ? namesWord(change, r.direction) : named.has(r.direction)) && covers(r.scope, project, session));
 }
-/** Your `rejected: \`x\`.` in the messages not yet read, each saved once as a decision for the repo you said it in. */
-export async function captureRejected(record: RecordStore, you: Connection, now: () => number, unread: readonly { session: string; project: string | null; messages: Message[]; from: number }[]): Promise<void> {
+/**
+ * Your `rejected: \`x\`.` in the messages not yet read, each saved once as a decision for the repo you said it in. A transcript
+ * read again may hold what you since overruled, so that stays overruled; a prompt `live` is new, so it rejects it again.
+ */
+export async function captureRejected(record: RecordStore, you: Connection, now: () => number, unread: readonly { session: string; project: string | null; messages: Message[]; from: number }[], live = false): Promise<void> {
   for (const u of unread) {
     for (const m of u.messages.slice(u.from)) {
       if (m.role !== 'user' || m.outside || m.tool !== undefined || INJECTED.test(m.text) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(m.id)) continue;
       for (const hit of m.text.matchAll(REJECTED)) {
         const scope = u.project ? `repo:${u.project}` : `session:${u.session}`;
         const key = rejectedKey(scope, hit[1]!);
-        if (((await record.raw(`SELECT 1 FROM decisions WHERE key = ${sqlText(key)}`)) as unknown[]).length) continue;
+        if (((await record.raw(`SELECT 1 FROM decisions WHERE key = ${sqlText(key)}${live ? " AND state = 'active'" : ''}`)) as unknown[]).length) continue;
         await saveDecision(record, you, now, { key, scope, answer: `rejected: \`${hit[1]!}\``, subject: `session:${u.session}#${m.id}` });
       }
     }
   }
+}
+/** A kept lesson's guard entry, when the decision overruled is that keep: the lesson is back on your list, and its guard gone. */
+export function dropKept(dir: string, key: string): void {
+  dropEntries(dir, (name) => name.startsWith('memory-') && decisionKey(`lesson-${name.slice('memory-'.length)}`) === key);
 }
 /** What you said no to, as guard entries in rules.json: deep-hook reads the word, the hub each entry's repo. */
 export async function syncRejected(raw: Raw, dir: string): Promise<void> {
