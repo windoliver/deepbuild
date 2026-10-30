@@ -1,0 +1,17 @@
+Base commit: c733840f (Merge pull request #794 from windoliver/claude/issue-777-47bdc6)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/29   (node = ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node, the repo's .node-version, first on PATH)
+Date: 2026-10-29  Node v24.22.0  vitest 5.0.5  darwin-arm64
+Exit code: 1
+Result: Test Files 14 failed (14); Tests 4 failed (4).
+
+Why it fails: packages/gate/src/index.ts, the surface the README defines, does not exist at the base. 13 of the 14 files import it and fail at that import, before any test runs:
+  Error: Cannot find module '../../../packages/gate/src/index.ts' imported from tests/acceptance/29/<file>
+(budgets, claims, floor, head, held, lanes, loops, own, queue, replay, slots, stack, timing).
+hub.test.ts does not import the gate; its 4 tests (all AC1) fail at their setup as BLOCKED, because the CLI is not built in this worktree:
+  Error: BLOCKED: the deep CLI (npm run build) is not built at <checkout>/packages/cli/dist/main.js
+Once built, AC1's hub tests judge the base hub's claim.made events; this run did not reach that point, and nothing here says how they read.
+
+Type check, beside this run (not at the base): the tests type-check under the root tsconfig against a declaration-only copy of the surface placed outside the repo (/tmp/dh29-typecheck, built from the README's SURFACE block by extract.py; tsc -p tests/acceptance/29/tsconfig.json): no errors, all 14 test files, the helpers and the surface checked.
+
+Not verified: no test body was run against any implementation or runtime stub of the surface, so no planted wrong program has been observed to fail its assertion yet, and the 41 criteria's expected values are unchecked against a running gate. The AC18 budget tests were not run on a reference Mac.
+The issue has 41 checkbox criteria; the job brief said 38. All 41 have tests (AC1 … AC41).
