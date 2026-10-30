@@ -541,7 +541,8 @@ fn moved(events: &[Value], ask: &Value) -> Option<(String, String, String)> {
 }
 
 /// The checks run on the commit an ask is pinned to, each by its latest run: how many passed, how many ran, and the
-/// one thing to look at, the first that failed (where it points, else its name), else the first still running, which
+/// one thing to look at, the first that failed (where it points, else its first finding, else its name), else the
+/// first still running, which
 /// hasn't passed; `None` when none ran.
 fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<String>)> {
     let pin = &ask["data"]["pinned_to"];
@@ -590,10 +591,12 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
             finished
                 .filter(|f| f["data"]["outcome"] != "passed")
                 .map(|f| {
-                    f["data"]["points_to"]
+                    // Where it points, else its first finding (the core's own runs say why there), else its name.
+                    let points_to = f["data"]["points_to"].as_str().map(str::to_owned);
+                    let finding = f["data"]["findings"][0]
                         .as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| check.clone())
+                        .map(|finding| format!("{check}: {finding}"));
+                    points_to.or(finding).unwrap_or_else(|| check.clone())
                 })
         })
         .or_else(|| {
@@ -1089,6 +1092,20 @@ mod tests {
             (get("checks"), get("look at")),
             (Some("0 of 2 passed"), Some("layout"))
         );
+        // A run the core finished says why in its findings, never where it points.
+        let mut stopped = vec![events[0].clone()];
+        stopped.push(json!({"kind": "run.started", "writer": "core", "data": {"run": "r13", "check": "e2e", "claim": "c", "commit": pinned}}));
+        stopped.push(json!({"kind": "run.finished", "writer": "core", "data": {"run": "r13", "check": "e2e", "outcome": "missing", "points_to": null, "findings": ["its stack never came up: db"]}}));
+        let model = Model::read(&stopped, "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(get("look at"), Some("e2e: its stack never came up: db"));
+
         // Only a run still going: that is the thing to look at.
         let model = Model::read(&later[..2], "ask:T", 0).unwrap();
         let get = |name: &str| {
