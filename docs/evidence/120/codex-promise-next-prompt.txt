@@ -1,0 +1,38 @@
+# Codex: a due wake-up starts nothing, shows on the session's row, and reaches the next prompt
+
+Codex CLI 0.160.0 (covered), in-process (`--no-daemon`), default approvals, in a terminal (script(1), 120 x 40),
+on 2026-10-29 local time. CODEX_HOME is a scratch folder whose hooks.json runs DeepBuild's deep-hook (PR #804)
+for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop and SessionEnd; its sign-in is yours, linked.
+Codex hooks never start a turn, so at the due time nothing starts; `deep status` then shows the row, and the
+next typed prompt carries the check (the hub's UserPromptSubmit reply, additionalContext).
+
+## deep status at the due time plus 15 s (excerpt)
+Reading the hub at unix:/private/tmp/dh120-e2e/h/.deepbuild/hub.sock
+18 sessions: 1 need you, 1 flagged, 4 working, 8 finished, 4 gone quiet
+  01a18b80  flagged    codex        a promised check is due since 2026-10-29 23:31, waiting for its next prompt or stop: "I'll check the deploy again in 1 minute."
+
+## Typed
+> Do not run any command. Reply with exactly this sentence and nothing else: The deploy is running. I'll check the deploy again in 1 minute.
+> (nothing typed for 75 s)
+> What did you promise to check, and when was it due? Answer in one sentence, without running any command.
+
+## The record (ledger.db), session 01a18b80-b850-7672-92b0-cd219e61af58, hub clock UTC
+06:30:33.792  session.start   {"agent": "codex", "worktree": "/private/tmp/dh120-e2e/work"}
+06:30:33.822  user.ask        {"text": "Do not run any command. Reply with exactly this sentence and nothing else: The deploy is running. I'll check the deploy again in 1 minute."}
+06:30:36.204  promise.set     {"promise": "01M65R1JXB7SAJM1R1NWSVP8D1", "quote": "I'll check the deploy again in 1 minute.", "due": 1793341896203, "times_set": 1, "end": 1793428296203}
+06:30:36.202  agent.stop      {"turn": 1, "did_work": false, "claim": false, "outcome": "finished", "cause": "unknown", "usage": null}
+06:31:36.204  promise.due     {"promise": "01M65R1JXB7SAJM1R1NWSVP8D1", "due": 1793341896203, "route": "next_hook"}
+06:31:36.206  session.reading {"reading": "A promised check is due since 2026-10-29 23:31: \"I'll check the deploy again in 1 minute.\" It waits for this session's next prompt or stop."}
+06:31:52.435  user.ask        {"text": "What did you promise to check, and when was it due? Answer in one sentence, without running any command."}
+06:31:52.451  promise.woken   {"promise": "01M65R1JXB7SAJM1R1NWSVP8D1", "via": "next_prompt"}
+06:31:59.879  agent.stop      {"turn": 2, "did_work": false, "claim": false, "outcome": "finished", "cause": "unknown", "usage": null}
+06:32:00.081  session.end     {"reason": "other"}
+
+## On screen (the terminal stream, escapes stripped; ⏎ is a line break)
+… hing GPT-6.1-Sol default · /private/tmp/dh120-e2e/work › Do not run any command. Reply with exactly this sentence and nothing else: The deploy is running. I'll check the deploy again in 1 minute. GPT-6.1-Sol default · /private/tmp/dh120-e2e/work  ⏎  ⏎  ⏎ › Do not run any command. Reply with exactly this sentence and nothing else: The deploy is ru …
+… ol default · /private/tmp/dh120-e2e/work ·⠴◦1•◦2• The deploy is running. I'll checkthedeployagainin1minute⠇.⠏Check deploy status ⏎  ⏎ • The deploy is running. I'll check the deploy again in 1 minute. › Ask Codex to do anything GPT-6.1-Sol default · /private/tmp/dh120-e2e/work · Check deploy status  ⏎  ⏎  Worked for 2s • 11:30 PM What did you promis …
+… ing (0s • esc to interrupt) › Ask Codex to do anything GPT-6.1-Sol default · /private/tmp/dh120-e2e/work · Check deploy status ◦1•◦2•◦3•4◦•5◦•6◦• I promised to check the deploy againoneminutelater,dueat23:31onOctober29,2026;Ican • I promised to check the deploy again one minute later, due at 23:31 on October 29, 2026; I can’t verify its sta …
+… s status because › Ask Codex to do anything GPT-6.1-Sol default · /private/tmp/dh120-e2e/work · Check deploy status nodeploymentwasidentified. ⏎  ⏎ • I promised to check the deploy again one minute later, due at 23:31 on October 29, 2026; I can’t verify its status ⏎  because no deployment was identified. › Ask Codex to do anything GPT-6.1-Sol def …
+
+## In the transcript
+06:31:52.467  response_item/message: DeepBuild: your promised check is due (2026-10-29 23:31): "I'll check the deploy again in 1 minute." Do it now, and report what you find; this wake-up sets itself no further. (promise:01M65R1JXB7SAJM1R1NWSVP8D1:1)

@@ -8,7 +8,9 @@ import type { Plant } from './wire.js';
 const { held, plant } = workerData as { held: string[]; plant?: Plant };
 warm();
 shedStartup();
-parentPort!.on('message', ({ n, chunks, first }: { n: number; chunks: Uint8Array[]; first: boolean }) => {
+parentPort!.on('message', ({ n, chunks, first, scrub }: { n: number; chunks: Uint8Array[]; first: boolean; scrub?: string[] }) => {
+  // Values the core loaded into a stack since the hub started (#332), scrubbed from every line after.
+  if (scrub) return void held.push(...scrub);
   const bytes = chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks);
   parentPort!.postMessage({ n, parsed: parseLine(bytes, first, held, plant) });
 });

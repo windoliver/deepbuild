@@ -1684,6 +1684,29 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** call.overrun@1 */
+export interface CallOverrun {
+  v: 1;
+  id: string;
+  kind: "call.overrun";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    kind: string;
+    command: string | null;
+    expected_ms: number;
+    ran_ms: number;
+    deadline: "attached" | "recorded" | "none";
+  };
+  evidence?: Array<string>;
+}
+
 /** capability.refused@1 */
 export interface CapabilityRefused {
   v: 1;
@@ -3333,6 +3356,90 @@ export interface ProcessTracked {
   evidence?: Array<string>;
 }
 
+/** promise.blocked@1 */
+export interface PromiseBlocked {
+  v: 1;
+  id: string;
+  kind: "promise.blocked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    status: "BLOCKED";
+    quote: string;
+    cause: "set_again" | "past_end";
+    owner: "service" | "you";
+    ask: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.due@1 */
+export interface PromiseDue {
+  v: 1;
+  id: string;
+  kind: "promise.due";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    due: number;
+    route: "wake" | "next_hook";
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.set@1 */
+export interface PromiseSet {
+  v: 1;
+  id: string;
+  kind: "promise.set";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    quote: string;
+    due: number;
+    times_set: number;
+    end: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.woken@1 */
+export interface PromiseWoken {
+  v: 1;
+  id: string;
+  kind: "promise.woken";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    via: "waiter" | "next_prompt" | "stop_hold";
+  };
+  evidence?: Array<string>;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
@@ -3650,6 +3757,30 @@ export interface SandboxDenied {
   evidence?: Array<string>;
 }
 
+/** seed.cloned@1 */
+export interface SeedCloned {
+  v: 1;
+  id: string;
+  kind: "seed.cloned";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    stack: string;
+    source: string;
+    copied_at: string;
+    migration: string;
+    template: string;
+    cloned_at: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.attention@1 */
 export interface SessionAttention {
   v: 1;
@@ -3849,6 +3980,30 @@ export interface SpendApproved {
       kind: "issue" | "resource" | "project" | "work";
       ref: string;
     };
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.approved@2 */
+export interface SpendApprovedV2 {
+  v: 2;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    runs?: number;
     cap_usd: number;
     ends: number;
     via: "card" | "inbox";
