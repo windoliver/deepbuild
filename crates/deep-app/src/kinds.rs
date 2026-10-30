@@ -555,11 +555,19 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
             runs.push(&event["data"]["run"]);
         }
     }
+    let mut starts: Vec<(usize, &Value, &Value)> = runs
+        .into_iter()
+        .filter_map(|run| {
+            let started = run_event(events, "run.started", run)?;
+            let at = events
+                .iter()
+                .position(|event| std::ptr::eq(event, started))?;
+            Some((at, run, started))
+        })
+        .collect();
+    starts.sort_by_key(|(at, _, _)| *at);
     let mut latest: Vec<(String, Option<&Value>)> = Vec::new();
-    for run in runs {
-        let Some(started) = run_event(events, "run.started", run) else {
-            continue;
-        };
+    for (_, run, started) in starts {
         if started["data"]["commit"] != commit.as_str() {
             continue;
         }
@@ -653,7 +661,12 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
 /// The exception the core raises when a session's asks fold: written by the core, keyed on its thread.
 fn is_fold(events: &[Value], ask: &Value) -> bool {
     let session = text(&ask["session"]);
-    let thread = events
+    // The thread as it stood when the ask was raised: the core keys a fold then, and a later start can move it.
+    let raised = events
+        .iter()
+        .position(|event| event["kind"] == "ask.created" && event["id"] == ask["id"])
+        .unwrap_or(events.len());
+    let thread = events[..raised]
         .iter()
         .rev()
         .find(|event| event["session"] == session.as_str() && event["kind"] == "session.start")
@@ -1019,6 +1032,47 @@ mod tests {
             (Some("0 of 1 passed"), Some("checkout.tsx:42"))
         );
 
+        // Two core finishes of one run: the last is its result, as the record keeps it.
+        let mut twice = vec![events[0].clone()];
+        twice.extend(run(
+            "r10",
+            "layout",
+            &pinned,
+            "failed",
+            json!("checkout.tsx:42"),
+        ));
+        twice.push(json!({"kind": "run.finished", "writer": "core", "data": {"run": "r10", "check": "layout", "outcome": "passed"}}));
+        let model = Model::read(&twice, "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(
+            (get("checks"), get("look at")),
+            (Some("1 of 1 passed"), None)
+        );
+
+        // A run first started by another writer is placed by the core's start when it lands: r11 is the latest.
+        let mut placed = vec![events[0].clone()];
+        placed.push(json!({"kind": "run.started", "writer": "mcp:x", "data": {"run": "r11", "check": "layout", "claim": "c", "commit": pinned}}));
+        placed.extend(run("r12", "layout", &pinned, "failed", json!("old")));
+        placed.extend(run("r11", "layout", &pinned, "passed", Value::Null));
+        let model = Model::read(&placed, "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(
+            (get("checks"), get("look at")),
+            (Some("1 of 1 passed"), None)
+        );
+
         // A rerun started before a check failed: the failure, named by its check when it points nowhere, comes first.
         let mut later = vec![events[0].clone()];
         later.push(json!({"kind": "run.started", "data": {"run": "r7", "check": "unit", "claim": "c", "commit": pinned}}));
@@ -1137,6 +1191,14 @@ mod tests {
         assert_eq!(
             scope.also, 0,
             "only the core raises a fold, and a decision never answers the fold"
+        );
+
+        // The session moves to another thread after the fold was raised: it stays a fold, keyed on the old thread.
+        let mut resumed = folding.clone();
+        resumed.push(json!({"kind": "session.start", "session": "s1", "project": "my-shop", "data": {"thread": "t2"}}));
+        assert!(
+            Model::read(&resumed, "ask:X", 0).unwrap().scope.is_none(),
+            "a fold stays one after its session moves"
         );
 
         // Another's unblock on its own card: the core saves no decision for it.
