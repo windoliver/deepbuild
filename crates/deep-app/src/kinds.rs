@@ -298,6 +298,13 @@ impl Model {
                     None => "the agent's, beside the live render".to_owned(),
                 };
                 fields.push(("reference".into(), reference));
+                // What DeepBuild saw beside what the agent shows: the checks on the commit the call is pinned to.
+                if let Some((passed, ran, look)) = checks_on(events, ask) {
+                    fields.push(("checks".into(), format!("{passed} of {ran} passed")));
+                    if let Some(look) = look {
+                        fields.push(("look at".into(), look));
+                    }
+                }
                 field(&mut fields, "live", &data["live"]);
                 field(&mut fields, "sheet", &data["sheet"]);
             }
@@ -530,6 +537,46 @@ fn moved(events: &[Value], ask: &Value) -> Option<(String, String, String)> {
         checks.join(", ")
     };
     Some((short(&pinned), short(&latest), checks))
+}
+
+/// The checks that finished on the commit an ask is pinned to, each by its latest run: how many passed, how many
+/// ran, and the one thing to look at, the first that didn't pass (where it points, else its name); `None` when none ran.
+fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<String>)> {
+    let pin = &ask["data"]["pinned_to"];
+    if pin["kind"] != "commit" {
+        return None;
+    }
+    let commit = text(&pin["ref"]);
+    let mut latest: Vec<(String, &Value)> = Vec::new();
+    for started in events.iter().filter(|event| {
+        event["kind"] == "run.started" && event["data"]["commit"] == commit.as_str()
+    }) {
+        let Some(finished) = events.iter().find(|event| {
+            event["kind"] == "run.finished" && event["data"]["run"] == started["data"]["run"]
+        }) else {
+            continue;
+        };
+        let check = text(&started["data"]["check"]);
+        latest.retain(|(seen, _)| *seen != check);
+        latest.push((check, finished));
+    }
+    if latest.is_empty() {
+        return None;
+    }
+    let passed = latest
+        .iter()
+        .filter(|(_, finished)| finished["data"]["outcome"] == "passed")
+        .count();
+    let look = latest
+        .iter()
+        .find(|(_, finished)| finished["data"]["outcome"] != "passed")
+        .map(|(check, finished)| {
+            finished["data"]["points_to"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| check.clone())
+        });
+    Some((passed, latest.len(), look))
 }
 
 /// The scope an option's answer is saved at, in words, and how many other open asks share the ask's key, so
@@ -840,6 +887,52 @@ mod tests {
         assert_eq!(
             model.past[0].answer, "Yes",
             "the past call shows the answer's label"
+        );
+    }
+
+    #[test]
+    fn a_taste_call_says_how_many_checks_passed_on_its_commit_and_what_to_look_at() {
+        let pinned = "a".repeat(40);
+        let run = |id: &str, check: &str, commit: &str, outcome: &str, points_to: Value| {
+            [
+                json!({"kind": "run.started", "data": {"run": id, "check": check, "claim": "c", "commit": commit}}),
+                json!({"kind": "run.finished", "data": {"run": id, "check": check, "outcome": outcome, "points_to": points_to}}),
+            ]
+        };
+        let mut events = vec![ask(
+            "T",
+            "taste",
+            json!({"subject": {"screen": "checkout", "element": "total"}, "pinned_to": {"kind": "commit", "ref": pinned}}),
+        )];
+        events.extend(run("r1", "unit", &pinned, "passed", Value::Null));
+        // The contrast check failed first and passed on its rerun: its latest run counts.
+        events.extend(run("r2", "contrast", &pinned, "failed", json!("old")));
+        events.extend(run("r3", "contrast", &pinned, "passed", Value::Null));
+        events.extend(run(
+            "r4",
+            "layout",
+            &pinned,
+            "failed",
+            json!("checkout.tsx:42"),
+        ));
+        // A check on another commit isn't this call's.
+        events.extend(run("r5", "e2e", &"b".repeat(40), "failed", Value::Null));
+        let model = Model::read(&events, "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(get("checks"), Some("2 of 3 passed"));
+        assert_eq!(get("look at"), Some("checkout.tsx:42"));
+
+        let quiet = vec![events[0].clone()];
+        let model = Model::read(&quiet, "ask:T", 0).unwrap();
+        assert!(
+            model.fields.iter().all(|(field, _)| field != "checks"),
+            "no checks ran: the card says nothing about them"
         );
     }
 
