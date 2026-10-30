@@ -1,10 +1,11 @@
 // Guards on real pi: deep-hook, the one matcher, reads each call before it runs. A matched entry's call never runs and
 // its name is on the record; with the hub away a fail-closed entry still holds; nothing else is touched.
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 // `deep setup` runs for real on a temp home, as tests/acceptance/19 does.
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLI, Client, NODE, Pi, childEnv, cleanup, run as sh, startHub, tempDir, waitFor, word, type Hub, type Line, type Step } from '../../../tests/acceptance/40/helpers.js';
+import { CLI, Client, NODE, Pi, REPO, childEnv, cleanup, run as sh, startHub, tempDir, waitFor, word, type Hub, type Line, type Step } from '../../../tests/acceptance/40/helpers.js';
 
 const bash = (command: string): Step => ({ tools: [{ name: 'bash', arguments: { command } }] });
 
@@ -53,6 +54,54 @@ describe('guards on a pi call', () => {
     expect(existsSync(join(w.cwd, '.deepbuild/spec.md')), 'the blocked write ran').toBe(false);
     expect((await before(w.client, w.pi.session)).data.matched).toContain('no-deepbuild-spec-write');
   }, 90_000);
+
+  it('a path pi opens without its leading @ is read as pi opens it', async () => {
+    const w = await world([{ tools: [{ name: 'write', arguments: { path: '@.deepbuild/spec.md', content: 'x' } }] }]);
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect(existsSync(join(w.cwd, '.deepbuild/spec.md')), 'the blocked write ran').toBe(false);
+  }, 90_000);
+
+  it('an edit of a guarded file is held too', async () => {
+    const w = await world([{ tools: [{ name: 'edit', arguments: { path: '.deepbuild/spec.md', edits: [{ oldText: 'a', newText: 'b' }] } }] }]);
+    mkdirSync(join(w.cwd, '.deepbuild'));
+    writeFileSync(join(w.cwd, '.deepbuild/spec.md'), 'a\n');
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect(readFileSync(join(w.cwd, '.deepbuild/spec.md'), 'utf8')).toBe('a\n');
+  }, 90_000);
+
+  it('a read of the control token is held', async () => {
+    const w = await world([{ tools: [{ name: 'read', arguments: { path: '~/.deepbuild/control.token' } }] }]);
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect((await before(w.client, w.pi.session)).data.matched).toContain('no-control-token-read');
+  }, 90_000);
+
+  it('with the hub up and deep-hook gone, a call is held rather than read as matching nothing', async () => {
+    const w = await world([bash('touch ran.txt')]);
+    const file = join(w.home, '.deepbuild/config.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')) as Line, hook: { binary: join(w.home, 'no-such-deep-hook') } }));
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect(said(end)).toContain('deep setup');
+    expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+  }, 90_000);
+
+  it('with rules installed and no deep-hook recorded, a call is held', async () => {
+    const w = await world([bash('touch ran.txt')]);
+    const file = join(w.home, '.deepbuild/config.json');
+    const { hook: _, ...rest } = JSON.parse(readFileSync(file, 'utf8')) as Line;
+    writeFileSync(file, JSON.stringify(rest));
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+  }, 90_000);
+
+  it('a line deep-hook can\'t read is unread, never a call that matched nothing', () => {
+    const out = execFileSync(join(REPO, 'target/debug/deep-hook'), ['match'], { input: '{"tool_name":"bash","tool_input":{"command":"pkill -f x; echo \\ud800"}}\n' });
+    expect(JSON.parse(out.toString('utf8'))).toMatchObject({ unread: true });
+  });
 
   it('a call no entry matches runs, and names none', async () => {
     const w = await world([bash('touch ran.txt')]);

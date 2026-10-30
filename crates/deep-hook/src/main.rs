@@ -325,6 +325,18 @@ const READ_TOOLS: &[&str] = &[
     "Grep",
 ];
 
+/// A path as pi's file tools open it (pi's `normalizePath`): without one leading `@`, its unicode spaces plain.
+fn pi_path(path: &str) -> String {
+    path.strip_prefix('@')
+        .unwrap_or(path)
+        .chars()
+        .map(|c| match c {
+            '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
+            c => c,
+        })
+        .collect()
+}
+
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
 /// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch), and
 /// for every tool, what it counts as: the class `classes` gives it, else change, and destructive for a tool whose
@@ -353,14 +365,12 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         "bash" => (field("command"), Vec::new(), false),
         "edit" | "write" => (
             None,
-            field("path").map(str::to_string).into_iter().collect(),
+            field("path").map(pi_path).into_iter().collect(),
             false,
         ),
-        "read" | "grep" | "find" | "ls" => (
-            None,
-            field("path").map(str::to_string).into_iter().collect(),
-            true,
-        ),
+        "read" | "grep" | "find" | "ls" => {
+            (None, field("path").map(pi_path).into_iter().collect(), true)
+        }
         _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
@@ -501,7 +511,8 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
 /// `deep-hook match`: for an agent that runs its hooks in its own process, where a process per call would cost too
 /// much. Each line on stdin is a tool hook's JSON; each line out is what `forward` would have sent the hub of it,
 /// `{"matched":[...],"notes"?,"stage"?}`, and its `"denials"` for the hub away. rules.json is read for every call, so
-/// an entry added mid-session holds the next one. It ends when stdin closes.
+/// an entry added mid-session holds the next one. A line it can't read is `{"unread":true}`: that call was checked
+/// against nothing. It ends when stdin closes.
 fn matching() -> ExitCode {
     let mut out = io::stdout().lock();
     for input in io::stdin().lock().lines() {
@@ -511,6 +522,7 @@ fn matching() -> ExitCode {
             let _ = CWD.set(PathBuf::from(cwd));
         }
         let reply = match rules() {
+            _ if parsed.is_none() => "{\"unread\":true,\"matched\":[],\"denials\":[]}".to_string(),
             Err(why) => format!(
                 "{{\"matched\":[],\"denials\":[{}]}}",
                 quoted(&format!(
