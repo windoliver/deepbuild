@@ -46,6 +46,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['windows.report', ['app', 'cli', 'hook']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   ['session.wait', ['cli']],
+  // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
+  ['session.note', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
 ]);
@@ -111,15 +113,16 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; cl
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; session?: string }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? []);
+    if (m.op === 'acking') return onAcking(m.session!);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -139,10 +142,10 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = new Core(options, onFrame, onAsking);
+  const core = new Core(options, onFrame, onAsking, onAcking);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -244,6 +247,8 @@ class Hub {
   private hooks = new Set<string>();
   /** The sessions with an ask still to deliver, as the core last said: only their stops are held (#18, #19). */
   private asking = new Set<string>();
+  /** The sessions with a message typed mid-turn to acknowledge (#340): the next tool call's hook is held for it. */
+  private readonly acking = new Set<string>();
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
   readonly start = ulid(Date.now());
@@ -279,10 +284,11 @@ class Hub {
       this.exit(1);
     };
     const asking = (sessions: string[], judged: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); };
+    const acking = (session: string) => { this.acking.add(session); };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES, generation: writerGeneration(this.root.ledger) });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking) : coreWorker(options, frame, fatal, asking);
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking) : coreWorker(options, frame, fatal, asking, acking);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
@@ -439,7 +445,11 @@ class Hub {
     // A permission prompt is held while the core reads whether a saved decision covers it (#23).
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
     const before = !blocked && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    // A tool call this hub saw run marks its session as having worked, so the stop that follows at once is held for
+    // its line whether or not the core's word of the turn has come back yet (#83).
+    if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
@@ -535,9 +545,11 @@ class Hub {
   private holdFor(meta: HookMeta): number | null {
     const now = Date.now();
     if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
+    // A message typed while the agent works is acknowledged at the session's next tool call, the queue beside it (#340).
+    if ((meta.event === 'PreToolUse' || meta.event === 'PostToolUse') && this.acking.delete(meta.session)) return now + CONTEXT_HOLD_MS;
     if (meta.event !== 'Stop') return null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
-    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && this.worked.has(meta.session) ? now + STOP_HOLD_MS : null;
+    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     const relation = this.stopHold();
     if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
     if (meta.watchOnly || !relation.holds || this.off) return null;
@@ -545,11 +557,13 @@ class Hub {
     // installs), and a stop whose turn did work is held for the one line the chat shows of it (#83), which the core
     // reads from the record at once. The planted wrong program holds every stop, as gates on unapproved checks would.
     // A test's planted sorter (#321) may answer any stop "proceed".
-    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
+    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !this.sawWork.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
   /** The sessions whose next stop the stop rule would read as a claim, as the core tells it beside `asking`: it is held for its line (#83). */
   private worked = new Set<string>();
+  /** The sessions a tool call of which this hub saw run since their last stop; the core's word may still be on its way. */
+  private sawWork = new Set<string>();
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {

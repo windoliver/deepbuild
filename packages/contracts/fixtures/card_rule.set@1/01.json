@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74G3C8E0G2J4M6N8Q0S2T4X",
+  "kind": "card_rule.set",
+  "data": {
+    "seller": "shop.example",
+    "max_usd": 25,
+    "card": "pm_1Q2w3E4r5T6yU7iO",
+    "via": "card"
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760020711123
+}

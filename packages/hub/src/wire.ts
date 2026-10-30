@@ -56,6 +56,8 @@ export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string 
 export function ulidTime(id: string): number {
   return [...id.slice(0, 10)].reduce((ms, c) => ms * 32 + CROCKFORD.indexOf(c), 0);
 }
+/** A ULID at `ms` whose random part is a hash of `key`, so the same source always gets the same ID and the record holds it once. */
+export const derivedId = (ms: number, key: string): string => ulid(ms, createHash('sha256').update(key).digest('hex').slice(0, 20));
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
@@ -89,13 +91,18 @@ export interface HookMeta {
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
-  /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
+  /**
+   * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
+   * subagent, a stop's last message, and Codex's turn.
+   */
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
+  pr?: string;
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }

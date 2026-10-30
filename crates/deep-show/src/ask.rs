@@ -67,7 +67,7 @@ impl Hub<'_> {
             let Some(p) = pointer else {
                 return refused("nothing_pointed");
             };
-            let r = spec.rect;
+            let r = self.slot(panel).unwrap_or(spec.rect);
             let at = [p[0] - r[0], p[1] - r[1]];
             attachment.insert("handles".into(), json!([]));
             attachment.insert("precision".into(), json!(Precision::Region.name()));

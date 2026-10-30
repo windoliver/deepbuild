@@ -440,6 +440,26 @@
         }
       }
     },
+    "packages/buying/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #69: a purchase past what's left of its budget is asked as an authority ask whose plan shows it at its price."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #69: a purchase reserves its price against the budget you approved (#86), counting purchases reserved and not yet charged, and its receipt is its cost reading."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #69: the canonical hash of a purchase, the inputs its reservation names."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #69: card rules appended and read back, and a receipt kept as evidence."
+        }
+      }
+    },
     "packages/resolver-decisions/package.json": {
       "dependencies": {
         "@deepbuild/asks": {
@@ -1097,6 +1117,20 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #20: each copy is linked by a transcript.archived event, and what was already copied is read back from the record."
+        }
+      }
+    },
+    "packages/config-eval/package.json": {
+      "dependencies": {
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #112: the eval compares its replays by the record's one comparison rule (compareReplay, planHash), which the learned layer's widening also uses."
+        }
+      },
+      "devDependencies": {
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #112: the archive test stores transcripts in a real evidence store, which the task reader reads through the record's reader."
         }
       }
     },

@@ -84,14 +84,22 @@
             "subagent",
             "session",
             "continuation",
+            "app",
             "unknown"
           ],
-          "description": "Where the prompt came from; unknown is one the adapter cannot place, and opens no ask.",
+          "description": "Where the prompt came from; app is your words DeepBuild delivered from the app, matched by request; unknown is one the adapter cannot place, and opens no ask.",
           "x-closure": {
             "closed": "the values come from agents and tools that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
             "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
             "mark": "extensible"
           }
+        },
+        "request": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z_-]+$",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The delivery's request ID, for words sent from the app (from: app) only; a minor of user.ask@1 (#340)."
         }
       },
       "required": [
