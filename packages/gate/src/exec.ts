@@ -4,7 +4,7 @@
 // lease script, and a timing check that failed under load rerun alone.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { accessSync, constants, copyFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { loadavg, availableParallelism, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Lease, LeaseTable, Resource } from '@deepbuild/leases';
@@ -22,19 +22,27 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 let runs = 0;
 const runId = (): string => `run:${Date.now().toString(36).toUpperCase()}${(++runs).toString(36).toUpperCase()}${process.pid.toString(36).toUpperCase()}`.replace(/[^0-9A-Za-z:]/g, '');
 
+/** Where snapshot objects go: DeepBuild's own object store, reading the repo's objects as alternates. */
+const DEFAULT_STORE = join(tmpdir(), 'deep-objects');
+async function storeEnv(repo: string, store: string): Promise<NodeJS.ProcessEnv> {
+  mkdirSync(store, { recursive: true });
+  const common = await git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  return { GIT_OBJECT_DIRECTORY: store, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(common, 'objects') };
+}
 /**
  * The claim's snapshot: HEAD on a clean worktree; otherwise a commit, parent HEAD, written from a copy of the
  * session's index with every change added, with a fixed author, committer, date and message, so the same tree on the
- * same HEAD is the same commit. Nothing in the worktree, its index or its refs changes.
+ * same HEAD is the same commit. Its objects go to `store`, never the repo's: the worktree, its index, its refs and
+ * its objects stay as they were.
  */
-export async function snapshotOf(repo: string): Promise<string> {
+export async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<string> {
   const head = await git(repo, ['rev-parse', 'HEAD']);
   if (!(await git(repo, ['status', '--porcelain', '--untracked-files=all']))) return head;
   const dir = mkdtempSync(join(tmpdir(), 'deep-index-'));
   try {
     const index = join(dir, 'index');
     const gitDir = await git(repo, ['rev-parse', '--absolute-git-dir']);
-    const env = { GIT_INDEX_FILE: index };
+    const env = { ...(await storeEnv(repo, store)), GIT_INDEX_FILE: index };
     // A copy of the session's index keeps its stat cache, so only changed files are hashed again; marks that hide a
     // change (assume-unchanged, skip-worktree) are cleared in the copy.
     if (existsSync(join(gitDir, 'index'))) copyFileSync(join(gitDir, 'index'), index);
@@ -43,17 +51,18 @@ export async function snapshotOf(repo: string): Promise<string> {
     await git(repo, ['add', '-A'], env);
     const tree = await git(repo, ['write-tree'], env);
     const fixed = { GIT_AUTHOR_NAME: 'DeepBuild', GIT_AUTHOR_EMAIL: 'snapshot@deepbuild.invalid', GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z', GIT_COMMITTER_NAME: 'DeepBuild', GIT_COMMITTER_EMAIL: 'snapshot@deepbuild.invalid', GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z' };
-    return await git(repo, ['commit-tree', tree, '-p', head, '-m', 'deep snapshot'], fixed);
+    return await git(repo, ['commit-tree', tree, '-p', head, '-m', 'deep snapshot'], { ...env, ...fixed });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 /** A temporary checkout of `commit`, outside every worktree: git's own worktree list, refs and stash stay as they were. */
-async function checkoutOf(repo: string, commit: string): Promise<string> {
+export async function checkoutOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string> {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-checkout-')));
   const gitDir = await git(repo, ['rev-parse', '--absolute-git-dir']);
-  await git(repo, [`--work-tree=${dir}`, `--git-dir=${gitDir}`, 'read-tree', '--index-output', join(dir, '.deep-index'), commit]);
-  await git(repo, [`--work-tree=${dir}`, `--git-dir=${gitDir}`, 'checkout-index', '-a', '-f'], { GIT_INDEX_FILE: join(dir, '.deep-index') });
+  const env = await storeEnv(repo, store);
+  await git(repo, [`--work-tree=${dir}`, `--git-dir=${gitDir}`, 'read-tree', '--index-output', join(dir, '.deep-index'), commit], env);
+  await git(repo, [`--work-tree=${dir}`, `--git-dir=${gitDir}`, 'checkout-index', '-a', '-f'], { ...env, GIT_INDEX_FILE: join(dir, '.deep-index') });
   rmSync(join(dir, '.deep-index'), { force: true });
   return dir;
 }
