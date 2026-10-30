@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CLASSIFIED, checkClassifier, decisionOneInputs, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
+import { CLASSIFIED, checkClassifier, decisionOneInputs, freshness, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
 import { isStatusQuestion } from './verdict-chat.js';
@@ -81,7 +81,8 @@ export class Numbers {
     return Object.entries(CLASSIFIERS).map(([id, classifier]) => {
       try {
         const { threshold, before, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; labels: { message: string; label: boolean }[] };
-        const sample = labels.flatMap((l): LabelledMessage[] => {
+        // A message labelled twice is one message.
+        const sample = [...new Map(labels.map((l) => [l.message, l])).values()].flatMap((l): LabelledMessage[] => {
           const e = typed.get(l.message);
           return e ? [{ message: l.message, text: String(e.data.text), label: l.label, period: e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' }] : [];
         });
@@ -91,7 +92,11 @@ export class Numbers {
   }
   private checked(readings: Reading[]): Reading[] {
     const checks = new Map(this.checks().map((c) => [c.id, c.check]));
-    return readings.map((r) => (checks.has(r.id) ? { ...r, classifier: checks.get(r.id) ?? null } : r));
+    // A baseline's classified count comes from the same pattern as the live is_it_done.
+    return readings.map((r) => {
+      const id = r.id.endsWith(CLASSIFIED) ? 'is_it_done' : r.id;
+      return checks.has(id) ? { ...r, classifier: checks.get(id) ?? null } : r;
+    });
   }
   async read(): Promise<{ rows: ReturnType<typeof panelRows>; decision_one: ReturnType<typeof decisionOneInputs> }> {
     await this.catchUp();
@@ -105,7 +110,7 @@ export class Numbers {
       const named = e.session ?? (typeof e.data.session === 'string' ? e.data.session.slice('session:'.length) : null);
       return named === null || letters(named) === own;
     });
-    return searchReadings(readingsOf(recompute(events)), query);
+    return searchReadings(this.checked(readingsOf(recompute(events))), query).map((hit) => ({ ...hit, status: freshness(hit.reading, { now: this.o.now(), fresh_for: FRESH_FOR }) }));
   }
   /** Recomputes the pilot baseline a manifest names, keeps its script and output as evidence, and records what it could. */
   async baseline(manifestPath: string) {
@@ -168,6 +173,6 @@ export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows'])
     const value = r.value === null ? 'unknown' : String(r.value);
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
     const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
-    return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}`;
+    return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}${r.detail ? ` ${JSON.stringify(r.detail)}` : ''}`;
   });
 }

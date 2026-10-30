@@ -34,11 +34,11 @@ function bySession(events: readonly RecordEvent[]): Map<string, RecordEvent[]> {
 }
 
 export function heldTime(events: RecordEvent[], options: { budget_ms: number }) {
-  const stops: { stop: string; session: string; turn: string; total_ms: number; by: HeldBy; code_changing: boolean }[] = [];
+  const stops: { stop: string; session: string; turn: string; total_ms: number; by: HeldBy; code_changing: boolean; at: number }[] = [];
   const turns = new Map<string, { turn: string; session: string; total_ms: number; by: HeldBy }>();
   const sessions: { session: string; total_ms: number; by: HeldBy; code_changing: { stops: number; p50_ms: number | null; p95_ms: number | null; budget_ms: number; band: 'inside' | 'over'; slow_hold_ms: number } }[] = [];
   for (const [session, list] of bySession(events)) {
-    const asks = list.filter((e) => e.kind === 'user.ask');
+    const asks = list.filter((e) => e.kind === 'user.ask' && e.data.no_model !== true);
     const by = noHold();
     let total = 0;
     let holds = 0;
@@ -53,7 +53,7 @@ export function heldTime(events: RecordEvent[], options: { budget_ms: number }) 
       const own = noHold();
       addBy(own, e);
       const code_changing = e.data.code_changing === true;
-      stops.push({ stop: String(e.data.stop), session, turn, total_ms: hold, by: own, code_changing });
+      stops.push({ stop: String(e.data.stop), session, turn, total_ms: hold, by: own, code_changing, at: e.ts });
       const t = turns.get(turn) ?? { turn, session, total_ms: 0, by: noHold() };
       t.total_ms += hold;
       addBy(t.by, e);
@@ -134,7 +134,8 @@ export function billingMode(sessionStart: RecordEvent): 'api_key' | 'plan' | 'un
   return set.includes(true) ? 'api_key' : set.length ? 'plan' : 'unknown';
 }
 /** A session's spend as turn.usage records it: per turn as it stands, a running total as the difference from the one before. */
-interface Used { turn: string; tokens: number; cost: Cost; ts: number; tasks: string[]; mode: ReturnType<typeof billingMode> }
+interface Used { id: string; turn: string; tokens: number; cost: Cost; ts: number; tasks: string[]; mode: ReturnType<typeof billingMode> }
+const tasksOf = (ask: RecordEvent): string[] => (Array.isArray(ask.data.tasks) ? (ask.data.tasks as string[]) : []);
 function usedIn(list: readonly RecordEvent[]): Used[] {
   const out: Used[] = [];
   let tasks: string[] = [];
@@ -143,17 +144,20 @@ function usedIn(list: readonly RecordEvent[]): Used[] {
   let mode: ReturnType<typeof billingMode> = 'unknown';
   for (const e of list) {
     if (e.kind === 'session.start') mode = billingMode(e);
-    if (e.kind === 'user.ask') tasks = Array.isArray(e.data.tasks) ? (e.data.tasks as string[]) : [];
+    // An ask naming no task, a "thanks" or a goal's next turn, works on for the one before, as the hub's claims do.
+    if (e.kind === 'user.ask' && tasksOf(e).length) tasks = tasksOf(e);
     if (e.kind !== 'turn.usage') continue;
     const t = e.data.tokens as { input?: unknown; cached?: unknown; output?: unknown } | undefined;
     const tokens = num(t?.input) + num(t?.cached) + num(t?.output);
     const cost = e.data.cost as Cost;
     if (e.data.covers === 'session') {
       const usd = 'usd' in cost ? cost.usd : 0;
-      // A running total is a baseline, never new use: what a resumed thread starts from was counted already.
-      out.push({ turn: String(e.data.turn), tokens: Math.max(0, tokens - last.tokens), cost: 'usd' in cost ? { ...cost, usd: Math.max(0, usd - last.usd) } : cost, ts: e.ts, tasks, mode });
-      last = { tokens: Math.max(tokens, last.tokens), usd: Math.max(usd, last.usd) };
-    } else out.push({ turn: String(e.data.turn), tokens, cost, ts: e.ts, tasks, mode });
+      // A running total is a baseline, never new use: what a resumed thread starts from was counted already. One that
+      // hasn't grown says nothing about the turn, which stays unknown rather than reading zero.
+      if (tokens <= last.tokens) continue;
+      out.push({ id: e.id, turn: String(e.data.turn), tokens: tokens - last.tokens, cost: 'usd' in cost ? { ...cost, usd: Math.max(0, usd - last.usd) } : cost, ts: e.ts, tasks, mode });
+      last = { tokens, usd: Math.max(usd, last.usd) };
+    } else out.push({ id: e.id, turn: String(e.data.turn), tokens, cost, ts: e.ts, tasks, mode });
   }
   return out;
 }
@@ -186,7 +190,7 @@ interface Part { readings: Reading[]; tasks: Map<string, Spend>; plan: number; f
 function foldSession(session: string, list: RecordEvent[]): Part {
   const subject = `session:${session}`;
   const readings: Reading[] = [];
-  const count = (id: string, value: number, as_of: number, unit = 'count') => readings.push({ id, subject, value, unit, source: RECORD, as_of, basis: 'observed' });
+  const count = (id: string, value: number, as_of: number, unit = 'count', detail?: Record<string, unknown>[]) => readings.push({ id, subject, value, unit, source: RECORD, as_of, basis: 'observed', ...(detail?.length ? { detail } : {}) });
 
   const held = heldTime(list, { budget_ms: BUDGET_MS });
   const lastHold = (stopIds: Set<string>) => Math.max(...list.filter((e) => e.kind === 'stop.held' && stopIds.has(String(e.data.stop))).map((e) => e.ts));
@@ -194,6 +198,7 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     const as_of = lastHold(new Set(held.stops.filter((s) => s.turn === t.turn).map((s) => s.stop)));
     readings.push({ id: 'held.turn', subject: t.turn, value: t.total_ms, unit: 'ms', source: RECORD, as_of, basis: 'observed', by: t.by });
   }
+  for (const s of held.stops) readings.push({ id: 'held.stop', subject: s.stop, value: s.total_ms, unit: 'ms', source: RECORD, as_of: s.at, basis: 'observed', by: s.by });
   for (const s of held.sessions) {
     const as_of = lastHold(new Set(held.stops.map((x) => x.stop)));
     readings.push({ id: 'held.session', subject, value: s.total_ms, unit: 'ms', source: RECORD, as_of, basis: 'observed', by: s.by });
@@ -205,9 +210,9 @@ function foldSession(session: string, list: RecordEvent[]): Part {
   }
   const cost = budgetCost(list);
   const newest = list.at(-1)?.ts ?? 0;
-  if (cost.left) { count('budget.left', cost.left, newest); count('budget.failed_after_reply', cost.failed_after_reply, newest); }
-  for (const s of staleRuns(list).sessions) { count('stale.count', s.count, newest); count('stale.within_30s', s.within_30s, newest); }
-  for (const s of loopHolds(list).sessions) { count('loop.places_taken', s.places_taken, newest); count('loop.runs_started', s.runs_started, newest); }
+  if (cost.left) { count('budget.left', cost.left, newest); count('budget.failed_after_reply', cost.failed_after_reply, newest, 'count', cost.items); }
+  for (const s of staleRuns(list).sessions) { count('stale.count', s.count, newest, 'count', s.runs); count('stale.within_30s', s.within_30s, newest); }
+  for (const s of loopHolds(list).sessions) { count('loop.places_taken', s.places_taken, newest); count('loop.runs_started', s.runs_started, newest, 'count', s.starts); }
 
   const tasks = new Map<string, Spend>();
   const own = new Map<string, Spend>();
@@ -235,10 +240,13 @@ function foldSession(session: string, list: RecordEvent[]): Part {
   }
   for (const [turn, t] of byTurn) readings.push({ id: 'cost.turn', subject: turn, value: t.usd, unit: 'usd', source: RECORD, as_of: t.as_of, basis: t.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: t.cost });
   // A turn with no usage, such as one that crashed, leaves what it sums short: the session's, and its tasks'. A turn runs
-  // from its first ask to its usage or a new start: a message typed mid-turn is the same turn, a subagent's stop ends none,
-  // and an ask no model read opens none.
+  // from its first ask to its usage: a message typed mid-turn is the same turn, a subagent's stop ends none, and an ask no
+  // model read opens none. After a failed stop or a new start the next ask opens another, but usage first means the turn
+  // went on, as it does across a compaction's start.
   const asks = list.filter((e) => e.kind === 'user.ask');
-  let turn: { at: number; tasks: string[]; spent: boolean } | undefined;
+  const grew = new Set(used.map((u) => u.id));
+  let turn: { at: number; tasks: string[]; spent: boolean; broke: boolean } | undefined;
+  let named: string[] = [];
   let unknownTurns = 0;
   const close = (): void => {
     if (!turn || turn.spent) return;
@@ -246,11 +254,13 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     for (const task of turn.tasks) addSpend(tasks, task, { usd: 0, priced: false, card: null, complete: false, as_of: turn.at });
   };
   for (const e of list) {
-    if (e.kind === 'session.start') { close(); turn = undefined; }
-    else if (e.kind === 'user.ask' && e.data.no_model !== true && (!turn || turn.spent)) {
+    if (e.kind === 'session.start' || (e.kind === 'agent.stop' && typeof e.data.cause === 'string' && e.data.cause !== 'unknown')) { if (turn) turn.broke = true; }
+    else if (e.kind === 'user.ask' && e.data.no_model !== true) {
+      if (tasksOf(e).length) named = tasksOf(e);
+      if (turn && !turn.spent && !turn.broke) continue;
       close();
-      turn = { at: e.ts, tasks: Array.isArray(e.data.tasks) ? (e.data.tasks as string[]) : [], spent: false };
-    } else if (turn && e.kind === 'turn.usage') turn.spent = true;
+      turn = { at: e.ts, tasks: named, spent: false, broke: false };
+    } else if (turn && grew.has(e.id)) turn.spent = true;
   }
   close();
   if (used.length) {
@@ -295,6 +305,7 @@ function foldAcross(list: RecordEvent[]): Reading[] {
   const blocked = new Map<string, number>();
   let blockedMs = 0;
   let blockedAt = 0;
+  let closed = false;
   for (const e of list) {
     if (e.kind === 'reading.recorded') {
       const id = String(e.data.reading);
@@ -313,13 +324,14 @@ function foldAcross(list: RecordEvent[]): Reading[] {
     } else if (e.kind === 'verdict.made') {
       const claim = String(e.data.claim);
       const since = blocked.get(claim);
-      if (since !== undefined) { blockedMs += e.ts - since; blockedAt = e.ts; blocked.delete(claim); }
-      if (e.data.outcome === 'BLOCKED') blocked.set(claim, e.ts);
+      if (since !== undefined) { blockedMs += e.ts - since; closed = true; blockedAt = e.ts; blocked.delete(claim); }
+      if (e.data.outcome === 'BLOCKED') { blocked.set(claim, e.ts); blockedAt = e.ts; }
     }
   }
   const out = [...readings.values()];
   for (const [kind, w] of waits) out.push({ id: 'approval.wait', subject: kind, value: median(w.ms), unit: 'ms', source: RECORD, as_of: w.as_of, basis: 'observed' });
-  if (blockedAt) out.push({ id: 'blocked.time', subject: null, value: blockedMs, unit: 'ms', source: RECORD, as_of: blockedAt, basis: 'observed' });
+  // A claim still blocked has no end yet, so the sum is short of it.
+  if (blockedAt) out.push({ id: 'blocked.time', subject: null, value: closed ? blockedMs : null, unit: 'ms', source: RECORD, as_of: blockedAt, basis: 'observed', complete: blocked.size === 0 });
   return out;
 }
 

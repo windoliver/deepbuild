@@ -6,19 +6,24 @@ export interface PanelRow {
   source: string; age_ms: number; basis: 'observed' | 'modeled';
   status: 'current' | 'STALE';
   agreement: { share: number; n: number; status: ClassifierCheck['status'] } | null;
-  cost?: Reading['cost']; complete?: boolean; by?: Reading['by']; band?: Reading['band'];
+  cost?: Reading['cost']; complete?: boolean; by?: Reading['by']; band?: Reading['band']; detail?: Reading['detail'];
 }
-/** Readings outside their band first; a source with no freshness limit is current here. */
-export function panelRows(readings: Reading[], options: { now: number; fresh_for: Record<string, number> }): PanelRow[] {
+interface Freshness { now: number; fresh_for: Record<string, number> }
+/** A source with no freshness limit is current. */
+export function freshness(r: Reading, options: Freshness): 'current' | 'STALE' {
+  const limit = options.fresh_for[r.source];
+  return limit !== undefined && options.now - r.as_of > limit ? 'STALE' : 'current';
+}
+/** Readings outside their band first. */
+export function panelRows(readings: Reading[], options: Freshness): PanelRow[] {
   const rows = readings.map((r): PanelRow => {
     const age_ms = Math.max(0, options.now - r.as_of);
-    const limit = options.fresh_for[r.source];
     const check = r.classifier;
     return {
       id: r.id, subject: r.subject, value: r.value, unit: r.unit, source: r.source, age_ms, basis: r.basis,
-      status: limit !== undefined && age_ms > limit ? 'STALE' : 'current',
+      status: freshness(r, options),
       agreement: check && check.agreement !== null ? { share: check.agreement, n: check.n, status: check.status } : null,
-      ...(r.cost ? { cost: r.cost } : {}), ...(r.complete !== undefined ? { complete: r.complete } : {}), ...(r.by ? { by: r.by } : {}), ...(r.band ? { band: r.band } : {}),
+      ...(r.cost ? { cost: r.cost } : {}), ...(r.complete !== undefined ? { complete: r.complete } : {}), ...(r.by ? { by: r.by } : {}), ...(r.band ? { band: r.band } : {}), ...(r.detail ? { detail: r.detail } : {}),
     };
   });
   return rows.sort((a, b) => Number(b.band === 'over') - Number(a.band === 'over'));

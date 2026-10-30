@@ -62,7 +62,8 @@ class Counter {
     if (!isObj(e) || !isObj(e.message)) return;
     if (e.type === 'user') {
       if (!beginsTurn(e, e.message) || typeof e.uuid !== 'string') return;
-      this.current = { turn: e.uuid, usage: empty(), unknown: false, replied: false };
+      // A replayed line is the turn it was, with what it already counted.
+      this.current = this.turns.get(e.uuid) ?? { turn: e.uuid, usage: empty(), unknown: false, replied: false };
       this.turns.set(e.uuid, this.current);
     } else if (e.type === 'assistant' && e.message.model !== '<synthetic>') {
       if (this.current) this.current.replied = true;
