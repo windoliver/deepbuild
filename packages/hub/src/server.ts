@@ -903,12 +903,15 @@ class Hub {
     this.stopping = true;
     clearTimeout(this.waitTimer);
     this.server.close();
-    for (const conn of this.conns) conn.sock.destroy();
+    // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
+    const answers = this.plant === 'stop-answers-waiting';
+    if (!answers) for (const conn of this.conns) conn.sock.destroy();
     try {
       await Promise.race([this.core.request({ op: 'stop', reason }), new Promise((_, reject) => setTimeout(() => reject(Error('the core took over 20 s to stop')), 20_000))]);
     } catch (error) {
       process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`);
     }
+    if (answers) for (const conn of this.conns) conn.sock.destroy();
     this.exit(0);
   }
   private exit(code: number): void {
