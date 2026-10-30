@@ -111,7 +111,7 @@
         },
         "agent_before_settle": {
           "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "outcome": "string" },
-          "optional": { "error": "string", "transcript_path": "string", "agent_version": "string" }
+          "optional": { "error": "string", "transcript_path": "string", "agent_version": "string", "last_assistant_message": "string" }
         },
         "agent_settled": {
           "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string" },

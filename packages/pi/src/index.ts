@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 type Obj = Record<string, unknown>;
-interface Ctx { cwd: string; isIdle(): boolean; hasPendingMessages(): boolean; sessionManager: { getSessionId(): string; getSessionFile(): string | undefined } }
+interface Ctx { ui: { notify(message: string, type?: 'info' | 'warning' | 'error'): void }; cwd: string; isIdle(): boolean; hasPendingMessages(): boolean; sessionManager: { getSessionId(): string; getSessionFile(): string | undefined } }
 interface Pi {
   on(event: string, handler: (event: never, ctx: Ctx) => unknown): void;
   registerTool(tool: Obj): void;
@@ -56,6 +56,8 @@ const startOf = (pid: number): Promise<string> => new Promise((done) => {
  * next one, sent only after this acknowledgement, lands after it.
  */
 const HELD_MS = 70_000;
+/** A stop sends a run back at most this many times in a row, from its last tool call: Claude Code's own cap, which pi lacks. */
+const CONTINUE_CAP = 8;
 const ANNOUNCE_MS = 30_000;
 function sendHook(socket: string, event: string, payload: Obj, acked: () => void): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
   return new Promise((resolve) => {
@@ -375,7 +377,7 @@ export default function deepbuild(pi: Pi): void {
     if (reply && reply.exit !== 0) return { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' };
     return undefined;
   });
-  on('tool_execution_start', (event) => { if (!event.parentToolCallId) { toolCalls++; place(true); } });
+  on('tool_execution_start', (event) => { sentBack = 0; if (!event.parentToolCallId) { toolCalls++; place(true); } });
   on('tool_execution_end', (event) => { if (!event.parentToolCallId) toolCalls = Math.max(0, toolCalls - 1); });
   on('tool_result', (event) => {
     const name = String(event.toolName);
@@ -398,6 +400,8 @@ export default function deepbuild(pi: Pi): void {
     };
   }
   on('message_end', (event) => {
+    const said = event.message as { role?: string; content?: unknown } | undefined;
+    if (said?.role === 'assistant' && Array.isArray(said.content)) lastSaid = (said.content as { type?: string; text?: string }[]).flatMap((part) => (part.type === 'text' && part.text ? [part.text] : [])).join('');
     const message = event.message as { role?: string; toolCallId?: string; nestedCalls?: { complete?: boolean; calls?: unknown[] } } | undefined;
     if (message?.role !== 'toolResult' || !message.toolCallId) return undefined;
     const built = results.get(message.toolCallId);
@@ -410,21 +414,27 @@ export default function deepbuild(pi: Pi): void {
     return undefined;
   });
   let stopSent = true;
+  let sentBack = 0;
+  let lastSaid = '';
   on('agent_before_settle', async (event) => {
     stopSent = true;
     const outcome = event.outcome === 'completed' ? 'finished' : 'failed';
-    const reply = await hook('agent_before_settle', { outcome });
+    const reply = await hook('agent_before_settle', { outcome, ...(lastSaid ? { last_assistant_message: lastSaid } : {}) });
     // The hub's send-back: the only hook that may continue a run, and only the hub's words do.
-    const out = reply?.stdout ? JSON.parse(reply.stdout) as { decision?: string; reason?: string } : {};
+    const out = reply?.stdout ? JSON.parse(reply.stdout) as { decision?: string; reason?: string; systemMessage?: string } : {};
+    // The hub's verdict line is for the person, as Claude Code shows a hook's systemMessage: the model doesn't read it.
+    if (out.systemMessage) ctx?.ui.notify(out.systemMessage, 'info');
     if (held.length && event.outcome === 'completed') {
       for (const answer of held.splice(0)) send(answer, 'followUp');
       // pi reads its queue when this handler returns, and sendUserMessage queues a step later.
       for (let tries = 0; tries < 100 && !ctx?.hasPendingMessages(); tries++) await new Promise((done) => setTimeout(done, 2));
     }
-    if (out.decision === 'block' && out.reason) return { continue: true, entries: [{ type: 'custom_message', customType: 'deepbuild', content: out.reason, display: true }] };
+    // A failed run settles: a send-back would only fail again. Past the cap the verdict stands as it is.
+    if (out.decision === 'block' && out.reason && event.outcome === 'completed' && sentBack++ < CONTINUE_CAP) return { continue: true, entries: [{ type: 'custom_message', customType: 'deepbuild', content: out.reason, display: true }] };
     return undefined;
   });
   on('agent_settled', (event) => {
+    sentBack = 0;
     // An aborted run skips pi's pre-settle hook, and its stop is still the one a run ends with.
     if (!stopSent && event.aborted === true) void hook('agent_before_settle', { outcome: 'failed' });
     stopSent = true;
