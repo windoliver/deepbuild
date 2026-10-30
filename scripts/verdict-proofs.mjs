@@ -15,6 +15,8 @@ const model = join(root, 'packages/verdicts/model');
 const THEOREMS = ['verdict_closed', 'verdict_highest', 'verdict_never_pass', 'verdict_set_only', 'verdict_rises', 'late_read_stale']
   .map((name) => `Verdicts.${name}`);
 const STANDARD = new Set(['propext', 'Quot.sound', 'Classical.choice']);
+/** What the lane checks: the model, the engine held to it, the toolchain pin and this script. */
+export const inputs = (file) => /^packages\/verdicts\/(src|model)\//.test(file) || file === 'lean-toolchain' || file === 'scripts/verdict-proofs.mjs';
 
 /** The pinned toolchain's lake, or a BLOCKED line naming the pin. */
 function toolchain() {
@@ -149,5 +151,7 @@ function vectors(args) {
   return r.status ?? 1;
 }
 
-const [command, ...rest] = process.argv.slice(2);
-process.exitCode = command === 'vectors' ? vectors(rest) : command === undefined ? lane() : (console.log(`INVALID verdict proofs: unknown command ${command}`), 1);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const [command, ...rest] = process.argv.slice(2);
+  process.exitCode = command === 'vectors' ? vectors(rest) : command === undefined ? lane() : (console.log(`INVALID verdict proofs: unknown command ${command}`), 1);
+}
