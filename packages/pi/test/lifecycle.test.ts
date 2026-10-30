@@ -207,6 +207,61 @@ describe.skipIf(!process.env.DEEP_PI_CLI)('the pi package', () => {
     await third.stop();
   }, 180_000);
 
+  it('a hub restarted mid-turn leaves the turn\'s stop judged', async () => {
+    const w = await openWorld({ steps: [{ tools: [{ name: 'bash', arguments: { command: 'sleep 6' } }] }, { text: 'done' }] });
+    await w.pi.call({ type: 'prompt', message: 'Work.' });
+    await w.pi.until('tool_execution_start', 1, 15_000);
+    process.kill(w.hub.pid);
+    await sleep(500);
+    const hub = await startHub(w.home);
+    const client = await Client.open(hub);
+    await w.pi.until('agent_settled', 1, 60_000);
+    await sleep(1500);
+    const events = await client.events();
+    expect(events.filter((e) => e.kind === 'agent.stop').map((e) => e.data.claim), 'an announce mid-turn would start the count over').toEqual([true]);
+    process.kill(hub.pid);
+  }, 180_000);
+
+  it('a session quit during deep_ask takes its answer when resumed', async () => {
+    const question = `Which ${word()} glen?`;
+    const label = `Glen ${word()}`;
+    const w = await openWorld({ steps: [askStep(question, label)] });
+    await w.pi.call({ type: 'prompt', message: 'Ask.' });
+    const created = await askCreated(w, question);
+    const handle = `ask:${String(created.id)}`;
+    const { data } = await w.pi.call({ type: 'get_state' });
+    await w.pi.stop();
+    await answer(w, handle);
+    const next = await Pi.start(w.home, w.cwd, { steps: [{ text: 'ok' }] });
+    await next.call({ type: 'switch_session', sessionPath: String(data.sessionFile) });
+    const outcome = await waitFor(async () => (await outcomesOf(w, handle))[0], 20_000, 'the outcome');
+    expect(outcome.data.outcome).toBe('delivered');
+    await next.stop();
+  }, 180_000);
+
+  it('an answer goes to the fork that asked, never to the session it forked from', async () => {
+    const question = `Which ${word()} tarn?`;
+    const label = `Tarn ${word()}`;
+    const w = await openWorld({ steps: [{ text: 'ok' }, askStep(question, label)] });
+    await w.pi.call({ type: 'prompt', message: 'Start.' });
+    await w.pi.until('agent_settled', 1, 30_000);
+    const { data: first } = await w.pi.call({ type: 'get_state' });
+    const { data: forks } = await w.pi.call({ type: 'get_fork_messages' });
+    const entry = (forks.messages as { entryId: string }[])[0]!.entryId;
+    await w.pi.call({ type: 'fork', entryId: entry });
+    await sleep(500);
+    await w.pi.call({ type: 'prompt', message: 'Ask.' });
+    const created = await askCreated(w, question);
+    const handle = `ask:${String(created.id)}`;
+    await w.pi.stop();
+    await answer(w, handle);
+    const next = await Pi.start(w.home, w.cwd, { steps: [{ text: 'ok' }] });
+    await next.call({ type: 'switch_session', sessionPath: String(first.sessionFile) });
+    await sleep(3000);
+    expect(next.count('agent_start'), 'the old session starts no turn on it').toBe(0);
+    await next.stop();
+  }, 180_000);
+
   it('a session replaced and then resumed takes its answer', async () => {
     const question = `Which ${word()} hill?`;
     const w = await openWorld({ steps: [askStep(question, 'Tall'), { text: 'ok' }] });
