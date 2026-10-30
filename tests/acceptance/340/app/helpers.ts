@@ -174,15 +174,20 @@ function deepEntries(settings: Line): Line[] {
     .filter((hook) => isDeepBuild(hook.command));
 }
 /**
- * `deep setup` (#18) with HOME the test's home and a hub answering; BLOCKED unless it exits 0 with one asyncRewake
- * waiter entry of DeepBuild's in Claude Code's user settings. Builds the deep-hook its entries name if it is missing.
+ * `deep setup` (#18) with HOME the test's home and a hub answering; BLOCKED unless it exits 0 with DeepBuild's
+ * asyncRewake waiter entry in Claude Code's user settings once under Stop and once under StopFailure, with the same
+ * command and timeout (#25, amended Oct 29), and no other. Builds the deep-hook its entries name if it is missing.
  */
 export async function setup(home: string, env: Record<string, string | undefined> = {}): Promise<void> {
   const r = await run(NODE, [CLI, 'setup'], { env: childEnv(home, env), timeoutMs: 180_000 });
   if (r.code !== 0) throw Error(`BLOCKED: deep setup must exit 0 and install DeepBuild into Claude Code's user settings: ${shown(r)}`);
   const settings = parseObject(readFileSync(settingsFile(home), 'utf8')) ?? {};
   const waiters = deepEntries(settings).filter((hook) => hook.asyncRewake === true);
-  if (waiters.length !== 1) throw Error(`BLOCKED: setup must write one asyncRewake waiter entry of DeepBuild's; found ${waiters.length}`);
+  const under = (event: string) => deepEntries({ hooks: { [event]: (settings.hooks as Record<string, unknown> | undefined)?.[event] } }).filter((hook) => hook.asyncRewake === true);
+  const [stop, failure] = [under('Stop'), under('StopFailure')];
+  if (waiters.length !== 2 || stop.length !== 1 || failure.length !== 1 || stop[0]!.command !== failure[0]!.command || stop[0]!.timeout !== failure[0]!.timeout) {
+    throw Error(`BLOCKED: setup must write DeepBuild's asyncRewake waiter entry under Stop and under StopFailure, with the same command and timeout, and no other; found ${JSON.stringify(waiters.map((w) => ({ command: w.command, timeout: w.timeout })))} (${stop.length} under Stop, ${failure.length} under StopFailure)`);
+  }
   for (const hook of deepEntries(settings)) {
     for (const path of String(hook.command).match(/\/[^\s'"]*deep-hook\b/g) ?? []) {
       if (existsSync(path)) continue;

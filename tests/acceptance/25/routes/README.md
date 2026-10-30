@@ -7,6 +7,15 @@ Code's facts (`adapters/claude-code.facts.json`) and base commit `0350cf0`, by a
 of #25. The implementing agent does not edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of
 this job.
 
+**Redrafted blind for the Oct 29 amendment** (issue #25's scope and the design's Claude Code row and Waiter
+guardrail, amended for #85): setup writes the waiter's entry under Stop and under StopFailure, with the same command
+and timeout, since a turn that ends on an API error fires only StopFailure; Claude Code starts it at either, and the
+hub keeps one live waiter per session, the newest. Only what that changes was changed: the waiter entries read from
+the settings (AC6), the stand-in's StopFailure, a StopFailure-idle wake (AC2), the newest waiter and a StopFailure
+waiter (AC12), and the plant `waiter-under-stop-only`. Every other test, name and expected value is as before.
+A second blind redraft rewrote AC2's and AC12's StopFailure tests and their wrong-program pairs so they hold under
+the design's other rules for a stop that ends on an API error (Disputes, 8); nothing else changed.
+
 The issue has 12 checkbox criteria, AC1 to AC12 in the body's order. **This folder covers AC1, AC2, AC3, AC4, AC6,
 AC11 and AC12.** Two sibling blind jobs cover the rest: `../fallbacks/` (AC5, AC7, AC9, AC10) and `../live/` (AC8 and
 the harness runs).
@@ -39,8 +48,9 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json
   connection with the control token; `events.read`. `DEEP_HUB_PLANT=<name>` selects a planted program, and a name the
   hub doesn't know makes it exit at start (#16); `DEEP_HUB_TEST_CLOCK` starts the hub's clock at a given time (#16);
   `DEEP_HUB_TEST_CONFIRM` names a file holding `confirmed`, the OS confirmation stubbed (#24).
-- **`deep setup`** (#18): writes DeepBuild's entries into `~/.claude/settings.json`, among them the waiter, DeepBuild's
-  one entry with `asyncRewake: true`, with its `timeout`. DeepBuild's entries are those whose command runs deep-hook or
+- **`deep setup`** (#18): writes DeepBuild's entries into `~/.claude/settings.json`, among them the waiter: DeepBuild's
+  entries with `asyncRewake: true`, exactly one under Stop and one under StopFailure, with the same command and
+  `timeout` (amended Oct 29), and none elsewhere. DeepBuild's entries are those whose command runs deep-hook or
   the deep CLI (as #18's install suite reads them).
 - **`deep mcp`** started by the session's process and `deep_ask` filing an ask under that session (#26); the ask is
   the `ask.created` event of that session with that question, its handle `ask:<event id>`. **`deep inbox answer <ask>
@@ -65,6 +75,12 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json
      Code 2.1.303 and the desktop app); if a turn is running, the wake waits until that turn's Stop goes through.
    - A Stop starts the waiter entry again and never stops an earlier one; earlier ones run on until their timeout
      (#80: "Earlier waiters keep running in the desktop app ... the adapter must end the old waiter itself").
+   - A StopFailure (a turn that ended on an API error, fired instead of Stop) ends the turn like a Stop that went
+     through: the session is idle. Claude Code reads nothing from its entries' output, and runs its async and
+     `asyncRewake` entries in the background as at a Stop, so it starts the waiter's StopFailure entry (amended Oct 29:
+     "Claude Code starts it at either"). The tests write the turn's API error entry into the transcript first (an
+     assistant entry with `isApiErrorMessage`, model `<synthetic>`), and the payload carries `error: "invalid_request"`
+     (Disputes, 8).
    - `configure({wake:false})` is a Claude Code that doesn't start a turn on that exit (the exit is still reported).
    - `end` is a session ending: Claude Code stops its `deep mcp` and exits, and leaves its background entries to end
      on their own; `kill` is its process killed. Either way nothing it started is stopped for DeepBuild.
@@ -85,7 +101,7 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json
    transcript entry carries one of them, leaving out entries holding a tool call or a tool result (the agent's own
    deep_ask call and reply name the ask and aren't a delivery).
 6. **A waiter process for a session** (AC3, AC12): a background `asyncRewake` run of DeepBuild's entry started at that
-   session's Stop that hasn't exited and still has a live (not zombie) process in its process group. Its size is the
+   session's Stop or StopFailure that hasn't exited and still has a live (not zombie) process in its process group. Its size is the
    resident size (`ps` RSS) of every live process in that group; "under 5 MB" is under 5120 KB.
 7. **"Outlives its session"** (AC3): any process of the waiter's process group still running 10 s after the session
    ended (SessionEnd then Claude Code's exit) or its Claude Code was killed.
@@ -103,7 +119,7 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json
 
 ### Additions the implementation must make
 
-1. Seven planted programs, selected with `DEEP_HUB_PLANT` and listed in `packages/hub/src/wire.ts`'s plants. The tests set
+1. Eight planted programs, selected with `DEEP_HUB_PLANT` and listed in `packages/hub/src/wire.ts`'s plants. The tests set
    the variable on `deep hub run`, on `deep setup`, on `deep inbox answer` and on the stand-in (so on deep-hook, the
    waiter and `deep mcp`), so a plant may live on any side.
 
@@ -115,12 +131,15 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json
    | `both-routes` | an answer that lands while the stop is held and the waiter is alive goes back through the Stop hold and the waiter both | AC4 | `one-route.test.ts`: "AC4 ask:… went back by both routes: the Stop hold (decision: block) and the waiter (exit 2 …)" |
    | `waiter-gives-up-at-600s` | the waiter, or the hub's lease on it, ends 600 s (Claude Code's default hook timeout) of hub time after its stop, whatever the entry's timeout; a later answer waits for the next prompt | AC6 | `twenty-minutes.test.ts`: "AC6 idle session … (1 of 2 answered) never woke within 30 s of its answer to ask:…" |
    | `delivered-on-waiter-exit` | records the delivery `delivered` when the waiter exits 2 with the answer, without reading the transcript (the base's behaviour) | AC11 | `stalled.test.ts`: "AC11 ask:… was recorded delivered and acknowledged from the waiter's exit alone, …" |
-   | `waiter-per-stop` | never ends an earlier waiter of the session: each Stop's waiter keeps waiting | AC12 | `thirty-stops.test.ts`: "AC12 thirty Stops in one session must leave one waiter process for it; they left 30 (pids …)" |
+   | `waiter-per-stop` | never ends an earlier waiter of the session: each Stop's or StopFailure's waiter keeps waiting | AC12 | `thirty-stops.test.ts`: "AC12 thirty Stops in one session must leave one waiter process for it; they left 30 (pids …)", and "AC12 three Stops and a StopFailure in one session must leave one waiter process for it; they left 4 (…)" |
+   | `waiter-under-stop-only` | setup writes the waiter's entry under Stop only, none under StopFailure (the merge base's settings), so a turn that ends on an API error leaves its session with no waiter | AC2, AC6 | `wake.test.ts`: "Claude Code started no waiter at …'s StopFailure: DeepBuild's settings hold no waiter entry under StopFailure, …"; `twenty-minutes.test.ts`: "setup wrote the waiter's entry under Stop only: a turn that ends on an API error fires only StopFailure, …" |
 
    The shared `tests/acceptance/25/twins.json` (outside this folder) should map `#25.0215da31` to
    `answer-skips-held-stop`, `#25.ee0f30b0` to `waiter-never-wakes`, `#25.008fdf08` to `waiter-outlives-session`,
    `#25.1eae4ef9` to `both-routes`, `#25.6367a6a9` to `waiter-gives-up-at-600s`, `#25.185becde` to
-   `delivered-on-waiter-exit` and `#25.11b719ba` to `waiter-per-stop`.
+   `delivered-on-waiter-exit` and `#25.11b719ba` to `waiter-per-stop`. `waiter-under-stop-only` is the in-suite wrong
+   program for the StopFailure checks of AC2 and AC6; in the before lane the merge base, whose setup writes the waiter
+   under Stop only, fails those same checks with the same messages.
 2. A `delivery.outcome@1` event with `outcome: "stalled"` for an ask whose waiter delivery no turn carried (AC11). The
    schema already has the value; the `via` the implementation records for the waiter route isn't read by these tests.
 3. The waiter keeps waiting while the hub restarts (AC6; Disputes, 2), and stays for its session when nothing is open
@@ -134,12 +153,12 @@ trimmed, whitespace collapsed>`, as `scripts/proof-change.mjs` computes it.
 | ID | Criterion (short) | Test | Wrong program it fails on |
 |---|---|---|---|
 | AC1 `#25.0215da31` | a held stop continues with the answer | `held.test.ts`: a Stop with no question open isn't held or sent back; a Stop with the session's ask open is held, you answer, and its reply is `decision: block` with the answer, exit 0 before the timeout; the continued turn's Stop isn't held or sent back with it again; the next prompt doesn't bring it again | `answer-skips-held-stop`; the base (its waiter takes the answer first, so the held stop goes through with no decision) |
-| AC2 `#25.ee0f30b0` | an idle session wakes within 2 s of an answer at p95 | `wake.test.ts`: 20 idle sessions, answered one at a time, each wakes with a turn carrying its answer; p95 ≤ 2 s (INCONCLUSIVE under load) | `waiter-never-wakes` (never woke) |
+| AC2 `#25.ee0f30b0` | an idle session wakes within 2 s of an answer at p95 | `wake.test.ts`: 20 idle sessions, answered one at a time, each wakes with a turn carrying its answer; p95 ≤ 2 s (INCONCLUSIVE under load). Then 20 sessions whose deep_ask turn ended on an API error (its error entry, then StopFailure, no Stop), the same way | `waiter-never-wakes` (never woke); `waiter-under-stop-only` and the merge base (the first never woke, and the failure names the missing StopFailure waiter) |
 | AC3 `#25.008fdf08` | no waiter outlives its session | `session-end.test.ts`: two idle sessions waiting on their asks; one ends (SessionEnd, exit), one's Claude Code is killed; within 10 s no process of either waiter's group is left | `waiter-outlives-session` |
 | AC4 `#25.1eae4ef9` | answer while held with the waiter alive: Stop hold only, waiter exits without waking, ID once in the transcript; both routes fails naming them | `one-route.test.ts`: the Stop's reply blocks with the answer; the waiter alive at the answer exits within 15 s with a code other than 2; the continued turn's Stop isn't sent back with it again; no wake follows in 5 s; one transcript entry carries the answer's ID | `both-routes` (names both routes); the base (the waiter takes it and the held stop goes through: "must go back through the Stop hold only; it went by the waiter") |
-| AC6 `#25.6367a6a9` | answer 20 minutes after a stop wakes within 2 s at p95; waiter timeout ≥ longest deadline | `twenty-minutes.test.ts`: deadlines at most 30 minutes; setup's waiter ≥ 1800 s and Claude Code runs it so; 20 idle sessions; Claude Code's clock and the hub's moved on 20 minutes; each wakes with its answer, p95 ≤ 2 s; with a 2-hour deadline, setup again gives ≥ 7200 s | `waiter-gives-up-at-600s`; the base (its waiter exits when the hub stops, so none wakes) |
+| AC6 `#25.6367a6a9` | answer 20 minutes after a stop wakes within 2 s at p95; waiter timeout ≥ longest deadline | `twenty-minutes.test.ts`: deadlines at most 30 minutes; setup's waiter entries, one under Stop and one under StopFailure with the same command and timeout, each ≥ 1800 s, and Claude Code runs it so; 20 idle sessions; Claude Code's clock and the hub's moved on 20 minutes; each wakes with its answer, p95 ≤ 2 s; with a 2-hour deadline, setup again gives ≥ 7200 s on both | `waiter-gives-up-at-600s`; `waiter-under-stop-only` and the merge base ("setup wrote the waiter's entry under Stop only") |
 | AC11 `#25.185becde` | waiter exit 2 with no turn carrying the ID: stalled, never delivered, next route once the transcript is read; a delivery from the exit alone fails, naming the ask | `stalled.test.ts`: a Claude Code that doesn't wake; the waiter exits 2 with the answer; 3 s on no `delivered` outcome for the ask; at the next typed prompt DeepBuild's reply carries the answer, and the ask's delivery reads `stalled`, with no `delivered` before it | `delivered-on-waiter-exit`; the base (records `delivered` when the waiter takes the answer) |
-| AC12 `#25.11b719ba` | thirty Stops leave one waiter process, under 5 MB; one per Stop leaves thirty, naming the count | `thirty-stops.test.ts`: thirty turns in one session; Claude Code started the waiter at each Stop (control); within 15 s exactly one is left for the session, its process group under 5120 KB resident | `waiter-per-stop` (left 30); the base (left 30, and each waiter is a Node process far over 5 MB) |
+| AC12 `#25.11b719ba` | thirty Stops leave one waiter process, under 5 MB; one per Stop leaves thirty, naming the count | `thirty-stops.test.ts`: thirty turns in one session; Claude Code started the waiter at each Stop (control); within 15 s exactly one is left for the session, the one started at the thirtieth Stop (the newest), its process group under 5120 KB resident. Then three Stops and a turn ending on an API error (StopFailure): Claude Code started the waiter at all four (control); within 15 s one is left, the one started at the StopFailure, and no replaced waiter woke the session | `waiter-per-stop` (left 30; left 4); the base (left 30, and each waiter is a Node process far over 5 MB; no waiter at the StopFailure) |
 
 ## Disputes
 
@@ -159,6 +178,19 @@ trimmed, whitespace collapsed>`, as `scripts/proof-change.mjs` computes it.
 5. **What Claude Code writes.** The block's "Stop hook feedback" entry and the wake's enqueue and user entry are the
    shapes #80 recorded (desktop app transcript; terminal hook log); fields beyond those (`origin`, `turnOrigin`) are
    left out rather than guessed. No entry is written for a UserPromptSubmit's added context.
+
+6. **What a StopFailure waiter's wake looks like.** #80 recorded the wake's task-notification only for a waiter
+   started at Stop (`Stop hook blocking error from command "Stop"`). For one started at StopFailure the stand-in writes
+   the same text with `"StopFailure"`; the tests read only that the wake's turn carries the answer, never this text.
+7. **Newest by start.** "The hub keeps one live waiter per session, the newest" is read as the waiter Claude Code
+   started last for the session, whichever event started it.
+8. **Which API error.** The design gives a stop's cause more rules than the waiter's: a transient cause (the facts map
+   `overloaded` and `rate_limit` to rate_limited) gets one automatic continue, which a correct hub sends through the
+   idle session's waiter, so it would wake the session, and end its waiter, before your answer; a sign-in problem
+   raises an unblock task whose closing resumes the session the same way. So the StopFailure turns end on
+   `invalid_request`, which Claude Code's hooks reference lists and the facts map to no cause (unknown): no automatic
+   continue, no task, and the session stays idle with its waiter waiting. If a correct DeepBuild treats an unknown
+   cause as transient, that is this job's redraft.
 
 ## Files
 
