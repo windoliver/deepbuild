@@ -1661,9 +1661,10 @@ export class Core {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
-    // One the hub no longer knows has no route to wait on, but may have been replaced before a restart.
     const asker = this.sessions.get(delivery.session);
-    if (!asker || asker.agent === 'pi') return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    if (asker?.agent === 'pi' || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    // One the restarted hub hasn't heard from may be a pi session replaced before it, or any idle session whose waiter asked again.
+    if (!asker) void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
     else this.offer(delivery.session);
   }
@@ -2184,13 +2185,14 @@ export class Core {
    * reaches the replacement; else handed to the package, unless the deep_ask or deep_wait still running returns it.
    */
   private async placeOrRefuse(session: string): Promise<void> {
-    const rows = (await this.waitingFor(session)).filter((row) => !this.askWaits.has(row.id));
+    // A refusal is final: a session resumed later doesn't take what was refused for it.
+    const refused = (await this.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
+    const rows = (await this.waitingFor(session)).filter((row) => !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
     if (!rows.length) return;
     const successor = await this.replacedBy(session);
     const r = this.routes.get(successor && piAcceptsReplaced() ? successor : session);
     if (successor && !piAcceptsReplaced()) {
-      const refused = (await this.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
-      for (const row of rows) if (!refused.some((d) => d.delivery === row.id)) await this.outcome(row.id, 'next_prompt', 'replaced');
+      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'replaced');
       return;
     }
     if (!r?.places || !r.waiter) return;

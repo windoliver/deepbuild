@@ -163,6 +163,22 @@ describe.skipIf(!process.env.DEEP_PI_CLI)('the pi package', () => {
     rmSync(join(home, '.deepbuild', 'hub.sock'), { force: true });
   }, 120_000);
 
+  it('an answer refused for a replaced session stays refused when that session resumes', async () => {
+    const question = `Which ${word()} fen?`;
+    const label = `Fen ${word()}`;
+    const w = await openWorld({ steps: [askStep(question, label), { text: 'ok' }] });
+    const handle = await pendingAsk(w, question);
+    const { data } = await w.pi.call({ type: 'get_state' });
+    await w.pi.call({ type: 'new_session' });
+    await sleep(500);
+    await answer(w, handle);
+    await waitFor(async () => (await outcomesOf(w, handle))[0], 15_000, 'the refusal');
+    await w.pi.call({ type: 'switch_session', sessionPath: String(data.sessionFile) });
+    await sleep(2000);
+    expect((await outcomesOf(w, handle)).map((e) => e.data.outcome)).toEqual(['replaced']);
+    expect(w.pi.count('agent_start')).toBe(1);
+  }, 180_000);
+
   it('a session replaced and then resumed takes its answer', async () => {
     const question = `Which ${word()} hill?`;
     const w = await openWorld({ steps: [askStep(question, 'Tall'), { text: 'ok' }] });

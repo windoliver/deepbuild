@@ -171,7 +171,6 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.stage) meta.stage = request.stage;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
-  if (!fields.prompt && str(payload.text)) fields.prompt = str(payload.text);
   if (Object.keys(fields).length) meta.fields = fields;
   if (name === 'pi' && str(payload.parent)) meta.parent = str(payload.parent);
   const tool = str(payload.tool_name);

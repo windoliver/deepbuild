@@ -227,16 +227,17 @@ export default function deepbuild(pi: Pi): void {
     const entry = { ...answer, via, how };
     sent.push(entry);
     // A prompt an extension took starts no run and fires no message: an idle session a moment on is its one outcome.
-    if (!how) setTimeout(() => { if (ctx?.isIdle() === true && running === 0) reached(entry); }, HANDLED_MS);
+    if (!how) setTimeout(() => { if (!gone && ctx?.isIdle() === true && running === 0) reached(entry); }, HANDLED_MS);
   }
   const afterStart: (() => void)[] = [];
+  let gone = false;
   /**
    * What the session can take now. A tool call running takes a steer, which reaches the model after the calls' results.
    * While only a model request runs nothing goes in: it may end in an error pi retries on its own, so the answer waits
    * for a tool call or the run's settling, and starts no competing continuation.
    */
   function place(toolsRunning: boolean): void {
-    if (!held.length) return;
+    if (gone || !held.length) return;
     // pi reads idle until a prompt's input handlers return, and refuses a second prompt then: one at a time.
     const idle = ctx?.isIdle() === true && running === 0 && !pendingInput && !sent.some((entry) => !entry.how);
     if (idle) {
@@ -253,7 +254,8 @@ export default function deepbuild(pi: Pi): void {
       if (mine.closed) return;
       const result = reply.result as { text?: string; asks?: string[]; exit?: string } | undefined;
       if (result?.text && result.asks) {
-        held.push({ asks: result.asks, text: result.text });
+        // Handed again by a restarted hub while it still waits here.
+        if (!held.some((answer) => answer.asks.some((ask) => result.asks!.includes(ask)))) held.push({ asks: result.asks, text: result.text });
         place(toolCalls > 0);
       } else if (result?.exit === 'session ended') return;
       else if ((reply.error as { code?: string } | undefined)?.code === 'role' && ctx?.sessionManager.getSessionFile()) {
@@ -296,6 +298,7 @@ export default function deepbuild(pi: Pi): void {
   const on = (event: string, handler: (event: Obj, ctx: Ctx) => unknown): void => pi.on(event, handler as never);
   on('session_start', async (event, c) => {
     ctx = c;
+    gone = false;
     // pi fires it again for a session a new runtime took over: one start, one connection.
     if (session === c.sessionManager.getSessionId()) return;
     session = c.sessionManager.getSessionId();
@@ -309,6 +312,8 @@ export default function deepbuild(pi: Pi): void {
     void listen(client);
   });
   on('session_shutdown', async (event) => {
+    // pi's context throws from here on, and a timer's throw would end the session.
+    gone = true;
     flushInput();
     const reason = String(event.reason);
     // What this runtime still held never reaches the session that follows.
@@ -415,7 +420,8 @@ export default function deepbuild(pi: Pi): void {
     void hook('agent_settled', {});
     running = 0;
     // What pi cleared unread, as an abort clears its queue, goes again as a turn of its own.
-    for (const entry of sent.splice(0)) {
+    // An abort leaves pi's queue as it is: what's still in it goes in with its next run.
+    if (ctx?.hasPendingMessages() !== true) for (const entry of sent.splice(0)) {
       for (const ask of entry.asks) delivered.delete(ask);
       held.push({ asks: entry.asks, text: entry.text });
     }
