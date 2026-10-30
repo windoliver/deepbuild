@@ -551,9 +551,29 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
     }
     let key = data["key"].as_str()?;
     let session = text(&ask["session"]);
-    let repo = events
+    let repo = repo_of(events, &session);
+    let words = match repo {
+        Some(repo) => format!("Saved for this repo ({repo})"),
+        None => "Saved for this session".to_owned(),
+    };
+    let also = states::open_asks(events, None)
+        .into_iter()
+        .filter(|open| states::handle(open) != states::handle(ask))
+        .filter(|open| open["data"]["key"] == key)
+        .filter(|open| match repo {
+            // A repo-scoped decision answers the asks of that repo's sessions only, as the core's resolver does.
+            Some(repo) => repo_of(events, &text(&open["session"])) == Some(repo),
+            None => open["session"] == session.as_str(),
+        })
+        .collect();
+    Some((words, also))
+}
+
+/// The repo a session started in: its project, else its repo, else its worktree's folder name.
+fn repo_of<'a>(events: &'a [Value], session: &str) -> Option<&'a str> {
+    events
         .iter()
-        .find(|event| event["session"] == session.as_str() && event["kind"] == "session.start")
+        .find(|event| event["session"] == session && event["kind"] == "session.start")
         .and_then(|start| {
             start["project"]
                 .as_str()
@@ -564,18 +584,7 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
                         .and_then(|path| path.rsplit('/').next())
                 })
         })
-        .filter(|repo| !repo.is_empty());
-    let words = match repo {
-        Some(repo) => format!("Saved for this repo ({repo})"),
-        None => "Saved for this session".to_owned(),
-    };
-    let also = states::open_asks(events, None)
-        .into_iter()
-        .filter(|open| states::handle(open) != states::handle(ask))
-        .filter(|open| open["data"]["key"] == key)
-        .filter(|open| repo.is_some() || open["session"] == session.as_str())
-        .collect();
-    Some((words, also))
+        .filter(|repo| !repo.is_empty())
 }
 
 #[cfg(test)]
@@ -831,6 +840,40 @@ mod tests {
         assert_eq!(
             model.past[0].answer, "Yes",
             "the past call shows the answer's label"
+        );
+    }
+
+    #[test]
+    fn a_repo_scoped_answer_counts_only_the_asks_of_that_repo() {
+        let start = |id: &str, worktree: &str| json!({"kind": "session.start", "session": id, "data": {"worktree": worktree}});
+        let in_session = |id: &str, session: &str| {
+            let mut event = ask(id, "taste", json!({"key": "same"}));
+            event["session"] = json!(session);
+            event
+        };
+        let events = vec![
+            start("s1", "~/src/shop"),
+            start("s2", "~/src/shop"),
+            start("s3", "~/src/docs"),
+            in_session("A", "s1"),
+            in_session("B", "s2"),
+            in_session("C", "s3"),
+        ];
+        let model = Model::read(&events, "ask:A", 0).unwrap();
+        let scope = model.scope.clone().unwrap();
+        assert_eq!(
+            (scope.words.as_str(), scope.also),
+            ("Saved for this repo (shop)", 1)
+        );
+        let also: Vec<String> = model
+            .also_answers(&events)
+            .into_iter()
+            .map(|(ask, _)| ask)
+            .collect();
+        assert_eq!(
+            also,
+            ["ask:B"],
+            "the same key in another repo is another scope"
         );
     }
 
