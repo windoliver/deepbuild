@@ -1,0 +1,3 @@
+{
+  "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] }
+}
