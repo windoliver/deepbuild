@@ -1523,3 +1523,280 @@ AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-HZyZe0 admi
 
 
 exit 1
+
+
+===== Blind redraft: history.test.ts and oldload.test.ts at the base (f2867254) =====
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/139 history oldload --no-file-parallelism
+(15 failed; each fails on the missing scripts/contract-diff.mjs)
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-139-tests/tests/acceptance/139
+
+ ❯ oldload.test.ts (6 tests | 6 failed) 620ms
+   ❯ #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one (6)
+     × AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview one 167ms
+     × AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: PASS 75ms
+     × AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported 57ms
+     × AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.get is changed 62ms
+     × AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose result changed is named 52ms
+     × AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other 61ms
+ ❯ history.test.ts (9 tests | 9 failed) 668ms
+   ❯ #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in (4)
+     × AC1 the candidate that changes nothing passes (the pass side of every test below) 50ms
+     × AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2 57ms
+     × AC1 removing deep.on, a stable method that arrived in R1, fails naming the method and R1 51ms
+     × AC1 retyping a field of deep.arrived fails naming the method, the field and R2 57ms
+   ❯ #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it (5)
+     × AC2 a break file that quotes a different line fails, still naming the method 47ms
+     × AC2 a break file with the exact line and no workaround fails 56ms
+     × AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it 50ms
+     × AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it 0ms
+     × AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3 87ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 the candidate that changes nothing passes (the pass side of every test below)
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:15:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:20:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 removing deep.on, a stable method that arrived in R1, fails naming the method and R1
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesWithEarly helpers.ts:211:3
+ ❯ history.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 retyping a field of deep.arrived fails naming the method, the field and R2
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file that quotes a different line fails, still naming the method
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ quotedOtherLine history.test.ts:52:24
+ ❯ history.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file with the exact line and no workaround fails
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ history.test.ts:65:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ history.test.ts:71:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ history.test.ts:80:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesWithEarly helpers.ts:211:3
+ ❯ history.test.ts:85:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview one
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:54:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: PASS
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:63:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:71:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.get is changed
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:76:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose result changed is named
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:85:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ oldload.test.ts:98:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  15 failed (15)
+   Start at  02:01:22
+   Duration  1.64s (tests 87%, import 9%, transform 4%)
+

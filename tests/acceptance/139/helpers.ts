@@ -202,6 +202,18 @@ export function releasesR1R2(): Tree {
   return t;
 }
 
+/** Like `releasesR1R2`, but the scene says itself which method is stable: the tree's API is only `early` (stable, since R1, called by a shipped piece) and, in R2, `deep.arrived`; the repo's own marks don't matter. */
+export function releasesWithEarly(early: string): Tree {
+  const t = scratch('rel');
+  edit(t, API_FILE, (api) => { api.splice(0, api.length); });
+  edit(t, SHIPPED_FILE, (s) => { s.pieces = []; });
+  addApi(t, apiEntry(early, { since: 'R1', stability: 'stable' }));
+  record(t, 'R1');
+  addApi(t, apiEntry('deep.arrived', { since: 'R2' }));
+  record(t, 'R2');
+  return t;
+}
+
 // ---- Packages and the host world, for the install tests.
 export interface World { dir: string; home: string; record: RecordStore; asks: Asks; sup: Supervisor; close(): Promise<void> }
 const worlds: World[] = [];

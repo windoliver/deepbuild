@@ -38,6 +38,8 @@ async function cutR1(source = index(CONFIG), recordIt = true): Promise<Tree> {
   const t = scratch('oldload');
   edit(t, API_FILE, (api: Json[]) => {
     const keep = api.filter((e) => ['deep.registerCheck', 'deep.config.get'].includes(e.method));
+    // Both are stable in R1 whatever the repo's own marks say: this scene states it.
+    for (const e of keep) { e.stability = 'stable'; e.since = 'R1'; delete e.tracking; }
     api.splice(0, api.length, ...keep, apiEntry('deep.preview', { stability: 'preview', tracking: '#139' }));
   });
   edit(t, 'contracts/shipped.json', (s) => { s.pieces = [{ piece: 'scratch/fixture', calls: ['deep.registerCheck', 'deep.config.get'] }]; });

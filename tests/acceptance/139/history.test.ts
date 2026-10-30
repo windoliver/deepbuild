@@ -5,7 +5,7 @@
 // the candidate is R3.
 import { describe, expect, it } from 'vitest';
 import {
-  breakFile, check, diffLines, expectFailNaming, expectPass, failLines, needStep, releasesR1R2, removeApi, reshapeApi, shown, step, type StepPlant, type Tree,
+  breakFile, check, diffLines, expectFailNaming, expectPass, failLines, needStep, releasesR1R2, releasesWithEarly, removeApi, reshapeApi, shown, step, type StepPlant, type Tree,
 } from './helpers.ts';
 
 const retype = (params: { properties: { type: { type: string } } }): void => { params.properties.type = { type: 'integer' } as never; };
@@ -22,8 +22,8 @@ describe('#139.0a8054ec removing or reshaping a published method without a break
     expectFailNaming(check(t, 'R3'), 'a removed method', 'deep.arrived', /arrived in R2/);
   }, 120_000);
 
-  it('AC1 removing deep.on, which arrived in R1, fails naming the method and R1', () => {
-    const t = releasesR1R2();
+  it('AC1 removing deep.on, a stable method that arrived in R1, fails naming the method and R1', () => {
+    const t = releasesWithEarly('deep.on');
     removeApi(t, 'deep.on');
     expectFailNaming(check(t, 'R3'), 'a removed method', 'deep.on', /arrived in R1/);
   }, 120_000);
@@ -82,7 +82,7 @@ describe('#139.5c4d4a53 a planted break whose break file quotes a different line
   }, 120_000);
 
   it('AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3', () => {
-    const t = releasesR1R2();
+    const t = releasesWithEarly('deep.on');
     removeApi(t, 'deep.on');
     const bare = check(t, 'R3');
     const lines = diffLines(bare);
