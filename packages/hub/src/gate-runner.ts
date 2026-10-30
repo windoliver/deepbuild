@@ -86,12 +86,16 @@ export class GateRunner {
     const slow: ClaimCheck[] = [];
     // The checks the budget left to the slow lane that the hold alone would have run: known only once a check has a time.
     const budgetCost: string[] = [];
+    const held = [...free];
     for (const t of timed) {
       free.sort((a, b) => a - b);
+      held.sort((a, b) => a - b);
       const start = free[0] ?? Infinity;
+      const inHold = (held[0] ?? Infinity) + t.ms <= r.stopAt + this.o.hold_ms;
+      if (inHold) held[0]! += t.ms;
       if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else {
         slow.push(t.c);
-        if (start + t.ms <= r.stopAt + this.o.hold_ms) budgetCost.push(t.c.check);
+        if (inHold) budgetCost.push(t.c.check);
       }
     }
     const runs = fast.map(async ({ c, ms }) => {

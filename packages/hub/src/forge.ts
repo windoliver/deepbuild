@@ -186,13 +186,14 @@ export class Forge {
         const author = isObj(p.user) ? p.user.login : undefined;
         const reviews = (await this.get(`${root}/pulls/${String(p.number)}/reviews`) as unknown[]).filter(isObj).filter((r) => typeof r.submitted_at === 'string' && !(isObj(r.user) && r.user.login === author));
         const closing = closes(typeof p.body === 'string' ? p.body : '');
-        const issue = closing === undefined ? undefined : await this.get(`${root}/issues/${closing}`);
+        // A closed issue that's gone leaves this one number missing, not the pull request.
+        const issue = closing === undefined ? undefined : await this.get(`${root}/issues/${closing}`).catch(() => undefined);
         out.push({
           number: Number(p.number), merged_at: Date.parse(p.merged_at), opened_at: Date.parse(p.created_at),
           issue_opened_at: isObj(issue) && typeof issue.created_at === 'string' ? Date.parse(issue.created_at) : null,
           reviews: reviews.map((r) => ({ at: Date.parse(String(r.submitted_at)), state: String(r.state) })),
         });
-      } catch { break; }
+      } catch { return undefined; }
     }
     return out;
   }

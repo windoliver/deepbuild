@@ -1349,7 +1349,7 @@ export class Core {
       }
       if (read && read.usage !== undefined) data.usage = read.usage;
     }
-    if (session && !meta.fields?.agent_id) void this.recordUsage(meta, session, data.usage).catch(() => undefined);
+    if (meta.transcript && !meta.fields?.agent_id) void this.recordUsage(meta).catch(() => undefined);
     const cause = String(data.cause);
     if (cause === 'unknown') return;
     data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
@@ -1358,17 +1358,22 @@ export class Core {
 
   /**
    * What the session has spent so far, as turn.usage (#45), off the hook's path: Claude Code's from its transcript and
-   * its subagents', estimated from the rate card; another agent's as its adapter read it. A stop that reads nothing
-   * records nothing, so that turn's usage reads unknown.
+   * its subagents', estimated from the rate card; Codex's from its rollout, by its adapter, unpriced. A stop that reads
+   * nothing records nothing, so that turn's usage reads unknown.
    */
-  private async recordUsage(meta: HookMeta, session: Session, adapterUsage: unknown): Promise<void> {
+  private async recordUsage(meta: HookMeta): Promise<void> {
     let usage: Obj | undefined;
     if (meta.agent === 'claude-code') {
       const tail = this.tails.get(meta.session) ?? new UsageTail();
       this.tails.set(meta.session, tail);
-      const { tokens, cost, model } = await tail.read(session.transcript);
+      const { tokens, cost, model } = await tail.read(meta.transcript);
       if (model) usage = { turn: meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
-    } else if (isObj(adapterUsage)) usage = adapterUsage;
+    } else if (meta.agent === 'codex') {
+      const text = await readFile(meta.transcript, 'utf8').catch(() => '');
+      const lines = text.split('\n').flatMap((l) => { try { return [JSON.parse(l) as JsonValue]; } catch { return []; } });
+      // The session's total, the last it reads; counted as the growth since the one before.
+      usage = this.registry().get('codex').readUsage?.(lines).at(-1) as unknown as Obj | undefined;
+    }
     if (!usage) return;
     const ts = this.now();
     await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'turn.usage', ts, subject: `session:${letters(meta.session)}`, data: usage as never });
@@ -2089,12 +2094,16 @@ export class Core {
     if (block && line) block = `${line}\n${block}`;
     // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end.
     if (lane && judged?.claim && !block && !proceeded) this.gate.turnEnded(judged.claim);
-    if (lane && judged?.claim) {
+    if (judged?.claim) {
       // A later stop on the same claim ran no lane: only its own hold counts, never the lane's times or its budget cost again.
       const again = judged.heldClaim === judged.claim;
       judged.heldClaim = judged.claim;
       const replyAt = this.now();
-      await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: again ? replyAt : lane.readyAt, fastEndedAt: again ? replyAt : lane.fastEndedAt, replyAt, questionMs, codeChanging: !again && lane.changed === true, budgetCost: again ? [] : lane.budgetCost ?? [] }).catch(() => undefined);
+      const own = replyAt - questionMs;
+      const record = (ran: { readyAt: number; fastEndedAt: number; changed?: boolean; budgetCost?: string[] }) => this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim!, stopAt, readyAt: again ? own : ran.readyAt, fastEndedAt: again ? own : ran.fastEndedAt, replyAt, questionMs, codeChanging: !again && ran.changed === true, budgetCost: again ? [] : ran.budgetCost ?? [] });
+      if (lane) await record(lane).catch(() => undefined);
+      // A fast lane still going when the hold ran out: its hold counts all the same, once the lane says what it was.
+      else void this.lanes.get(judged.claim)?.then(record).catch(() => undefined);
     }
     return { ...(block ? { block } : {}), ...(line ? { message: line } : {}) };
   }

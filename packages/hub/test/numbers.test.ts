@@ -41,3 +41,30 @@ describe('turn.usage at a stop', () => {
     });
   }, 60_000);
 });
+
+describe('Codex\'s usage', () => {
+  it('reads the session\'s total from its rollout at a stop, unpriced', async () => {
+    const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    procs.push(claude);
+    await withHub(async (root, home) => {
+      const work = join(home, 'work');
+      mkdirSync(work, { recursive: true });
+      const transcript = join(home, 'rollout.jsonl');
+      writeFileSync(transcript, [
+        { type: 'turn_context', payload: { turn_id: 't1', model: 'gpt-5-codex' } },
+        { type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 100, cached_input_tokens: 40, output_tokens: 7 }, last_token_usage: { input_tokens: 100, cached_input_tokens: 40, output_tokens: 7, total_tokens: 107 } } } },
+      ].map((l) => JSON.stringify(l)).join('\n') + '\n');
+      const hook = (event: string, extra: Record<string, unknown> = {}) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, { session_id: SESSION, transcript_path: transcript, cwd: work, hook_event_name: event, turn_id: 't1', model: 'gpt-5-codex', ...extra }, { ppid: claude.pid, agent: 'codex' }));
+      await hook('SessionStart', { source: 'startup' });
+      await hook('UserPromptSubmit', { prompt: 'go' });
+      await hook('Stop', { stop_hook_active: false, last_assistant_message: 'ok' });
+      const usages = () => {
+        const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+        try { return (db.prepare("SELECT data FROM events WHERE kind = 'turn.usage'").all() as { data: string }[]).map((r) => JSON.parse(r.data) as { cost: unknown; tokens: { output: number } }); } finally { db.close(); }
+      };
+      for (let i = 0; i < 100 && !usages().length; i++) await new Promise((r) => setTimeout(r, 100));
+      expect(usages()[0]?.cost).toEqual({ basis: 'unpriced' });
+      expect(usages()[0]?.tokens.output).toBe(7);
+    });
+  }, 60_000);
+});

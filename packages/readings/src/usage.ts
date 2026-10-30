@@ -38,7 +38,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const whole = (v: unknown): number => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : 0);
 /** A line a person or the agent's harness wrote that begins a turn: never a tool's result, a command's echo or a harness note. */
-function beginsTurn(e: Obj, message: Obj): boolean {
+export function beginsTurn(e: Obj, message: Obj): boolean {
   if (e.toolUseResult !== undefined || e.isMeta === true || e.isCompactSummary === true) return false;
   const { content } = message;
   if (Array.isArray(content)) return !content.some((c) => isObj(c) && c.type === 'tool_result');
