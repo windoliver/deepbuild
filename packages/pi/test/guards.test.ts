@@ -80,6 +80,13 @@ describe('guards on a pi call', () => {
     expect((await before(w.client, w.pi.session)).data.matched).toContain('no-control-token-read');
   }, 90_000);
 
+  it('a home path with a doubled slash stays in home', async () => {
+    const w = await world([{ tools: [{ name: 'read', arguments: { path: '~//.deepbuild/control.token' } }] }]);
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect((await before(w.client, w.pi.session)).data.matched).toContain('no-control-token-read');
+  }, 90_000);
+
   it('with the hub up and deep-hook gone, a call is held rather than read as matching nothing', async () => {
     const w = await world([bash('touch ran.txt')]);
     const file = join(w.home, '.deepbuild/config.json');
