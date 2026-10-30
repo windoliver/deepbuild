@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { openRecord } from '@deepbuild/record';
 import { ulid } from '../src/wire.js';
-import { hookLine, send, withHub } from './hub.js';
+import { hookLine, reply, send, withHub } from './hub.js';
 
 const SESSION = '3b9f1c2e-1111-4222-8333-444455556666';
 
@@ -156,6 +156,33 @@ describe('a turn that ends in StopFailure', () => {
       expect(await hook('UserPromptSubmit', { prompt: 'and fix what fails', prompt_id: 'p3' })).toContain('"ack"');
       expect(await hook('StopFailure', { error: 'overloaded', prompt_id: 'p2' })).toContain('"ack"');
       expect(await woken, 'no wake while turn 3 runs').toBeUndefined();
+    });
+  }, 60_000);
+});
+
+describe('a continue parked for the next prompt', () => {
+  it('outlives the session starting again: a resumed session gets it with its next prompt', async () => {
+    await withHub(async (root, home) => {
+      const id = '6e2c4f5b-4444-4555-8666-777788889999';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid }));
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await hook('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' })).toContain('"ack"');
+      // The first turn ends on an overloaded service, with no waiter: the continue is parked for the next prompt.
+      expect(await hook('StopFailure', { error: 'overloaded', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE 'DeepBuild continues this session%'", id), 10_000), 'parked for the next prompt').toHaveLength(1);
+      // You quit Claude Code and resume the session later.
+      expect(await hook('SessionEnd', { reason: 'prompt_input_exit' })).toContain('"ack"');
+      expect(await hook('SessionStart', { source: 'resume' })).toContain('"ack"');
+      typed('go on', 'p2');
+      const said = await reply(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), 'UserPromptSubmit', { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: 'UserPromptSubmit', prompt: 'go on', prompt_id: 'p2' }, { ppid: process.pid }));
+      expect(said.stdout, 'the next prompt of the resumed session carries the continue').toContain('one automatic continue');
     });
   }, 60_000);
 });

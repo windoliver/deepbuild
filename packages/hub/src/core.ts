@@ -1314,6 +1314,9 @@ export class Core {
       const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] };
       const old = this.routes.get(meta.session);
       if (old?.waiter) fresh.waiter = old.waiter;
+      // A continue parked for the next prompt goes with the first prompt after a resume (#85); a clear or a
+      // compaction starts a new session ID, and the cleared one's continues end with it.
+      if (old) fresh.later = old.later;
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
     }
@@ -1327,6 +1330,9 @@ export class Core {
     if (meta.event === 'SessionEnd') {
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
+      // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
+      // it as the folder's last session.
+      if (r.later.length) this.routesOf(meta.session).later = r.later;
       for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted]) map.delete(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and starts no waiter of its own: the one its session's
