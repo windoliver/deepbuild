@@ -450,6 +450,83 @@ fn core_boxes(
         .collect()
 }
 
+/// Each cell grid's marks (#402): a cell whose background isn't the grid's own as a box, then
+/// each row as one line of the mono face, its runs in their cells' colors.
+fn cell_grids(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+    doc: &Value,
+) -> Vec<deep_canvas_marks::scene::Drawn> {
+    use deep_canvas_cells::module::Grid;
+    use deep_canvas_marks::scene::{self, Fill, Mark};
+    let mut out = Vec::new();
+    for (id, _) in doc["items"].as_object().into_iter().flatten() {
+        let Some(Val::Any(any, _)) = session.value(sched, "cells.grid", Some(id)) else {
+            continue;
+        };
+        let Ok(g) = any.downcast::<Grid>() else {
+            continue;
+        };
+        let mark = |m: Mark| scene::Drawn {
+            mark: m,
+            clip: None,
+            scopes: Vec::new(),
+        };
+        let [cw, ch] = g.cell;
+        let w = cw * g.rows.first().map_or(0, |r| r.text.chars().count()) as f64;
+        out.push(mark(Mark::Rect {
+            item: id.clone(),
+            bounds: [g.origin[0], g.origin[1], w, ch * g.rows.len() as f64],
+            radius: 0.0,
+            fill: Fill::Solid(g.bg),
+        }));
+        for (r, row) in g.rows.iter().enumerate() {
+            let y = g.origin[1] + ch * r as f64;
+            for (from, to, c) in &row.fills {
+                out.push(mark(Mark::Rect {
+                    item: id.clone(),
+                    bounds: [
+                        g.origin[0] + cw * *from as f64,
+                        y,
+                        cw * (to - from) as f64,
+                        ch,
+                    ],
+                    radius: 0.0,
+                    fill: Fill::Solid(*c),
+                }));
+            }
+            let base = row.runs.first().map_or([0; 3], |r| r.2);
+            let runs = row
+                .runs
+                .iter()
+                .map(|(from, to, c)| scene::TextRun {
+                    from: *from,
+                    to: *to,
+                    role: String::new(),
+                    color: *c,
+                })
+                .collect();
+            out.push(mark(Mark::Text {
+                item: id.clone(),
+                spec: scene::TextSpec {
+                    text: row.text.trim_end().to_string(),
+                    font: "mono".into(),
+                    size: g.font_size,
+                    weight: 400,
+                    width: None,
+                    align: scene::Align::Start,
+                    bound: false,
+                },
+                origin: [g.origin[0], y],
+                role: None,
+                color: base,
+                runs,
+            }));
+        }
+    }
+    out
+}
+
 /// What the frame's operators left in a session to draw; `None` before it has a document.
 pub(crate) fn drawing_of(
     sched: &deep_canvas::schedule::Scheduler<'_>,
@@ -460,7 +537,22 @@ pub(crate) fn drawing_of(
         Some(Val::Any(any, _)) => Some(any),
         _ => None,
     };
-    let drawing = typed("marks2d.frame").and_then(|a| a.downcast::<Drawing>().ok());
+    let mut drawing = typed("marks2d.frame").and_then(|a| a.downcast::<Drawing>().ok());
+    // #402: each cell grid's rows, drawn through the one shaper over the frame's marks.
+    let grids = cell_grids(sched, session, doc);
+    if let (Some(d), false) = (&mut drawing, grids.is_empty()) {
+        let mut frame = d.frame.clone();
+        frame.layers.push(deep_canvas_marks::scene::Layer {
+            id: "cells".into(),
+            marks: grids,
+            key: deep_canvas_marks::key::ContentKey([0; 16]),
+        });
+        *d = Arc::new(Drawing {
+            frame,
+            runs: d.runs.clone(),
+            animated: d.animated.clone(),
+        });
+    }
     let status = typed("text.status").and_then(|a| a.downcast::<StatusDrawing>().ok());
     let side = |k: usize| doc["size"][k].as_f64().unwrap_or(1.0);
     let boxes = match drawing {
