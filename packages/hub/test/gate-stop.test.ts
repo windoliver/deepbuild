@@ -33,6 +33,8 @@ async function world(): Promise<{ hub: Hub; s: Session; ref: string; repo: strin
   const events = await settle(hub, (e) => { const r = taskOf(askNamed(e, s, BEHAVIOR)); return r !== undefined && lockedFor(e, r).length > 0; });
   return { hub, s, ref: taskOf(askNamed(events, s, BEHAVIOR))!, repo: w.repo, home: w.home };
 }
+/** A stop's held time is recorded once its hold replies: within the 60 s hold, with room for a loaded machine. */
+const HELD_WAIT = 90_000;
 const claimsOf = (events: readonly Ev[], ref: string) => events.filter((e) => e.kind === 'claim.made' && e.data.task_ref === ref);
 
 /** What a run wrote to its stdout, read back from the evidence store by its hash. */
@@ -64,7 +66,7 @@ describe('the gate runner at a real stop', () => {
       await s.read('src/auth.ts');
       await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
       const r = await s.stop('checkToken now compares `src/auth.ts:2` with the clock.');
-      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'));
+      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
       const [claim] = claimsOf(events, ref);
       const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
       expect(started, 'the claim\'s check ran').toBeDefined();
@@ -101,7 +103,7 @@ describe('the gate runner at a real stop', () => {
       await s.read('src/auth.ts');
       await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
       await s.stop('Done with `src/auth.ts:2`.');
-      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'));
+      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
       const [claim] = claimsOf(events, ref);
       const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
       expect(started, 'the check still runs, in the sandbox').toBeDefined();
