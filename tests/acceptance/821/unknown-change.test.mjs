@@ -11,14 +11,14 @@ function bothRun(r, why) {
   assert.equal(r.status, 0, r.out);
 }
 
-test('AC4: with no origin/main, both path-gated lanes run, even for a docs/notes.md change', (t) => {
+test('#821.7e0e2d43 AC4: with no origin/main, both path-gated lanes run, even for a docs/notes.md change', (t) => {
   const cwd = repo(t, { origin: false });
   write(cwd, { 'docs/notes.md': 'Notes, edited.\n' });
   commit(cwd);
   bothRun(runReal(cwd, LANES), 'without origin/main the change has no merge base');
 });
 
-test('AC4: with an origin/main that shares no history with HEAD, both path-gated lanes run', (t) => {
+test('#821.7e0e2d43 AC4: with an origin/main that shares no history with HEAD, both path-gated lanes run', (t) => {
   const cwd = repo(t);
   git(cwd, 'checkout', '-q', '--orphan', 'unrelated');
   git(cwd, 'rm', '-rq', '--cached', '.');
@@ -33,7 +33,7 @@ test('AC4: with an origin/main that shares no history with HEAD, both path-gated
   bothRun(runReal(cwd, LANES), "with no merge base the change can't be worked out");
 });
 
-test('AC4: in a folder that is not a git repository, both path-gated lanes run', (t) => {
+test('#821.7e0e2d43 AC4: in a folder that is not a git repository, both path-gated lanes run', (t) => {
   const cwd = scratch(t);
   write(cwd, BASE_FILES);
   bothRun(runReal(cwd, LANES), "outside a git repository the change can't be worked out");

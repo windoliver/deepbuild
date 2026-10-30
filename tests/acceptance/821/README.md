@@ -51,14 +51,21 @@ The SKIP cells are part of the contract: a lane that runs on every change would 
 
 ## Criteria and tests
 
-| Acceptance criterion | Tests (file: name) | Base |
-|---|---|---|
-| AC1: a nested `AGENTS.md` or `CLAUDE.md`, added or edited, runs config eval; `docs/notes.md` still skips it | config-eval: *a committed new crates/deep-app/AGENTS.md runs the config eval lane*; *an uncommitted new crates/deep-app/AGENTS.md runs the config eval lane*; *an edit to a nested packages/cli/CLAUDE.md runs the config eval lane*; *a change to docs/notes.md alone still skips the config eval lane, and the root AGENTS.md still runs it* | first three fail (SKIP); the fourth is a guard and passes |
-| AC2: `lean-toolchain` or `scripts/verdict-proofs.mjs` runs verdict proofs | verdict-proofs: *a Lean toolchain bump in lean-toolchain runs the verdict proofs lane*; *a change to scripts/verdict-proofs.mjs runs the verdict proofs lane*; *the engine and the model still run the verdict proofs lane, and docs/notes.md skips it* | first two fail (SKIP); the third is a guard and passes |
-| AC3: paths from the script's predicate; a planted lane missing a file fails naming lane and file | predicate: *a planted lane whose paths miss a file its script reads fails, naming the lane and the file*; *on the probe set, config eval and verdict proofs run exactly for the files their scripts read*; *each lane script exports the inputs predicate it judges by, and every lane with paths agrees with it* | all three fail |
-| AC4: a lane that can't work out the change's paths runs | unknown-change: *with no origin/main, both path-gated lanes run, even for a docs/notes.md change*; *with an origin/main that shares no history with HEAD, both path-gated lanes run*; *in a folder that is not a git repository, both path-gated lanes run* | all pass: today's behavior, kept as regression guards |
+Each test's title starts with its criterion's ID, `#821.` and the first 8 hex digits of the SHA-256 of the criterion's text, so the proof lanes' before and trace lanes can find it. A tagged test must fail at an assertion on the merge base, or on a planted wrong program that `twins.json` lists for its tag. Each twin under `twins/<name>/` holds files laid over the change checkout at their repo paths. Each twin here is the implementation's `scripts/lanes.mjs`, taken from `d78c284d`, the tip of `feat/821-lane-inputs`, with one wrong change and nothing else:
 
-**Wrong programs.** For AC1 to AC3, the merge base is the wrong program, and it fails as `BASE-FAILURE.txt` shows. A lane that always runs fails the `docs/notes.md` guards and the probe table, because those SKIP cells are part of the contract. A runLanes that FAILs every lane with list paths fails the AC3 twins. AC4's tests fail on a runLanes that skips when the change can't be worked out.
+| Twin | The one wrong change in `scripts/lanes.mjs` |
+|---|---|
+| `always-runs` | `if (lane.paths && !release)` becomes `if (lane.paths && release)`, so the local preflight never gates a lane, and so never skips one |
+| `skips-unknown-change` | `changed ??= changedPaths(cwd);` becomes `changed ??= changedPaths(cwd) ?? [];`, so a change whose paths can't be worked out reads as an empty change, and the lane skips |
+
+| Acceptance criterion | Tag | Tests (file: name) | Fails on |
+|---|---|---|---|
+| AC1: a nested `AGENTS.md` or `CLAUDE.md`, added or edited, runs config eval; `docs/notes.md` still skips it | `#821.c3c2e437` | config-eval: *a committed new crates/deep-app/AGENTS.md runs the config eval lane*; *an uncommitted new crates/deep-app/AGENTS.md runs the config eval lane*; *an edit to a nested packages/cli/CLAUDE.md runs the config eval lane*; *a change to docs/notes.md alone still skips the config eval lane, and the root AGENTS.md still runs it* | the first three on the merge base (SKIP). The fourth, a guard that passes on the base, on `always-runs` (RUN for docs/notes.md) |
+| AC2: `lean-toolchain` or `scripts/verdict-proofs.mjs` runs verdict proofs | `#821.77bb6594` | verdict-proofs: *a Lean toolchain bump in lean-toolchain runs the verdict proofs lane*; *a change to scripts/verdict-proofs.mjs runs the verdict proofs lane*; *the engine and the model still run the verdict proofs lane, and docs/notes.md skips it* | the first two on the merge base (SKIP). The third, a guard, on `always-runs` (RUN for docs/notes.md) |
+| AC3: paths from the script's predicate; a planted lane missing a file fails naming lane and file | `#821.eebd0fa5` | predicate: *a planted lane whose paths miss a file its script reads fails, naming the lane and the file*; *on the probe set, config eval and verdict proofs run exactly for the files their scripts read*; *each lane script exports the inputs predicate it judges by, and every lane with paths agrees with it* | all three on the merge base; no twin is listed |
+| AC4: a lane that can't work out the change's paths runs | `#821.7e0e2d43` | unknown-change: *with no origin/main, both path-gated lanes run, even for a docs/notes.md change*; *with an origin/main that shares no history with HEAD, both path-gated lanes run*; *in a folder that is not a git repository, both path-gated lanes run* | none on the base, which already behaves this way; all three on `skips-unknown-change` (SKIP) |
+
+**Wrong programs.** For AC1 to AC3, the merge base is the wrong program, and it fails as `BASE-FAILURE.txt` shows. The guards that pass on the base fail on their twins. Inside the planted-lane test, a runLanes that FAILs every lane with list paths fails the agreeing twin lanes.
 
 ## Not covered here
 
