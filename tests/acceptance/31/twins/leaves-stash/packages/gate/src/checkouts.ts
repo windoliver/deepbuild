@@ -410,9 +410,10 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       // A base run cut short proved nothing either way: it runs again rather than carry.
       if (was.base && !['passed', 'failed', 'overran'].includes(was.base.outcome)) continue;
       if (!await inStore(['cat-file', '-e', `${e.snapshot}^{commit}`]).then(() => true, () => false)) continue;
-      const diff = await git(worktree, ['diff', '--name-only', e.snapshot, commit], await repoEnv(worktree)).catch(() => null);
+      // Both names of a rename, each as it is: a rename or a quoted name must not hide an input that changed.
+      const diff = await git(worktree, ['diff', '--name-only', '--no-renames', '-z', e.snapshot, commit], await repoEnv(worktree)).catch(() => null);
       if (diff === null) continue;
-      const changed = diff.split('\n').filter(Boolean);
+      const changed = diff.split('\0').filter(Boolean);
       const inputs = c.spec.inputs;
       if (changed.some((p) => !inputs.length || inputs.some((g) => matches(g, p)) || was.head.read.includes(p))) continue;
       return { ...was, carried: true };

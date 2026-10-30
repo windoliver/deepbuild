@@ -1,7 +1,7 @@
 // The base-commit service's checkouts from where a session really sits (#31): a subfolder of the repo, and a dependency
 // folder git partly tracks. Real git, no hub; the host and leases only serve stand-ins, which these declare none of.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openCheckouts, type CheckoutsOptions } from '@deepbuild/gate';
@@ -147,6 +147,53 @@ describe('checkouts from where a session sits', () => {
       await again.close();
     } finally { chmodSync(join(repo, 'node_modules/ro'), 0o755); }
   }, 60_000);
+
+  describe('what a later claim carries', () => {
+    const kindOf = (outcomes: string[]): { kind: { kind: string; run(): Promise<unknown> }; calls(): number } => {
+      let i = 0;
+      return {
+        calls: () => i,
+        kind: {
+          kind: 'scripted',
+          run: async () => {
+            const outcome = outcomes[Math.min(i++, outcomes.length - 1)]!;
+            return { outcome, testsRun: 1, failures: outcome === 'passed' ? [] : [{ test: 't', file: 'a.ts', line: 1, stack: null, assertion: true, message: 'm' }], evidence: [], read: [], mask: null };
+          },
+        },
+      };
+    };
+    const twoClaims = async (inputs: string[], outcomes: string[], setUp: (repo: string) => void, change: (repo: string) => void): Promise<{ carried: boolean; calls: number }> => {
+      const { repo, git } = world();
+      setUp(repo);
+      git('add', '-A');
+      git('commit', '-qm', 'base');
+      const { kind, calls } = kindOf(outcomes);
+      const s = await openCheckouts({ store: join(repo, '..', 'store2'), root: join(repo, '..', 'checkouts2'), kinds: [kind] as unknown as CheckoutsOptions['kinds'], host: {} as CheckoutsOptions['host'], leases: {} as CheckoutsOptions['leases'], now: Date.now });
+      const checks = [{ check: 'c', spec: { kind: 'scripted', inputs }, own: [] }] as unknown as Parameters<typeof s.runClaim>[0]['checks'];
+      const first = await s.runClaim({ claim: 'claim:1', worktree: repo, onto: 'HEAD', checks });
+      change(repo);
+      const before = calls();
+      const second = await s.runClaim({ claim: 'claim:2', worktree: repo, onto: 'HEAD', checks, earlier: [first] });
+      await s.close();
+      return { carried: second.checks[0]!.carried, calls: calls() - before };
+    };
+
+    it('an input that is only renamed runs again', async () => {
+      const r = await twoClaims(['src/cart.ts'], ['passed'], (repo) => { mkdirSync(join(repo, 'src')); writeFileSync(join(repo, 'src/cart.ts'), 'cart\n'); }, (repo) => { renameSync(join(repo, 'src/cart.ts'), join(repo, 'src/basket.ts')); });
+      expect(r.carried).toBe(false);
+    }, 60_000);
+
+    it('an input whose name git would quote runs again when it changes', async () => {
+      const r = await twoClaims(['src/café.ts'], ['passed'], (repo) => { mkdirSync(join(repo, 'src')); writeFileSync(join(repo, 'src/café.ts'), 'a\n'); }, (repo) => { writeFileSync(join(repo, 'src/café.ts'), 'b\n'); });
+      expect(r.carried).toBe(false);
+    }, 60_000);
+
+    it('a clean pass with nothing it names changed still is', async () => {
+      const r = await twoClaims(['src/a.ts'], ['passed'], () => undefined, (repo) => { writeFileSync(join(repo, 'other.txt'), 'x\n'); });
+      expect(r.carried).toBe(true);
+      expect(r.calls).toBe(0);
+    }, 60_000);
+  });
 
   it('a module stand-in is never written through a link in the base tree', async () => {
     const { repo, service, git } = world();
