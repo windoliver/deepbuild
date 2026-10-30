@@ -186,11 +186,12 @@ describe.skipIf(!process.env.DEEP_PI_CLI)('the pi package', () => {
     const handle = await pendingAsk(w, question);
     const old = w.pi.session;
     const { data } = await w.pi.call({ type: 'get_state' });
-    const starts = async () => (await w.client.events()).filter((e) => e.kind === 'session.start' && e.session_id === old).length;
+    const starts = async () => (await w.client.events()).filter((e) => e.kind === 'session.start' && JSON.stringify(e).includes(String(old))).length;
     const second = await Pi.start(w.home, w.cwd, { steps: [{ text: 'ok' }] });
     await second.call({ type: 'switch_session', sessionPath: String(data.sessionFile) });
     await sleep(1000);
     const at = await starts();
+    expect(at).toBeGreaterThan(0);
     await sleep(4000);
     expect(await starts(), 'refused, it says so once').toBeLessThanOrEqual(at + 1);
     await second.stop();
