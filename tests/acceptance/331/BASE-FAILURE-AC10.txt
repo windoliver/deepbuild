@@ -1,0 +1,55 @@
+Acceptance tests for #331's AC10 (the AC10 block of leases.test.ts and fixtures/escape.c, the third blind redraft), on
+the merge base 5a6d09a4 (origin/main with earlier work on #331: deep env up and down, env-local, the hub's
+DEEP_HUB_PLANT twins), run on 2026-10-29 on an Apple silicon Mac, Node 24.22.0, after npm ci,
+npm run generate -w @deepbuild/contracts and npm run build --workspaces, with
+PATH=$HOME/.nvm/versions/node/v24.22.0/bin:/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin (no cargo) and port 3000 free:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/331 --no-file-parallelism leases.test.ts -t AC10
+  node node_modules/typescript/bin/tsc -p tests/acceptance/331/tsconfig.json   -> no errors
+
+Outcome: 1 failed, 3 passed (AC5's test skipped by -t).
+
+- AC10 (the run): FAILS at leases.test.ts:90 (scenario's first upReady, helpers.ts:428), before the scenario forms.
+  Each test process gets a fresh temp HOME, and at this base the first deep command in a fresh HOME runs first-run
+  setup even with --root: `deep env up --root <hub> --json` exits 1 with "deep setup: spawnSync cargo ENOENT" (no
+  cargo on PATH), so the first test of the file never gets a stack. The README says --root names a dev hub; a deep
+  env up against one that can't run without the machine's first-run setup fails this test.
+- AC10 (wrong program) env-kills-by-port: passes. The plant stops the escaped helper at down; criterion() throws at
+  leases.test.ts:125 ("the escaped helper <pid> listening on port 3000 was stopped").
+- AC10 (wrong program) env-leases-port-again: passes. The next up leases 3000 again; criterion() throws at
+  leases.test.ts:140 ("the next deep env up leased port 3000 again, where the helper <pid> still listens").
+- AC10 (wrong program) env-holds-lease-for-helper: passes. The lease on 3000 never ends; criterion() throws at
+  leases.test.ts:131 ("the lease on port 3000 never ended once every recorded process was gone").
+  These three ran after the first test's failed setup had written the HOME's ~/.deepbuild, so their deep commands
+  skipped setup.
+
+What the run test does past setup (a diagnostic, not kept): a scratch copy of leases.test.ts with the run test
+moved after the three plant tests, run the same way, passed the run test on this base: the helper (PPID 1, its own
+group, no run token, listening on 3000 beside the stack's server) was never recorded, survived down, was in `left`
+as {pid, port: 3000} and not in `stopped`; lease.released@1 for 3000 came after process.ended@1 for every process
+recorded for the run; nothing leased 3000 again; the next up was ready on another port; the helper still listened
+on 3000. In that order the first plant test (env-kills-by-port) failed instead, at leases.test.ts:90 with the same
+"deep setup: spawnSync cargo ENOENT". So at this base AC10's only failure is first-run setup in a fresh HOME.
+
+A first draft of the redraft waited for the helper launcher's 'close' event; the helper inherited the launcher's
+stderr pipe, so the plant tests timed out at 180 s. The launcher now runs with no pipes and is waited on by 'exit';
+the outcome above is from that version.
+
+ RUN  v5.0.5 .../scratchpad/run-base/tests/acceptance/331
+
+ ❯ leases.test.ts (5 tests | 1 failed | 1 skipped) 15763ms
+   ❯ AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port (4)
+     × AC10 after deep env down, a helper that escaped before it was recorded is reported with its PID and port 3000 and left running; the lease on 3000 ends after every recorded process is gone; the next up gets another port 908ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  leases.test.ts > AC10 #331.43266bc3 ... > AC10 after deep env down, a helper that escaped before it was recorded is reported with its PID and port 3000 and left running; the lease on 3000 ends after every recorded process is gone; the next up gets another port
+AssertionError: deep env up in /private/tmp/dh331-MWWmb0/wt-a exits 0 (stdout  stderr deep setup: spawnSync cargo ENOENT): expected 1 to be +0 // Object.is equality
+ ❯ upReady helpers.ts:428:139
+ ❯ scenario leases.test.ts:90:16
+ ❯ leases.test.ts:148:15
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed | 1 skipped (5)
+   Start at  14:30:17
+   Duration  15.91s (tests 100%)

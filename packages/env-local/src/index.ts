@@ -141,6 +141,8 @@ interface UpOptions {
   compose?: { dir: string; docker?: string | undefined } | undefined;
   /** The planted wrong program: compose runs under the file's own project name, shared by every worktree. */
   sharedProject?: boolean;
+  /** Who holds the stack's leases (StartSpec.holder): the session whose deep_env call starts it; the core unless given. */
+  holder?: string;
 }
 
 /**
@@ -437,6 +439,7 @@ export async function upStack(host: Host, o: UpOptions): Promise<Up> {
     run: o.run, argv, cwd: o.folder, grant,
     env: { ...o.env, ...Object.fromEntries(Object.entries(given).map(([k, v]) => [k, String(v)])) },
     ...(leases.length ? { leases } : {}),
+    ...(o.holder ? { holder: o.holder } : {}),
   });
   if (started.status === 'BLOCKED') {
     for (const f of Object.values(folders ?? {})) rmSync(f, { recursive: true, force: true });

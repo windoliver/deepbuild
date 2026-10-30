@@ -25,6 +25,8 @@ deep-marks-gpui = { path = "../deep-marks-gpui" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 # Issue #377: the GPU layer, whose views the window shows in place.
 deep-gpu = { path = "../deep-gpu" }
+# Issue #327: the image you attach is kept by its SHA-256; the click token is one too (the version already in the tree).
+sha2 = "0.10"
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
 # Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the

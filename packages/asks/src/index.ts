@@ -58,6 +58,8 @@ export interface Delivery {
   option: string | null;
   decision: Decision;
   words: string | null;
+  /** The SHA-256 of a screenshot sent with the answer from the question card; null without one. */
+  image: string | null;
   provisional: boolean;
   undoes: string | null;
   /** For an automatic answer, the decision it reused; null otherwise. */
@@ -103,7 +105,8 @@ export interface ResolverAnswer {
   budget?: BudgetLeft;
 }
 /** What a resolver is asked: the card, the session the ask was raised in, its question class, its session's repo (null when unknown) and its subject. */
-export type ResolverAsk = Card & { session: string; key: string; repo: string | null; subject: Subject | null };
+/** A resolver's read of an ask: the card less what it says it saves and its receipt, which a resolver never sees. */
+export type ResolverAsk = Omit<Card, 'saves' | 'receipt'> & { session: string; key: string; repo: string | null; subject: Subject | null };
 export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;
 /** One refusal the core made of a resolver's answer. */
 export interface Refusal { ask: string; resolver: string; decision: string | null; reason: string }
@@ -132,6 +135,14 @@ export interface Card {
   needs_person: string[];
   /** On a paid run's request whose named budget the core refused: that budget, and what's left in it, which the run's price doesn't fit. null otherwise. */
   budget: BudgetLeft | null;
+  /**
+   * What the card says before it arms about an answer that will be saved as a decision: the decision's scope in words,
+   * and how many other open asks it will also answer. Both are fixed when the card is first presented (read through
+   * `card` or `needsYou`) and never change while it shows. null when no decision would be saved (#327).
+   */
+  saves: { scope: string; also: number } | null;
+  /** The answered card's one-line receipt: your answer, and every other ask it closed, those decided for you included. null while open. */
+  receipt: { answer: string; also: string[] } | null;
 }
 
 /** Every refusal the core makes, naming what it refuses. */
@@ -372,7 +383,8 @@ const REQUEST_SOURCE = 'request.draft';
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
-const ANSWER_FIELDS = new Set(['option', 'words', 'plan_hash', 'token']);
+const ANSWER_FIELDS = new Set(['option', 'words', 'image', 'plan_hash', 'token', 'steps']);
+const SHA256 = /^[0-9a-f]{64}$/;
 const PROVISIONAL_KINDS = new Set(['taste', 'choice']);
 /** Kinds typed text can answer: questions that need no authority. An unblock closes only on its check. */
 const TYPED_KINDS = new Set(['taste', 'choice', 'exception', 'definition']);
@@ -413,6 +425,10 @@ interface Ask {
   /** Your answer: the plan it bound, its click, its decision, and the steps of the plan it approved (null: all of them). */
   approval?: { hash: string | null; token: string | null; decision: string; steps: number[] | null };
   words: string[];
+  /** What its card said it saves, fixed when the card was first presented (#327). */
+  saves?: Card['saves'];
+  /** The other asks your answer closed: riders answered with it and asks the decision it saved then decided (#327). */
+  receiptAlso: string[];
   /** For a provisional choice: the files its session edited while it went on with the recommended option. */
   decided: Set<string>;
   /** What the log calls for and the core hasn't appended yet. */
@@ -474,6 +490,8 @@ class AsksCore implements Asks {
   private readonly resolvers = new Map<string, Resolver>();
   /** The refusals made of resolvers' answers, by ask handle. */
   private readonly refused = new Map<string, Refusal[]>();
+  /** Each ask shown in a batch of several, and the batch's asks in order: what an approval's `steps` index (#327). */
+  private readonly batchOf = new Map<string, string[]>();
 
   constructor(private readonly options: AsksOptions) {}
 
@@ -596,11 +614,13 @@ class AsksCore implements Asks {
       for (const key of Object.keys(input)) if (!ANSWER_FIELDS.has(key)) throw new AskRefused(`an answer has no field ${key}`, { field: key });
       const ask = this.asks.get(bare(handle));
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
-      const { option, words, plan_hash: planHash, token } = input;
+      const { option, words, image, plan_hash: planHash, token, steps } = input;
       if (option !== undefined && typeof option !== 'string') throw new AskRefused('the option is an ID', { field: 'option' });
       if (words !== undefined && (typeof words !== 'string' || !words)) throw new AskRefused('words are text', { field: 'words' });
-      if (option === undefined && words === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
+      if (image !== undefined && (typeof image !== 'string' || !SHA256.test(image))) throw new AskRefused('a screenshot is named by its SHA-256, in lower-case hex', { field: 'image' });
+      if (option === undefined && words === undefined && image === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
+      if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
       const now = this.options.now();
       if (ask.closed) {
         // A later answer to a closed ask is refused, and the refusal is recorded; nothing reaches the agent.
@@ -616,6 +636,23 @@ class AsksCore implements Asks {
       if (option !== undefined && !chosen) throw new AskRefused(`${ask.handle} has no option ${option}`, { option });
       // Words alone are none.
       const decision: Decision = chosen?.decision ?? 'none';
+      // Approving part of a batch runs only those (#327): `steps` names, by index into the batch this ask showed in,
+      // the asks whose plans run; each named one takes its own allow option, bound to its own plan. The rest stay open.
+      const batch = steps === undefined ? [] : this.batchOf.get(ask.handle) ?? [];
+      if (steps !== undefined) {
+        if (decision !== 'allow') throw new AskRefused('steps go with an approval', { field: 'steps' });
+        if (!batch.length) throw new AskRefused(`${ask.handle} showed in no batch, so it has no steps`, { field: 'steps', ask: ask.handle });
+        const indices = [...new Set(steps as number[])].sort((a, b) => a - b);
+        const out = indices.find((i) => i >= batch.length);
+        if (out !== undefined) throw new AskRefused(`the batch has ${batch.length} steps, not a step ${out}`, { field: 'steps' });
+        if (!indices.some((i) => batch[i] === ask.handle)) throw new AskRefused(`${ask.handle} isn't among the steps it approves`, { field: 'steps', ask: ask.handle });
+      }
+      // Each member runs the plan it shows, the first the core proposed for it (the card shows that one too).
+      const others = steps === undefined ? [] : [...new Set(steps as number[])].sort((a, b) => a - b).map((i) => batch[i]!).filter((h) => h !== ask.handle).flatMap((h) => {
+        const member = this.asks.get(bare(h));
+        const allow = member?.options.find((o) => o.decision === 'allow');
+        return member && !member.closed && allow ? [{ member, allow }] : [];
+      });
       if (decision === 'allow') {
         // An approval binds to the digest of the plan you were shown and to your click's token.
         if ((planHash ?? null) !== (ask.plan?.hash ?? null)) throw new AskRefused(`${ask.handle}'s approval names a plan it didn't show`, { field: 'plan_hash' });
@@ -639,30 +676,41 @@ class AsksCore implements Asks {
       // Each one is delivered as soon as it's recorded, so a write that fails partway leaves the rest open, not closed unheard.
       for (const { a, option: o } of together) {
         await this.options.record.append(this.core(connection), {
-          v: 2, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
-          data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null },
+          v: 4, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
+          data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(a, o.id, null, false, o.decision);
+        ask.receiptAlso.push(a.handle);
       }
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
       await this.options.record.append(this.core(connection), {
-        v: 2, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
+        v: 4, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
-          answer: option ?? (words as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
-          via, verified: true, on: ask.data.pinned_to!, token: token ?? null,
+          answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
+          via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
         },
       });
       await this.sync();
-      this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision);
+      this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
         await this.options.record.append(this.core({ ...connection, ...rider.who }), {
-          v: 2, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
-          data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null },
+          v: 4, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
+          data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(rider, chosen!.id, null, false, decision);
+        ask.receiptAlso.push(rider.handle);
+      }
+      for (const { member, allow } of others) {
+        await this.options.record.append(this.core({ ...connection, ...member.who }), {
+          v: 4, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
+          data: { answer: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
+        });
+        await this.sync();
+        this.hand(member, allow.id, null, false, allow.decision);
+        ask.receiptAlso.push(member.handle);
       }
       // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim.
       const scope = chosen && !ask.fold ? this.scopeOf(ask) : null;
@@ -685,7 +733,7 @@ class AsksCore implements Asks {
       await this.sync();
       const ask = this.asks.get(bare(handle));
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
-      return this.cardOf(ask);
+      return this.cardOf(ask, true);
     });
   }
 
@@ -694,7 +742,7 @@ class AsksCore implements Asks {
       await this.sync();
       // The same question from another thread shows through the older one's card.
       const shown = this.open().filter((a) => this.status(a) === 'shown' && !this.rides(a));
-      return Promise.all(shown.map((a) => this.cardOf(a)));
+      return Promise.all(shown.map((a) => this.cardOf(a, true)));
     });
   }
 
@@ -1273,12 +1321,12 @@ class AsksCore implements Asks {
     return (this.threads.get(thread) ?? []).filter((a) => !a.closed);
   }
 
-  private hand(ask: Ask, option: string | null, words: string | null, provisional: boolean, decision: Decision | null, because: string | null = null, undid: string | null = null, budget: BudgetLeft | null = null): void {
+  private hand(ask: Ask, option: string | null, words: string | null, provisional: boolean, decision: Decision | null, because: string | null = null, undid: string | null = null, budget: BudgetLeft | null = null, image: string | null = null): void {
     const chosen = ask.options.find((o) => o.id === option);
     const recommended = ask.data.recommended as string | null;
     // A different answer undoes the option a provisional ask went on with, or the one an overruled decision gave.
     const undoes = undid ?? (!provisional && ask.data.provisional === true && option !== null && option !== recommended ? recommended : null);
-    this.options.deliver({ ask: ask.handle, session: ask.session, option, decision: decision ?? chosen?.decision ?? 'none', words, provisional, undoes, because, budget });
+    this.options.deliver({ ask: ask.handle, session: ask.session, option, decision: decision ?? chosen?.decision ?? 'none', words, image, provisional, undoes, because, budget });
   }
 
   /** Whether an open ask shows through an older open one from another thread: the same question, by key, pinned to the same thing. */
@@ -1355,7 +1403,12 @@ class AsksCore implements Asks {
     return best ? { decision: best.d.handle, answer: best.d.answer, scope: best.d.scope } : null;
   }
 
-  private async cardOf(ask: Ask): Promise<Card> {
+  /**
+   * What the card shows. `presented` is a read through the card surface (`card`, `needsYou`): the first such read
+   * fixes what the card says it saves; a resolver's read never presents it.
+   */
+  private async cardOf(ask: Ask, presented = false): Promise<Card> {
+    if (presented && ask.saves === undefined && !ask.closed) ask.saves = this.savesOf(ask);
     return {
       ask: ask.handle,
       kind: ask.data.kind as AskKind,
@@ -1370,7 +1423,20 @@ class AsksCore implements Asks {
       conflict: ask.conflict.map((c) => ({ ...c })),
       needs_person: needsPerson(ask.data),
       budget: ask.budget && !ask.closed ? { ...ask.budget } : null,
+      saves: ask.saves ?? null,
+      receipt: ask.closed?.outcome === 'answered' && ask.closed.answer !== undefined ? { answer: ask.closed.answer, also: [...ask.receiptAlso] } : null,
     };
+  }
+
+  /** What an answer to the ask would be saved as, said in words, and how many other open asks that decision would then answer. */
+  private savesOf(ask: Ask): Card['saves'] {
+    if (ask.fold || ask.theirs || !ask.options.length) return null;
+    const scope = this.scopeOf(ask);
+    if (scope === null) return null;
+    const project = this.sessions.get(ask.session)?.project;
+    const words = scope.startsWith('repo:') && project ? `Saved for this repo (${project})` : 'Saved for this session';
+    const also = this.open().filter((a) => a !== ask && !a.theirs && !a.fold && a.data.key === ask.data.key && this.scopeCovers(scope, a)).length;
+    return { scope: words, also };
   }
 
   /** What changed since the commit an ask showed, when its session's worktree has moved on from it. */
@@ -1419,7 +1485,7 @@ class AsksCore implements Asks {
         const holder = fold || theirs ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], decided: new Set(), pending: {}, conflict: [],
+          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
           created: e.ts, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -1483,6 +1549,10 @@ class AsksCore implements Asks {
         const ask = e.kind === 'decision.applied' ? this.asks.get(bare(String(d.ask))) : target;
         // The first close to append decides, and no agent closes an ask.
         if (!ask || ask.closed || isAgent(e.writer)) return;
+        if (e.kind === 'decision.applied') {
+          const origin = this.asks.get(bare(this.decisions.get(String(d.decision))?.ask ?? ''));
+          if (origin && origin !== ask) origin.receiptAlso.push(ask.handle);
+        }
         ask.closed = {
           outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts, ...(typeof d.answer === 'string' ? { answer: d.answer } : {}),
           ...(e.kind === 'decision.applied' ? { decision: String(d.decision), answer: this.decisions.get(String(d.decision))?.answer ?? '' } : {}),
@@ -1507,6 +1577,8 @@ class AsksCore implements Asks {
         return;
       case 'ask.batched': {
         if (e.writer !== 'core' || !Array.isArray(d.asks)) return;
+        const members = d.asks.flatMap((item) => (isObj(item) && typeof item.ask === 'string' ? [item.ask] : []));
+        if (members.length > 1) for (const member of members) this.batchOf.set(member, members);
         const shown = d.asks.flatMap((item) => {
           const ask = isObj(item) ? this.asks.get(bare(String(item.ask))) : undefined;
           // A showing counts only under the identity the ask was raised for.
@@ -1603,8 +1675,8 @@ class AsksCore implements Asks {
         } else if (ask.pending.typed !== undefined) {
           // Typed in the session: the answer to that question only, unverified, never a decision.
           await this.options.record.append(as, {
-            ...base, v: 2, kind: 'ask.answered',
-            data: { answer: ask.pending.typed, plan_hash: null, decision: 'none', via: 'session', verified: false, on: ask.data.pinned_to!, token: null },
+            ...base, v: 4, kind: 'ask.answered',
+            data: { answer: ask.pending.typed, plan_hash: null, decision: 'none', via: 'session', verified: false, on: ask.data.pinned_to!, token: null, words: ask.pending.typed, image: null },
           });
         } else if (ask.fold && !this.openIn(ask.thread).some((a) => a.folded === ask.handle)) {
           // An exception that holds no open ask has nothing left to ask, as when the ask it was raised for never landed.

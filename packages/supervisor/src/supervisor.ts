@@ -29,6 +29,8 @@ const RECHECK_MS = 60_000;
 /** The ask.sources@1 row the supervisor raises its unblock asks from. */
 const UNBLOCK_SOURCE = 'supervisor.cleanup';
 const RUN = /^run:[0-9A-Za-z]+$/;
+/** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
+const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const alive = (pid: number): boolean => {
@@ -54,6 +56,8 @@ interface Run {
   /** The process.ended events that prove its processes gone: what its leases' release cites. */
   gone: string[];
   leases: { kind: string; key: string }[];
+  /** Who holds its leases (StartSpec.holder); the core when unset. */
+  holder?: string;
   /** What its cleanup recorded, once it has run. */
   cleaned?: Cleanup;
   /** Its cleanup while it runs: a second call shares it. */
@@ -146,7 +150,11 @@ class LocalSupervisor implements Supervisor {
     return Number(row?.head ?? 0);
   }
   private async lease(kind: 'lease.acquired' | 'lease.stale', run: string, lease: { kind: string; key: string }, expires = this.options.now() + (this.options.lease_ms ?? DAY)): Promise<void> {
-    await this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: 'core', mode: 'exclusive', expires }, run);
+    await this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: this.holderOf(run), mode: 'exclusive', expires }, run);
+  }
+  /** The holder a run's leases name: its spec's, or the core. */
+  private holderOf(run: string): string {
+    return this.runs.get(run)?.holder ?? 'core';
   }
   /** A run's lease ends: through the lease table when there is one, citing what proves it over. */
   private async release(run: string, lease: { kind: string; key: string }, proof: string[]): Promise<void> {
@@ -157,7 +165,7 @@ class LocalSupervisor implements Supervisor {
       if (id) await this.options.leases.release(id, proof);
       return;
     }
-    await this.append('lease.released', { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: 'core', mode: 'exclusive', expires: this.options.now() + (this.options.lease_ms ?? DAY) }, run);
+    await this.append('lease.released', { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: this.holderOf(run), mode: 'exclusive', expires: this.options.now() + (this.options.lease_ms ?? DAY) }, run);
   }
   private async track(r: Run, pid: number, start: string, token: string | null): Promise<void> {
     // A known ID with another start time is a new process of the run's: the one it named is gone.
@@ -194,8 +202,10 @@ class LocalSupervisor implements Supervisor {
         case 'lease.acquired':
         case 'lease.stale':
         case 'lease.released': {
-          // Only a run's leases, held by the core, are the supervisor's: a session's in the same table never joins a pool.
-          if (d.holder !== 'core') break;
+          // Only a run's leases, the core's or its named holder's, are the supervisor's: a session's in the same table never joins a pool.
+          if (!ours(d.holder)) break;
+          // The holder is kept here only without a table, where the run's start precedes its leases; the table folds its own.
+          if (r && d.holder !== 'core') r.holder = d.holder as string;
           const res = d.resource as { kind: string; key: string };
           const name = `${res.kind}:${res.key}`;
           let key = this.keys.get(name);
@@ -422,7 +432,7 @@ class LocalSupervisor implements Supervisor {
         if (table) {
           // Another want waits: the run takes nothing until every want can be had.
           if (on.length) break;
-          const got = await table.lease({ holder: 'core', run: spec.run }, { host: 'local', kind: want.kind, key: c.key }, 'exclusive');
+          const got = await table.lease({ holder: spec.holder ?? 'core', run: spec.run }, { host: 'local', kind: want.kind, key: c.key }, 'exclusive');
           if (got.status === 'granted') { this.leaseIds.set(name, got.lease.id); free = c; break; }
           if (got.status === 'BLOCKED') { await giveBack(); return { kind: 'blocked', on: want.kind }; }
           if (got.reason === 'taken') outside++;
@@ -483,7 +493,7 @@ class LocalSupervisor implements Supervisor {
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
-    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases };
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}) };
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);

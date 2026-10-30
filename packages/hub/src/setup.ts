@@ -121,7 +121,28 @@ async function install(cli: string, quiet = false): Promise<number> {
     process.stderr.write('deep setup: the hub didn\'t start through its login service; deep doctor names what is missing.\n');
     return 3;
   }
-  return 0;
+  return readHistory(quiet);
+}
+/**
+ * Once the hub is up, it reads your Claude Code and Codex history into the wiki (#356): pattern matching written first,
+ * then each reading job finished or waiting on the plan reserve. Each wiki page that changed gets a line, unless quiet.
+ * The reading is the hub's; the agent's own session and settings are already in place, so a failure here is told and
+ * setup still stands: 4 only when the hub couldn't be asked.
+ */
+async function readHistory(quiet: boolean): Promise<number> {
+  try {
+    const root = installedRoot();
+    const reply = await call(hubAddress().path, readFileSync(rootOf(root).token, 'utf8').trim(), 'wiki.build', {});
+    if ('error' in reply) {
+      process.stderr.write(`deep setup: the wiki wasn't built: ${reply.error.remediation}\n`);
+      return 4;
+    }
+    if (!quiet) for (const page of (reply.result.changed as string[] | undefined) ?? []) console.log(`Wiki: ${page}`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`deep setup: the wiki wasn't built: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 4;
+  }
 }
 /** deep-hook as this checkout built it; from a checkout with none, setup builds it once (a release ships it built, #41). */
 function builtHook(): string {

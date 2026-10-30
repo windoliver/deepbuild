@@ -5,7 +5,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { access, chmod, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { homedir, networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,7 +20,7 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
-import { openLeases } from '@deepbuild/leases';
+import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
@@ -36,12 +37,16 @@ import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hoo
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { argsOf, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
+import { openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
+import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
+import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
+import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
@@ -74,14 +79,6 @@ const QUIET_MS = 30_000;
 const CALL_GRACE = 2_000;
 /** How long a waiter's answer has to show in a turn before its delivery reads stalled and goes by the next prompt. */
 const WAKE_GRACE = 10_000;
-/**
- * A shell call's expected time (#27): this many times the longest the same command took before, at least
- * OVERRUN_FLOOR; with no earlier run in the newest OVERRUN_WINDOW events, OVERRUN_UNKNOWN.
- */
-const OVERRUN_FACTOR = 4;
-const OVERRUN_FLOOR = 60_000;
-const OVERRUN_UNKNOWN = 600_000;
-const OVERRUN_WINDOW = 50_000;
 /** The most transcript entries of one turn the core keeps for its stop's records. */
 const TURN_ENTRIES = 5_000;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
@@ -192,7 +189,7 @@ interface Routes {
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
 }
 /** An answered ask, as a route delivers it. */
-interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null }
+interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
 /** Your words sent from the app into a session (#340), by the delivery's request ID. */
 interface Note { session: string; text: string; request: string }
 /**
@@ -232,6 +229,8 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  /** The kernel's lease table (#237), read by deep env down for who holds a port now. */
+  private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -242,6 +241,8 @@ export class Core {
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
+  /** Setup's wiki build (#356). */
+  private wikiBuild!: { build(): Promise<WikiBuilt> };
   /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
   private readonly parked = new Map<string, Promise<void>>();
   /** Each session a reading named a job for, once. */
@@ -340,6 +341,8 @@ export class Core {
   private readonly offers = new Map<string, { meta: HookMeta; about: About; scope: string }>();
   /** The typed-saves-decision plant's sessions you typed words in. */
   private readonly typedAt = new Map<string, number>();
+  /** Each session's promised check (#120): its state as the record has it, the timer for its due time, and whether its one ask was raised. */
+  private readonly promises = new Map<string, PromiseState & { timer?: NodeJS.Timeout | undefined; asked?: boolean; handed?: boolean }>();
   /** resolver-decisions with no ledger, asked whether a saved decision covers a prompt before anything is raised (#23). */
   private precheck!: Resolver;
 
@@ -414,7 +417,7 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
@@ -489,6 +492,8 @@ export class Core {
     const archive = await openArchive({
       record: this.record, evidence: this.store, asks, adapters: shipped(), env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
       held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
+      // A session's copy is recorded under the repo its folder is in, so what it says reaches that repo's page (#356).
+      projectOf: (cwd, agent) => projectOf(cwd, agent, this.options.plant),
     });
     let archiving: Promise<void> | undefined;
     const archivePass = () => {
@@ -498,13 +503,21 @@ export class Core {
         repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
         await archive.pass();
       })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+      return archiving;
     };
     archivePass();
+    // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
+    this.wikiBuild = openWikiBuild({
+      record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
+      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant,
+    });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
     if (this.options.plant !== 'restores-at-session-start-only') this.watchSettings();
+    // The promised checks the record still holds wait on, armed again (#120).
+    await this.restorePromises().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
   }
 
@@ -560,45 +573,6 @@ export class Core {
   private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[] } = {}): Promise<void> {
     const ts = this.now();
     return this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...extra });
-  }
-  /** The shell calls still running, by call ID, with the overrun timer each has once its expected time is known. */
-  private shellCalls = new Map<string, { session: string; timer?: NodeJS.Timeout }>();
-  /** A shell call starting is timed against its expected time; one that ends, or whose session ends, no longer is. */
-  private watchCalls(drafts: Draft[], meta: HookMeta): void {
-    for (const d of drafts) {
-      const call = typeof d.data.call === 'string' ? d.data.call : undefined;
-      if (!call) continue;
-      if (d.kind === 'tool.after') {
-        clearTimeout(this.shellCalls.get(call)?.timer);
-        this.shellCalls.delete(call);
-      } else if (d.kind === 'tool.before' && d.data.kind === 'shell' && typeof d.data.command === 'string' && !this.shellCalls.has(call)) {
-        this.shellCalls.set(call, { session: meta.session });
-        // Timed on the hub's clock from the hook's arrival, whatever the hook's stamp says.
-        void this.timeCall(meta, call, d.data.command, this.now()).catch(() => undefined);
-      }
-    }
-    if (meta.event !== 'SessionEnd') return;
-    for (const [call, c] of this.shellCalls) if (c.session === meta.session) { clearTimeout(c.timer); this.shellCalls.delete(call); }
-  }
-  /**
-   * A call still running past its expected time is recorded as an overrun on its session, once, while it runs: its
-   * effect is unknown until the session has been read, and it never becomes a wait on you.
-   */
-  private async timeCall(meta: HookMeta, call: string, command: string, started: number): Promise<void> {
-    const [row] = (await this.record.raw(`SELECT MAX(a.ts - b.ts) AS took FROM events b JOIN events a ON a.kind = 'tool.after' AND a.session_id = b.session_id
-      AND json_extract(a.data, '$.call') = json_extract(b.data, '$.call') AND a.log_pos > b.log_pos
-      WHERE b.log_pos > (SELECT MAX(log_pos) FROM events) - ${OVERRUN_WINDOW} AND a.log_pos > (SELECT MAX(log_pos) FROM events) - ${OVERRUN_WINDOW}
-      AND b.kind = 'tool.before' AND json_extract(b.data, '$.command') = '${sql(command)}'`)) as { took: number | null }[];
-    const expected = row?.took ? Math.max(OVERRUN_FLOOR, OVERRUN_FACTOR * row.took) : OVERRUN_UNKNOWN;
-    const c = this.shellCalls.get(call);
-    if (!c) return;
-    c.timer = setTimeout(() => {
-      if (this.shellCalls.get(call) !== c) return;
-      this.shellCalls.delete(call);
-      const shown = command.length > 80 ? `${command.slice(0, 80)}…` : command;
-      void this.appendReading(meta.session, meta.agent, `Call ${call} (\`${shown}\`) overran: still running ${words(this.now() - started)} after it started, past its expected ${words(expected)}${row?.took ? `, from the ${words(row.took)} the same command took before` : ''}. What it did is unknown until the session is read, so nothing retries it.`).catch(() => undefined);
-    }, Math.max(0, started + expected - this.now()));
-    c.timer.unref();
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {
@@ -678,7 +652,6 @@ export class Core {
     }
     // A call whose prompt went to you has run, live or replayed: offered back as a decision to save (#23).
     if (meta.event === 'PostToolUse' && meta.call) void this.offerBack(meta).catch(() => undefined);
-    if (!replayed) this.watchCalls(drafts, meta);
     if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) await this.replaced(meta.session);
     if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
       this.typedAt.set(meta.session, Date.now());
@@ -911,7 +884,226 @@ export class Core {
         await this.stopRecords(draft, meta, session);
         const loop = this.loopAt(live);
         if (loop) data.loop = loop;
+        // A check the agent promises for later becomes a wake-up (#120); a subagent's stop promises nothing to you.
+        if (session && !meta.fields?.agent_id) await this.promised(meta).catch(() => undefined);
       }
+    }
+  }
+
+  // ---- Long waits and promised checks (#120; design: Before each command, "Commands end.").
+
+  /** An event about a session, appended as the core. */
+  private appendSession(session: string, agent: string, kind: string, data: Obj): Promise<void> {
+    const ts = this.now();
+    return this.append(this.connection('core', { session, agent }), { v: 1, id: ulid(ts), kind, ts, subject: `session:${letters(session)}`, data: data as JsonValue });
+  }
+  /**
+   * The waits as the record holds them, for a hub starting on it (#120): how long each command took before, and
+   * each session's turn and calls still running, with the last line its chat could read and each call's overrun.
+   */
+  async waitsState(): Promise<{ history: [string, number][]; sessions: Restored[] }> {
+    await this.ready;
+    // One read of the recent events, paired by call in memory: no join the database could not index.
+    const events = (await this.record.raw(`SELECT e.session_id AS session, e.kind, e.ts, e.data, s.agent, s.worktree FROM events e JOIN sessions s ON s.id = e.session_id
+      WHERE e.kind IN ('user.ask', 'agent.stop', 'session.end', 'tool.before', 'tool.after', 'session.reading', 'call.overrun') AND e.log_pos > (SELECT COALESCE(MAX(log_pos), 0) - 20000 FROM events) ORDER BY e.log_pos`)) as { session: string; kind: string; ts: number; data: string | Obj; agent: string | null; worktree: string | null }[];
+    const history: [string, number][] = [];
+    const befores = new Map<string, { ts: number; key: string }>();
+    const state = new Map<string, Restored>();
+    for (const e of events) {
+      const d = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
+      let r = state.get(e.session);
+      if (!r) state.set(e.session, r = { session: e.session, agent: e.agent ?? 'agent', cwd: e.worktree ?? '', lastLine: e.ts, open: [] });
+      const call = typeof d.call === 'string' ? d.call : undefined;
+      switch (e.kind) {
+        case 'user.ask':
+          if (d.from === 'person' || !r.turnStart) { r.ask = excerpt(String(d.text ?? ''), 40) || 'your prompt'; r.turnStart = e.ts; }
+          r.lastLine = e.ts;
+          r.open = [];
+          break;
+        case 'agent.stop': r.lastLine = e.ts; r.open = []; break;
+        case 'session.end': state.delete(e.session); break;
+        case 'tool.before':
+          if (call) {
+            const kind = String(d.kind ?? 'unknown');
+            const tool = String(d.tool ?? '');
+            const command = typeof d.command === 'string' ? d.command : null;
+            befores.set(`${e.session}|${call}`, { ts: e.ts, key: historyKey(kind, command, tool) });
+            r.open.push({ call, kind, tool, command, started: e.ts, shown: e.ts });
+          }
+          break;
+        case 'tool.after': {
+          const before = call ? befores.get(`${e.session}|${call}`) : undefined;
+          // A call that ended well teaches the next one its time.
+          if (before && d.outcome === 'ok' && e.ts >= before.ts) history.push([before.key, e.ts - before.ts]);
+          if (call) befores.delete(`${e.session}|${call}`);
+          r.open = r.open.filter((o) => o.call !== call);
+          break;
+        }
+        case 'call.overrun': for (const o of r.open) if (o.call === call) { o.overrun = e.ts; o.shown = e.ts; } break;
+        case 'session.reading':
+          r.lastLine = e.ts;
+          for (const o of r.open) o.shown = e.ts;
+          break;
+        default:
+      }
+    }
+    return { history, sessions: [...state.values()].filter((r) => r.turnStart !== undefined) };
+  }
+  /** A line the chat showed of a wait: kept as the session's reading, so the next ten minutes count from it after a restart too. */
+  async line(session: string, agent: string, text: string): Promise<void> {
+    await this.ready;
+    await this.queue(() => this.appendReading(session, agent, text.replace(/^DeepBuild: /gm, '')));
+  }
+  /** A call still running past its expected time: recorded as an overrun, and the session's row says so. It never becomes a wait on you. */
+  async overrun(m: { session: string; agent: string; cwd: string; data: Obj }): Promise<void> {
+    await this.ready;
+    // The line itself is recorded by the hook that shows it (`line`), once, where the chat read it.
+    await this.queue(() => this.appendSession(m.session, m.agent, 'call.overrun', m.data));
+    // The session's row says so (#27): a reading naming the call, as the record reads no chat line until a hook shows one.
+    const d = m.data as { call: string; command: string | null; expected_ms: number; ran_ms: number };
+    const what = d.command === null ? '' : ` (\`${d.command.length > 80 ? `${d.command.slice(0, 80)}…` : d.command}\`)`;
+    await this.queue(() => this.appendReading(m.session, m.agent, `Call ${d.call}${what} overran: still running ${words(d.ran_ms)} in, past the ${words(d.expected_ms)} expected for it. What it did is unknown until the session is read, so nothing retries it.`)).catch(() => undefined);
+  }
+  /** Words for an agent whose hooks take no context: carried by its next prompt. */
+  later(session: string, cwd: string, text: string): void {
+    this.routesOf(session, cwd).later.push(text);
+  }
+  /**
+   * The checks a stop's last message promises for later: the first sets the session's wake-up, or sets it again,
+   * keeping its first end; a wake-up never sets itself again. A promise set a fourth time, or due past its end, is
+   * BLOCKED with its owner and at most one ask, and no further wake-up fires.
+   */
+  private async promised(meta: HookMeta): Promise<void> {
+    const text = meta.fields?.last_assistant_message;
+    if (!text) return;
+    const now = this.now();
+    const [next] = promisesIn(text, now);
+    if (!next) return;
+    const current = this.promises.get(meta.session);
+    // BLOCKED stands until the session ends: no further wake-up is set, and the one ask is not asked again.
+    if (current?.status === 'blocked') return;
+    clearTimeout(current?.timer);
+    const state = setPromise(current, next, ulid(now));
+    const entry = { ...state, timer: undefined, asked: current?.asked ?? false };
+    this.promises.set(meta.session, entry);
+    if (state.status === 'blocked') return this.promiseBlocked(meta.session, meta.agent, meta.cwd, entry);
+    await this.appendSession(meta.session, meta.agent, 'promise.set', { promise: state.id, quote: state.quote, due: state.due, times_set: state.set, end: state.end });
+    this.armPromise(meta.session);
+  }
+  /** One timer per promise, for its due time; nothing polls, so an idle session costs no CPU while it waits. */
+  private armPromise(session: string): void {
+    const p = this.promises.get(session);
+    if (!p || p.status !== 'set' || this.stopping) return;
+    clearTimeout(p.timer);
+    p.timer = setTimeout(() => void this.queue(() => this.promiseDue(session)).catch(() => undefined), Math.min(Math.max(0, p.due - this.now()), 2 ** 31 - 1));
+    p.timer.unref();
+  }
+  /**
+   * A promise's due time: where the session has shown it can be woken when idle (Claude Code's waiter), the wake-up
+   * starts a turn now; elsewhere, as in Codex, whose hooks never start a turn, it starts nothing: the session's row
+   * shows it due, and its next prompt or stop carries it. The route is the session's shown routes, never the agent's name.
+   */
+  private async promiseDue(session: string): Promise<void> {
+    const p = this.promises.get(session);
+    if (!p || p.status !== 'set' || this.stopping) return;
+    if (p.due > this.now()) return this.armPromise(session);
+    const agent = this.sessions.get(session)?.agent ?? this.live.get(session)?.agent ?? 'claude-code';
+    const r = this.routes.get(session);
+    const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && r.busy < r.waiter.since;
+    await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: idle ? 'wake' : 'next_hook' });
+    p.status = 'due';
+    if (idle && r.waiter) return this.handPromise(session, p, r);
+    await this.appendReading(session, agent, dueReading(p));
+    // The event loop holds this session's next stop for it.
+    this.askingSoon();
+  }
+  /**
+   * The wake-up handed to the session's waiter: woken only once the wake's prompt shows it (the `promise:<id>` token
+   * in the waiter's text). A wake that shows no turn within the grace reads stalled, as an ask's does: the route is
+   * marked as not waking, the row shows the check due, and the session's next prompt or stop carries it.
+   */
+  private handPromise(session: string, p: PromiseState & { timer?: NodeJS.Timeout | undefined; handed?: boolean }, r: Routes): void {
+    const waiter = r.waiter;
+    if (!waiter) return;
+    r.waiter = undefined;
+    p.handed = true;
+    waiter.give({ session, text: wakeText(p) });
+    this.armPromiseGrace(session, p, WAKE_GRACE);
+  }
+  private armPromiseGrace(session: string, p: PromiseState & { timer?: NodeJS.Timeout | undefined }, inMs: number): void {
+    if (this.stopping) return;
+    clearTimeout(p.timer);
+    p.timer = setTimeout(() => void this.queue(() => this.promiseUnwoken(session, p.id)).catch(() => undefined), Math.max(0, inMs));
+    p.timer.unref();
+  }
+  private async promiseUnwoken(session: string, id: string): Promise<void> {
+    const p = this.promises.get(session);
+    if (!p || p.id !== id || p.status !== 'due' || p.handed !== true) return;
+    p.handed = false;
+    const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+    const r = this.routes.get(session);
+    // A route never seen working counts as absent: this session's promised checks wait for its next prompt or stop.
+    if (r && r.wakes !== true) r.wakes = false;
+    await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'next_hook' });
+    await this.appendReading(session, agent, `Claude Code didn't wake this session for its promised check: its waiter handed it over and no turn started. ${dueReading(p)}`);
+    this.askingSoon();
+  }
+  /** The due promise a session's prompt or stop carries, taken once, with how it went. */
+  private async promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt = ''): Promise<string | undefined> {
+    const p = this.promises.get(session);
+    if (!p || p.status !== 'due') return undefined;
+    p.status = 'woken';
+    const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+    // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check
+    // itself. Only a handed wake text carries this set's token, so a late wake (its prompt after the grace) still proves
+    // the route, and a typed prompt that lands while the wake is queued finds it in the transcript, as an ask's does.
+    const token = promiseToken(p);
+    const stalled = p.handed === false;
+    const woke = via === 'next_prompt' && (prompt.includes(token) || (p.handed !== undefined && await this.woken(session, token)));
+    clearTimeout(p.timer);
+    const r = this.routes.get(session);
+    if (woke && r) r.wakes = true;
+    await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: woke ? 'waiter' : via }).catch(() => undefined);
+    if (woke && stalled) await this.appendReading(session, agent, 'Claude Code woke this session for its promised check after all; the check goes with that wake\'s turn.').catch(() => undefined);
+    this.askingSoon();
+    return woke ? undefined : wakeText(p);
+  }
+  private promiseDueFor(session: string): boolean { return this.promises.get(session)?.status === 'due'; }
+  private async promiseBlocked(session: string, agent: string, cwd: string, p: PromiseState & { asked?: boolean }): Promise<void> {
+    const owner = ownerOf(p.quote);
+    let ask: string | null = null;
+    if (!p.asked) {
+      p.asked = true;
+      const question = `The agent's promised check is BLOCKED (${blockedCause(p) === 'set_again' ? `promised ${p.set} times` : 'promised past its end'}; owner: ${owner}): "${p.quote}" Do the check yourself, or drop it?`;
+      const options = [{ id: 'take', label: 'I will do the check', decision: 'none' }, { id: 'drop', label: 'Drop it', decision: 'none' }];
+      const raised = { kind: 'choice', question, options, recommended: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.pinOf(cwd, question) };
+      ask = await this.asks.raise(this.connection('core', { session, agent }), 'promise.blocked', raised).catch(() => null);
+    }
+    await this.appendSession(session, agent, 'promise.blocked', { promise: p.id, status: 'BLOCKED', quote: p.quote, cause: blockedCause(p), owner, ask });
+    await this.appendReading(session, agent, blockedReading(p, owner));
+    await this.attention(session, agent, 'stuck');
+  }
+  /** The promises the record holds that still wait, after a restart: each set one is armed again, each due one waits for its hook. */
+  private async restorePromises(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
+    const handedAt = new Map<string, number>();
+    for (const row of rows) {
+      // A session's end takes its promise with it: nothing wakes a session that is gone.
+      if (row.kind === 'session.end') { this.promises.delete(row.session); continue; }
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      const p = this.promises.get(row.session);
+      if (row.kind === 'promise.set') this.promises.set(row.session, { id: String(d.promise), quote: String(d.quote), due: Number(d.due), set: Number(d.times_set), end: Number(d.end), status: 'set', timer: undefined, asked: p?.asked ?? false });
+      else if (p && p.id === d.promise) {
+        p.status = row.kind === 'promise.due' ? 'due' : row.kind === 'promise.woken' ? 'woken' : 'blocked';
+        p.handed = row.kind === 'promise.due' && d.route === 'wake';
+        if (p.handed) handedAt.set(row.session, Number(row.ts));
+      }
+      if (row.kind === 'promise.blocked' && p) p.asked = true;
+    }
+    for (const [session, p] of this.promises) {
+      if (p.status === 'set') this.armPromise(session);
+      else if (p.status === 'due' && p.handed) this.armPromiseGrace(session, p, WAKE_GRACE - (this.now() - (handedAt.get(session) ?? this.now())));
+      else if (p.status === 'due') this.askingSoon();
     }
   }
 
@@ -1364,6 +1556,9 @@ export class Core {
     if (meta.event === 'SessionEnd') {
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
+      const promise = this.promises.get(meta.session);
+      clearTimeout(promise?.timer);
+      this.promises.delete(meta.session);
       for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted]) map.delete(meta.session);
     } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart') r.busy = Math.max(r.busy, ulidTime(meta.id));
   }
@@ -1382,9 +1577,18 @@ export class Core {
     await Promise.allSettled([...this.inflight]);
     const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
-    const rows = (await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
-      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Answer[];
-    return rows.filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
+    const rows = ((await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
+      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
+      .filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
+    if (!rows.length) return [];
+    // Your words and the screenshot sent from the card (#327) ride on the answer event, which the asks table doesn't
+    // carry: one read of those events for the rows still waiting, the latest per ask.
+    const events = (await this.record.raw(`SELECT subject, data FROM events WHERE kind = 'ask.answered' AND subject IN (${rows.map((row) => `'ask:${sql(row.id)}'`).join(', ')}) ORDER BY log_pos`)) as { subject: string; data: string }[];
+    const latest = new Map(events.map((e) => [e.subject, JSON.parse(e.data) as { words?: unknown; image?: unknown }]));
+    return rows.map((row) => {
+      const data = latest.get(`ask:${row.id}`) ?? {};
+      return { ...row, words: typeof data.words === 'string' ? data.words : null, image: typeof data.image === 'string' ? data.image : null };
+    });
   }
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
@@ -1392,7 +1596,10 @@ export class Core {
       const chosen = row.answer === null ? null : JSON.parse(row.answer) as unknown;
       const options = row.options === null ? [] : JSON.parse(row.options) as { id: string; label: string }[];
       const label = options.find((o) => o.id === chosen)?.label;
-      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}.`;
+      // An answer of words or a screenshot alone is already the answer: it isn't said twice.
+      const beside = [row.words === null || row.words === chosen ? [] : [`your words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
+      if (row.image !== null && row.image === chosen) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: a screenshot, sha256 ${row.image}${row.words === null ? '' : ` — with your words: "${row.words}"`}.`;
+      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? ` — with ${beside.join(' and ')}` : ''}.`;
     });
     return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
   }
@@ -1435,9 +1642,10 @@ export class Core {
   private async askingNow(): Promise<void> {
     const rows = ((await this.record.raw(`SELECT id, session_id FROM asks WHERE session_id IS NOT NULL AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')`)) as { id: string; session_id: string }[])
       .filter((r) => !this.prompts.has(`ask:${r.id}`));
-    // A session with a send-back planted for its next stop has that stop held too (#25).
+    // A session with a send-back planted for its next stop has that stop held too (#25), and one whose promised check is due (#120).
     const planted = [...this.routes].filter(([, r]) => r.sendBacks.length).map(([id]) => id);
-    const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted])].sort();
+    const promised = [...this.promises].filter(([, p]) => p.status === 'due').map(([id]) => id);
+    const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted, ...promised])].sort();
     const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
     const key = `${sessions.join(' ')}|${judged.join(' ')}`;
     if (key === this.askingSent) return;
@@ -1459,6 +1667,16 @@ export class Core {
     void this.queue(async () => {
       const waiter = r.waiter;
       if (!waiter || !idle()) return;
+      // A promised check that came due before this waiter asked (a hub restarted on the record, the waiter back a
+      // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
+      const p = this.promises.get(session);
+      if (p?.status === 'due' && !p.handed) {
+        // The hand follows its recorded route, or not at all.
+        const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+        await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'wake' });
+        await this.appendReading(session, agent, 'The promised check\'s wake-up is handed to this session\'s waiter.').catch(() => undefined);
+        return this.handPromise(session, p, r);
+      }
       const rows = await this.waitingFor(session);
       const notes = this.notes.get(session) ?? [];
       if (!rows.length && !notes.length) return;
@@ -1493,7 +1711,7 @@ export class Core {
     if (!handed) return;
     clearTimeout(handed.timer);
     this.handed.delete(ask);
-    const woken = (prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, ask);
+    const woken = (prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, `ask:${ask}`);
     if (woken) {
       const r = this.routes.get(session);
       if (r) r.wakes = true;
@@ -1529,13 +1747,16 @@ export class Core {
     this.handedNotes.delete(request);
     this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), { session: note.session, text: note.text, request }]);
   }
-  /** Whether the transcript shows a turn carrying an ask's answer: a queued wake or a prompt naming it; undefined when it can't be read. */
-  private async woken(session: string, ask: string): Promise<boolean | undefined> {
+  /**
+   * Whether the transcript shows a turn carrying a waiter's text (an ask's answer, a promise's wake-up): a queued wake
+   * or a prompt naming its token; undefined when the transcript can't be read.
+   */
+  private async woken(session: string, token: string): Promise<boolean | undefined> {
     const transcript = this.sessions.get(session)?.transcript;
     if (!transcript) return false;
     try { await access(transcript, constants.R_OK); } catch { return undefined; }
     return (await this.tail(transcript, 1 << 20)).split('\n').some((l) => {
-      if (!l.includes(`ask:${ask}`)) return false;
+      if (!l.includes(token)) return false;
       try {
         const e = JSON.parse(l) as Obj;
         return e.type === 'queue-operation' || (e.type === 'user' && isObj(e.message) && typeof e.message.content === 'string');
@@ -1715,13 +1936,13 @@ export class Core {
         // An answer whose delivery timed out is read for first: one a turn already showed isn't sent again.
         for (const [ask, session] of [...this.unread]) {
           if (session !== meta.session) continue;
-          const woken = await this.woken(session, ask);
+          const woken = await this.woken(session, `ask:${ask}`);
           if (woken === undefined) continue;
           this.unread.delete(ask);
           if (woken) await this.outcome(ask, 'next_prompt', 'delivered');
         }
         const waiting = await this.waitingFor(meta.session);
-        if (status && !waiting.length && !r.later.length) {
+        if (status && !waiting.length && !r.later.length && !this.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.live.get(meta.session);
           if (live?.state && live.state !== 'working') await this.attention(meta.session, live.agent, live.state);
@@ -1736,7 +1957,8 @@ export class Core {
         const notes = this.carried.get(meta.session);
         this.carried.delete(meta.session);
         const ack = this.acknowledge(meta.session);
-        const context = [answers, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context].filter(Boolean).join('\n\n');
+        const promised = await this.promiseCarried(meta.session, 'next_prompt', prompt);
+        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -1798,6 +2020,9 @@ export class Core {
   /** A stop held while the agent left a question: what it is sent back with, or nothing. */
   private async stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined> {
     const session = meta.session;
+    // A promised check that came due while no route could wake the session goes back with this stop (#120).
+    const promised = await this.queue(() => this.promiseCarried(session, 'stop_hold'));
+    if (promised) return promised;
     const open = async () => ((await this.record.raw(`SELECT 1 FROM asks WHERE session_id = '${sql(session)}' AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered') LIMIT 1`)) as unknown[]).length > 0;
     if (this.options.plant !== 'no-stop-count' && r.continued >= this.cap()) {
       // One more block would pass Claude Code's cap and be overridden: what would continue the turn waits for its next prompt.
@@ -2373,6 +2598,7 @@ export class Core {
       case 'record.backup': return this.backup(params);
       case 'env.up': return this.envUp(params);
       case 'env.down': return this.envDown(params);
+      case 'wiki.build': return this.wikiBuild.build();
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
@@ -2408,12 +2634,15 @@ export class Core {
       await chmod(partial, 0o600);
       await synced(partial);
       for (const [from, name] of copies) await copySynced(from, join(folder, name));
+      // What the wiki last wrote sits beside its folder (#356): without it, every restored page would read as your edit.
+      if (existsSync(wikiWritten(this.root.wiki))) await copyFile(wikiWritten(this.root.wiki), wikiWritten(join(folder, 'wiki')));
       // ledger.db names a whole backup only once all of it is on disk, and lasts once its folder is synced.
       await synced(folder);
       renameSync(partial, ledger);
     } catch (error) {
       rmSync(partial, { force: true });
       for (const [, name] of copies) rmSync(join(folder, name), { recursive: true, force: true });
+      rmSync(wikiWritten(join(folder, 'wiki')), { force: true });
       throw error;
     }
     // After the rename the backup is whole, so a failed sync here leaves it as it is.
@@ -2611,7 +2840,7 @@ export class Core {
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
-    const answer = chosen?.id ?? String(input.words);
+    const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
@@ -2809,6 +3038,7 @@ export class Core {
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
+        case 'deep_env': return await this.deepEnv(session!, String(args.action));
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3374,10 +3604,24 @@ export class Core {
     }
   }
   private envUp(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.inTurn(worktree, () => this.riseIn(worktree));
+    return this.upFor(this.worktreeOf(params));
   }
-  private async riseIn(worktree: string): Promise<Obj> {
+  private upFor(worktree: string, holder?: string): Promise<Obj> {
+    return this.inTurn(worktree, () => this.riseIn(worktree, holder));
+  }
+  /**
+   * deep_env (#331): the bound session's own worktree's stack, up or down, as `deep env up` and `deep env down` run
+   * there. The worktree is the session's, from its hooks, never from the call, so a child session in a worktree of its
+   * own leases its own ports there and never its parent's. Its leases name the session's deep mcp as their holder; a
+   * stack already up in that worktree is reused as it is, so the holder says who leased it, not who uses it.
+   */
+  private async deepEnv(session: string, action: string): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
+    const worktree = realpathSync(cwd);
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' });
+  }
+  private async riseIn(worktree: string, holder?: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
     // A stack is reused only while its process runs and its health route still answers 200.
     if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
@@ -3390,7 +3634,7 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
@@ -3407,29 +3651,31 @@ export class Core {
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
   private envDown(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
+    return this.downFor(this.worktreeOf(params), { path: '/params/worktree', remedy: 'deep env up' });
+  }
+  /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
+  private downFor(worktree: string, at: { path: string; remedy: string }): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
     if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, rising));
+    return this.inTurn(worktree, () => this.downIn(worktree, at, rising));
   }
-  private async downIn(worktree: string, interrupted?: string): Promise<Obj> {
+  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string): Promise<Obj> {
     const stack = this.stacks.get(worktree);
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
-    if (!stack) throw new Refused(refusal('not_found', '/params/worktree', `No stack runs for ${worktree}; start one with deep env up.`, worktree));
+    if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
     const ports = Object.values(stack.ports);
     const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
     const before = recorded.filter(running);
-    // The planted wrong program stops whatever listens on the leased ports, the run's or not.
-    if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
     this.stacks.delete(worktree);
-    const cleaned = await this.takeDown(stack.run);
+    const { result: cleaned, left } = await downLeaving(ports, { listen: listening, leases: async () => (await this.leases.leases()).map((v) => v.lease) }, async () => {
+      // The planted wrong program stops whatever listens on the leased ports, the run's or not.
+      if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+      return this.takeDown(stack.run);
+    });
     const stopped = [...new Set([...before.filter((pid) => !running(pid)), ...cleaned.stopped])];
-    const left = new Map<number, { pid: number; port?: number }>();
-    for (const name of cleaned.left) if (name.startsWith('pid:')) left.set(Number(name.slice(4)), { pid: Number(name.slice(4)) });
-    for (const port of ports) for (const pid of await listening(port)) left.set(pid, { pid, port });
-    return { run: stack.run, stopped, left: [...left.values()] };
+    return { run: stack.run, stopped, left };
   }
 
   // ---- Spool, retention and the test load.
@@ -3612,6 +3858,7 @@ export class Core {
     this.stopping = true;
     for (const timer of this.timers) clearInterval(timer);
     for (const live of this.live.values()) clearTimeout(live.quiet);
+    for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
     for (const set of this.waiting.values()) for (const wake of set) wake();
     try {

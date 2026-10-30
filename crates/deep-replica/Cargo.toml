@@ -36,6 +36,12 @@ name = "headless"
 path = "headless.rs"
 harness = false
 
+# Issue #327: a card drawn taller than its slot never arms, measured in the real window.
+[[test]]
+name = "card_size"
+path = "card_size.rs"
+harness = false
+
 # Issue #326, criterion group "panels": the acceptance tests written blind in
 # tests/acceptance/326/panels. `acceptance_326_panels` holds the criteria; `..._planted` runs the
 # wrong programs they name through the same judges. AppKit needs the main thread, so no harness.
@@ -54,4 +60,23 @@ harness = false
 [[test]]
 name = "acceptance_326_surfaces"
 path = "../../tests/acceptance/326/surfaces/surfaces.rs"
+harness = false
+
+# Issue #327, the question card in the replica: its kinds, arming, input provenance, OS confirmation,
+# notifications with the window hidden, usage rows and the answers it sends, written blind in
+# tests/acceptance/327. `acceptance_327_card` holds the criteria; `..._planted` runs the wrong
+# programs they name through the same judges. No harness, as above.
+[[test]]
+name = "acceptance_327_card"
+path = "../../tests/acceptance/327/card.rs"
+harness = false
+
+[[test]]
+name = "acceptance_327_planted"
+path = "../../tests/acceptance/327/planted.rs"
+harness = false
+
+[[test]]
+name = "acceptance_327_ac1_redraft"
+path = "../../tests/acceptance/327/ac1_redraft.rs"
 harness = false
