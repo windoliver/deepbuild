@@ -134,6 +134,10 @@ impl BuildSet {
     }
 }
 
+/// The module kinds the design names without a family, each its module's own name: the cell
+/// grid `cells@1` (#402). Any other bare name is the core's.
+const BARE_MODULE_KINDS: &[&str] = &["cells"];
+
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
 /// map (Registry and seal: `build_set`), so a build that leaves one out is refused at startup.
 pub const CORE_MODULES: [&str; 2] = ["look", "text"];
@@ -1061,8 +1065,14 @@ impl Sealed {
                 return self.left_out_kinds.get(full).cloned();
             }
         }
-        // A core kind (`text@1`, `rect@1`) has no family to name a module by.
-        let (family, _) = full.split_once('.')?;
+        // A core kind (`text@1`, `rect@1`) has no family to name a module by; the one bare
+        // name a module's kind keeps, `cells@1` (canvas primitives: Cell grid `cells@1`), is
+        // the cells module's.
+        let family = match full.split_once('.') {
+            Some((f, _)) => f,
+            None if BARE_MODULE_KINDS.contains(&full) => full,
+            None => return None,
+        };
         KNOWN_MODULES
             .iter()
             .find(|(name, _)| *name == family && !self.has(name))
@@ -1585,7 +1595,9 @@ impl Registry {
                 }
                 // A bare name is the core's (a core kind has no family); a module's kind
                 // carries its family, so no module takes `rect` or `text` from the compositor.
-                if k.entry.family.is_empty() {
+                // The one module kind the design names bare, `cells@1`, is the cells module's.
+                let bare = BARE_MODULE_KINDS.contains(&k.entry.name) && k.entry.name == name;
+                if k.entry.family.is_empty() && !bare {
                     return Err(SealError::new(
                         "bad_shape",
                         &[name],
@@ -3675,6 +3687,35 @@ mod tests {
         for register in [ascending, default_in_range] {
             assert!(seal(register).is_ok());
         }
+    }
+
+    #[test]
+    fn only_the_cells_module_keeps_a_bare_kind_name_and_a_build_without_it_names_it_missing() {
+        fn cells(r: &mut Registrar) {
+            let mut entry = thing();
+            entry.family = "";
+            entry.name = "cells";
+            r.kind(entry, &[], "");
+        }
+        let seal = |name: &str| {
+            Registry::new(BuildSet::R2)
+                .with(Module {
+                    manifest: manifest(name, &[]),
+                    register: cells,
+                })
+                .seal()
+        };
+        let sealed = seal("cells").expect("the cells module keeps `cells@1`");
+        assert_eq!(sealed.module_of_kind("cells"), Some("cells"));
+        assert_eq!(seal("b").unwrap_err().code, "bad_shape");
+        let without = Registry::new(BuildSet::Core)
+            .seal()
+            .expect("the core seals");
+        assert_eq!(
+            without.missing_for_kind("cells@1").as_deref(),
+            Some("cells")
+        );
+        assert_eq!(without.missing_for_kind("text@1"), None);
     }
 
     #[test]
