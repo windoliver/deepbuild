@@ -8,6 +8,11 @@ logs), Claude Code's facts (`adapters/claude-code.facts.json`) and base commit `
 implementation of #25. The implementing agent does not edit these files (AGENTS.md, Proof); a dispute goes to a blind
 redraft of this job.
 
+**Redrafted blind for the Oct 29 amendment** (issue #25's scope and the design's Claude Code row and Waiter
+guardrail, amended for #85): setup writes the waiter's entry under Stop and under StopFailure, with the same command
+and timeout. The only change here is the setup precondition below, which now expects that pair; no test, name or
+expected value changed. These tests fire no StopFailure, so the stand-in is unchanged.
+
 The issue has 12 checkbox criteria, AC1 to AC12 in the body's order. **This folder covers AC5, AC7, AC9 and AC10.**
 Two other blind jobs cover the rest in `../routes/` (AC1–AC4, AC6, AC11, AC12) and `../live/` (AC8 and the live runs).
 
@@ -45,7 +50,9 @@ DEEP_HUB_PLANT=no-stop-count npx vitest run --root tests/acceptance/25/fallbacks
   control token; `events.read`, `sessions.read` (a session's row, #34) and `inbox.read`; `DEEP_HUB_PLANT=<name>` selects
   a planted program (#16); `DEEP_HUB_TEST_CONFIRM` stands for the OS confirming you (#24).
 - **`deep setup`** writes DeepBuild's hook entries into `~/.claude/settings.json`, among them one foreground Stop entry
-  (the stop hold) and one `asyncRewake` entry (the waiter) (#18). Its timeouts are as setup writes them.
+  (the stop hold) and the waiter's `asyncRewake` entry, once under Stop and once under StopFailure with the same
+  command and timeout (#18; amended Oct 29), and nowhere else; anything else is BLOCKED. Its timeouts are as setup
+  writes them.
 - **deep-hook** as those entries run it, and the hook protocol's reply: a held Stop answers `decision: block` with a
   reason; a prompt or a session start gets `additionalContext` (#18, #315).
 - **`deep mcp`**, bound to the session whose hooks came from its parent process: `deep_ask` files an ask under it and
@@ -72,7 +79,7 @@ DEEP_HUB_PLANT=no-stop-count npx vitest run --root tests/acceptance/25/fallbacks
    - **A desktop app that doesn't wake** (`wakes: false`): the exit 2 is noted and nothing else happens. Its transcript
      entries say `entrypoint: "claude-desktop"`.
    - **The waiter's hook disabled for one session** (`skip: ['asyncRewake']`): that session's Claude Code runs no
-     `asyncRewake` entry; every other session's does.
+     `asyncRewake` entry, under Stop or under StopFailure; every other session's does.
    - A reply's `additionalContext` is written to the transcript as a `hook_additional_context` attachment.
 2. **A held-stop answer** is a Stop the hub holds while the session's ask is open, answered with `deep inbox answer`
    during the hold; "goes back through the Stop hook" is DeepBuild's Stop reply blocking with it and the stand-in
