@@ -3,11 +3,12 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isItDone } from './classify.js';
+import { isItDone, isRework } from './classify.js';
 import { beginsTurn, countTexts } from './usage.js';
 
-export interface BaselineMeasure { id: string; kind: string; window: { from: number; to: number }; transcripts: { sha256: string }[]; copied_from_doc?: number }
-export interface BaselineMeasureResult { id: string; window: { from: number; to: number }; transcripts: string[]; value: number | null; status: 'recomputed' | 'missing' }
+/** A window's ends are times in ms or dates. */
+export interface BaselineMeasure { id: string; kind: string; window: { from: number | string; to: number | string }; transcripts: { sha256: string }[]; copied_from_doc?: number }
+export interface BaselineMeasureResult { id: string; window: { from: number; to: number }; transcripts: string[]; value: number | null; status: 'recomputed' | 'missing'; why?: string }
 export interface BaselineResult {
   baseline_sha256: string;
   script: { sha256: string; text: string };
@@ -42,9 +43,18 @@ function typed(text: string, seen: Set<string>): string[] {
     } catch { return []; }
   });
 }
+/** Whether a transcript is in the shape this counts, Claude Code's; another agent's would read as a measured zero. */
+const counted = (text: string): boolean => text.split('\n').some((line) => {
+  try {
+    const e = JSON.parse(line) as { type?: unknown; message?: unknown };
+    return (e.type === 'user' || e.type === 'assistant') && typeof e.message === 'object' && e.message !== null;
+  } catch { return false; }
+});
+const CLASSIFIERS: Record<string, (text: string) => boolean> = { is_it_done: isItDone, rework: isRework };
 function count(kind: string, whole: string[], window: { from: number; to: number }): number | null {
   // A window that catches nothing was named wrong or never archived: that's missing, never a measured zero. A transcript
   // with no times at all can only be counted whole.
+  if (!whole.every(counted)) return null;
   const lines = whole.flatMap((t) => t.split('\n').filter((l) => l.trim()));
   const times = lines.map(timeOf).filter((ms) => !Number.isNaN(ms));
   if (!lines.length || (times.length && !times.some((ms) => ms >= window.from && ms < window.to))) return null;
@@ -53,9 +63,10 @@ function count(kind: string, whole: string[], window: { from: number; to: number
     const t = countTexts(texts).totals;
     return t.input + t.output + t.cache_write + t.cache_read;
   }
-  if (kind === 'is_it_done') {
+  const classifier = CLASSIFIERS[kind];
+  if (classifier) {
     const seen = new Set<string>();
-    return texts.flatMap((t) => typed(t, seen)).filter(isItDone).length;
+    return texts.flatMap((t) => typed(t, seen)).filter(classifier).length;
   }
   return null;
 }
@@ -64,8 +75,13 @@ export function recomputeBaseline(input: { baseline_sha256: string; measures: Ba
   const measures = input.measures.map((m): BaselineMeasureResult => {
     const hashes = m.transcripts.map((t) => t.sha256);
     const bytes = hashes.map((h) => { const b = input.archive(h); return b && sha256(b) === h ? b : null; });
-    const value = !hashes.length || bytes.includes(null) ? null : count(m.kind, bytes.map((b) => Buffer.from(b!).toString('utf8')), m.window);
-    return { id: m.id, window: m.window, transcripts: hashes, value, status: value === null ? 'missing' : 'recomputed' };
+    const ms = (v: number | string): number => (typeof v === 'string' ? Date.parse(v) : v);
+    const window = { from: ms(m.window.from), to: ms(m.window.to) };
+    const lost = hashes.find((_, i) => bytes[i] === null);
+    const value = !hashes.length || lost !== undefined ? null : count(m.kind, bytes.map((b) => Buffer.from(b!).toString('utf8')), window);
+    if (value !== null) return { id: m.id, window, transcripts: hashes, value, status: 'recomputed' };
+    const why = !hashes.length ? 'it names no transcript' : lost !== undefined ? `transcript ${String(lost)} isn't in the archive with that hash` : `its kind ${m.kind} can't be counted, or a transcript isn't Claude Code's or has nothing in the window`;
+    return { id: m.id, window, transcripts: hashes, value, status: 'missing', why };
   });
   const output = measures.map((m) => JSON.stringify({ baseline: input.baseline_sha256, id: m.id, value: m.value ?? 'missing', window: m.window, transcripts: m.transcripts })).join('\n');
   // The script is the code that counted, read from where it ran.

@@ -4091,11 +4091,11 @@ export class Core {
   }
 
   /**
-   * The retention pass: keeps the files decisions and verdicts cite, the transcripts transcript.archived links and the
+   * The retention pass: keeps the files decisions, verdicts and recorded readings cite, the transcripts transcript.archived links and the
    * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
    */
   private async retain(): Promise<void> {
-    const rows = (await this.record.raw("SELECT evidence FROM events WHERE kind IN ('decision.created', 'decision.applied', 'verdict.made') AND evidence IS NOT NULL")) as { evidence: string }[];
+    const rows = (await this.record.raw("SELECT evidence FROM events WHERE kind IN ('decision.created', 'decision.applied', 'verdict.made', 'reading.recorded') AND evidence IS NOT NULL")) as { evidence: string }[];
     const cited = new Set<string>(this.options.plant === 'empty-cited' ? [] : rows.flatMap((r) => JSON.parse(r.evidence) as string[]));
     const linked = (await this.record.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
     const logs = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];

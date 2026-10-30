@@ -215,6 +215,25 @@ describe('the baseline', () => {
     expect(recomputeBaseline({ baseline_sha256: 'b', measures: [{ id: 'x', kind: 'tokens.total', window: { from: 0, to: 1 }, transcripts: [{ sha256: sha(summary) }] }], archive: () => Buffer.from(summary) }).measures[0], 'a line with no time doesn\'t rescue it').toMatchObject({ status: 'missing' });
     expect(read({ from: 0, to: Date.UTC(2027, 0) })).toMatchObject({ value: 6, status: 'recomputed' });
   });
+
+  const one = (kind: string, text: string, window: { from: number | string; to: number | string } = { from: 0, to: Date.UTC(2027, 0) }) => recomputeBaseline({ baseline_sha256: 'b', measures: [{ id: 'x', kind, window, transcripts: [{ sha256: sha(text) }] }], archive: () => Buffer.from(text) }).measures[0];
+  const said = JSON.stringify({ type: 'user', uuid: 'u', timestamp: '2026-09-01T00:00:00.000Z', message: { content: 'that\'s wrong, redo' } });
+
+  it('counts rework as it counts "is it done?"', () => {
+    expect(one('rework', said)).toMatchObject({ value: 1, status: 'recomputed' });
+    expect(one('is_it_done', said)).toMatchObject({ value: 0, status: 'recomputed' });
+  });
+
+  it('another agent\'s transcript is missing, saying why, never a measured zero', () => {
+    const rollout = JSON.stringify({ type: 'event_msg', timestamp: '2026-09-01T00:00:00.000Z', payload: { type: 'token_count' } });
+    const measure = one('tokens.total', rollout);
+    expect(measure).toMatchObject({ value: null, status: 'missing' });
+    expect(measure?.why).toMatch(/Claude Code/);
+  });
+
+  it('a window may be named in dates', () => {
+    expect(one('tokens.total', line, { from: '2026-08-31', to: '2026-09-02' })).toMatchObject({ value: 6, status: 'recomputed' });
+  });
 });
 
 describe('lifecycle numbers', () => {

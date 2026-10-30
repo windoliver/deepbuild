@@ -4,7 +4,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { CLASSIFIED, checkClassifier, decisionOneInputs, freshness, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
@@ -17,6 +17,8 @@ const KINDS = ['user.ask', 'agent.stop', 'stop.held', 'run.started', 'run.finish
 const CLASSIFIERS = { is_it_done: isItDone, rework: isRework };
 const quoted = KINDS.map((k) => `'${k}'`).join(', ');
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
+/** How a recorded baseline count's id says which classifier counted it. */
+const suffixOf = (kind: string | undefined): string => (kind === 'rework' ? `rework${CLASSIFIED}` : kind === 'is_it_done' ? `isitdone${CLASSIFIED}` : '');
 const SAMPLE = 120;
 /** A refresh is yours to wait for, and reads a call or two per pull request: longer than a receipt's forge budget. */
 const REFRESH_MS = 60_000;
@@ -97,7 +99,7 @@ export class Numbers {
     const checks = new Map(this.checks().map((c) => [c.id, c.check]));
     // A baseline's classified count comes from the same pattern as the live is_it_done.
     return readings.map((r) => {
-      const id = r.id.endsWith(CLASSIFIED) ? 'is_it_done' : r.id;
+      const id = r.id.endsWith(`rework${CLASSIFIED}`) ? 'rework' : r.id.endsWith(CLASSIFIED) ? 'is_it_done' : r.id;
       return checks.has(id) ? { ...r, classifier: checks.get(id) ?? null } : r;
     });
   }
@@ -121,7 +123,8 @@ export class Numbers {
     const bytes = new Map<string, Uint8Array | null>();
     for (const sha of new Set(manifest.measures.flatMap((m) => m.transcripts.map((t) => t.sha256)))) {
       if (!/^[0-9a-f]{64}$/.test(sha)) { bytes.set(sha, null); continue; }
-      const path = manifest.archive_dir ? join(manifest.archive_dir, sha) : undefined;
+      // Named from where the manifest sits: the hub's own folder means nothing to you.
+      const path = manifest.archive_dir ? join(resolve(dirname(manifestPath), manifest.archive_dir), sha) : undefined;
       bytes.set(sha, path && existsSync(path) ? readFileSync(path) : await this.o.evidence(sha));
     }
     const result = recomputeBaseline({ baseline_sha256: manifest.baseline_sha256, measures: manifest.measures, archive: (sha) => bytes.get(sha) ?? null });
@@ -129,7 +132,7 @@ export class Numbers {
     for (const m of result.measures) {
       if (m.value === null) continue;
       const ts = this.o.now();
-      await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence, data: { reading: `reading:baseline${manifest.baseline_sha256.slice(0, 8)}${letters(m.id)}${manifest.measures.find((x) => x.id === m.id)?.kind === 'is_it_done' ? CLASSIFIED : ''}`, value: m.value, unit: 'count', as_of: ts, source: `baseline:${manifest.baseline_sha256.slice(0, 8)}`, n: m.transcripts.length, outside: false } });
+      await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence, data: { reading: `reading:baseline${manifest.baseline_sha256.slice(0, 8)}${letters(m.id)}${suffixOf(manifest.measures.find((x) => x.id === m.id)?.kind)}`, value: m.value, unit: 'count', as_of: ts, source: `baseline:${manifest.baseline_sha256.slice(0, 8)}`, n: m.transcripts.length, outside: false } });
     }
     return { baseline_sha256: result.baseline_sha256, script: result.script.sha256, output: result.output.sha256, measures: result.measures };
   }
@@ -152,13 +155,15 @@ export class Numbers {
     return { repos: [...repos], unread };
   }
   /** Your sample to label: your own messages at random, both sides of a date, with no date or period to see, only an opaque id. */
-  async sample(before: number): Promise<{ before: number; label_in: string; messages: { message: string; text: string }[] }> {
+  async sample(before: number): Promise<{ before: number; label_in: string; warning?: string; messages: { message: string; text: string }[] }> {
     await this.catchUp();
     const typed = [...this.typed()];
     const shuffled = (list: typeof typed) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
     const half = SAMPLE / 2;
     const drawn = shuffled([...shuffled(typed.filter(([, e]) => e.ts < before)).slice(0, half), ...shuffled(typed.filter(([, e]) => e.ts >= before)).slice(0, half)]);
-    return { before, label_in: `${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, labels: [{ message, label }] }`, messages: drawn.map(([message, e]) => ({ message, text: String(e.data.text) })) };
+    // The record holds only what the hub saw: a period before it has no messages to label, and the check stays BLOCKED.
+    const oneSided = !typed.some(([, e]) => e.ts < before) || !typed.some(([, e]) => e.ts >= before);
+    return { before, ...(oneSided ? { warning: 'The record holds messages from only one side of that date, so these labels can\'t pass: a check needs both periods.' } : {}), label_in:`${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, labels: [{ message, label }] }`, messages: drawn.map(([message, e]) => ({ message, text: String(e.data.text) })) };
   }
 }
 /** `owner/name` of a worktree's origin on GitHub, or undefined. */
