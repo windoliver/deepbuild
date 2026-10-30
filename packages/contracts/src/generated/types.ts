@@ -3739,6 +3739,36 @@ export interface RunStarted {
   evidence?: Array<string>;
 }
 
+/** run.started@2 */
+export interface RunStartedV2 {
+  v: 2;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    commit: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+  };
+  evidence?: Array<string>;
+}
+
 /** sandbox.denied@1 */
 export interface SandboxDenied {
   v: 1;
@@ -4122,6 +4152,34 @@ export interface SpoolRefused {
     file: string;
     offset: number;
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** stop.held@1 */
+export interface StopHeld {
+  v: 1;
+  id: string;
+  kind: "stop.held";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    stop: string;
+    claim: string | null;
+    total: number;
+    question: number;
+    slow: number;
+    fast: number;
+    snapshot_start: number;
+    queue_wait: number;
+    code_changing: boolean;
+    budget_cost: Array<string>;
   };
   evidence?: Array<string>;
 }

@@ -19,6 +19,7 @@ export type CoreRequest =
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
   | { op: 'waiter-gone'; key: number }
+  | { op: 'hook-gone'; id: string; session: string }
   // A call still running past its expected time (#120): recorded as an overrun, with the line the chat shows of it.
   | { op: 'overrun'; session: string; agent: string; cwd: string; data: { call: string; kind: string; command: string | null; expected_ms: number; ran_ms: number; deadline: 'attached' | 'recorded' | 'none' } }
   // Words for an agent whose hooks take no context: they go with its next prompt (#120).
@@ -55,6 +56,7 @@ if (parentPort && workerData?.core) {
   port.on('message', (message: CoreMessage) => {
     if (message.op === 'hook') return void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
+    if (message.op === 'hook-gone') return core.hookGone(message.id, message.session);
     if (message.op === 'overrun') return void core.overrun(message).catch(() => undefined);
     if (message.op === 'later') return core.later(message.session, message.cwd, message.text);
     if (message.op === 'line') return void core.line(message.session, message.agent, message.text).catch(() => undefined);

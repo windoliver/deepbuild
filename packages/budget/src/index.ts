@@ -85,7 +85,11 @@ const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 
 const RESOLVER = 'ext:resolver-decisions';
 const SCOPES = new Set<string>(['issue', 'resource', 'project', 'work']);
 /** The asks that close an ask; the first to append decides, and no agent closes one. */
-const CLOSES = new Set(['ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot']);
+const CLOSE_KINDS = ['ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot'] as const;
+const CLOSES = new Set<string>(CLOSE_KINDS);
+/** The kinds `fold` reads: its switch is on this type, so a case for a kind left out of the list fails to compile. */
+const FOLDED = ['spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'run.finished', 'ask.created', 'decision.applied', ...CLOSE_KINDS] as const;
+type Folded = (typeof FOLDED)[number];
 const RUN = /^run:[0-9A-Za-z]+$/;
 const DECISION = /^decision:[0-9A-Za-z]+$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -415,23 +419,29 @@ class BudgetLedger implements Ledger {
     await this.sync();
   }
 
-  /** Reads what the log gained since the last call. */
+  /**
+   * Reads what the log gained since the last call, only the kinds `fold` reads, the rest never decoded. The cursor
+   * moves to the head read first, so a busy log's other events are scanned once.
+   */
   private async sync(): Promise<void> {
+    const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+    const head = Number(row?.head ?? 0);
     for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
+      const page = await this.options.record.read({ after: this.cursor, limit: PAGE, kinds: FOLDED });
       for (const e of page) {
         // A read in the raising request's turn can overlap another: each event is folded once.
         if (e.log_pos <= this.cursor) continue;
         this.fold(e);
         this.cursor = e.log_pos;
       }
-      if (page.length < PAGE) return;
+      if (page.length < PAGE) break;
     }
+    this.cursor = Math.max(this.cursor, head);
   }
 
   private fold(e: Event): void {
     const d = isObj(e.data) ? e.data : {};
-    switch (e.kind) {
+    switch (e.kind as Folded) {
       case 'spend.approved': {
         const scope = d.scope as { kind: ScopeKind; ref: string };
         this.budgets.set(e.id, {
