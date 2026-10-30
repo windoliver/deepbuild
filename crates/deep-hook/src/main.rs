@@ -346,7 +346,8 @@ fn pi_path(path: &str) -> String {
 }
 
 /// What Node's `fileURLToPath` makes of a `file://` URL's rest: the URL parser ends it at a `?` or `#`, drops tabs and
-/// newlines and what trails it, reads `\` as `/` and an empty or `localhost` host as none; then it is percent-decoded.
+/// newlines and what trails it and reads `\` as `/`; then it is percent-decoded. Any host is passed over: Node opens the
+/// path under one that decodes to `localhost` however it is spelled, and throws on the rest, so nothing else opens.
 fn file_url_path(url: &str) -> String {
     let clean: String = url
         .trim_end_matches(|c: char| c <= ' ')
@@ -355,10 +356,7 @@ fn file_url_path(url: &str) -> String {
         .map(|c| if c == '\\' { '/' } else { c })
         .collect();
     let path = clean.split(['?', '#']).next().unwrap_or("");
-    let path = match path.get(..9) {
-        Some(host) if host.eq_ignore_ascii_case("localhost") => &path[9..],
-        _ => path,
-    };
+    let path = path.find('/').map_or(path, |slash| &path[slash..]);
     let bytes = path.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -1676,6 +1674,8 @@ mod tests {
             ("@file:///h/t", "/h/t"),
             ("file://localhost/h/t", "/h/t"),
             ("file://LOCALHOST/h/t", "/h/t"),
+            ("file://%6Cocalhost/h/t", "/h/t"),
+            ("file://local\u{00AD}host/h/t", "/h/t"),
             ("file:///h/%2Ed/t%20u", "/h/.d/t u"),
             ("file:///h/t?x#y", "/h/t"),
             ("file:///h/t#y?x", "/h/t"),
