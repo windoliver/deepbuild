@@ -51,6 +51,17 @@ const workloads = {
     }
     if ((await asks.inbox()).length !== 10_000) throw Error('the inbox lists every ask');
   },
+  // One plan's preview drafted (#69): an authority ask raised with a 500-step plan whose last step can't be undone,
+  // until its card shows the whole plan.
+  async 'plan-preview'(record, asks) {
+    await start(record, 'S1');
+    const del = askSources().find((row) => row.source === 'effect.delete');
+    const steps = Array.from({ length: 499 }, (_, i) => ({ does: `Delete build/cache/part-${i}.bin`, changes: [`build/cache/part-${i}.bin`], undo: `Restore build/cache/part-${i}.bin from the staged copy`, public: false, cost: 0 }));
+    steps.push({ does: 'Empty the staged copies of build/cache', changes: ['the staged copies'], undo: null, public: false, cost: 0 });
+    const handle = await asks.raise(as('core', 'S1'), del.source, { ...structuredClone(del.fixture.ask), deadline: T0 + 86_400_000, key: sha256('plan-preview') }, { steps, diff: sha256('build/cache') });
+    const shown = (await asks.card(handle)).plan;
+    if (shown?.steps.length !== 500 || shown.steps[499].undo !== "can't undo") throw Error('the preview shows every step, the last marked can\'t undo');
+  },
 };
 
 const task = process.argv[2];

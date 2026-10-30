@@ -234,6 +234,9 @@ pub struct Planted {
     pub presents_hidden: bool,
     /// A hidden window presents nothing but still evaluates its sessions at its latches.
     pub evaluates_hidden: bool,
+    /// #401: a pop-out takes any serial in the writer's ring, however old and from whichever
+    /// of its panels.
+    pub accepts_any_ring_serial: bool,
 }
 
 /// What happened to a window: it opened or was dragged to a rect, or came to the top of the
@@ -284,11 +287,19 @@ pub struct Placement {
     events: Vec<(i64, String, Event)>,
     /// Your inputs: when, and the window the panel was in.
     inputs: Vec<(i64, String)>,
-    /// The input router's serials, each the panel it was delivered to.
-    serials: BTreeMap<u64, String>,
+    /// The input router's serials, each the panel it was delivered to and when.
+    serials: BTreeMap<u64, (String, i64)>,
     reports: Reports,
     next_id: u32,
     planted: Planted,
+}
+
+/// Input router: a token lives at most 30 s (`token: {serial, writer, kind, expires ≤ 30 s}`).
+const TOKEN_LIFE: i64 = 30 * FLICKS;
+
+/// Whether a gesture at `when` is still fresh at `now` (#401).
+fn fresh(when: i64, now: i64) -> bool {
+    when <= now && now - when < TOKEN_LIFE
 }
 
 /// A refusal's code.
@@ -534,14 +545,35 @@ impl Placement {
         (open, unseen)
     }
 
-    /// Your input to a panel at `at`, with the serial the router gave it: its window comes to
-    /// the top.
-    pub fn input(&mut self, at: i64, panel: &str, serial: u64) {
-        self.serials.insert(serial, panel.to_string());
+    /// Your input to a panel at `at`: its window comes to the top.
+    pub fn input(&mut self, at: i64, panel: &str) {
         if let Some(id) = self.window_of(panel).map(|w| w.id.clone()) {
             self.inputs.push((at, id.clone()));
             self.events.push((at, id, Event::Raised));
         }
+    }
+
+    /// A gesture of yours (a press, or a key the panel took) delivered to `panel` at `at`, with
+    /// its serial: what lets that panel's focus, pop-out, clipboard write, toast, placement or
+    /// send through while fresh (#401). A hover, a scroll or a key the shell took is no gesture.
+    pub fn gesture(&mut self, at: i64, panel: &str, serial: u64) {
+        self.serials.insert(serial, (panel.to_string(), at));
+    }
+
+    /// The newest of your gesture serials in `panel` fresh at `now` that `usable` keeps.
+    pub fn fresh_serial(&self, panel: &str, now: i64, usable: impl Fn(u64) -> bool) -> Option<u64> {
+        self.serials
+            .iter()
+            .rev()
+            .find(|(s, (p, when))| p == panel && fresh(*when, now) && usable(**s))
+            .map(|(s, _)| *s)
+    }
+
+    /// Whether `serial` is a gesture of yours in `panel` fresh at `now`.
+    pub fn serial_fresh_in(&self, serial: u64, panel: &str, now: i64) -> bool {
+        self.serials
+            .get(&serial)
+            .is_some_and(|(p, when)| p == panel && fresh(*when, now))
     }
 
     /// `pop_out`: your pop-out of `panel`'s view, `size` points, onto `display`, pressed with
@@ -558,9 +590,27 @@ impl Placement {
         let Some(serial) = serial else {
             return refused("no_serial");
         };
-        if self.serials.get(&serial).map(String::as_str) != Some(panel) {
-            return refused("serial_not_in_panel");
+        match self.serials.get(&serial) {
+            Some(_) if self.planted.accepts_any_ring_serial => {}
+            Some((p, _)) if p != panel => return refused("serial_not_in_panel"),
+            // #401: a serial lets a pop-out through only while fresh (`expires ≤ 30 s`).
+            Some((_, when)) if !fresh(*when, at) => return refused("serial_expired"),
+            Some(_) => {}
+            None => return refused("serial_not_in_panel"),
         }
+        self.open_view(at, panel, display, full_screen, size)
+    }
+
+    /// Opens `panel`'s view in a window of its own on `display`: the step of a pop-out after
+    /// its serial is checked.
+    pub fn open_view(
+        &mut self,
+        at: i64,
+        panel: &str,
+        display: &str,
+        full_screen: bool,
+        size: [f64; 2],
+    ) -> Value {
         let Some(d) = self.display(display).cloned() else {
             return refused("unknown_display");
         };
@@ -790,5 +840,42 @@ impl CardState {
             "state": self.states.last().map_or("hidden", |(s, _)| *s),
             "states": self.states.iter().map(|(s, at)| json!({"state": s, "at": at})).collect::<Vec<_>>(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A gesture serial is fresh under 30 s, only in the panel it went to, and a hover's serial
+    /// (an input but no gesture) lets nothing through (#401).
+    #[test]
+    fn a_gesture_serial_is_fresh_under_thirty_seconds_in_its_own_panel() {
+        let mut p = Placement::open(Vec::new(), None, None, Planted::default());
+        p.input(5 * FLICKS, "p");
+        p.input(10 * FLICKS, "p");
+        p.gesture(10 * FLICKS, "p", 7);
+        let any = |_| true;
+        assert_eq!(p.fresh_serial("p", 39 * FLICKS, any), Some(7), "29 s old");
+        assert_eq!(p.fresh_serial("p", 40 * FLICKS, any), None, "30 s old");
+        assert_eq!(p.fresh_serial("q", 11 * FLICKS, any), None, "another panel");
+        assert_eq!(
+            p.fresh_serial("p", 9 * FLICKS, any),
+            None,
+            "before the press"
+        );
+        p.input(12 * FLICKS, "p");
+        p.gesture(12 * FLICKS, "p", 8);
+        assert_eq!(
+            p.fresh_serial("p", 13 * FLICKS, |s| s != 8),
+            Some(7),
+            "two clicks, two sends"
+        );
+        assert!(
+            !p.serial_fresh_in(6, "p", 6 * FLICKS),
+            "a hover is no gesture"
+        );
+        assert!(p.serial_fresh_in(7, "p", 39 * FLICKS));
+        assert!(!p.serial_fresh_in(7, "p", 41 * FLICKS));
     }
 }

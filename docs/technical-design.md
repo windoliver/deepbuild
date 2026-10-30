@@ -2392,7 +2392,7 @@ Every number says whether it is measured, with its date, machine and method, a t
 
 | Budget | Target | Why |
 |---|---|---|
-| Hook overhead | Under 10 ms at p95 on top of process start, except holds | Hooks run on every tool call. Process start is an estimate until week 1 measures it again on the reference Mac: on the pilot's Mac on October 5, the median of 25 starts was 19 ms for Bun, 27 ms for a native binary, 52 ms for Node and 75 ms for Python, by a method nobody recorded. |
+| Hook overhead | Under 10 ms at p95 on top of process start, except holds | Hooks run on every tool call. Process start was measured on the reference Mac (Mac15,12, M3) on 2026-10-29 with hyperfine 1.19, no shell and 20 warm-up runs before 200 timed runs, and recorded with the method, the versions and the date in [spikes/21/record.json](spikes/21/record.json) (`node docs/spikes/21/measure.mjs`): the median start was 0.5 ms for a native binary (`/usr/bin/true`; 0.7 ms for a Rust `fn main() {}`), 8 ms for Bun 1.3.10, 19 ms for Node 24.22 and 90 ms for Python 3.13 (a conda install), each a no-op. |
 | Fail-open time | Under 50 ms from the hook's start to decide the hub isn't there or hasn't acknowledged the request | A stopped or stuck hub must never slow an agent down noticeably |
 | Event intake | 5,000 events a second, in batched WAL writes | Catching up on a backlog of transcripts |
 | The app | Inbox loaded in under 1 second, with 30 days of history | You open it to decide, not to wait |

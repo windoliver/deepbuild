@@ -55,7 +55,7 @@ describe('a saved approval of an MCP tool', () => {
     const [first] = (await record.raw("SELECT id, question FROM asks WHERE kind = 'authority'")) as { id: string; question: string }[];
     expect(first?.question, "the update's ask names the tool and shows its hints as the server's own claims").toMatch(/delete_repo.*The server says, as its own claims: delete_repo: \{"readOnlyHint":true\}/);
     expect(await call('s2'), 'held until you answer').toContain(`ask:${first!.id}`);
-    await asks.answer(as('cli'), `ask:${first!.id}`, { option: 'approve', token: 'click' });
+    await asks.answer(as('cli'), `ask:${first!.id}`, { option: 'approve', plan_hash: (await asks.card(`ask:${first!.id}`)).plan!.hash, token: 'click' });
     expect(await call('s2'), 'your yes covers the tool at the schema you approved').toBeUndefined();
 
     update([tool('list_issues', BY_NAME, { readOnlyHint: true }), tool('delete_repo', BY_ID, { readOnlyHint: true })], '1.2.0');

@@ -1,0 +1,230 @@
+Base commit: 5a6d09a4 (origin/main, no implementation of #21's additions)
+Command: npm ci; npm run build --workspaces; cargo build --locked -q -p deep-hook; cargo build --locked -q --release -p deep-hook; then NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/21 --no-file-parallelism --reporter=verbose   (node v24.22.0, the repo's .node-version; cargo, rustc, hyperfine and bun on PATH; DEEP_HARNESS_LIVE not set)
+Date: 2026-10-29  Node v24.22.0  vitest 5.0.5  darwin-arm64 (Mac15,12, Apple M3, 16 GiB, on battery power, load averages 150-560 from other work on the machine: the timing gates were closed, so the gated tests were INCONCLUSIVE)
+Exit code: 1
+Result: 4 files, 14 tests, 9 failed, 3 passed, 2 skipped. Duration 687 s.
+
+Why each test fails, by criterion:
+- AC1 (live, sessions.live.test.ts): BLOCKED: no DEEP_HARNESS_LIVE=1 (the job doesn't spend the plan). Run by hand, it would also stop at the base's harness, which has no `bash-calls` scenario (README, Defined here, 6).
+- AC2 (live): the same.
+- AC2 (replay.test.ts, the replayed day): 18 problems. 16 hooks across all five windows (hub up, stopped and SIGSTOPped alike) took 51-150 ms over the native no-op floor's 3.78 ms median from spawn to exit, and one hub-up PreToolUse had no event in the record. The hooks' own readings (exit less the record's seq) and the day's p95s were within budget (overhead p95 about 4-10 ms, fail-open p95 about 26-38 ms across the runs); the outliers fall in every window, including hub-up ones, which points to the machine's load (150-560) rather than to the base's fail-open. This test is expected to pass at the base on a machine at rest; it is not gated on the machine because the 50 ms is the client's own deadline (as #315's AC1 read it).
+- AC3 (budgets.test.ts, perf tasks): benchmarks/budgets.json has no task whose initialReason names #21.
+- AC3 (benches print both numbers): there are no #21 tasks to run.
+- AC3 (recorded numbers): docs/spikes/21/record.json doesn't exist.
+- AC4 (process-start.test.ts, the measurement): docs/spikes/21/measure.mjs doesn't exist.
+- AC4 (the recorded reading): docs/spikes/21/record.json doesn't exist.
+- AC4 (the design row): the Hook overhead row's reason doesn't cite spikes/21/record.json; it still rests on the unrecorded estimate.
+
+Skipped (INCONCLUSIVE, not on mains power): AC1 over five replayed days, and AC3 over five replayed days judged at 10 ms and 50 ms. Budgets count only on a reference Mac on mains power, Low Power Mode off, thermal state nominal.
+
+The three tests that pass at the base are the wrong programs, each failing the check it is aimed at:
+- AC1 (wrong program): with DH21_TIMER_LINGER_MS=15 on the hub-up hooks, the day fails "p95 hook time ... not under 10 ms".
+- AC2 (wrong program, DEEP_HUB_PLANT=replay-appends-twice, merged with #666): the day fails naming a call whose event is in the record 2 times.
+- AC2 (wrong program): with DH21_TIMER_LINGER_MS=60 on the windows' hooks, the day fails naming a window hook more than 50 ms over the floor.
+
+Checked beside this run (not at the base): the tests type-check with no errors (node node_modules/typescript/bin/tsc -p tests/acceptance/21/tsconfig.json). The hook timer was checked to exec deep-hook in place (same PID, the agent as its parent), so the hub's session binding by parent PID is undisturbed. The live tests were not run.
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/21
+
+ ↓ replay.test.ts > AC1 #21.cd6952ad p95 overhead under 10 ms on top of process start > AC1 #21.cd6952ad over a replayed day of 1,000 recorded Claude Code tool calls, the hooks run with the hub up take under 10 ms at p95 over process start, in each of five days 291ms [INCONCLUSIVE (a reading only): not on mains power: Now drawing from 'Battery Power']
+stdout | replay.test.ts > AC1 #21.cd6952ad p95 overhead under 10 ms on top of process start > AC1 #21.cd6952ad (wrong program) a hook that takes 15 ms longer with the hub up fails the same check
+recorded tool calls: 50; held by the hub, left out: none
+
+stdout | replay.test.ts > AC1 #21.cd6952ad p95 overhead under 10 ms on top of process start > AC1 #21.cd6952ad (wrong program) a hook that takes 15 ms longer with the hub up fails the same check
+replayed day (hooks in up windows 15 ms longer): 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 34.14 ms over own start, 32.91 ms over the floor; fail-open p95 27.75 ms over own start, 31.57 ms over the floor; process start (spawn to seq) median 4.19 ms; floor median 4.13 ms, p95 14.07 ms
+
+ ✓ replay.test.ts > AC1 #21.cd6952ad p95 overhead under 10 ms on top of process start > AC1 #21.cd6952ad (wrong program) a hook that takes 15 ms longer with the hub up fails the same check 174341ms
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes
+replayed day: 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 8.92 ms over own start, 8.21 ms over the floor; fail-open p95 28.46 ms over own start, 33.58 ms over the floor; process start (spawn to seq) median 3.89 ms; floor median 3.78 ms, p95 8.31 ms
+
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes
+replayed day: 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 10.63 ms over own start, 7.09 ms over the floor; fail-open p95 31.97 ms over own start, 38.15 ms over the floor; process start (spawn to seq) median 3.93 ms; floor median 3.79 ms, p95 11.21 ms
+
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes
+replayed day: 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 9.24 ms over own start, 8.51 ms over the floor; fail-open p95 28.13 ms over own start, 31.73 ms over the floor; process start (spawn to seq) median 3.56 ms; floor median 3.50 ms, p95 9.47 ms
+
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes
+replayed day: 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 3.97 ms over own start, 3.18 ms over the floor; fail-open p95 25.68 ms over own start, 25.90 ms over the floor; process start (spawn to seq) median 2.08 ms; floor median 1.86 ms, p95 4.55 ms
+
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes
+replayed day: 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 3.98 ms over own start, 3.30 ms over the floor; fail-open p95 26.76 ms over own start, 28.56 ms over the floor; process start (spawn to seq) median 2.10 ms; floor median 1.93 ms, p95 5.78 ms
+
+ × replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes 284863ms
+   → expected [ '18 problems', …(18) ] to deeply equal []
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 (wrong program) a hub that appends a replayed event twice (DEEP_HUB_PLANT=replay-appends-twice) fails the same check, naming the call
+replayed day (DEEP_HUB_PLANT=replay-appends-twice): 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 8.59 ms over own start, 9.05 ms over the floor; fail-open p95 29.08 ms over own start, 42.05 ms over the floor; process start (spawn to seq) median 3.85 ms; floor median 3.66 ms, p95 16.50 ms
+
+ ✓ replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 (wrong program) a hub that appends a replayed event twice (DEEP_HUB_PLANT=replay-appends-twice) fails the same check, naming the call 73018ms
+stdout | replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 (wrong program) a hook that takes 60 ms longer while the hub is away fails the same check, naming the call
+replayed day (hooks in stopped, sigstopped windows 60 ms longer): 1000 calls (up 300, stopped 200, up 200, sigstopped 200, up 100), 2000 hooks; overhead p95 10.11 ms over own start, 7.50 ms over the floor; fail-open p95 101.92 ms over own start, 110.02 ms over the floor; process start (spawn to seq) median 3.80 ms; floor median 3.80 ms, p95 16.00 ms
+
+ ✓ replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 (wrong program) a hook that takes 60 ms longer while the hub is away fails the same check, naming the call 147765ms
+ ↓ replay.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd on the reference Mac, five replayed days of 1,000 recorded tool calls each keep hook overhead under 10 ms at p95 and fail-open under 50 ms at p95 191ms [INCONCLUSIVE (a reading only): not on mains power: Now drawing from 'Battery Power']
+ × budgets.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd the perf lane has #21's tasks, each a bench under benchmarks/ with a first measurement naming #21, valid against the merge base's budgets 345ms
+   → benchmarks/budgets.json has at least one task whose initialReason names #21: expected [] to not deeply equal []
+ × budgets.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd #21's benches run, each over 1,000 or more tool calls, and between them print both numbers: the hook overhead at p95 and the fail-open time 1ms
+   → benchmarks/budgets.json has #21's tasks: expected 0 to be greater than 0
+ × budgets.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd both numbers are recorded: docs/spikes/21/record.json holds five runs of each from a reference Mac, with the date, the machine, the method and the commands of #21's perf tasks, all within the budgets 2ms
+   → <checkout>/docs/spikes/21/record.json exists: expected false to be true // Object.is equality
+ × sessions.live.test.ts > AC1 #21.cd6952ad p95 overhead under 10 ms on top of process start > AC1 #21.cd6952ad (live) over a day of real Claude Code sessions, the hooks Claude Code ran with the hub up take under 10 ms at p95 over process start 12ms
+   → BLOCKED: these tests start real Claude Code sessions on your plan (about 1,050 Bash calls); run them by hand with DEEP_HARNESS_LIVE=1
+ × sessions.live.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 (live) over 1,000 or more real Claude Code tool calls, 200 or more with the hub stopped and 200 or more with it SIGSTOPped, no hook takes more than 50 ms over process start, and the windows' events are in the record once after the hub resumes 0ms
+   → BLOCKED: these tests start real Claude Code sessions on your plan (about 1,050 Bash calls); run them by hand with DEEP_HARNESS_LIVE=1
+ × process-start.test.ts > AC4 #21.f7ca87ba Process start for a native no-op binary, Node, Bun and Python, each a no-op, is measured on the reference Mac with hyperfine, warm-up runs first and no shell, and recorded as readings with the method, the versions and the date; the Hook overhead row's reason cites that recorded run > AC4 #21.f7ca87ba node docs/spikes/21/measure.mjs runs hyperfine with -N and warm-up runs over a native no-op, Node, Bun and Python, each a no-op, and prints the readings with the method, the versions and the date 90ms
+   → the measurement <checkout>/docs/spikes/21/measure.mjs exists: expected false to be true // Object.is equality
+ × process-start.test.ts > AC4 #21.f7ca87ba Process start for a native no-op binary, Node, Bun and Python, each a no-op, is measured on the reference Mac with hyperfine, warm-up runs first and no shell, and recorded as readings with the method, the versions and the date; the Hook overhead row's reason cites that recorded run > AC4 #21.f7ca87ba docs/spikes/21/record.json's processStart is that measurement's run on a reference Mac, with the method, the versions and the date 94ms
+   → <checkout>/docs/spikes/21/record.json exists: expected false to be true // Object.is equality
+ × process-start.test.ts > AC4 #21.f7ca87ba Process start for a native no-op binary, Node, Bun and Python, each a no-op, is measured on the reference Mac with hyperfine, warm-up runs first and no shell, and recorded as readings with the method, the versions and the date; the Hook overhead row's reason cites that recorded run > AC4 #21.f7ca87ba the design's Hook overhead row keeps its target and its reason cites the recorded run, docs/spikes/21/record.json and its date, in place of the unrecorded estimate 20ms
+   → the reason cites the recorded run by its file: expected 'Hooks run on every tool call. Process…' to contain 'spikes/21/record.json'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd the perf lane has #21's tasks, each a bench under benchmarks/ with a first measurement naming #21, valid against the merge base's budgets
+AssertionError: benchmarks/budgets.json has at least one task whose initialReason names #21: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ budgets.test.ts:32:119
+     30|     validateBudgets(current, baseBudgets());
+     31|     const tasks = ours(current.tasks);
+     32|     expect(tasks.map((t) => t.id), 'benchmarks/budgets.json has at lea…
+       |                                                                                                                       ^
+     33|     const base = new Set(baseBudgets().tasks.map((t) => t.id));
+     34|     for (const t of tasks) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  budgets.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd #21's benches run, each over 1,000 or more tool calls, and between them print both numbers: the hook overhead at p95 and the fail-open time
+AssertionError: benchmarks/budgets.json has #21's tasks: expected 0 to be greater than 0
+ ❯ budgets.test.ts:43:70
+     41|   it(`${AC3} #21's benches run, each over 1,000 or more tool calls, an…
+     42|     const tasks = ours(budgets().tasks);
+     43|     expect(tasks.length, 'benchmarks/budgets.json has #21\'s tasks').t…
+       |                                                                      ^
+     44|     const lines: Line[] = [];
+     45|     for (const t of tasks) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  budgets.test.ts > AC3 #21.474533cd Budgets, on the reference Mac in the local preflight, compared with the merge base: over 1,000 real tool calls, hook overhead stays under 10 ms at p95 and fail-open under 50 ms, and both numbers are recorded > AC3 #21.474533cd both numbers are recorded: docs/spikes/21/record.json holds five runs of each from a reference Mac, with the date, the machine, the method and the commands of #21's perf tasks, all within the budgets
+AssertionError: <checkout>/docs/spikes/21/record.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budgets.test.ts:58:52
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  process-start.test.ts > AC4 #21.f7ca87ba Process start for a native no-op binary, Node, Bun and Python, each a no-op, is measured on the reference Mac with hyperfine, warm-up runs first and no shell, and recorded as readings with the method, the versions and the date; the Hook overhead row's reason cites that recorded run > AC4 #21.f7ca87ba node docs/spikes/21/measure.mjs runs hyperfine with -N and warm-up runs over a native no-op, Node, Bun and Python, each a no-op, and prints the readings with the method, the versions and the date
+AssertionError: the measurement <checkout>/docs/spikes/21/measure.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ process-start.test.ts:151:68
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  process-start.test.ts > AC4 #21.f7ca87ba Process start for a native no-op binary, Node, Bun and Python, each a no-op, is measured on the reference Mac with hyperfine, warm-up runs first and no shell, and recorded as readings with the method, the versions and the date; the Hook overhead row's reason cites that recorded run > AC4 #21.f7ca87ba docs/spikes/21/record.json's processStart is that measurement's run on a reference Mac, with the method, the versions and the date
+AssertionError: <checkout>/docs/spikes/21/record.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ process-start.test.ts:177:52
+    175|
+    176|   it(`${AC4} docs/spikes/21/record.json's processStart is that measure…
+    177|     expect(existsSync(RECORD), `${RECORD} exists`).toBe(true);
+       |                                                    ^
+    178|     const p = (JSON.parse(readFileSync(RECORD, 'utf8')) as Line).proce…
+    179|     expect(readingProblems(p, null)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  process-start.test.ts > AC4 #21.f7ca87ba Process start for a native no-op binary, Node, Bun and Python, each a no-op, is measured on the reference Mac with hyperfine, warm-up runs first and no shell, and recorded as readings with the method, the versions and the date; the Hook overhead row's reason cites that recorded run > AC4 #21.f7ca87ba the design's Hook overhead row keeps its target and its reason cites the recorded run, docs/spikes/21/record.json and its date, in place of the unrecorded estimate
+AssertionError: the reason cites the recorded run by its file: expected 'Hooks run on every tool call. Process…' to contain 'spikes/21/record.json'
+
+Expected: "spikes/21/record.json"
+Received: "Hooks run on every tool call. Process start is an estimate until week 1 measures it again on the reference Mac: on the pilot's Mac on October 5, the median of 25 starts was 19 ms for Bun, 27 ms for a native binary, 52 ms for Node and 75 ms for Python, by a method nobody recorded.|"
+
+ ❯ process-start.test.ts:189:66
+    187|     expect(cells[2], 'the target is unchanged: a change never moves it…
+    188|     const why = cells.slice(3).join('|');
+    189|     expect(why, 'the reason cites the recorded run by its file').toCon…
+       |                                                                  ^
+    190|     expect(existsSync(RECORD), `${RECORD} exists`).toBe(true);
+    191|     const date = String(((JSON.parse(readFileSync(RECORD, 'utf8')) as …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  replay.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes
+AssertionError: expected [ '18 problems', …(18) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "18 problems",
++   "the PostToolUse hook of toolu_dh21ac442fc2346c8c2ded60 (window 1, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 55.65 ms from spawn to exit, 51.87 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh21a9821cca7da0062265a5 (window 2, hub stopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 137.12 ms from spawn to exit, 133.33 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh2154158d61c77d8a576b37 (window 2, hub stopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 63.15 ms from spawn to exit, 59.37 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh2154158d61c77d8a576b37 (window 2, hub stopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 105.65 ms from spawn to exit, 101.86 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh2138f01111a90d6124bc2a (window 2, hub stopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 153.87 ms from spawn to exit, 150.08 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh21fa204fd6e185998e20b9 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 69.82 ms from spawn to exit, 66.03 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh21834710eb06a67a07e0e2 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 55.24 ms from spawn to exit, 51.46 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh21a508e53d107a34005c17 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 82.96 ms from spawn to exit, 79.17 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh218120658501f77307a4a7 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 57.75 ms from spawn to exit, 53.96 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh2176f7d2d28f946c1a8b86 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) has no event in the record",
++   "the PreToolUse hook of toolu_dh2176f7d2d28f946c1a8b86 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 124.92 ms from spawn to exit, 121.14 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh210a740727164647c961d1 (window 3, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 57.57 ms from spawn to exit, 53.78 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh213e15ea2d92a159ff62ed (window 4, hub sigstopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 56.99 ms from spawn to exit, 53.21 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh21b2b363ee3b046b9281f8 (window 4, hub sigstopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 68.88 ms from spawn to exit, 65.10 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh210384c19601ee47992167 (window 4, hub sigstopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 73.52 ms from spawn to exit, 69.73 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PostToolUse hook of toolu_dh21089316de0e2542a17ede (window 4, hub sigstopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 80.42 ms from spawn to exit, 76.64 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh210bc791cab5abaadeb51c (window 4, hub sigstopped, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 63.98 ms from spawn to exit, 60.19 ms over the native no-op's 3.78 ms, more than 50 ms",
++   "the PreToolUse hook of toolu_dh211d5cc314609670c1d4f4 (window 5, hub up, session e28e96d7-382a-4202-a049-f33b3e40f2c8) took 70.71 ms from spawn to exit, 66.92 ms over the native no-op's 3.78 ms, more than 50 ms",
++ ]
+
+ ❯ replay.test.ts:155:42
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  sessions.live.test.ts > AC1 #21.cd6952ad p95 overhead under 10 ms on top of process start > AC1 #21.cd6952ad (live) over a day of real Claude Code sessions, the hooks Claude Code ran with the hub up take under 10 ms at p95 over process start
+ FAIL  sessions.live.test.ts > AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes > AC2 #21.9a5768d4 (live) over 1,000 or more real Claude Code tool calls, 200 or more with the hub stopped and 200 or more with it SIGSTOPped, no hook takes more than 50 ms over process start, and the windows' events are in the record once after the hub resumes
+Error: BLOCKED: these tests start real Claude Code sessions on your plan (about 1,050 Bash calls); run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive sessions.live.test.ts:30:52
+     28|
+     29| function requireLive(): string {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31|   const which = spawnSync('/bin/sh', ['-c', 'command -v claude'], { en…
+     32|   const claude = which.stdout.trim();
+ ❯ sessions.live.test.ts:70:18
+ ❯ helpers.ts:318:27
+ ❯ sessions.live.test.ts:114:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  9 failed | 3 passed | 2 skipped (14)
+   Start at  00:01:57
+   Duration  687.18s (tests 100%)
+
+EXIT 1
