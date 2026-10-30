@@ -173,7 +173,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (!fields.prompt && str(payload.text)) fields.prompt = str(payload.text);
   if (Object.keys(fields).length) meta.fields = fields;
-  if (str(payload.parent)) meta.parent = str(payload.parent);
+  if (name === 'pi' && str(payload.parent)) meta.parent = str(payload.parent);
   const tool = str(payload.tool_name);
   if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;

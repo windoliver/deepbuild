@@ -1,7 +1,8 @@
 // DeepBuild's pi package, in-process: pi's session and tool events go to the hub as hook requests, in order and off
 // pi's path; the deep_* tools are native tools over the hub's socket; and an answer the hub hands over reaches the
-// session through pi.sendUserMessage. It never decides anything: a block is the hub's, and nothing it reports is
-// evidence but the events pi itself fired.
+// session through pi.sendUserMessage. It never decides anything, and nothing it reports is evidence but the events pi
+// itself fired. Rules don't reach a pi session yet: deep-hook is the one matcher and it doesn't run here, so `matched`
+// is empty and no guard blocks a pi call.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -138,6 +139,11 @@ class Tools {
       this.sock!.write(line({ id, method, params }));
     });
   }
+  /** Says hello again on the next call: the hub binds a connection to its session once, at hello. */
+  rebind(): void {
+    this.sock?.destroy();
+    this.sock = undefined;
+  }
   close(): void {
     this.closed = true;
     this.sock?.destroy();
@@ -180,22 +186,44 @@ export default function deepbuild(pi: Pi): void {
     void hook('input', { ...payload, ...fields });
   };
 
-  const report = (asks: string[], via: string, outcome: string): void => { void client?.call('session.delivered', { session, asks, via, outcome }); };
+  /** What became of answers, until the hub has it: a lost report would leave them open for good. */
+  async function report(asks: string[], via: string, outcome: string): Promise<void> {
+    const mine = client;
+    for (let tries = 0; tries < 5 && mine && !mine.closed; tries++) {
+      if (!(await mine.call('session.delivered', { session, asks, via, outcome })).error) return;
+      await new Promise((done) => setTimeout(done, 1000).unref());
+    }
+  }
+  /** Sent and not yet seen: pi's own message_start says one reached the session. */
+  const sent: { asks: string[]; text: string; via: string; how: 'steer' | 'followUp' | undefined }[] = [];
+  const reached = (entry: (typeof sent)[number]): void => {
+    const at = sent.indexOf(entry);
+    if (at < 0) return;
+    sent.splice(at, 1);
+    void report(entry.asks, entry.via, 'delivered');
+  };
   /**
    * An answer sent now: a new turn when the session is idle, steered in after the running tool calls when it is busy,
    * or queued at the pre-settle boundary, the one place a run may continue.
    */
   function send(answer: { asks: string[]; text: string }, how?: 'steer' | 'followUp'): void {
-    if (answer.asks.every((ask) => delivered.has(ask))) return;
+    // Handed again by a hub that lost the report, which it reads once.
+    if (answer.asks.every((ask) => delivered.has(ask))) {
+      if (!sent.some((entry) => entry.asks.some((ask) => answer.asks.includes(ask)))) void report(answer.asks, how === 'steer' ? 'steer' : 'next_prompt', 'delivered');
+      return;
+    }
     for (const ask of answer.asks) delivered.add(ask);
     if (how) pi.sendUserMessage(answer.text, { deliverAs: how });
     else pi.sendUserMessage(answer.text);
     const via = how === 'steer' ? 'steer' : 'next_prompt';
     if (plant === 'waits-for-agent-start') {
-      afterStart.push(() => report(answer.asks, via, 'delivered'));
+      afterStart.push(() => void report(answer.asks, via, 'delivered'));
       return;
     }
-    report(answer.asks, via, 'delivered');
+    const entry = { ...answer, via, how };
+    sent.push(entry);
+    // A prompt an extension took starts no run and fires no message: an idle session a moment on is its one outcome.
+    if (!how) setTimeout(() => { if (ctx?.isIdle() === true && running === 0) reached(entry); }, HANDLED_MS);
   }
   const afterStart: (() => void)[] = [];
   /**
@@ -218,7 +246,12 @@ export default function deepbuild(pi: Pi): void {
         held.push({ asks: result.asks, text: result.text });
         place(toolCalls > 0);
       } else if (result?.exit === 'session ended') return;
-      else await new Promise((done) => setTimeout(done, reply.error ? 1000 : 50).unref());
+      else if ((reply.error as { code?: string } | undefined)?.code === 'role' && ctx?.sessionManager.getSessionFile()) {
+        // A restarted hub knows this session from its next hook, and an idle session sends none: say it's here.
+        await hook('session_start', { source: 'resume' });
+        mine.rebind();
+        await new Promise((done) => setTimeout(done, 1000).unref());
+      } else await new Promise((done) => setTimeout(done, reply.error ? 1000 : 50).unref());
     }
   }
   let toolCalls = 0;
@@ -236,6 +269,12 @@ export default function deepbuild(pi: Pi): void {
         try {
           const reply = await Promise.race([client.call('mcp.call', { tool: tool.name, arguments: params }), gone]);
           if ('error' in reply) throw Error(JSON.stringify(reply.error));
+          // The call that returns an answer is what delivers it: only now has the session got it.
+          const got = reply.result as { ask?: string; status?: string } | undefined;
+          if (got?.status === 'answered' && got.ask && !delivered.has(got.ask.slice(4))) {
+            delivered.add(got.ask.slice(4));
+            void report([got.ask.slice(4)], 'steer', 'delivered');
+          }
           return { content: [{ type: 'text', text: JSON.stringify(reply.result) }], details: reply.result };
         } finally {
           signal?.removeEventListener('abort', stop);
@@ -263,7 +302,8 @@ export default function deepbuild(pi: Pi): void {
     flushInput();
     const reason = String(event.reason);
     // What this runtime still held never reaches the session that follows.
-    if (reason !== 'reload' && reason !== 'quit' && held.length) report(held.splice(0).flatMap((answer) => answer.asks), 'next_prompt', 'replaced');
+    held.push(...sent.splice(0));
+    if (reason !== 'reload' && reason !== 'quit' && held.length) void report(held.splice(0).flatMap((answer) => answer.asks), 'next_prompt', 'replaced');
     const mine = client;
     client = undefined;
     // A reload is the same session in a new runtime; only a session that goes ends.
@@ -279,6 +319,13 @@ export default function deepbuild(pi: Pi): void {
     return undefined;
   });
   on('before_agent_start', () => { flushInput(); return undefined; });
+  on('message_start', (event) => {
+    const message = event.message as { role?: string; content?: unknown } | undefined;
+    if (message?.role !== 'user') return undefined;
+    const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '');
+    for (const entry of [...sent]) if (text.includes(JSON.stringify(entry.text).slice(1, -1))) reached(entry);
+    return undefined;
+  });
   on('agent_start', () => {
     flushInput();
     running++;
@@ -357,6 +404,17 @@ export default function deepbuild(pi: Pi): void {
     stopSent = true;
     void hook('agent_settled', {});
     running = 0;
-    place(false);
+    // What pi cleared unread, as an abort clears its queue, goes again as a turn of its own.
+    for (const entry of sent.splice(0)) {
+      if (!entry.how) { sent.push(entry); reached(entry); continue; }
+      for (const ask of entry.asks) delivered.delete(ask);
+      held.push({ asks: entry.asks, text: entry.text });
+    }
+    // pi goes idle only after its handlers for this event return, and no later event says so.
+    const settle = (tries: number): void => {
+      place(false);
+      if (held.length && running === 0 && tries > 0) setTimeout(() => settle(tries - 1), 20).unref();
+    };
+    settle(100);
   });
 }

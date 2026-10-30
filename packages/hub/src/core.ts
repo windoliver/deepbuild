@@ -1582,6 +1582,7 @@ export class Core {
       const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] };
       const old = this.routes.get(meta.session);
       if (old?.waiter) fresh.waiter = old.waiter;
+      if (old?.places) fresh.places = true;
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
     }
@@ -2145,7 +2146,7 @@ export class Core {
     if (this.options.plant === 'waiter-gives-up-at-600s' && this.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
     if (params.push === true) {
-      if (context.session !== session) throw refuse('role', '/params/session', 'Wait only on the session this connection is bound to.', session);
+      if (context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Wait only on the pi session this connection is bound to.', session);
       r.places = true;
     }
     if (params.poll === true) {
@@ -2171,7 +2172,9 @@ export class Core {
   private async replacedBy(session: string): Promise<string | undefined> {
     const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'session.start' AND json_extract(data, '$.parent') = '${sql(session)}'
       AND log_pos > (SELECT COALESCE(MAX(log_pos), 0) FROM events WHERE kind = 'session.start' AND session_id = '${sql(session)}') ORDER BY log_pos DESC LIMIT 1`)) as { session_id: string }[];
-    return row?.session_id;
+    // Replaced in its own process: a start naming it as parent from anywhere else replaces nothing.
+    const [was, now] = [this.sessions.get(session), row && this.sessions.get(row.session_id)];
+    return was && now && was.pid === now.pid && was.start === now.start ? row!.session_id : undefined;
   }
   /**
    * An answer of a session whose package places them (#40): refused when another session has replaced it, so it never
@@ -2183,7 +2186,8 @@ export class Core {
     const successor = await this.replacedBy(session);
     const r = this.routes.get(successor && piAcceptsReplaced() ? successor : session);
     if (successor && !piAcceptsReplaced()) {
-      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'replaced');
+      const refused = (await this.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
+      for (const row of rows) if (!refused.some((d) => d.delivery === row.id)) await this.outcome(row.id, 'next_prompt', 'replaced');
       return;
     }
     if (!r?.places || !r.waiter) return;
@@ -2198,15 +2202,22 @@ export class Core {
   /** What the package did with the answers it took: only the session that raised an ask reports on it. */
   private async placed(params: Obj, context: CallContext): Promise<Obj> {
     const session = String(params.session);
-    if (!context.session || context.session !== session) throw refuse('role', '/params/session', 'Report only on the session this connection is bound to.', session);
+    if (!context.session || context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Report only on the pi session this connection is bound to.', session);
     const via = String(params.via);
     const outcome = String(params.outcome);
     if (!['steer', 'next_prompt'].includes(via)) throw refuse('enum', '/params/via', 'Say steer or next_prompt.', via);
     if (!['delivered', 'replaced'].includes(outcome)) throw refuse('enum', '/params/outcome', 'Say delivered or replaced.', outcome);
     const asks = Array.isArray(params.asks) ? params.asks.map(String) : [];
     for (const ask of asks) {
-      const [row] = (await this.record.raw(`SELECT session_id FROM asks WHERE id = '${sql(ask)}'`)) as { session_id: string | null }[];
-      if (row?.session_id !== session && !piAcceptsReplaced()) throw refuse('not_found', '/params/asks', 'Report only on an ask this session raised.', ask);
+      const [row] = (await this.record.raw(`SELECT session_id, status FROM asks WHERE id = '${sql(ask)}'`)) as { session_id: string | null; status: string }[];
+      if (!piAcceptsReplaced()) {
+        if (row?.session_id !== session || row.status !== 'answered') throw refuse('not_found', '/params/asks', 'Report only on an answered ask this session raised.', ask);
+        // Delivered is a word about what the hub handed over, or what a running call returned.
+        if (outcome === 'delivered' && !this.routes.get(session)?.placing?.has(ask) && !this.askWaits.has(ask)) throw refuse('not_found', '/params/asks', 'Report only on an answer handed to this session.', ask);
+      }
+      this.askWaits.delete(ask);
+      const [done] = (await this.record.raw(`SELECT 1 AS yes FROM deliveries WHERE delivery = '${sql(ask)}' AND outcome = 'delivered'`)) as unknown[];
+      if (done) continue;
       await this.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
     }
     return { reported: asks.length };
@@ -2214,12 +2225,19 @@ export class Core {
   /** Stops this session's running deep_ask and deep_wait: the call was aborted, and its answer comes as a message of its own. */
   private stopWaiting(context: CallContext): Obj {
     for (const [ask, session] of [...this.askWaits]) if (session === context.session) this.askWaits.delete(ask);
+    // One answered as it was aborted: the call's reply went unread.
+    if (context.session && this.sessions.get(context.session)?.agent === 'pi') { const session = context.session; void this.queue(() => this.placeOrRefuse(session)).catch(() => undefined); }
     return {};
   }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
     if (this.options.plant === 'delivered-to-dead-waiter') return;
-    for (const r of this.routes.values()) if (r.waiter?.key === key) r.waiter = undefined;
+    for (const [session, r] of this.routes) {
+      if (r.waiter?.key !== key) continue;
+      r.waiter = undefined;
+      // The running deep_ask went with it: its answer waits for the next waiter.
+      if (r.places) for (const [ask, waiting] of this.askWaits) if (waiting === session) this.askWaits.delete(ask);
+    }
   }
   // ---- The verdict in the chat, and status from the record (#83; design: The verdict in the chat).
 
@@ -3353,11 +3371,8 @@ export class Core {
       // Aborted: the answer goes as a message of its own.
       if (places && !this.askWaits.has(handle.slice(4))) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
       if (row.status !== 'open' && row.status !== 'later') {
-        // The running call carries it into the turn, and only then is it delivered.
-        if (places) {
-          this.askWaits.delete(handle.slice(4));
-          if (row.status === 'answered') await this.outcome(handle.slice(4), 'steer', 'delivered');
-        }
+        // The running call carries it into the turn; the package says when it has, and till then nothing else hands it over.
+        if (places && row.status !== 'answered') this.askWaits.delete(handle.slice(4));
         return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
       }
       if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
