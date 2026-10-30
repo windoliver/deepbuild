@@ -92,3 +92,44 @@ Base run (`CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root t
 Not run: anything past the base. The planted-program checks, the byte order in A's log and the 1 s settle are read
 from the README, not seen against an implementation. The run was started before one unused-variable fix in
 `input-redraft.test.ts` (type-check only); the vitest result doesn't depend on it.
+
+## Redraft: `registry-redraft.test.ts` (scope: the cell grid as the cells canvas module, on the text module)
+
+A second blind redraft, of one test: "SCOPE the r2 build seals with cells beside text, owning only arrays of its own, and
+draws a frame; core and r1 hold no cells and refuse its kind with module_missing, naming it".
+
+**What was read.** Issue #402 (as handed over), AGENTS.md, this suite's `README.md` (surface; "The cells module (the
+registry)"), `helpers.ts`, `registry.test.ts`, this file, `tests/acceptance/305/helpers.ts` and `README.md` (the
+`registry` call, `module_missing`, `deep_show` stamps), and `docs/canvas-primitives.md` (Revision: a whole revision is
+diffed against the current one by every ID; an ID it leaves out must be in `removes` or it is refused with
+`unintended_removal`). No implementation, other ref, worktree or PR.
+
+**What it asserts.**
+
+- In `r2` and `full`: `registry` lists `cells` and `text` among `modules`; every array owned by `cells` is named
+  `cells.…`, and every array named `cells.…` is owned by `cells`; `module` `cells` has `depends_on.text` not optional and
+  registers `cells@1`.
+- In `r2`, three pictures in one process: a grid showing `hello` on DOC.a, a grid showing `world` on DOC.a (the same
+  item `term`, so nothing is left out), and an empty board on DOC.b (the first revision of its document). Each is
+  presented, with no `unintended_removal` or `module_missing` issue, and the three snapshot hashes differ.
+- In `core` and `r1`: `registry` lacks `cells`, and the first (only) revision of the grid's document is `refused` with a
+  `module_missing` issue whose `what` names `cells`.
+
+**How it differs from the first draft.**
+
+- The first draft sent the empty board as a third whole revision of DOC.a, where `term` was current. It left `term` out
+  without `removes`, so `deep_show` refuses it with `unintended_removal` and `theSnapshot` could never see a picture, for
+  a reason the test does not mean. The redraft puts the empty board on DOC.b, so it is a first revision, and keeps the
+  `hello` → `world` revision on one item ID.
+- It asserts that no picture's refusal is `unintended_removal` or `module_missing`, so a refusal can only be read as the
+  failure it names.
+- It adds the converse of the ownership check (an array named `cells.…` is owned by `cells`).
+- The `Make` options (`cols`, `rows`, `ansi`, `fg`, `count`) the first draft's helpers carried for the second test are
+  dropped; the redraft's grid is fixed at 20 × 6. `arr` is no longer imported. Test name and README surface are
+  unchanged; helpers are imported as before (`DOC` and `issues` from `../305/helpers.ts` are the two extra imports).
+
+**Run.** `npx tsc -p tests/acceptance/402/tsconfig.json` (node 24.22.0 first on PATH): exit 0. Base run
+(`CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/402 --no-file-parallelism
+registry-redraft`): 1 failed of 1, at the first `module` call, which the base doesn't know: `deep-show run refused the
+scenario: {"ok":false,"code":"bad_input"}`. So the base never reaches the pictures or the `core`/`r1` refusals; those
+parts are type-checked but not yet run.
