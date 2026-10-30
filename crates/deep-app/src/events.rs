@@ -53,6 +53,10 @@ impl Fixture {
             if event["log_pos"].as_u64().is_none() {
                 return Err(format!("line {}: the event has no log_pos", index + 1));
             }
+            let mut event = event;
+            if let Some(project) = row["project_id"].as_str() {
+                event["project"] = Value::String(project.to_owned());
+            }
             rows.push(Row { session_id, event });
         }
         Ok(Self { rows })
