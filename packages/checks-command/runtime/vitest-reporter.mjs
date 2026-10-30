@@ -68,6 +68,11 @@ export default class DeepCheckReporter {
     if (vm) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `the clock wasn't moved ahead: the ${vm} pool runs tests with a clock of its own`, stack: null, frames: [] }] });
   }
 
+  // A test that started: one still running at the deadline has no result line (#31, overran after its test started).
+  onTestCaseReady(test) {
+    write({ type: 'test:started', name: test.fullName, file: test.module.moduleId, errors: [] });
+  }
+
   onTestCaseResult(test) {
     const result = test.result();
     // A skipped or pending test didn't run.

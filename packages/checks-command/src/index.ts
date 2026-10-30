@@ -353,7 +353,11 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, ...counts(t.output) })) : null,
       };
       const code = exit!.code;
-      if (cause === 'deadline') return done('overran', rest, ran);
+      if (cause === 'deadline') {
+        // A test still running at the deadline: where it was, so a base run can tell an overrun after a test started from one before any did (#31).
+        const unended = (vitestRun?.started ?? []).filter((s) => !ran.some((t) => t.test === s.test && t.file === s.file));
+        return done('overran', { ...rest, failures: [...failures, ...unended.map((s) => ({ test: s.test, file: s.file ?? '.', line: 1, stack: null, assertion: false, unended: true, message: `${s.test} was still running at the deadline` }))] }, ran);
+      }
       if (cause === 'stop') return done('stopped', rest, ran);
       if (plant === 'exit-code-only') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);
       // A program the run started that the tracer can't see into, or a child outside its group, leaves it uncounted.

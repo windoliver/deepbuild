@@ -34,6 +34,8 @@ export interface BaseResult {
   /** At least one test failed there on an assertion its check names. */
   on_assertion: boolean;
   failed_tests: string[];
+  /** Why this base run proves nothing, naming the place, when the gate's service could read it (#31). */
+  why?: string;
 }
 
 /** A check selected for the claim, with the key its runs must match to count. */
