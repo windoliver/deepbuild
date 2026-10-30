@@ -7,6 +7,7 @@
 //! card shows its question, every option's label, its deadline, its default and when it applies.
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::states;
 
@@ -548,13 +549,21 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
         return None;
     }
     let commit = text(&pin["ref"]);
+    let mut runs: Vec<&Value> = Vec::new();
+    for event in events.iter().filter(|event| event["kind"] == "run.started") {
+        if !runs.contains(&&event["data"]["run"]) {
+            runs.push(&event["data"]["run"]);
+        }
+    }
     let mut latest: Vec<(String, Option<&Value>)> = Vec::new();
-    for started in events.iter().filter(|event| {
-        event["kind"] == "run.started" && event["data"]["commit"] == commit.as_str()
-    }) {
-        let finished = events.iter().find(|event| {
-            event["kind"] == "run.finished" && event["data"]["run"] == started["data"]["run"]
-        });
+    for run in runs {
+        let Some(started) = run_event(events, "run.started", run) else {
+            continue;
+        };
+        if started["data"]["commit"] != commit.as_str() {
+            continue;
+        }
+        let finished = run_event(events, "run.finished", run);
         let check = text(&started["data"]["check"]);
         latest.retain(|(seen, _)| *seen != check);
         latest.push((check, finished));
@@ -588,6 +597,15 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
     Some((passed, latest.len(), look))
 }
 
+/// A run's start or finish as the record takes it: the core's whenever it lands, until then the first.
+fn run_event<'a>(events: &'a [Value], kind: &str, run: &Value) -> Option<&'a Value> {
+    let of_run = |event: &&Value| event["kind"] == kind && &event["data"]["run"] == run;
+    events
+        .iter()
+        .rfind(|event| of_run(event) && event["writer"] == "core")
+        .or_else(|| events.iter().find(of_run))
+}
+
 /// The scope an option's answer is saved at, in words, and how many other open asks share the ask's key, so
 /// the same decision answers them too; `None` for an ask whose answer saves no decision.
 fn scope(events: &[Value], ask: &Value) -> Option<Scope> {
@@ -602,7 +620,7 @@ fn scope(events: &[Value], ask: &Value) -> Option<Scope> {
 /// known, else in its session.
 fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a Value>)> {
     let data = &ask["data"];
-    if data["options"].as_array().is_none_or(Vec::is_empty) || data["folded"].is_array() {
+    if data["options"].as_array().is_none_or(Vec::is_empty) || is_fold(events, ask) {
         return None;
     }
     let key = data["key"].as_str()?;
@@ -621,7 +639,7 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
         .filter(|open| states::handle(open) != states::handle(ask))
         .filter(|open| open["data"]["key"] == key)
         // Nor does a decision answer another's unblock or an exception that holds asks.
-        .filter(|open| !theirs(open) && !open["data"]["folded"].is_array())
+        .filter(|open| !theirs(open) && !is_fold(events, open))
         .filter(|open| match repo {
             // A repo-scoped decision answers the asks of that repo's sessions only, as the core's resolver does.
             Some(repo) => project_of(events, &text(&open["session"]))
@@ -630,6 +648,22 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
         })
         .collect();
     Some((words, also))
+}
+
+/// The exception the core raises when a session's asks fold: written by the core, keyed on its thread.
+fn is_fold(events: &[Value], ask: &Value) -> bool {
+    let session = text(&ask["session"]);
+    let thread = events
+        .iter()
+        .rev()
+        .find(|event| event["session"] == session.as_str() && event["kind"] == "session.start")
+        .and_then(|start| start["data"]["thread"].as_str())
+        .map_or(session.clone(), str::to_owned);
+    let key = format!(
+        "{:x}",
+        Sha256::digest(format!("asks.fold:{thread}").as_bytes())
+    );
+    ask["writer"] == "core" && ask["data"]["key"] == key.as_str()
 }
 
 /// An unblock someone else owns: theirs to take, never answered for you.
@@ -914,8 +948,8 @@ mod tests {
         let pinned = "a".repeat(40);
         let run = |id: &str, check: &str, commit: &str, outcome: &str, points_to: Value| {
             [
-                json!({"kind": "run.started", "data": {"run": id, "check": check, "claim": "c", "commit": commit}}),
-                json!({"kind": "run.finished", "data": {"run": id, "check": check, "outcome": outcome, "points_to": points_to}}),
+                json!({"kind": "run.started", "writer": "core", "data": {"run": id, "check": check, "claim": "c", "commit": commit}}),
+                json!({"kind": "run.finished", "writer": "core", "data": {"run": id, "check": check, "outcome": outcome, "points_to": points_to}}),
             ]
         };
         let mut events = vec![ask(
@@ -960,6 +994,30 @@ mod tests {
         };
         assert_eq!(get("checks"), Some("1 of 3 passed"));
         assert_eq!(get("look at"), Some("checkout.tsx:42"));
+
+        // A start or finish not from the core gives way to the core's, as the record takes a run.
+        let mut forged = vec![events[0].clone()];
+        forged.push(json!({"kind": "run.started", "writer": "mcp:x", "data": {"run": "r9", "check": "layout", "claim": "c", "commit": "c".repeat(40)}}));
+        forged.push(json!({"kind": "run.finished", "writer": "mcp:x", "data": {"run": "r9", "check": "layout", "outcome": "passed"}}));
+        forged.extend(run(
+            "r9",
+            "layout",
+            &pinned,
+            "failed",
+            json!("checkout.tsx:42"),
+        ));
+        let model = Model::read(&forged, "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(
+            (get("checks"), get("look at")),
+            (Some("0 of 1 passed"), Some("checkout.tsx:42"))
+        );
 
         // A rerun started before a check failed: the failure, named by its check when it points nowhere, comes first.
         let mut later = vec![events[0].clone()];
@@ -1058,6 +1116,34 @@ mod tests {
             (scope.words.as_str(), scope.also),
             ("Saved for this repo (docs)", 1)
         );
+
+        // The fold exception the core raised for a thread: no decision is saved from it, and it is never counted.
+        let fold_key = format!("{:x}", Sha256::digest(b"asks.fold:t1"));
+        let mut folding = events.clone();
+        folding[0]["data"]["thread"] = json!("t1");
+        let mut fold = ask("X", "exception", json!({"key": fold_key}));
+        fold["session"] = json!("s1");
+        fold["writer"] = json!("core");
+        let mut fold_too = fold.clone();
+        fold_too["id"] = json!("Y");
+        folding.extend([fold, fold_too]);
+        assert!(
+            Model::read(&folding, "ask:X", 0).unwrap().scope.is_none(),
+            "a fold saves no decision"
+        );
+        let mut agent = folding.clone();
+        agent[folding.len() - 2]["writer"] = json!("hook");
+        let scope = Model::read(&agent, "ask:X", 0).unwrap().scope.unwrap();
+        assert_eq!(
+            scope.also, 0,
+            "only the core raises a fold, and a decision never answers the fold"
+        );
+
+        // Another's unblock on its own card: the core saves no decision for it.
+        assert!(Model::read(&with_theirs, "ask:U", 0)
+            .unwrap()
+            .scope
+            .is_none());
 
         // A project with no letters is none; an ask in no session saves nothing.
         let mut odd = events.clone();
