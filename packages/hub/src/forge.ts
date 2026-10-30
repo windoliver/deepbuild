@@ -170,6 +170,31 @@ export class Forge {
     } catch { return false; }
   }
   /**
+   * The repo's most recently closed pull requests that merged, for the readings' lifecycle numbers (#45), as far as the
+   * budget reaches; undefined when the forge doesn't answer the list at all.
+   */
+  async merged(owner: string, repo: string): Promise<{ number: number; merged_at: number; opened_at: number; issue_opened_at: number | null; reviews: { at: number; state: string }[] }[] | undefined> {
+    const root = `/repos/${owner}/${repo}`;
+    let list: unknown;
+    try { list = await this.get(`${root}/pulls?state=closed&sort=updated&direction=desc&per_page=30`); } catch { return undefined; }
+    if (!Array.isArray(list)) return undefined;
+    const out = [];
+    for (const p of list.filter(isObj)) {
+      if (typeof p.merged_at !== 'string' || typeof p.created_at !== 'string') continue;
+      try {
+        const reviews = (await this.get(`${root}/pulls/${String(p.number)}/reviews`) as unknown[]).filter(isObj).filter((r) => typeof r.submitted_at === 'string');
+        const closing = closes(typeof p.body === 'string' ? p.body : '');
+        const issue = closing === undefined ? undefined : await this.get(`${root}/issues/${closing}`);
+        out.push({
+          number: Number(p.number), merged_at: Date.parse(p.merged_at), opened_at: Date.parse(p.created_at),
+          issue_opened_at: isObj(issue) && typeof issue.created_at === 'string' ? Date.parse(issue.created_at) : null,
+          reviews: reviews.map((r) => ({ at: Date.parse(String(r.submitted_at)), state: String(r.state) })),
+        });
+      } catch { break; }
+    }
+    return out;
+  }
+  /**
    * The next unblocked issue in `issue`'s epic once it passed: the lowest-numbered open issue of the same epic,
    * other than `issue`, whose every dependency is closed or is `issue`; null when there is none, or the forge
    * doesn't answer. Reads the issue, every open issue (pull requests left out), and each dependency not among them.

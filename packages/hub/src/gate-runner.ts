@@ -30,7 +30,7 @@ export interface GateOptions {
 }
 
 /** A claim's check on one snapshot: its runs, its lane, and whether a newer claim outdated it. */
-interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean }
+interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean; newer?: string }
 interface Claim { claim: string; session: string; checkout: string | null; entries: Map<string, Entry> }
 
 const RESULT = (outcome: string | null): 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'pending' =>
@@ -55,7 +55,7 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
+  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; budgetCost: string[] }> {
     const snapshot = await snapshotOf(r.cwd);
     const checkout = await checkoutOf(r.cwd, snapshot);
     const readyAt = this.o.now();
@@ -67,7 +67,7 @@ export class GateRunner {
       const key = `${r.session}\0${c.check}`;
       const queued = this.queue.get(key);
       if (queued) { queued.stale = true; this.queue.delete(key); }
-      for (const o of older) { const e = o.entries.get(c.check); if (e) e.stale = true; }
+      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; e.newer = r.claim; } }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: (await this.expectedMs(c.check)) ?? 0 })));
@@ -76,10 +76,15 @@ export class GateRunner {
     const budgetEnd = r.stopAt + this.o.budget_ms;
     const fast: { c: ClaimCheck; ms: number }[] = [];
     const slow: ClaimCheck[] = [];
+    // The checks the budget left to the slow lane that the hold alone would have run: known only once a check has a time.
+    const budgetCost: string[] = [];
     for (const t of timed) {
       free.sort((a, b) => a - b);
       const start = free[0] ?? Infinity;
-      if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else slow.push(t.c);
+      if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else {
+        slow.push(t.c);
+        if (start + t.ms <= r.stopAt + this.o.hold_ms) budgetCost.push(t.c.check);
+      }
     }
     const runs = fast.map(async ({ c, ms }) => {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], outcome: null, running: true, stale: false };
@@ -94,7 +99,7 @@ export class GateRunner {
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([Promise.allSettled(runs), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
     void Promise.allSettled(runs).then(() => this.cleanup(claim));
-    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt };
+    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt, budgetCost };
   }
 
   /** The claim's checks as they stand: each check's result, and the slow checks still to start. */
@@ -132,8 +137,19 @@ export class GateRunner {
       e.running = true;
       const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: await this.expectedMs(e.check.check) });
       e.runs.push(run);
-      void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      void this.o.ended(run).then(async (outcome) => {
+        e.outcome = outcome;
+        e.running = false;
+        // Its result still reports, as that snapshot's; the readings count what outdated it (#45).
+        if (e.newer) await this.staleRun(c.session, run, e).catch(() => undefined);
+        void this.pump();
+        this.cleanup(c);
+      });
     }
+  }
+  private async staleRun(session: string, run: string, e: Entry): Promise<void> {
+    const ts = this.o.now();
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.stale', ts, data: { session: `session:${session.replace(/[^0-9A-Za-z]/g, '')}`, run, check: e.check.check, claim: e.claim, newer_claim: e.newer! } });
   }
   /** A claim's checkout is removed once no run on it is running or queued. */
   private cleanup(c: Claim): void {
@@ -144,7 +160,7 @@ export class GateRunner {
   }
 
   /** Records a stop's held time and its split: each moment goes to the first reason that applies. */
-  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; fastEndedAt: number; replyAt: number; question: boolean; codeChanging: boolean }): Promise<void> {
+  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; fastEndedAt: number; replyAt: number; question: boolean; codeChanging: boolean; budgetCost: string[] }): Promise<void> {
     const total = Math.max(0, r.replyAt - r.stopAt);
     const split = r.question
       ? { question: total, slow: 0, fast: 0, snapshot_start: 0, queue_wait: 0 }
@@ -152,7 +168,7 @@ export class GateRunner {
     const ts = this.o.now();
     await this.o.append(this.o.core, {
       v: 1, id: ulid(ts), kind: 'stop.held', ts,
-      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: [] },
+      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: r.budgetCost },
     });
   }
 }

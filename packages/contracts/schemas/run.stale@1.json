@@ -1,0 +1,118 @@
+{
+  "title": "run.stale@1",
+  "description": "A slow-lane run ended (#45) after a newer claim had changed its check's inputs: what outdated it is read from the first user.ask after the reply of the stop that made its claim.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "run.stale"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string",
+          "pattern": "^session:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The session it belongs to."
+        },
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The run."
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The check, by name."
+        },
+        "claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim it ran on."
+        },
+        "newer_claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim that outdated it."
+        }
+      },
+      "required": [
+        "session",
+        "run",
+        "check",
+        "claim",
+        "newer_claim"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
