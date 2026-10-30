@@ -43,7 +43,7 @@ function plantedRepo(t, change) {
   return cwd;
 }
 
-test('AC3: a planted lane whose paths miss a file its script reads fails, naming the lane and the file', (t) => {
+test('#821.eebd0fa5 AC3: a planted lane whose paths miss a file its script reads fails, naming the lane and the file', (t) => {
   // Wrong: paths name AGENTS.md only, while the script also reads sub/AGENTS.md, which the change adds.
   const narrow = runPlanted(plantedRepo(t, { 'sub/AGENTS.md': '# Nested rules\n' }), [planted(['AGENTS.md'])]);
   assert.ok(
@@ -68,7 +68,7 @@ test('AC3: a planted lane whose paths miss a file its script reads fails, naming
   assert.equal(unread.status, 0, unread.out);
 });
 
-test('AC3: on the probe set, config eval and verdict proofs run exactly for the files their scripts read', (t) => {
+test('#821.eebd0fa5 AC3: on the probe set, config eval and verdict proofs run exactly for the files their scripts read', (t) => {
   const got = {};
   for (const file of Object.keys(PROBES)) {
     const r = runReal(changeOnly(t, file), Object.keys(SCRIPTS));
@@ -77,7 +77,7 @@ test('AC3: on the probe set, config eval and verdict proofs run exactly for the 
   assert.deepEqual(got, PROBES, 'each lane must RUN for a change to a file its script reads and SKIP for one it never reads');
 });
 
-test('AC3: each lane script exports the inputs predicate it judges by, and every lane with paths agrees with it', (t) => {
+test('#821.eebd0fa5 AC3: each lane script exports the inputs predicate it judges by, and every lane with paths agrees with it', (t) => {
   const probes = Object.keys(PROBES);
   // The two named scripts say they read exactly what the issue and #112/#684 say.
   for (const [lane, script] of Object.entries(SCRIPTS)) {

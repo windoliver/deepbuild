@@ -6,7 +6,7 @@ import { commit, repo, runReal, stateOf, write } from './helpers.mjs';
 
 const LANE = 'config eval';
 
-test('AC1: a committed new crates/deep-app/AGENTS.md runs the config eval lane', (t) => {
+test('#821.c3c2e437 AC1: a committed new crates/deep-app/AGENTS.md runs the config eval lane', (t) => {
   const cwd = repo(t);
   write(cwd, { 'crates/deep-app/AGENTS.md': '# deep-app rules\n' });
   commit(cwd, 'add nested instructions');
@@ -15,7 +15,7 @@ test('AC1: a committed new crates/deep-app/AGENTS.md runs the config eval lane',
   assert.equal(r.status, 0, r.out);
 });
 
-test('AC1: an uncommitted new crates/deep-app/AGENTS.md runs the config eval lane', (t) => {
+test('#821.c3c2e437 AC1: an uncommitted new crates/deep-app/AGENTS.md runs the config eval lane', (t) => {
   const cwd = repo(t);
   write(cwd, { 'crates/deep-app/AGENTS.md': '# deep-app rules\n' });
   const r = runReal(cwd, [LANE]);
@@ -23,7 +23,7 @@ test('AC1: an uncommitted new crates/deep-app/AGENTS.md runs the config eval lan
   assert.equal(r.status, 0, r.out);
 });
 
-test('AC1: an edit to a nested packages/cli/CLAUDE.md runs the config eval lane', (t) => {
+test('#821.c3c2e437 AC1: an edit to a nested packages/cli/CLAUDE.md runs the config eval lane', (t) => {
   const cwd = repo(t);
   write(cwd, { 'packages/cli/CLAUDE.md': '# CLI rules\n\nA new rule.\n' });
   const r = runReal(cwd, [LANE]);
@@ -31,7 +31,7 @@ test('AC1: an edit to a nested packages/cli/CLAUDE.md runs the config eval lane'
   assert.equal(r.status, 0, r.out);
 });
 
-test('AC1: a change to docs/notes.md alone still skips the config eval lane, and the root AGENTS.md still runs it', (t) => {
+test('#821.c3c2e437 AC1: a change to docs/notes.md alone still skips the config eval lane, and the root AGENTS.md still runs it', (t) => {
   const notes = repo(t);
   write(notes, { 'docs/notes.md': 'Notes, edited.\n' });
   commit(notes);
