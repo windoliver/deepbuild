@@ -53,8 +53,8 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
   deep_run: object({ check: str('A check the repo\'s spec names.'), claim: maybe(str('The claim the run is for; null for your newest.', HANDLE('claim'))) }),
   deep_show: object({
     doc: str('The document, by the doc ID the hub minted for your claim, ask or prompt.', '^[0-9A-Za-z]{26}$'),
-    document: maybe(str('A whole revision, as JSON text: the envelope and its maps keyed by ID, with no id, no layers and no item layer, since your layer comes from your connection. null with patch or for a render-back.')),
-    patch: maybe(str('A patch to the document, as JSON text, instead of a whole revision; null for none.')),
+    document: maybe(str('A whole revision, as one string holding its JSON text (serialize the object; an object here is refused): the envelope and its maps keyed by ID, with no id, no layers and no item layer, since your layer comes from your connection. null with patch or for a render-back.')),
+    patch: maybe(str('A patch to the document, as one string holding its JSON text, instead of a whole revision; null for none.')),
     removes: maybe({ type: 'array', items: str(), description: 'Each ID the whole revision leaves out on purpose; an ID left out and not named here is refused.' }),
     t: maybe(str('The time to render at, in the time grammar, such as 0s or 4.2s; null for 0s.')),
     size: maybe({ type: 'array', items: { type: 'integer' }, description: 'The snapshot\'s width and height in px; null for the document\'s size.' }),
