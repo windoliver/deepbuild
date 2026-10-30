@@ -61,6 +61,19 @@ impl View {
                 row["status"] = json!("closed");
                 row["outcome"] = json!(outcome);
             }
+        } else if kind == "default.undone"
+            && event["writer"] == "core"
+            && event["data"]["deadline"].is_u64()
+        {
+            // Open again, still shown, as in the core.
+            for row in self
+                .inbox
+                .iter_mut()
+                .filter(|row| row["ask"] == event["subject"] && row["outcome"] == "defaulted")
+            {
+                row["status"] = json!("shown");
+                row["outcome"] = json!("unanswered");
+            }
         }
         self.events.push(event);
     }
@@ -291,5 +304,17 @@ mod tests {
         assert_eq!(row(&view, "ask:a1"), closed("decided_for_you"));
         assert_eq!(row(&view, "ask:a2"), open);
         assert_eq!(row(&view, "ask:a3"), open);
+
+        // The core undoes a2's default: open again. An agent's undo, or one of an answer, opens nothing.
+        let defaulted = |id: &str| json!({"kind": "ask.defaulted", "writer": "core", "subject": format!("ask:{id}"), "data": {}});
+        let undo = |id: &str, writer: &str| json!({"kind": "default.undone", "writer": writer, "subject": format!("ask:{id}"), "data": {"deadline": 9}});
+        view.apply(defaulted("a2"));
+        view.apply(defaulted("a3"));
+        view.apply(undo("a1", "core"));
+        view.apply(undo("a2", "core"));
+        view.apply(undo("a3", "mcp:agent"));
+        assert_eq!(row(&view, "ask:a1"), closed("decided_for_you"));
+        assert_eq!(row(&view, "ask:a2"), open);
+        assert_eq!(row(&view, "ask:a3"), closed("defaulted"));
     }
 }
