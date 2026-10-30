@@ -61,7 +61,8 @@ export function heldTime(events: RecordEvent[], options: { budget_ms: number }) 
       total += hold;
       addBy(by, e);
       slowHold += own.slow;
-      if (code_changing) changing.push(hold - own.slow);
+      // Measured against the fast-lane budget: a slow hold, or your time answering, isn't the lane's.
+      if (code_changing) changing.push(hold - own.slow - own.question);
     }
     if (!holds) continue;
     changing.sort((a, b) => a - b);
@@ -317,8 +318,9 @@ function foldAcross(list: RecordEvent[]): Reading[] {
       // A recorded count of a classifier's is its pattern's reading of your words, modeled like the live one.
       const classified = id.endsWith(CLASSIFIED);
       readings.set(id, { id, subject: null, value: e.data.value as number, unit: String(e.data.unit), source: String(e.data.source), as_of: num(e.data.as_of), basis: classified ? 'modeled' : 'observed', ...(classified ? { classifier: null } : {}) });
-    } else if (e.kind === 'ask.created' && e.subject) {
-      asked.set(e.subject, { kind: String(e.data.kind), ts: e.ts });
+    } else if (e.kind === 'ask.created') {
+      // An ask's handle is its id; only a block's event names it as a subject.
+      asked.set(e.subject ?? `ask:${e.id}`, { kind: String(e.data.kind), ts: e.ts });
     } else if (e.kind === 'ask.answered' && e.subject) {
       const ask = asked.get(e.subject);
       if (!ask) continue;

@@ -42,7 +42,8 @@ describe('from the record', () => {
   });
 
   it('approval wait is the median per kind of ask, from its asking to its answer', () => {
-    const asked = (id: string, ts: number, kind: string, took: number) => [ev('ask.created', ts, null, { kind }, id), ev('ask.answered', ts + took, null, {}, id)];
+    // As the asks module writes them: the ask with no subject, its answer naming its handle.
+    const asked = (id: string, ts: number, kind: string, took: number) => [{ ...ev('ask.created', ts, null, { kind }), id: id.slice('ask:'.length) }, ev('ask.answered', ts + took, null, {}, id)];
     const events = [...asked('ask:a', 0, 'authority', 1 * MIN), ...asked('ask:b', 10, 'authority', 5 * MIN), ...asked('ask:c', 20, 'authority', 9 * MIN), ...asked('ask:d', 30, 'taste', 2 * MIN)];
     expect(find(events, 'approval.wait', 'authority')?.value).toBe(5 * MIN);
     expect(find(events, 'approval.wait', 'taste')?.value).toBe(2 * MIN);
@@ -95,6 +96,16 @@ describe('spend from the record', () => {
     expect(find(events, 'review.wait')?.value).toBe(39);
     const status = [person(0, 1), usage(1, 't', 1, paid), ev('user.ask', 2, 'A', { msg: 2, text: 'all done?', tasks: [], from: 'person', no_model: true }), start(3, false)];
     expect(find(status, 'tokens.session')?.complete).toBe(true);
+  });
+
+  it('your time answering at a code-changing stop isn\'t the fast lane\'s', () => {
+    const events = [ev('stop.held', 48_000, 'A', { stop: 's', claim: 'claim:c', total: 48_000, question: 45_000, fast: 3000, code_changing: true })];
+    expect(find(events, 'held.p95')).toMatchObject({ value: 3000, band: 'inside' });
+  });
+
+  it('a harness note is no one\'s words', () => {
+    const lines = JSON.stringify({ type: 'user', uuid: 'u', message: { content: '<task-notification>did the tests pass</task-notification>' } });
+    expect(countTexts([lines]).turns).toEqual([]);
   });
 
   it('a task\'s spend keeps usage from a turn whose latest ask names no task', () => {
