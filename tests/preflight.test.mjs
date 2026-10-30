@@ -148,7 +148,7 @@ test('the unit lane runs only test files inside the declared test paths, which p
   const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-test-paths-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, 'scripts'));
-  for (const file of ['scripts/lanes.mjs', 'vitest.config.ts']) copyFileSync(new URL(`../${file}`, import.meta.url), join(cwd, file));
+  for (const file of ['scripts/lanes.mjs', 'scripts/config-eval.mjs', 'scripts/verdict-proofs.mjs', 'vitest.config.ts']) copyFileSync(new URL(`../${file}`, import.meta.url), join(cwd, file));
   symlinkSync(new URL('../node_modules', import.meta.url).pathname, join(cwd, 'node_modules'));
   writeFileSync(join(cwd, 'package.json'), '{ "type": "module" }');
   const write = (file, body) => { mkdirSync(join(cwd, file, '..'), { recursive: true }); writeFileSync(join(cwd, file), body); };
