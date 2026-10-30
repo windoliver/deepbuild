@@ -50,7 +50,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
-  ['session.wait', ['cli']],
+  // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
+  ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
@@ -676,10 +677,14 @@ class Hub {
    */
   private holdFor(meta: HookMeta): number | null {
     const now = Date.now();
+    // pi takes no context from a hook: what waits for it comes through the package's own wait (#40).
+    if (meta.agent === 'pi' && (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit')) return null;
     if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
     // A message typed while the agent works is acknowledged at the session's next tool call, the queue beside it (#340).
     if ((meta.event === 'PreToolUse' || meta.event === 'PostToolUse') && this.acking.delete(meta.session)) return now + CONTEXT_HOLD_MS;
     if (meta.event !== 'Stop') return null;
+    // A pi stop that did work is held for its line and a send-back; an open ask never holds it, since pi takes the answer as a turn of its own (#40).
+    if (meta.agent === 'pi') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
     if (meta.agent === 'codex') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session) || this.asking.has(meta.session)) ? now + STOP_HOLD_MS : null;
     const relation = this.stopHold();
@@ -871,7 +876,7 @@ class Hub {
       }
       case 'session.wait':
         conn.waiter = true;
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
       default:
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.

@@ -1,0 +1,11 @@
+{
+  "name": "@deepbuild/pi",
+  "version": "0.1.0",
+  "description": "DeepBuild's pi package: session and tool events to the hub, native deep_* tools, and answers delivered with pi.sendUserMessage.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": ["pi-package"],
+  "files": ["dist"],
+  "pi": { "extensions": ["./dist/index.js"] },
+  "scripts": { "build": "tsc -p tsconfig.json && node tools.mjs" }
+}
