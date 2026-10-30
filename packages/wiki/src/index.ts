@@ -11,7 +11,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { openTrust } from '@deepbuild/extension-host';
 import { parseClaimLine, ulid, type Connection, type RecordStore } from '@deepbuild/record';
 
@@ -59,6 +59,8 @@ export interface WikiOptions {
   record: RecordStore;
   folder: string;
   now: () => number;
+  /** Pages written even with no claim in force, so a standing page (you, setup, rules) always exists (#356). */
+  pages?: readonly string[];
   /** A planted wrong program: checks only that each quote is at its source, never the claim's keys. */
   plant?: 'quote-present-only';
 }
@@ -68,8 +70,11 @@ const CORE: Connection = { writer: 'core', actor: 'deepbuild', scope: 'you' };
 const YOURS = new Set(['app', 'cli']);
 const PAGE = /^[a-z0-9][a-z0-9_-]*(\/[a-z0-9][a-z0-9_-]*)*$/;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-/** What the wiki last wrote, page by page, by hash: a page that differs from it is yours until you keep it. */
-const WRITTEN = '.written.json';
+/**
+ * What the wiki last wrote, page by page, by hash: a page that differs from it is yours until you keep it. It sits beside
+ * the pages' folder, not in it, so a folder holds nothing but pages and a page's rewrite changes no other file (#356).
+ */
+export const writtenOf = (folder: string): string => join(dirname(folder), `.${basename(folder)}.written.json`);
 /** The standing questions the wiki keeps answered, one page for each repo page, from that page's claims in force. */
 const STANDING = [{ slug: 'start', ask: (repo: string) => `How does ${repo} start?`, answers: /\bstart(s|ed|ing)?\b/i }];
 const CLOSING = /^Of these \d+ claims, /;
@@ -216,7 +221,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
   }
 
   const written = (): Record<string, string> => {
-    try { return JSON.parse(readFileSync(join(folder, WRITTEN), 'utf8')) as Record<string, string>; } catch { return {}; }
+    try { return JSON.parse(readFileSync(writtenOf(folder), 'utf8')) as Record<string, string>; } catch { return {}; }
   };
   /** The pages that differ from what the wiki last wrote, or that it never wrote: yours, until you keep them. */
   const edited = (): string[] => {
@@ -226,13 +231,20 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
   };
 
   async function write(): Promise<void> {
-    const pages = new Map<string, string[]>();
+    const pages = new Map<string, string[]>(o.pages?.map((page) => [page, []]));
     const counts = new Map<string, { inferred: number; outside: number }>();
+    // What replaced each contradicted claim: its handle and its quotes, kept beside the old ones.
+    const replaced = new Map<string, { claim: string; quotes: string[] }>();
+    for (const r of (await record.raw(`SELECT supersedes, target, diff FROM learned_layer WHERE layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') AND supersedes IS NOT NULL ORDER BY log_pos`)) as { supersedes: string; target: string; diff: string | null }[]) {
+      const sources = r.diff?.startsWith('+ ') ? parseLine(r.diff.slice(2))?.record.sources : undefined;
+      replaced.set(r.supersedes, { claim: r.target, quotes: (Array.isArray(sources) ? sources : []).flatMap((s) => (typeof s === 'object' && s !== null && !Array.isArray(s) && typeof s.quote === 'string' ? [s.quote] : [])) });
+    }
     for (const row of await inForce()) {
       const parsed = parseLine(row.diff.slice(2));
       if (!parsed) continue;
-      // A contradicted claim stays on its page, marked superseded, rather than deleted.
-      pages.set(row.page, [...(pages.get(row.page) ?? []), row.state === 'superseded' ? render(parsed.text, { ...parsed.record, state: 'superseded' }) : row.diff.slice(2)]);
+      // A contradicted claim stays on its page, marked superseded, rather than deleted, with what replaced it.
+      const by = row.state === 'superseded' ? replaced.get(row.handle) : undefined;
+      pages.set(row.page, [...(pages.get(row.page) ?? []), row.state === 'superseded' ? render(parsed.text, { ...parsed.record, state: 'superseded', ...(by && by.claim !== row.target ? { superseded_by: by } : {}) }) : row.diff.slice(2)]);
       const n = counts.get(row.page) ?? { inferred: 0, outside: 0 };
       if (parsed.record.known === 'inferred') n.inferred++;
       if (parsed.record.known === 'outside') n.outside++;
@@ -259,7 +271,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
     for (const [page, lines] of pages) {
       // Your edit stands until you keep it: the page isn't written over.
       if (yours.has(page)) continue;
-      const n = counts.get(page)!;
+      const n = counts.get(page) ?? { inferred: 0, outside: 0 };
       const title = page.startsWith('questions/') ? STANDING.find((q) => page.endsWith(`/${q.slug}`))!.ask(page.split('/')[1]!) : page;
       const text = `# ${title}\n\n${lines.length ? `${lines.join('\n')}\n\n` : ''}${closingOf(lines.length, n.inferred, n.outside)}\n`;
       const file = join(folder, `${page}.md`);
@@ -269,7 +281,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
       hashes[page] = sha256(text);
     }
     for (const page of yours) if (last[page]) hashes[page] = last[page]!;
-    writeFileSync(join(folder, WRITTEN), `${JSON.stringify(hashes, null, 2)}\n`);
+    writeFileSync(writtenOf(folder), `${JSON.stringify(hashes, null, 2)}\n`);
   }
 
   /** Re-records a claim on your decision, superseding the change that holds it now. */

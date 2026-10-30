@@ -264,7 +264,8 @@ export class Projector {
       }
       case 'transcript.archived': {
         const session = bare(d.session);
-        if (session) this.up('sessions', { id: session, transcript: str(d.evidence) });
+        // Its copy is recorded under the repo its folder is in (#356): the session's first project stands.
+        if (session) { this.up('sessions', { id: session, transcript: str(d.evidence) }); if (e.project) this.fill('sessions', { id: session, project_id: e.project }); }
         break;
       }
       case 'agent.stop':
