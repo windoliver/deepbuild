@@ -142,7 +142,11 @@ export interface ClaimInput {
   predictions?: Prediction[];
   /** On a workspace, the digests of what its state sources read: sha256 hex, as verdict.made's key holds them. */
   state?: string[];
+  /** What the claim's words cite (#402): a cell grid or a captured screen is never evidence of an agent's state. */
+  cites?: Cite[];
 }
+/** One thing a claim cites, by its handle. */
+export interface Cite { kind: 'file' | 'line' | 'test' | 'run' | 'link' | 'cell_grid' | 'screen'; handle: string }
 
 export interface CheckResult {
   check: string;

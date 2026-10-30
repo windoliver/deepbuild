@@ -111,7 +111,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 µs at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 \u00b5s at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "corpus-replay",
@@ -673,6 +673,17 @@
       "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "wiki-build",
+      "command": [
+        "node",
+        "benchmarks/wiki.mjs",
+        "build"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #356 first measurement: the merge base has no wiki build at setup. One process archives 212 seeded sessions (30 days of history in four repos, twelve messages each), builds the wiki from them as setup does with a reading agent that finds nothing, then builds it again, failing unless the first build wrote a page for each repo and the second changed no page, read no message again and started no new reading job; p50 includes Node's start, the archive pass, pattern matching, the claims, the pages and the read positions. The issue's 5% of a plan window and 4,000-token start slice stay in tests/acceptance/356/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-hook-day-overhead",
       "command": [
         "node",
@@ -715,6 +726,28 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels. One process installs a plug-in with six panels, gives each a click and pops each out onto the second display with its click's serial through `deep-show run`, failing unless every window opens; p50 includes Node's and the binary's start. The issue's 300 ms a pop-out stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "terminal-60hz",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "terminal-60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #402 first measurement: the merge base has no terminals. One process installs a plug-in whose panel shows a terminal's cell grid, feeds the terminal 600 numbered lines, one every 1/60 s, through `deep-show run` on the virtual clock, and reads its updates, failing unless every update is presented in a frame of its own; p50 includes Node's and the binary's start. The issue's 60 updates a second stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "cell-grid-60hz",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "cell-grid-60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #402 first measurement: the merge base has no cell grid. One process feeds a terminal's cell grid 600 full-screen repaints of 36 rows, one every 1/60 s, through `deep-show run` on the virtual clock, failing unless every patch is presented in a frame of its own; p50 includes Node's and the binary's start. The cell grid's cost (under 5% of a core at 60 patches a second) stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

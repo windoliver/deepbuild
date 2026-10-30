@@ -1718,6 +1718,7 @@ name = "deep-app"
 version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
+ "deep-canvas-cells",
  "deep-canvas-marks",
  "deep-gpu",
  "deep-marks-gpui",
@@ -1734,6 +1735,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -1745,6 +1747,14 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "unicode-normalization",
+]
+
+[[package]]
+name = "deep-canvas-cells"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
 ]
 
 [[package]]
@@ -1951,6 +1961,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
  "deep-canvas-marks",
@@ -1967,6 +1978,7 @@ dependencies = [
  "deep-text-gpui",
  "gpui-kit",
  "image",
+ "libc",
  "serde_json",
  "sha2 0.10.9",
  "vello_cpu",

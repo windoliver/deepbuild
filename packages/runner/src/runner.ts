@@ -21,6 +21,9 @@ import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, Subagent, WindowReport } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** The kinds `fold` reads: its switch is on this type, so a case for a kind left out of the list fails to compile. */
+const FOLDED = ['job.recorded', 'job.ended', 'process.starting', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted'] as const;
+type Folded = (typeof FOLDED)[number];
 const MINUTE = 60_000;
 const DAY = 86_400_000;
 /** How long a CLI may keep running after its final result, or after its process ends without one. */
@@ -202,14 +205,22 @@ class LocalRunner implements Runner {
     const event: EventInput = { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
     return this.o.record.append(CORE, event).then(() => undefined);
   }
+  /**
+   * What the log gained of the kinds `fold` reads, the rest never decoded. The cursor moves to the head read first, so
+   * a busy log's other events are scanned once, not again at every pump.
+   */
   private async events(): Promise<Event[]> {
+    const [row] = (await this.o.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+    const head = Number(row?.head ?? 0);
     const all: Event[] = [];
     for (;;) {
-      const page = await this.o.record.read({ after: this.cursor, limit: 1000 });
-      if (!page.length) return all;
+      const page = await this.o.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
       all.push(...page);
-      this.cursor = page[page.length - 1]!.log_pos;
+      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
+      if (page.length < 1000) break;
     }
+    this.cursor = Math.max(this.cursor, head);
+    return all;
   }
   /** What the record gained: the jobs a crash left, and answers to the runner's asks. */
   private async fold(opening: boolean): Promise<void> {
@@ -218,7 +229,7 @@ class LocalRunner implements Runner {
     const left = new Map<string, number[]>();
     for (const e of await this.events()) {
       const d = e.data as Obj;
-      switch (e.kind) {
+      switch (e.kind as Folded) {
         case 'job.recorded': {
           if (!opening || this.jobs.has(String(d.job))) break;
           const rec: JobRecord = { job: String(d.job), kind: d.kind as JobRecord['kind'], agent: d.agent as Agent, account: (d.account as string | null) ?? null, state: 'waiting', folder: String(d.folder) };

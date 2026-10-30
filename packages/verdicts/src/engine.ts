@@ -436,6 +436,14 @@ export function verdict(claim: ClaimInput): Verdict {
     invalid(`state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`,
       'state digests as sha256 hex from the workspace\'s state sources');
   }
+  // A cell grid or a captured screen shows what a terminal drew, never an agent's state, so a
+  // claim that cites them and nothing that counts goes back naming each (#402).
+  const cites = claim.cites ?? [];
+  const screens = cites.filter((c) => c.kind === 'cell_grid' || c.kind === 'screen');
+  if (screens.length && screens.length === cites.length) {
+    invalid(`the claim cites only ${sorted(screens.map((c) => `${c.kind === 'screen' ? 'the captured screen' : 'the cell grid'} ${c.handle}`)).join(' and ')}, and what a screen shows is never evidence of an agent's state`,
+      'a check run or a file the claim can cite instead');
+  }
   if (!claim.checks.length) {
     const reqs = claim.requirements.map((q) => q.req);
     invalid(`no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`, 'a check selected for the claim');
