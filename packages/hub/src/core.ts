@@ -5,7 +5,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { chmod, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { homedir, networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -36,6 +37,7 @@ import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hoo
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { argsOf, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
+import { openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
@@ -239,6 +241,8 @@ export class Core {
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
+  /** Setup's wiki build (#356). */
+  private wikiBuild!: { build(): Promise<WikiBuilt> };
   /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
   private readonly parked = new Map<string, Promise<void>>();
   /** Each session a reading named a job for, once. */
@@ -499,6 +503,8 @@ export class Core {
     const archive = await openArchive({
       record: this.record, evidence: this.store, asks, adapters: shipped(), env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
       held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
+      // A session's copy is recorded under the repo its folder is in, so what it says reaches that repo's page (#356).
+      projectOf: (cwd, agent) => projectOf(cwd, agent, this.options.plant),
     });
     let archiving: Promise<void> | undefined;
     const archivePass = () => {
@@ -508,8 +514,14 @@ export class Core {
         repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
         await archive.pass();
       })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+      return archiving;
     };
     archivePass();
+    // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
+    this.wikiBuild = openWikiBuild({
+      record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
+      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant,
+    });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
@@ -2339,6 +2351,7 @@ export class Core {
       case 'record.backup': return this.backup(params);
       case 'env.up': return this.envUp(params, context);
       case 'env.down': return this.envDown(params, context);
+      case 'wiki.build': return this.wikiBuild.build();
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
@@ -2374,12 +2387,15 @@ export class Core {
       await chmod(partial, 0o600);
       await synced(partial);
       for (const [from, name] of copies) await copySynced(from, join(folder, name));
+      // What the wiki last wrote sits beside its folder (#356): without it, every restored page would read as your edit.
+      if (existsSync(wikiWritten(this.root.wiki))) await copyFile(wikiWritten(this.root.wiki), wikiWritten(join(folder, 'wiki')));
       // ledger.db names a whole backup only once all of it is on disk, and lasts once its folder is synced.
       await synced(folder);
       renameSync(partial, ledger);
     } catch (error) {
       rmSync(partial, { force: true });
       for (const [, name] of copies) rmSync(join(folder, name), { recursive: true, force: true });
+      rmSync(wikiWritten(join(folder, 'wiki')), { force: true });
       throw error;
     }
     // After the rename the backup is whole, so a failed sync here leaves it as it is.

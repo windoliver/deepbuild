@@ -12,12 +12,12 @@ import { fileURLToPath } from 'node:url';
 import { validate } from '@deepbuild/contracts';
 import { ulid, type Connection, type RecordStore } from '@deepbuild/record';
 import type { Agent, JobRecord, Runner } from '@deepbuild/runner';
-import { knownOf, type Candidate, type Known, type Wiki } from '@deepbuild/wiki';
+import { knownOf, withoutQueries, type Candidate, type Known, type Wiki } from '@deepbuild/wiki';
 import { claimId } from './claims.js';
 import { usedBetween, type WindowReading } from './plan.js';
 import { CAP, NotFound, openSlicer, type Found, type Slice, type Slicer } from './slices.js';
 
-export { CAP, NotFound, openSlicer };
+export { CAP, NotFound, claimId, openSlicer };
 export type { Found, Slice, Slicer };
 
 export type ReadingKind = 'install' | 'replay' | 'premise' | 'summary';
@@ -201,15 +201,24 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
       if (id && !projectOf.has(id)) projectOf.set(id, ((await record.raw(`SELECT project_id FROM sessions WHERE id = ${sqlText(id)}`)) as { project_id: string | null }[])[0]?.project_id ?? null);
     }
     const claims = new Map<string, { claim: Omit<Candidate, 'sources'>; findings: Finding[] }>();
+    const covered = async (page: string, f: Finding): Promise<boolean> => {
+      for (const c of f.cites) {
+        const held = (await record.raw(`SELECT s.quote FROM wiki_sources s JOIN wiki_claims w ON w.handle = s.claim WHERE w.page = ${sqlText(page)} AND s.at = ${sqlText(c.at)}`)) as { quote: string }[];
+        if (!held.some((h) => norm(withoutQueries(h.quote)) === norm(withoutQueries(c.quote)))) return false;
+      }
+      return true;
+    };
     for (const f of findings) {
       const projects = new Set(f.cites.map((c) => projectOf.get(/^session:([0-9A-Za-z]+)/.exec(c.at)?.[1] ?? '') ?? null));
       const project = projects.size === 1 ? [...projects][0] : null;
-      // Only a project id the learned layer's scope can name has its repo's page and scope.
-      const page = project && /^[a-z0-9]+$/.test(project) ? `repos/${project}` : 'notes';
+      // Only a project id the learned layer's scope can name has its repo's page and scope; the rest is about you (#356).
+      const page = project && /^[0-9A-Za-z]+$/.test(project) ? `repos/${project.toLowerCase()}` : 'you';
+      // A finding the page already holds, quote for quote at the same handles, is no news: it would only rewrite the claim.
+      if (await covered(page, f)) continue;
       const key = `${page}\n${norm(f.text).trim()}`;
       const same = claims.get(key);
       if (same) same.findings.push(f);
-      else claims.set(key, { claim: { page, id: claimId(f.text), text: f.text, scope: project && /^[0-9A-Za-z]+$/.test(project) ? `repo:${project}` : 'all' }, findings: [f] });
+      else claims.set(key, { claim: { page, id: claimId(f.text), text: f.text, scope: page.startsWith('repos/') ? `repo:${project}` : 'all' }, findings: [f] });
     }
     // The wiki checks a claim's quotes again, by its own reading of them. The findings stating one claim are learned
     // in turn, each with its own quotes and those the claim already holds, so a refused one takes only itself.
