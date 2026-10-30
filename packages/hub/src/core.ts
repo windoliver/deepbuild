@@ -319,6 +319,8 @@ export class Core {
   private ahead: { after: number; limit: number; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
+  /** Each background job's last failure, cleared by its next clean run: a job that keeps failing shows in hub.health. */
+  private readonly jobs = new Map<string, { at: number; error: string } | null>();
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
@@ -455,7 +457,7 @@ export class Core {
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
     const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
-    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick() : undefined)).catch(() => undefined), 1000));
+    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => { if (await due()) await asks.tick(); });
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -466,7 +468,7 @@ export class Core {
     // cpu.slot, and the supervisor takes every run's keys through it.
     const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
-    this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
+    this.every('leases', 1000, () => leases.tick());
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       resources: [port, compose], leases,
@@ -496,7 +498,7 @@ export class Core {
     this.host = this.options.host
       ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
       : this.supervisor;
-    this.timers.push(setInterval(() => void this.supervisor.tick().catch(() => undefined), 1000));
+    this.every('supervisor', 1000, () => this.supervisor.tick());
     const config = this.config();
     const ledger = await openLedger({ record: this.record, asks, now: this.now, price: async () => null });
     // resolver-decisions ships on by default (#23): your saved decisions, and the budgets you approved, answer the
@@ -504,7 +506,7 @@ export class Core {
     asks.registerResolver('resolver-decisions', resolverDecisions({ record: this.record, ledger }));
     this.precheck = resolverDecisions({ record: this.record });
     await this.syncStanding().catch(() => undefined);
-    this.timers.push(setInterval(() => void this.judgeRules().catch(() => undefined), HOUR));
+    this.every('rules', HOUR, () => this.judgeRules());
     // The runner reaps or reports what a crash cut, and ticks itself.
     this.runner = await openRunner({
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
@@ -537,10 +539,10 @@ export class Core {
     await this.judgedAcrossRestart();
     await this.recoverRuns();
     await this.retain();
-    this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
+    this.every('retention', DAY, () => this.retain());
     // Each staged copy is let go at its set time (#347): at start, then once an hour.
     await this.staging.prune().catch(() => undefined);
-    this.timers.push(setInterval(() => void this.staging.prune().catch(() => undefined), HOUR));
+    this.every('staging', HOUR, () => this.staging.prune());
     // The transcript archive (#20) copies what the agents' cleanups would delete, and the CI runs of the GitHub repos
     // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
     const env: Record<string, string | undefined> = { ...process.env };
@@ -629,6 +631,22 @@ export class Core {
   private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[] } = {}): Promise<void> {
     const ts = this.now();
     return this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...extra });
+  }
+  /**
+   * A background job, run every `ms`: no caller waits on it, so its last failure is kept for hub.health instead of
+   * dropped, and its next clean run clears it.
+   */
+  private every(name: string, ms: number, job: () => Promise<unknown>): void {
+    this.jobs.set(name, null);
+    this.timers.push(setInterval(() => void this.run(name, job), ms));
+  }
+  private async run(name: string, job: () => Promise<unknown>): Promise<void> {
+    try {
+      await job();
+      this.jobs.set(name, null);
+    } catch (error) {
+      this.jobs.set(name, { at: this.now(), error: error instanceof Error ? error.message : String(error) });
+    }
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {
@@ -2922,7 +2940,7 @@ export class Core {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
