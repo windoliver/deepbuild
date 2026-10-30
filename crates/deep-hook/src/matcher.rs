@@ -121,7 +121,8 @@ impl Call {
         let at = |p: &str| -> Option<PathBuf> {
             let path = Path::new(p);
             if let Some(rest) = p.strip_prefix("~/") {
-                Some(home.join(rest))
+                // Joined as text, as pi joins it: a further `/` doesn't leave home.
+                Some(home.join(rest.trim_start_matches('/')))
             } else if path.is_absolute() {
                 Some(path.to_path_buf())
             } else {
