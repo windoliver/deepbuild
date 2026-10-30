@@ -72,6 +72,8 @@ interface AgentParts {
   hosts: string[];
   /** What a real agent needs in its job's environment: its own temp folder, the forwarder, and your sign-in token if the hub read one. */
   reach(o: { temp: string; proxy: string; token?: string }): Record<string, string>;
+  /** It installs by npm, so it reads its dependencies around its own folder, and its version check reads what its job's grant names. */
+  packaged?: boolean;
   /** It reports no plan window: its job waits for no reading of one. */
   windowless?: boolean;
   /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
@@ -138,6 +140,7 @@ AGENTS.pi = {
   signIn: () => [],
   windows: () => new Map(),
   windowless: true,
+  packaged: true,
   hosts: ['api.anthropic.com:443'],
   reach: ({ temp, proxy }) => ({ TMPDIR: temp, PI_CODING_AGENT_DIR: temp, HTTPS_PROXY: proxy, https_proxy: proxy, PI_OFFLINE: '1', PI_TELEMETRY: '0' }),
   token: async () => undefined,
@@ -529,7 +532,7 @@ class LocalRunner implements Runner {
       try { real = realpathSync(path); } catch { return { refused: `${path} is gone` }; }
       const before = identity(statSync(real));
       const digest = await fileDigest(real);
-      const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real), ...(job.spec.grant?.read ?? [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
+      const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
       const version = /(\d+\.\d+\.\d+)/.exec(shown.stdout.toString('utf8'))?.[1];
@@ -548,9 +551,8 @@ class LocalRunner implements Runner {
     }
   }
   /** What a job's programs may read and run: the binary's folder and the login shell's PATH. */
-  private programs(real: string): string[] {
-    // An npm-installed agent reads its package and its dependencies, around its own folder.
-    const installed = real.indexOf('/node_modules/');
+  private programs(real: string, parts: AgentParts | undefined): string[] {
+    const installed = parts?.packaged ? real.indexOf('/node_modules/') : -1;
     const dirs = new Set([installed >= 0 ? real.slice(0, installed + '/node_modules'.length) : dirname(real)]);
     for (const dir of this.o.loginPath.split(delimiter)) if (dir && isAbsolute(dir) && existsSync(dir)) dirs.add(realpathSync(dir));
     return [...dirs];
@@ -778,7 +780,7 @@ class LocalRunner implements Runner {
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, ...(token ? { token } : {}) }) };
     const grant: Grant = {
-      read: [...this.programs(binary.real), ...(home ? parts.signIn(home) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
+      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
       ...(job.spec.grant?.sockets?.length ? { sockets: job.spec.grant.sockets } : {}),
     };
     const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {})];
