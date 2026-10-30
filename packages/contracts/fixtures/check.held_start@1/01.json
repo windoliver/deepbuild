@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "check.held_start",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "session": "session:01K74FQ8S1T2V3W4X5Y6Z7A8B9",
+    "check": "journey:checkout",
+    "claim": "claim:01K74G2Z3X5V7T9R1P3N5M7K9H",
+    "by": "pause"
+  }
+}

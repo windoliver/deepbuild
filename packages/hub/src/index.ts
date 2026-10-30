@@ -20,7 +20,7 @@ import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
 export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, relationItems, restoreCommand, runMcp, setUpFirst, setupCommand, undoCommand, waiterCommand };
-export { statusCommand } from './status.js';
+export { numbersCommand, statusCommand } from './status.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
 export { rootOf } from './paths.js';

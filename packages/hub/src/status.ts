@@ -3,8 +3,9 @@
 // finished lists that turn's tool calls and commits (#668). With the hub up it asks the hub (`status.read`); with the
 // hub down it opens the hub's database read-only and reads the same tables.
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { call } from './client.js';
+import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime } from './promises.js';
@@ -24,6 +25,13 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query);
+  // By each session's latest start: a resume without the key no longer bills it.
+  const keyed = new Set<string>();
+  for (const e of (await query("SELECT session_id, data FROM events WHERE kind = 'session.start' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; data: string | Obj }[]) {
+    const data = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
+    if (Object.values((data.billing ?? {}) as Obj).includes(true)) keyed.add(e.session_id);
+    else keyed.delete(e.session_id);
+  }
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
   const rows = sessions.map((s): StatusRow => {
     const open = asks.get(s.id);
@@ -37,7 +45,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
       : s.status === 'unknown' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
       : s.status === 'finished' ? ['finished', `its turn stopped ${ago(s.last_seen)} ago`]
       : ['working', `last seen ${ago(s.last_seen)} ago`];
-    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why };
+    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why: keyed.has(s.id) ? `${why}, billing an API key` : why };
   });
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
@@ -164,6 +172,37 @@ export function render(rows: readonly StatusRow[], from: string): string {
   const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
   return `${out.join('\n')}\n`;
+}
+
+/** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */
+export async function numbersCommand(args: readonly string[]): Promise<number> {
+  const [sub, arg] = args;
+  const asks: [string, Record<string, unknown>] | undefined = !sub || sub === '--json' ? ['numbers.read', {}]
+    : sub === 'refresh' && !arg ? ['numbers.refresh', {}]
+    : sub === 'baseline' && arg ? ['numbers.baseline', { manifest: resolve(arg) }]
+    : sub === 'sample' && arg && !Number.isNaN(Date.parse(arg)) ? ['numbers.sample', { before: Date.parse(arg) }]
+    : undefined;
+  if (!asks) {
+    process.stderr.write('Usage: deep numbers [--json] | refresh | baseline <manifest> | sample <before date>\n');
+    return 2;
+  }
+  try {
+    const socket = hubAddress().path;
+    const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
+    const reply = await call(socket, token ? readFileSync(token, 'utf8').trim() : '', asks[0], asks[1]);
+    if (!('result' in reply)) {
+      process.stderr.write(`deep numbers: ${reply.error.remediation}\n`);
+      return 3;
+    }
+    if (asks[0] === 'numbers.read' && sub !== '--json') {
+      const lines = numbersLines(reply.result.rows as Parameters<typeof numbersLines>[0]);
+      process.stdout.write(lines.length ? `${lines.join('\n')}\n` : 'No readings yet.\n');
+    } else process.stdout.write(`${JSON.stringify(reply.result, null, 2)}\n`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`deep numbers: ${error instanceof Error ? error.message : String(error)}; start the hub with deep hub start.\n`);
+    return 3;
+  }
 }
 
 /** `deep status`: 0 read from the hub; 3 when no hub could be read, after what its database shows, if there is one. */
