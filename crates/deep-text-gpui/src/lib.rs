@@ -10,8 +10,8 @@ use std::{
     ops::Range,
 };
 
-pub use deep_text::Shaped;
-use deep_text::{Align, Atlas, Role, Shaper, Spec, PAGE};
+use deep_text::{Align, Atlas, Shaper, Spec, PAGE};
+pub use deep_text::{Role, Shaped};
 use gpui_kit::*;
 
 /// The atlas number GPUI knows this atlas's pages under.
