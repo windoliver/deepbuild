@@ -69,15 +69,17 @@ describe('AC2 #332.895dd0e2 with session A holding `shop-test-1`, session B\'s `
       expect(['shop-test-1', 'shop-test-2'], `session B's stack got an account from the pool in SHOP_ACCOUNT (${JSON.stringify(accB)})`).toContain(accB);
       expect(accB, 'sessions A and B were given the same account').not.toBe(accA);
 
+      // The file's tests share one HOME and hub record, so only this test's sessions' leases are read.
+      const ours = (e: Line): boolean => holderIs(e.data.holder, A.s.id) || holderIs(e.data.holder, B.s.id);
       const events = await client.events();
-      const leaseOf = (key: string): Line | undefined => leaseEvents(events, 'lease.acquired', 'account', key)[0];
+      const leaseOf = (key: string): Line | undefined => leaseEvents(events, 'lease.acquired', 'account', key).find(ours);
       expect(holderIs(leaseOf(accA as string)?.data.holder, A.s.id), `A's account ${String(accA)} is leased to session A (${JSON.stringify(leaseOf(accA as string)?.data)})`).toBe(true);
       expect(holderIs(leaseOf(accB as string)?.data.holder, B.s.id), `B's account ${String(accB)} is leased to session B (${JSON.stringify(leaseOf(accB as string)?.data)})`).toBe(true);
 
       const downA = await A.agent.env(hub, A.s, 'down');
       expect(downA.code, `session A's deep env down exits 0 (${downA.stdout} ${downA.stderr})`).toBe(0);
-      await waitFor(async () => leaseEvents(await client.events(), 'lease.released', 'account', accA as string).length > 0, 15_000, `the lease on ${String(accA)} to end after A's down`);
-      expect(leaseEvents(await client.events(), 'lease.released', 'account', accB as string).map((e) => e.data), `session B's lease on ${String(accB)} still holds`).toEqual([]);
+      await waitFor(async () => leaseEvents(await client.events(), 'lease.released', 'account', accA as string).filter(ours).length > 0, 15_000, `the lease on ${String(accA)} to end after A's down`);
+      expect(leaseEvents(await client.events(), 'lease.released', 'account', accB as string).filter(ours).map((e) => e.data), `session B's lease on ${String(accB)} still holds`).toEqual([]);
       expect((await get(upB.ports.web as number, '/health')).status, 'session B\'s stack still answers').toBe(200);
     } finally {
       client.close();
