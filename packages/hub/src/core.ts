@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
-import { homedir, networkInterfaces } from 'node:os';
+import { availableParallelism, homedir, networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
@@ -20,12 +20,13 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
+import { headTrust, slot, validityGate, type SessionLog } from '@deepbuild/gate';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
-import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, tampered, words } from './claude-settings.js';
+import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
@@ -35,6 +36,7 @@ import { Holds } from './holds.js';
 import { Staging } from './staging.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
+import { GateRunner } from './gate-runner.js';
 import { argsOf, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
@@ -77,6 +79,8 @@ const CURSOR_SAVE = 200;
 const QUIET_MS = 30_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
 const CALL_GRACE = 2_000;
+/** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
+const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
 /** How long a waiter's answer has to show in a turn before its delivery reads stalled and goes by the next prompt. */
 const WAKE_GRACE = 10_000;
 /** The most transcript entries of one turn the core keeps for its stop's records. */
@@ -202,7 +206,7 @@ interface Cursor { transcript: string; read: number; reached: string[]; ended?: 
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean }
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null }
 /** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
 const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
@@ -226,12 +230,20 @@ export class Core {
   private readonly holds: Holds;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
+  /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
+  private readonly gate: GateRunner;
+  /** Claims whose head is untrusted (#29): their checks run in the sandbox with no network and no credentials. */
+  private readonly untrusted = new Map<string, boolean>();
+  /** Each session's last stop's final message, what its claims cite (#29). */
+  private readonly lastMessage = new Map<string, string>();
+  /** What each claim's stop waits on: its fast lane, and what the hold reports of it. */
+  private readonly lanes = new Map<string, Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; findings: string[] }>>();
   /** Staging for destructive commands (#347): a delete whose reach can't be worked out, staged copy-on-write or asked about. */
   private readonly staging: Staging;
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
-  /** The kernel's lease table (#237), read by deep env down for who holds a port now. */
+  /** The kernel's lease table (#237), read by deep env down for who holds a port now, and the gate runner's cpu.slot. */
   private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
@@ -374,7 +386,15 @@ export class Core {
     this.tasks = new AskTasks({
       raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
-      pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runApproved(r),
+      pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runClaim(r),
+      invalid: (claim, commit, reason) => this.invalid(claim, commit, reason),
+    });
+    this.gate = new GateRunner({
+      raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
+      start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run),
+      slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
+      // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
+      budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     });
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
@@ -815,7 +835,9 @@ export class Core {
       if (failed.length) throw Error(`hook ${meta.id} was not recorded`);
     });
     settled.catch(() => undefined);
-    // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record.
+    // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record; the
+    // agent's final message is what the claim cites, for the validity gate (#29).
+    if (claimed) this.lastMessage.set(meta.session, meta.fields?.last_assistant_message ?? '');
     if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
@@ -1395,7 +1417,11 @@ export class Core {
     }
     // Read on the session's own chain, never the core's: a replay at the start would wait on the start it is part of.
     if (meta.cwd && ['SessionStart', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd'].includes(meta.event)) {
-      live.reading = (live.reading ?? Promise.resolve()).then(() => this.commits(meta, live)).catch(() => undefined);
+      // A call of the session's that makes commits (git commit, merge, cherry-pick, am, revert, rebase) makes the
+      // commits that appear by its end the session's (#29: head trust reads them); any other new head is not.
+      const after = drafts.find((d) => d.kind === 'tool.after');
+      const made = after !== undefined && typeof after.data.command === 'string' && COMMITS.test(after.data.command);
+      live.reading = (live.reading ?? Promise.resolve()).then(() => this.commits(meta, live, made)).catch(() => undefined);
     }
   }
   private attention(session: string, agent: string, state: string): Promise<void> {
@@ -1437,13 +1463,17 @@ export class Core {
     const ts = this.now();
     await this.append(this.connection('core', { session: session.id, agent }), { v: 1, id: ulid(ts), kind: 'session.child_started', ts, subject: `session:${letters(session.id)}`, data: { parent: `session:${letters(parent)}`, child: `session:${letters(session.id)}`, task_ref: null } });
   }
-  /** The commits made in a session's worktree since its last hook, each recorded once under it. */
-  private async commits(meta: HookMeta, live: Live): Promise<void> {
+  /**
+   * The commits a session made in its worktree since its last hook, each recorded once under it: only those a call of
+   * its own that makes commits brought (`made`), never a head that moved some other way, such as a pull of a
+   * stranger's commits, whatever their author and committer fields say.
+   */
+  private async commits(meta: HookMeta, live: Live, made: boolean): Promise<void> {
     const head = await headOf(meta.cwd).catch(() => undefined);
     if (!head) return;
     const before = live.head;
     live.head = head.sha;
-    if (!before || before === head.sha) return;
+    if (!before || before === head.sha || !made) return;
     for (const sha of await commitsBetween(meta.cwd, before, head.sha)) {
       if (this.committed.has(sha)) continue;
       this.committed.add(sha);
@@ -1989,13 +2019,18 @@ export class Core {
       await this.appendReading(meta.session, meta.agent, `This stop's claim could not be recorded: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined);
       return undefined;
     });
+    // The claim's fast lane (#29): the hold waits for the checks the budget admitted, and no longer than the hold.
+    const stopAt = ulidTime(meta.id);
+    const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
+    let proceeded = false;
     try {
       // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
       const proceed = await this.holds.proceed(meta, until);
       if (proceed) {
+        proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold'));
-        block = [r.sendBacks.shift(), delivered, proceed].filter(Boolean).join('\n\n');
-      } else block = await this.stopHold(meta, r, until);
+        block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
+      } else block = lane?.sendBack ?? await this.stopHold(meta, r, until);
     } finally {
       r.holding--;
       if (block) {
@@ -2015,6 +2050,11 @@ export class Core {
     // The chat has seen it once it is replied in time; a reply past the hold is not, and the next prompt shows the line.
     if (line && judged && Date.now() < until) judged.delivered = line;
     if (block && line) block = `${line}\n${block}`;
+    // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end.
+    if (lane && judged?.claim && !block && !proceeded) this.gate.turnEnded(judged.claim);
+    if (lane && judged?.claim) {
+      await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: lane.readyAt, fastEndedAt: lane.fastEndedAt, replyAt: this.now(), question: false, codeChanging: lane.fast.length + lane.slow.length > 0 }).catch(() => undefined);
+    }
     return { ...(block ? { block } : {}), ...(line ? { message: line } : {}) };
   }
   /**
@@ -2032,6 +2072,22 @@ export class Core {
     const queue = `DeepBuild queue (${waiting.length}): ${waiting.map((t) => `“${short(t)}”`).join(' · ')}`;
     const context = acks.map((a) => `You were sent a message while you worked: “${a.text}”${a.task ? `, a new ask (${a.task})` : ''}. Acknowledge it in one line, then go on.`).join('\n');
     return { context, message: [...noted, queue].join('\n') };
+  }
+  /**
+   * A claim's fast lane as the stop's hold sees it (#29), waited for until `until`: the validity gate's findings and a
+   * fast-lane check that failed send the claim back, naming what's missing or which check failed.
+   */
+  private async laneOf(claim: string, until: number): Promise<{ fast: string[]; slow: string[]; readyAt: number; fastEndedAt: number; sendBack?: string } | undefined> {
+    const lane = this.lanes.get(claim);
+    if (!lane) return undefined;
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<undefined>((done) => { timer = setTimeout(() => done(undefined), Math.max(0, until - Date.now())); });
+    const ran = await Promise.race([lane.catch(() => undefined), late]).finally(() => clearTimeout(timer));
+    if (!ran) return undefined;
+    const failed = this.gate.standing(claim).filter((c) => c.lane === 'fast' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
+    const sendBack = ran.findings.length ? `DeepBuild sent this claim back before any check ran:\n${ran.findings.map((f) => `- ${f}`).join('\n')}`
+      : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
+    return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, fastEndedAt: ran.fastEndedAt, ...(sendBack ? { sendBack } : {}) };
   }
   /** A stop held while the agent left a question: what it is sent back with, or nothing. */
   private async stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined> {
@@ -3331,6 +3387,18 @@ export class Core {
     if (claimed === 'agent' && session) return { role: 'agent', session };
     return fromCredential;
   }
+  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */
+  private async invalid(claim: string, commit: string, reason: string): Promise<void> {
+    const ts = this.now();
+    const id = ulid(ts);
+    await this.append(this.connection('core'), {
+      v: 1, id, kind: 'verdict.made', ts, subject: claim,
+      data: {
+        outcome: 'INVALID', verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
+        key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
+      },
+    });
+  }
   /** A drafted check's bytes as approved at its definition's lock, kept by digest for the claim's checks to run. */
   private async keep(bytes: Uint8Array, source: string): Promise<string> {
     const put = await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'unknown', license: { name: 'session', allows: [] } });
@@ -3340,7 +3408,61 @@ export class Core {
    * A claim's check, run from its approved bytes: read from the evidence store, checked against their digest, and
    * written once under the hub's root by that digest, so a change to the file in the session's folder never runs.
    */
-  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string }): Promise<void> {
+  /**
+   * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
+   * temporary checkout and runs its fast lane; what the stop waits for.
+   */
+  private async runClaim(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void> {
+    const at = this.now();
+    const lane = (async () => {
+      const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
+      // A claim that fails the validity gate goes back naming what's missing, before any check runs.
+      if (findings.length) return { fast: [], slow: [], snapshot: r.commit, fastEndedAt: this.now(), readyAt: this.now(), findings };
+      // Head trust (#29): checks run as you only when every commit since the base was recorded from a DeepBuild
+      // session; any other head runs only in the platform sandbox, with no network and no credentials.
+      this.untrusted.set(r.claim, !(await this.trustedHead(r.cwd, r.base)));
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, cwd: r.cwd, checks: r.checks, stopAt: at });
+      return { ...ran, findings };
+    })();
+    this.lanes.set(r.claim, lane);
+    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
+  }
+  /**
+   * Whether a claim's head is trusted: every commit from its base to HEAD was recorded from a DeepBuild session (its
+   * commit.made) or has a push.record@1 reading whose pusher is yours. Until a forge's reader is installed (#46), no
+   * reading is there, so a commit no session recorded is untrusted, never trusted for its author or committer fields.
+   */
+  private async trustedHead(cwd: string, base: string): Promise<boolean> {
+    const head = (await headOf(cwd).catch(() => undefined))?.sha;
+    if (!head || !/^[0-9a-f]{40}$/.test(base) || head === base) return true;
+    // The commits a session's own call made, as commit.made records them (a claim's commit lands in the commits table too).
+    const recorded = ((await this.record.raw("SELECT json_extract(data, '$.sha') AS sha FROM events WHERE kind = 'commit.made'")) as { sha: string }[]).map((r) => r.sha);
+    try {
+      return headTrust({ repo: cwd, base, head, recorded, yours: [], provider: [] }).trusted;
+    } catch {
+      return false;
+    }
+  }
+  /** What this session read and ran, from its own tool calls in the record: what a claim's cites must name. */
+  private async sessionLog(session: string): Promise<SessionLog> {
+    const rows = (await this.record.raw(`SELECT data FROM events WHERE session_id = '${sql(session)}' AND kind = 'tool.after'`)) as { data: string }[];
+    const read: string[] = [];
+    const ran: SessionLog['ran'] = [];
+    const cwd = this.live.get(session)?.cwd ?? '';
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as Obj;
+      for (const p of Array.isArray(d.paths) ? d.paths : []) if (typeof p === 'string') read.push(cwd && p.startsWith(`${cwd}/`) ? p.slice(cwd.length + 1) : p);
+      if (typeof d.command === 'string') ran.push({ command: d.command, exit_status: typeof d.exit_code === 'number' ? d.exit_code : d.outcome === 'ok' ? 0 : null, output: '' });
+    }
+    return { read, ran, links: [] };
+  }
+  /** A run's outcome, once its finish is in the record. */
+  private async runEnded(run: string): Promise<string> {
+    await this.runs.get(run)?.done.catch(() => undefined);
+    const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = '${sql(run.slice(4))}'`)) as { outcome: string | null }[];
+    return row?.outcome ?? 'stopped';
+  }
+  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null }): Promise<string> {
     let script = join(this.root.dir, 'checks', r.approved);
     if (this.options.plant === 'runs-disk-bytes') script = join(r.cwd, r.check);
     else if (!existsSync(script)) {
@@ -3348,7 +3470,10 @@ export class Core {
       writeFileSync(`${script}.tmp`, await this.store.read(r.approved), { mode: 0o500 });
       renameSync(`${script}.tmp`, script);
     }
-    await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd });
+    // An untrusted head's run gets its checkout and nothing else: no network, no credentials, none of your files.
+    const grant = this.untrusted.get(r.claim) ? { write: [r.cwd], read: [r.cwd, script] } : RUN_AS_YOU;
+    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null });
+    return String(run);
   }
   /**
    * The stop rule (#303, design: Every stop is judged): a stop whose turn did work is a claim, other than one right
@@ -3440,7 +3565,7 @@ export class Core {
   }
 
   private async runStart(params: Obj): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms } = params;
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
     if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
@@ -3460,14 +3585,29 @@ export class Core {
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const run = await this.launch({
       run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
+      ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
     });
     return { run };
   }
 
+  /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
+  private async claimSession(claim: string): Promise<string> {
+    const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = '${sql(claim.slice(6))}' LIMIT 1`)) as { session_id: string | null }[];
+    return row?.session_id ? `session:${letters(row.session_id)}` : 'core';
+  }
   /** Starts a run through the host, sandboxed, with the hub's run token injected; its output becomes scrubbed evidence. */
   private async launch(run: Run): Promise<string> {
     this.writeJournal((runs) => { runs[run.run] = run; });
-    await this.appendCore('run.started', { run: run.run, check: run.check, claim: run.claim, commit: run.commit }, { subject: run.run });
+    // Every check run takes a `cpu.slot` from the kernel's lease table first, held for the claim's session (#29):
+    // at most half the cores run checks, and the slot shows in the lease table under that session.
+    const holder = await this.claimSession(run.claim);
+    const lease = await slot(this.leases, holder, run.run);
+    // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
+    const ts = this.now();
+    await this.append(this.connection('core'), {
+      v: 2, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
+      data: { run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow' },
+    });
     const token = randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
     const values = this.options.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.options.held] };
@@ -3541,7 +3681,7 @@ export class Core {
       await this.finish(run, outcome, findings, evidence);
     });
     this.runs.set(run.run, { run, done, stop });
-    void done.finally(() => this.runs.delete(run.run));
+    void done.finally(() => this.leases.release(lease.id, []).catch(() => undefined)).finally(() => this.runs.delete(run.run));
     return run.run;
   }
   private async finish(run: Run, outcome: string, findings: string[], evidence: string[]): Promise<void> {

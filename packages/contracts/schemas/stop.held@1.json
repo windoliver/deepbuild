@@ -1,0 +1,163 @@
+{
+  "title": "stop.held@1",
+  "description": "How long a stop was held (#29), from deep-hook's stamp on its request to its reply, split by why: each moment goes to the first reason that applies, so the parts sum to the hold.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "stop.held"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string",
+          "pattern": "^session:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The session whose stop it was."
+        },
+        "stop": {
+          "type": "string",
+          "format": "ulid",
+          "description": "The stop's event ID."
+        },
+        "claim": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim the stop made, if any."
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The whole hold, in ms."
+        },
+        "question": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "A stop whose send-back a question holds: its whole hold, in ms."
+        },
+        "slow": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Once its fast-lane checks ended, while a stop that can't be woken waits for its slow checks, in ms."
+        },
+        "fast": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "While any fast-lane check runs, in ms."
+        },
+        "snapshot_start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "While the validity gate runs, the claim's snapshot and checkout are made or a stack starts, in ms."
+        },
+        "queue_wait": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "While its checks wait only for a CPU slot, in ms."
+        },
+        "code_changing": {
+          "type": "boolean",
+          "description": "Whether the stop's snapshot changed the inputs of at least one check on its claims."
+        },
+        "budget_cost": {
+          "type": "array",
+          "description": "The checks the budget left to the slow lane that the hold alone would have run.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          }
+        }
+      },
+      "required": [
+        "session",
+        "stop",
+        "claim",
+        "total",
+        "question",
+        "slow",
+        "fast",
+        "snapshot_start",
+        "queue_wait",
+        "code_changing",
+        "budget_cost"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
