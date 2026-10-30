@@ -99,6 +99,22 @@ export function writeStanding(dir: string, standing: readonly unknown[]): void {
   writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, standing }, null, 2)}\n`));
 }
 
+/** Copies the directions you rejected into `<dir>/rules.json` as `rejected-*` entries (#111), keeping every other. */
+export function writeRejected(dir: string, rejected: Obj): void {
+  const file = join(dir, 'rules.json');
+  let current: Obj;
+  try {
+    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
+  } catch {
+    return;
+  }
+  if (!isObj(current.entries)) return;
+  const others = Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-')));
+  const entries = { ...others, ...rejected };
+  if (JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort())) return;
+  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries }, null, 2)}\n`));
+}
+
 const USAGE = 'Usage: deep guard add <file>';
 /** Refusals that leave nothing added and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */
 const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);

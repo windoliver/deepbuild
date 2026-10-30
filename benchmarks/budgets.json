@@ -684,6 +684,17 @@
       "initialReason": "Issue #356 first measurement: the merge base has no wiki build at setup. One process archives 212 seeded sessions (30 days of history in four repos, twelve messages each), builds the wiki from them as setup does with a reading agent that finds nothing, then builds it again, failing unless the first build wrote a page for each repo and the second changed no page, read no message again and started no new reading job; p50 includes Node's start, the archive pass, pattern matching, the claims, the pages and the read positions. The issue's 5% of a plan window and 4,000-token start slice stay in tests/acceptance/356/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "wiki-memory-compile",
+      "command": [
+        "node",
+        "benchmarks/wiki.mjs",
+        "memory"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #111 first measurement: the merge base reads only Claude Code's and Codex's user-level files and refuses their lines. One process compiles four agents' memory files, 200 rules each with 100 shared, as setup does, failing unless a shared rule is one claim with four sources and a second compile changes no page. The issue's 60 s stays in tests/acceptance/111/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-hook-day-overhead",
       "command": [
         "node",
