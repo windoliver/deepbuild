@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 type Obj = Record<string, unknown>;
 interface Ctx { cwd: string; isIdle(): boolean; hasPendingMessages(): boolean; sessionManager: { getSessionId(): string; getSessionFile(): string | undefined } }
@@ -154,7 +155,7 @@ class Tools {
   }
 }
 
-const here = (): string => new URL('.', import.meta.url).pathname;
+const here = (): string => fileURLToPath(new URL('.', import.meta.url));
 
 export default function deepbuild(pi: Pi): void {
   const tools = JSON.parse(readFileSync(join(here(), 'tools.json'), 'utf8')) as { name: string; description: string; inputSchema: Obj }[];
@@ -249,6 +250,7 @@ export default function deepbuild(pi: Pi): void {
   }
   /** The hub's long wait for this session's answers: one at a time, asked again after each, until the session goes. */
   async function listen(mine: Tools): Promise<void> {
+    let announced = false;
     while (!mine.closed) {
       const reply = await mine.call('session.wait', { session, cwd: ctx?.cwd ?? '', push: true }, 0);
       if (mine.closed) return;
@@ -259,11 +261,16 @@ export default function deepbuild(pi: Pi): void {
         place(toolCalls > 0);
       } else if (result?.exit === 'session ended') return;
       else if ((reply.error as { code?: string } | undefined)?.code === 'role' && ctx?.sessionManager.getSessionFile()) {
-        // A restarted hub knows this session from its next hook, and an idle session sends none: say it's here.
-        await hook('session_start', { source: 'resume' });
+        // A restarted hub knows this session from its next hook, and an idle session sends none: say it's here, once,
+        // since a hub that still refuses it, as with a second process on one session file, records every saying.
+        if (!announced) await hook('session_start', { source: 'resume' });
+        announced = true;
         mine.rebind();
         await new Promise((done) => setTimeout(done, 1000).unref());
-      } else await new Promise((done) => setTimeout(done, reply.error ? 1000 : 50).unref());
+      } else {
+        announced = false;
+        await new Promise((done) => setTimeout(done, reply.error ? 1000 : 50).unref());
+      }
     }
   }
   let toolCalls = 0;

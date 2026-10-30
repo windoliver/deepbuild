@@ -14,14 +14,12 @@ const closers: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of closers.splice(0)) await close(); }, 30_000);
 const DAY = 86_400_000;
 
-it('a pi job records the cost its messages report, each message once', async () => {
+async function job(out: string[], stderr = '') {
   const tmp = mkdtempSync(join(tmpdir(), 'pi-cost-'));
   const [home, bin] = [join(tmp, 'h'), join(tmp, 'bin')];
   mkdirSync(home);
   mkdirSync(bin);
-  const message = (total: number) => JSON.stringify({ type: 'message_end', message: { role: 'assistant', model: 'm', stopReason: 'stop', content: [{ type: 'text', text: 'done' }], usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total } } } });
-  const out = [JSON.stringify({ type: 'session', id: 'session-1' }), message(0.25), message(0.5), JSON.stringify({ type: 'agent_settled' })];
-  writeFileSync(join(bin, 'pi'), `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.4.0; exit 0; fi\nprintf '%s\\n' ${out.map((one) => `'${one}'`).join(' ')}\n`);
+  writeFileSync(join(bin, 'pi'), `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.4.0; exit 0; fi\n${out.length ? `printf '%s\\n' ${out.map((one) => `'${one}'`).join(' ')}\n` : ''}${stderr ? `echo '${stderr}' >&2\nexit 1\n` : ''}`);
   chmodSync(join(bin, 'pi'), 0o755);
   const record = await openRecord({ path: join(tmp, 'ledger.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
@@ -33,7 +31,25 @@ it('a pi job records the cost its messages report, each message once', async () 
     settings: { plan: { reserve_pct: 10 }, asks: { unblock: { deadline_ms: 2 * DAY } } },
   });
   closers.push(async () => { await runner.close(); await supervisor.close(); await record.close(); rmSync(tmp, { recursive: true, force: true, maxRetries: 5 }); });
-  const rec = await runner.run({ kind: 'read', agent: 'pi' as never, prompt: 'hi', deadline_ms: 30_000, grant: { read: [tmp] } });
+  return runner.run({ kind: 'read', agent: 'pi' as never, prompt: 'hi', deadline_ms: 30_000, grant: { read: [tmp] } });
+}
+const message = (total: number, more: Record<string, unknown> = {}) => JSON.stringify({ type: 'message_end', message: { role: 'assistant', model: 'm', stopReason: 'stop', content: [{ type: 'text', text: 'done' }], usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total } }, ...more } });
+const opened = JSON.stringify({ type: 'session', id: 'session-1' });
+const settled = JSON.stringify({ type: 'agent_settled' });
+
+it('a pi job records the cost its messages report, each message once', async () => {
+  const rec = await job([opened, message(0.25), message(0.5), settled]);
   expect({ state: rec.state, blocked: rec.blocked, refused: rec.refused }).toEqual({ state: 'finished', blocked: undefined, refused: undefined });
   expect(rec.cost_usd).toBe(0.75);
 }, 60_000);
+
+it('a pi job cut off at its output limit has no result', async () => {
+  const rec = await job([opened, message(0.25, { stopReason: 'length' }), settled]);
+  expect({ state: rec.state, result: rec.result, cause: rec.stop?.cause }).toEqual({ state: 'stopped', result: undefined, cause: 'unknown' });
+}, 60_000);
+
+it('a pi job with no key says who has to act, and a token count reads as no status code', async () => {
+  expect((await job([], 'No API key for provider anthropic')).stop?.cause).toBe('sign_in_required');
+  const big = await job([opened, message(0, { stopReason: 'error', errorMessage: 'context window exceeded: 140300 tokens' }), settled]);
+  expect(big.stop?.cause).toBe('context_overflow');
+}, 120_000);

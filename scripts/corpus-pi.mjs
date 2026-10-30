@@ -2,7 +2,7 @@
 // with the package and a real hub. Only the model is scripted. A tee on the hub's socket keeps each hook payload the
 // package sends byte for byte; the transcript is pi's own session file. Like the other agents' sets a recording has no
 // `expect`: those are written from the design's event shapes and reviewed. DEEP_PI_CLI names pi's dist/cli.js.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -92,10 +92,10 @@ async function record(name, scenario, cli, out) {
     await sleep(300);
     const transcripts = readdirSync(sessions).filter((file) => file.includes(session)).map((file) => join(sessions, file));
     // pi's system prompt names where it is installed and where its extensions load from.
-    const scrub = (text) => text.replaceAll(dir, '/work').replaceAll(realpathSync(tmpdir()), '/tmp').replace(/\/(Users|home)\/[^/"\\\s]+/g, '/Users/user').replace(/\/(private\/)?tmp\/claude-[^"\\\s]*?(\/node_modules\/)/g, '/opt/pi$2');
-    const target = join(out, 'pi', '1.4.0', name);
+    const scrub = (text) => redact(text).replaceAll(dir, '/work').replaceAll(realpathSync(tmpdir()), '/tmp').replace(/\/(Users|home)\/[^/"\\\s]+/g, '/Users/user').replace(/\/(private\/)?tmp\/claude-[^"\\\s]*?(\/node_modules\/)/g, '/opt/pi$2');
+    const target = join(out, 'pi', version, name);
     mkdirSync(target, { recursive: true });
-    writeFileSync(join(target, 'session.json'), `${JSON.stringify({ schema: 'corpus.session@1', agent: 'pi', version: '1.4.0', surface: 'rpc', recorded: new Date().toISOString().slice(0, 10), scenario: name }, null, 2)}\n`);
+    writeFileSync(join(target, 'session.json'), `${JSON.stringify({ schema: 'corpus.session@1', agent: 'pi', version, surface: 'rpc', recorded: new Date().toISOString().slice(0, 10), scenario: name }, null, 2)}\n`);
     writeFileSync(join(target, 'events.jsonl'), kept.map((payload) => `${scrub(JSON.stringify({ payload, ...(facts.ask && payload.parent ? { pending: { ask: facts.ask, session: payload.parent, outcome: 'replaced' } } : {}) }))}\n`).join(''));
     writeFileSync(join(target, 'transcript.jsonl'), scrub(transcripts.filter(existsSync).map((file) => readFileSync(file, 'utf8')).join('')));
   } finally {
@@ -118,8 +118,12 @@ function openAsk(hubHome) {
   });
 }
 
-export async function recordPi(out) {
+let version = '';
+let redact = (text) => text;
+export async function recordPi(out, redactor) {
+  redact = redactor;
   const cli = process.env.DEEP_PI_CLI;
   if (!cli || !existsSync(cli)) throw Error("DEEP_PI_CLI names pi's dist/cli.js: nothing was recorded");
+  version = spawnSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).stdout.trim();
   for (const [name, scenario] of Object.entries(SCENARIOS)) await record(name, scenario, cli, out);
 }

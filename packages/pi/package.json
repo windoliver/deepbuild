@@ -7,5 +7,5 @@
   "keywords": ["pi-package"],
   "files": ["dist"],
   "pi": { "extensions": ["./dist/index.js"] },
-  "scripts": { "build": "tsc -p tsconfig.json && node tools.mjs" }
+  "scripts": { "build": "tsc -p tsconfig.json && node tools.mjs", "prepack": "npm run build" }
 }

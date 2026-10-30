@@ -177,6 +177,8 @@ interface Job {
   ended: Promise<JobRecord>;
   end(rec: JobRecord): void;
   stopCause?: StopCause;
+  /** The end of a pi job's stderr. */
+  failure?: string;
   /** Its result was marked an error: no answer. */
   errored?: boolean;
   settling?: Promise<void>;
@@ -799,7 +801,10 @@ class LocalRunner implements Runner {
       // The prompt goes only to the bytes it verified: swapped during the start, its process reads nothing and is stopped.
       input: () => (this.unchanged(binary) && !job.cancelled ? Buffer.from(job.spec.prompt, 'utf8') : undefined),
       ...(job.spec.leases ? { leases: job.spec.leases } : {}),
-      output: { stdout: (chunk) => this.read(job, chunk), stderr: () => { job.outputAt = Date.now(); } },
+      output: { stdout: (chunk) => this.read(job, chunk), stderr: (chunk) => {
+        job.outputAt = Date.now();
+        if (job.spec.agent === 'pi') job.failure = `${job.failure ?? ''}${chunk.toString()}`.slice(-4096);
+      } },
     });
     if (started.status !== 'started') {
       if (job.cancelled) {
@@ -861,14 +866,12 @@ class LocalRunner implements Runner {
         if (typeof cost === 'number') job.rec.cost_usd = (job.rec.cost_usd ?? 0) + cost;
       }
       // pi retries some errors itself: only the last message says how the run ended.
-      const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted';
+      const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted' || msg.stopReason === 'length';
       job.errored = failed;
       delete job.stopCause;
       delete job.said;
       if (failed) {
-        const text = String(msg.errorMessage ?? '').toLowerCase();
-        const causes = this.facts('pi').errorTexts.causes ?? {};
-        job.stopCause = (Object.entries(causes).find(([needle]) => text.includes(needle.toLowerCase()))?.[1] ?? 'unknown') as StopCause;
+        job.stopCause = this.piCause(String(msg.errorMessage ?? ''));
       } else if (Array.isArray(msg.content)) {
         job.said = msg.content.flatMap((part) => (isObj(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('');
       }
@@ -879,6 +882,12 @@ class LocalRunner implements Runner {
       if (!job.errored && job.said !== undefined) job.rec.result = job.said;
       void this.settle(job, job.resultAt);
     }
+  }
+  /** The cause the facts name for an error's words: a status code only as a word of its own, so no token count reads as one. */
+  private piCause(error: string): StopCause {
+    const text = error.toLowerCase();
+    const causes = this.facts('pi').errorTexts.causes ?? {};
+    return (Object.entries(causes).find(([needle]) => (/^\d+$/.test(needle) ? new RegExp(`\\b${needle}\\b`).test(text) : text.includes(needle.toLowerCase())))?.[1] ?? 'unknown') as StopCause;
   }
   private event(job: Job, e: Obj): void {
     if (job.spec.agent === 'pi') return this.piEvent(job, e);
@@ -989,7 +998,9 @@ class LocalRunner implements Runner {
     job.rec.model = job.answered ?? 'unknown';
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
-    const cause = job.stopCause ?? (finished ? undefined : 'agent_crashed');
+    // pi says on stderr what stops a run before its first message, as a missing key does.
+    const said = job.failure && !finished && !job.stopCause ? this.piCause(job.failure) : 'unknown';
+    const cause = job.stopCause ?? (finished ? undefined : said !== 'unknown' ? said : 'agent_crashed');
     if (cause) job.rec.stop = { cause };
     if (this.o.plant === 'widens-range-on-smoke' && job.spec.kind === 'smoke' && job.rec.binary) this.widened.add(job.rec.binary.version);
     // Charged what its output said it cost; with no cost read, its reservation stays held, never charged as zero.

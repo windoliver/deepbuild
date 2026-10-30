@@ -33,7 +33,7 @@ const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env, stdio: ['ignore'
 /** One session from prompt to settle: its time, and the events its stream carried that aren't deltas. */
 function session(withPackage) {
   return new Promise((resolve, reject) => {
-    const args = [PI, '--mode', 'rpc', '--no-session', '--no-extensions', '--no-approve', '-e', SCRIPTED, ...(withPackage ? ['-e', join(REPO, 'packages/pi')] : []), '--provider', 'scripted', '--model', 'scripted-1'];
+    const args = [PI, '--mode', 'rpc', '--session-dir', join(dir, 'sessions'), '--no-extensions', '--no-approve', '-e', SCRIPTED, ...(withPackage ? ['-e', join(REPO, 'packages/pi')] : []), '--provider', 'scripted', '--model', 'scripted-1'];
     const pi = spawn(process.execPath, args, { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] });
     let t0 = 0;
     let events = 0;

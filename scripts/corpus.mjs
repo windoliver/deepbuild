@@ -351,9 +351,11 @@ async function recordCodex(out, bin, facts) {
 async function recordCommand(options) {
   const agent = options.agent, out = resolve(options.out);
   if (agent === 'pi') {
-    await (await import('./corpus-pi.mjs')).recordPi(out);
-    say({ type: 'summary', verdict: 'recorded', set: join(out, 'pi') });
-    return 0;
+    await (await import('./corpus-pi.mjs')).recordPi(out, redactor());
+    const scan = spawnSync('gitleaks', ['detect', '--no-git', '--source', join(out, 'pi'), '--config', join(root, 'packages/evidence/gitleaks/gitleaks.toml'), '--redact', '--no-banner', '--exit-code', '3'], { encoding: 'utf8' });
+    const verdict = scan.error ? 'BLOCKED' : scan.status === 0 ? 'PASS' : 'FAIL';
+    say({ type: 'summary', verdict, set: join(out, 'pi'), secretScan: scan.error ? `gitleaks did not run: ${scan.error.message}` : scan.status === 0 ? 'clean' : 'findings; the set must not join the corpus' });
+    return verdict === 'PASS' ? 0 : 1;
   }
   if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code, codex or pi');
   const bin = binaryPath(agent === 'codex' ? 'codex' : 'claude');
