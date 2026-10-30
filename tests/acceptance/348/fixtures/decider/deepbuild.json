@@ -3,5 +3,6 @@
   "version": "1.0.0",
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
   "access": { "words": ["record"] },
-  "checks": ["ext.decider.report"]
+  "checks": ["ext.decider.report"],
+  "requires": { "preview": ["deep.record.append"] }
 }
