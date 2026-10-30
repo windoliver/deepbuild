@@ -184,10 +184,6 @@
           "spec": "^0.2",
           "why": "Issue #389: the one ops module's pinned math, so CPU math a check reads matches across machines."
         },
-        "serde": {
-          "spec": "^1",
-          "why": "Issue #389: the document envelope, items and patches read and written as JSON."
-        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #389: the document JSON and the canonical bytes a revision hashes; already in the workspace tree."
@@ -1093,10 +1089,6 @@
         "wgpu-profiler": {
           "spec": "^0.28",
           "why": "Issue #380: the criterion names it: per-pass GPU timestamps for the frame budget."
-        },
-        "bytemuck": {
-          "spec": "^1",
-          "why": "Issue #380: operator inputs and the frame uniform written to GPU buffers."
         },
         "serde_json": {
           "spec": "^1",

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { fixtures } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore } from '@deepbuild/evidence';
-import { openRecord, testStorage } from '../src/index.js';
+import { openRecord, readSince, testStorage } from '../src/index.js';
 import type { Connection, EventInput, RecordStore } from '../src/index.js';
 
 const T0 = 1_760_013_451_000;
@@ -968,5 +968,27 @@ describe('a prompt the core answered in the model\'s place (#83)', () => {
     // A record that reads the answered prompt as a turn still open reads the idle session as active, and its claim lost.
     expect(row?.verdict_id, 'the session had ended before the cut: its claim is not INVALID').toBeNull();
     expect((await r.session(S))?.turns.map((t) => t.stopped), 'the answered prompt\'s turn is ended').toEqual([true, true]);
+  });
+});
+
+describe('readSince follows the log for a fold', () => {
+  it('hands on each event of its kinds once, in log order, across pages, and moves the cursor past the rest', async () => {
+    const { record: r, S } = await record();
+    // 2,500 calls, every fifth a tool.before: three pages of the other kind, which readSince must skip, not stop at.
+    for (let i = 0; i < 2500; i++) await r.append(hook(S), event(i % 5 ? 'tool.after' : 'tool.before', T0 + i, seqAt(T0 + i)));
+    const head = ((await r.raw('SELECT max(log_pos) AS head FROM events')) as { head: number }[])[0]!.head;
+    const seen: number[] = [];
+    const cursor = await readSince(r, 0, ['tool.before'], (e) => { expect(e.kind).toBe('tool.before'); seen.push(e.log_pos); });
+    expect(seen).toHaveLength(500);
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    // The last event is a tool.after: the cursor is the head, so the next read scans none of it again.
+    expect(cursor).toBe(head);
+    const again: number[] = [];
+    expect(await readSince(r, cursor, ['tool.before'], (e) => again.push(e.log_pos))).toBe(head);
+    expect(again).toEqual([]);
+    // What lands after the cursor is read next time, and only that.
+    await r.append(hook(S), event('tool.before', T0 + 9000, seqAt(T0 + 9000)));
+    expect(await readSince(r, cursor, ['tool.before'], (e) => again.push(e.log_pos))).toBe(head + 1);
+    expect(again).toEqual([head + 1]);
   });
 });

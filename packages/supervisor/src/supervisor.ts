@@ -11,7 +11,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { availableParallelism, totalmem } from 'node:os';
 import { dirname } from 'node:path';
-import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
+import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { JsonValue } from '@deepbuild/contracts';
 import { HELPER, scan, sha256, table, tokenOf, type Proc } from './procs.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
@@ -144,15 +144,8 @@ class LocalSupervisor implements Supervisor {
    * first, so a busy log's other events are scanned once, not again at every tick.
    */
   private async events(): Promise<Event[]> {
-    const head = await this.head();
     const all: Event[] = [];
-    for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
-      all.push(...page);
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < 1000) break;
-    }
-    this.cursor = Math.max(this.cursor, head);
+    this.cursor = await readSince(this.options.record, this.cursor, FOLDED, (e) => all.push(e));
     return all;
   }
   private async head(): Promise<number> {

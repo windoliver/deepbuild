@@ -1742,7 +1742,6 @@ name = "deep-canvas"
 version = "0.0.0"
 dependencies = [
  "libm",
- "serde",
  "serde_json",
  "sha2 0.10.9",
  "unicode-normalization",
@@ -1827,7 +1826,6 @@ version = "0.0.0"
 name = "deep-effects-render"
 version = "0.0.0"
 dependencies = [
- "bytemuck",
  "deep-canvas-effects",
  "deep-gpu",
  "deep-scene3d-render",
