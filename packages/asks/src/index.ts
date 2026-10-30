@@ -47,9 +47,16 @@ export interface AskSource {
   kind: AskKind;
   fixture: { ask: JsonValue; at_deadline: { decision: Decision } };
 }
-export interface PlanStep { does: string; changes: string[]; undo: string; public: boolean; cost: number }
+/** A plan's step: what it does, what it changes, its undo (null when it has none) and its cost in USD. */
+export interface PlanStep { does: string; changes: string[]; undo: string | null; public: boolean; cost: number }
 /** plan.proposed@1's data, less the ask and the digest the core computes. */
 export interface PlanInput { steps: PlanStep[]; diff: string }
+/** What the core marks a step with no undo, in the plan it records and shows (#69). */
+export const CANT_UNDO = "can't undo";
+/** Whether a run may take a step of an authority ask's plan; when it may not, the ask it waits on. */
+export type StepCheck = { run: true } | { run: false; ask: string };
+/** A batch as its card shows it: every step of every plan in it, each with its switch as it starts. */
+export interface BatchCard { batch: string; steps: { ask: string; step: number; does: string; undo: string; on: boolean }[] }
 /** A step the agent is about to take; whether it leaves the machine comes from the guard engine. */
 export interface Step { leaves_machine: boolean }
 
@@ -197,6 +204,15 @@ export interface Asks {
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
   authorized(ask: string, planHash: string): Promise<string | null>;
+  /**
+   * Before a run takes a step of an authority ask's plan (#69): it runs only when your yes approved a plan holding it,
+   * switched on. A step outside that plan stops the run and is asked again, once, as a new authority ask.
+   */
+  beforeStep(ask: string, step: PlanStep): Promise<StepCheck>;
+  /** The batch an ask.batched names, with each step's switch as it starts: a step that can't be undone starts off. */
+  batch(batch: string): Promise<BatchCard>;
+  /** Your yes to a batch, on the trusted path: each plan in it, bound to your click, for the steps switched on. */
+  approveBatch(connection: Connection, batch: string, input: { token: string; switches: { ask: string; step: number; on: boolean }[] }): Promise<void>;
   /** Later, on the trusted path: hides the ask until `until`, never past its deadline. */
   later(connection: Connection, ask: string, until: number): Promise<void>;
   /** Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did. */
@@ -369,6 +385,8 @@ const TOGETHER = 'together';
 /** The fold's option that leaves the asks it holds to their defaults. */
 const FOLD_DEFAULTS = 'defaults';
 const FOLD_SOURCE = 'asks.fold';
+/** Where the core asks again for a step a run would take outside the plan your yes approved (#69). */
+const OUTSIDE_SOURCE = 'effect.outside_plan';
 /** Where the core drafts a request for the owner of a block that isn't yours. */
 const REQUEST_SOURCE = 'request.draft';
 /** Where the core raises the task for a stop's block (#85): one per block, shared by every session it stopped. */
@@ -421,7 +439,8 @@ interface Ask {
   conflict: Card['conflict'];
   /** The budget a resolver named for it that the core refused, when it was last asked. */
   budget?: BudgetLeft;
-  approval?: { hash: string | null; token: string | null; decision: string };
+  /** Your answer: the plan it bound, its click, its decision, and the steps of the plan it approved (null: all of them). */
+  approval?: { hash: string | null; token: string | null; decision: string; steps: number[] | null };
   words: string[];
   /** For a provisional choice: the files its session edited while it went on with the recommended option. */
   decided: Set<string>;
@@ -490,6 +509,8 @@ class AsksCore implements Asks {
   private queue: Promise<unknown> = Promise.resolve();
   /** Sessions with a message you typed that the agent hasn't read yet. */
   private readonly unread = new Set<string>();
+  /** The asks each batch showed, by its name. */
+  private readonly shownIn = new Map<string, string[]>();
   /** How many asks batches showed each UTC day, by day number. */
   private readonly batched = new Map<number, number>();
   /** Settings read in this call, by worktree: each call reads the files once. */
@@ -580,9 +601,14 @@ class AsksCore implements Asks {
         throw new AskRefused('only a taste call or a choice with a recommendation goes on provisionally', { field: 'provisional' });
       }
       if (plan !== undefined && row.kind !== 'authority') throw new AskRefused('only an authority ask carries a plan', { field: 'plan' });
+      // Every yes with authority shows what will happen first (#69): no plan, or a plan of no steps, raises nothing.
+      if (row.kind === 'authority' && (!isObj(plan) || !Array.isArray(plan.steps) || plan.steps.length === 0)) {
+        throw new AskRefused(`an authority ask from ${source} shows its plan: the steps, what each changes, its undo or that it can't be undone, and its cost`, { field: 'plan' });
+      }
       let proposed: Obj | undefined;
       if (plan !== undefined) {
-        const steps = plan.steps as unknown as JsonValue;
+        // A step with no undo is marked so by the core, never by its raiser's words.
+        const steps = plan.steps.map(markStep) as unknown as JsonValue;
         proposed = { ask: `ask:${id}`, steps, diff: plan.diff, hash: sha256Hex(canonicalize({ steps, diff: plan.diff })) };
         const planned = validate('plan.proposed@1', { v: 1, id: ulid(now), kind: 'plan.proposed', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data: proposed });
         if (!planned.ok) throw new AskRefused(`plan.proposed@1 refuses the plan at ${planned.issues[0]!.path}`, { field: `plan${planned.issues[0]!.path.replace(/^\/data/, '')}` });
@@ -800,6 +826,83 @@ class AsksCore implements Asks {
       const approval = ask?.closed?.outcome === 'answered' ? ask.approval : undefined;
       return approval?.decision === 'allow' && approval.hash === planHash ? approval.token : null;
     });
+  }
+
+  async beforeStep(handle: string, step: PlanStep): Promise<StepCheck> {
+    const check = await this.exclusive(async (): Promise<StepCheck | { again: Ask; key: string }> => {
+      await this.sync();
+      const ask = this.asks.get(bare(handle));
+      if (!ask || ask.data.kind !== 'authority') throw new AskRefused(`${handle} is no authority ask`, { ask: handle });
+      const marked = markStep(step);
+      const approval = ask.closed?.outcome === 'answered' && ask.approval?.decision === 'allow' ? ask.approval : undefined;
+      // Not yet answered, or answered anything but yes: the run waits on the ask itself.
+      if (!approval) return { run: false, ask: ask.handle };
+      // Your yes covers the plan it bound, and of it only the steps switched on.
+      const at = approval.hash !== null && approval.hash === ask.plan?.hash
+        ? ask.plan.steps.findIndex((s, i) => sameStep(s, marked) && (approval.steps === null || approval.steps.includes(i))) : -1;
+      if (at >= 0) return { run: true };
+      // Outside it: asked again, once, for that step.
+      const key = sha256Hex(canonicalize({ again: ask.handle, step: marked as unknown as JsonValue }));
+      const asked = this.open().find((a) => a.data.key === key);
+      return asked ? { run: false, ask: asked.handle } : { again: ask, key };
+    });
+    if (!('again' in check)) return check;
+    const { again: ask, key } = check;
+    const now = this.options.now();
+    const raised = await this.raise({ ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) }, OUTSIDE_SOURCE, {
+      kind: 'authority', question: `The run ${ask.handle} approved would also: ${step.does}. Your yes didn't cover it. Let it?`.slice(0, 8192),
+      options: ask.options.map((o) => ({ ...o })), recommended: null, deadline: now + (ask.data.deadline as number) - ask.created, fallback: ask.data.fallback!,
+      default: ask.options.find((o) => o.decision === 'deny')!.id, provisional: false, owner: ask.data.owner!, key, pinned_to: ask.data.pinned_to!,
+    }, { steps: [step], diff: sha256Hex(canonicalize({ outside: ask.handle, key })) });
+    return { run: false, ask: raised };
+  }
+
+  batch(batch: string): Promise<BatchCard> {
+    return this.exclusive(async () => {
+      await this.sync();
+      return { batch, steps: this.batchSteps(batch) };
+    });
+  }
+
+  approveBatch(connection: Connection, batch: string, input: { token: string; switches: { ask: string; step: number; on: boolean }[] }): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      const via = TRUSTED[connection.writer];
+      if (via === undefined) throw new AskRefused(`an answer counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      if (!isObj(input) || typeof input.token !== 'string' || !input.token) throw new AskRefused('an approval binds to its click token', { field: 'token' });
+      if (!Array.isArray(input.switches)) throw new AskRefused('a batch is approved with the switches you turned', { field: 'switches' });
+      const steps = this.batchSteps(batch);
+      if (!steps.length) throw new AskRefused(`${batch} shows no plan to approve`, { field: 'batch' });
+      // Each step keeps the switch it started with unless you turned its own.
+      const on = new Map(steps.map((s) => [`${s.ask}#${s.step}`, s.on]));
+      for (const sw of input.switches) {
+        const id = isObj(sw) ? `${String(sw.ask)}#${String(sw.step)}` : '';
+        if (!on.has(id) || typeof sw.on !== 'boolean') throw new AskRefused(`${batch} has no step ${id}`, { field: 'switches' });
+        on.set(id, sw.on);
+      }
+      const now = this.options.now();
+      for (const handle of new Set(steps.map((s) => s.ask))) {
+        const ask = this.asks.get(bare(handle))!;
+        const allow = ask.options.find((o) => o.decision === 'allow');
+        if (!allow || !ask.plan) continue;
+        const chosen = steps.filter((s) => s.ask === handle && on.get(`${s.ask}#${s.step}`)).map((s) => s.step);
+        // A plan with none of its steps switched on isn't approved: it waits for its own card.
+        if (!chosen.length) continue;
+        await this.options.record.append(this.core({ ...connection, ...ask.who }), {
+          v: 3, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
+          data: { answer: allow.id, plan_hash: ask.plan.hash, decision: 'allow', via, verified: true, on: ask.data.pinned_to!, token: input.token, steps: chosen },
+        });
+        await this.sync();
+        this.hand(ask, allow.id, null, false, 'allow');
+      }
+      await this.settle();
+    });
+  }
+
+  /** The open authority asks with a plan that a batch showed, each step with its switch as it starts. */
+  private batchSteps(batch: string): BatchCard['steps'] {
+    const asks = (this.shownIn.get(batch) ?? []).map((h) => this.asks.get(bare(h))).filter((a): a is Ask => !!a && !a.closed && a.data.kind === 'authority' && !!a.plan);
+    return asks.flatMap((a) => a.plan!.steps.map((s, step) => ({ ask: a.handle, step, does: s.does, undo: String(s.undo), on: s.undo !== CANT_UNDO })));
   }
 
   registerResolver(name: string, resolver: Resolver): () => void {
@@ -1467,7 +1570,10 @@ class AsksCore implements Asks {
           outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts, ...(typeof d.answer === 'string' ? { answer: d.answer } : {}),
           ...(e.kind === 'decision.applied' ? { decision: String(d.decision), answer: this.decisions.get(String(d.decision))?.answer ?? '' } : {}),
         };
-        if (e.kind === 'ask.answered') ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision) };
+        if (e.kind === 'ask.answered') {
+          const steps = Array.isArray(d.steps) ? d.steps.filter((n): n is number => typeof n === 'number') : null;
+          ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision), steps };
+        }
         if (ask.block) {
           if (this.blockTasks.get(ask.block.signature) === ask) this.blockTasks.delete(ask.block.signature);
           // A session's task folded into the shared one: the shared task covers its stop from then on.
@@ -1500,6 +1606,7 @@ class AsksCore implements Asks {
           // A showing counts only under the identity the ask was raised for.
           return ask && (!ask.shown || ask.later !== undefined) && ask.who.actor === e.actor && ask.who.scope === e.scope ? [ask] : [];
         });
+        if (typeof d.batch === 'string') this.shownIn.set(d.batch, [...(this.shownIn.get(d.batch) ?? []), ...shown.map((a) => a.handle)]);
         for (const ask of shown) {
           // Shown again, as when its Later ends: back in Needs you.
           ask.shown = true;
@@ -1807,9 +1914,13 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const question = `Send ${String(block.data.owner)} this request? ${String(block.data.question)}`.slice(0, 8192);
     const data: Obj = { ...template, question, deadline: block.data.deadline!, owner: block.who.actor, key: requestKey(block), pinned_to: block.data.pinned_to! };
-    await this.options.record.append({ ...CORE, ...block.who, ...(block.session ? { session: block.session } : {}) }, {
-      v: 1, id: ulid(now), kind: 'ask.created', subject: block.handle, ts: now, data,
-    });
+    const who = { ...CORE, ...block.who, ...(block.session ? { session: block.session } : {}) };
+    const id = ulid(now);
+    await this.options.record.append(who, { v: 1, id, kind: 'ask.created', subject: block.handle, ts: now, data });
+    // Sending it leaves the machine, so it shows its plan: the one message, which can't be unsent (#69).
+    const steps = [{ does: `Send ${String(block.data.owner)} the request: ${String(block.data.question)}`.slice(0, 8192), changes: [`a message to ${String(block.data.owner)}`], undo: CANT_UNDO, public: true, cost: 0 }];
+    const diff = sha256Hex(canonicalize({ request: block.handle }));
+    await this.options.record.append(who, { v: 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: { ask: `ask:${id}`, steps, diff, hash: sha256Hex(canonicalize({ steps, diff })) } });
     await this.sync();
   }
 
@@ -1822,6 +1933,11 @@ class AsksCore implements Asks {
     await this.sync();
   }
 }
+
+/** A step as a plan holds it: one with no undo marked can't undo. */
+const markStep = (step: PlanStep): PlanStep => (isObj(step) && (step.undo === null || step.undo === '') ? { ...step, undo: CANT_UNDO } : step);
+/** Two steps are the same step when every field is. */
+const sameStep = (a: PlanStep, b: PlanStep): boolean => sha256Hex(canonicalize(a as unknown as JsonValue)) === sha256Hex(canonicalize(b as unknown as JsonValue));
 
 /** A question's text as it compares: NFC, case folded, white space collapsed, trailing punctuation dropped. */
 const normalize = (text: string): string => text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?]+$/u, '');
@@ -1921,6 +2037,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   return {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
+    beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),

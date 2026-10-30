@@ -15,6 +15,7 @@ import { openRecord } from '../../../packages/record/src/index.ts';
 import type { Connection } from '../../../packages/record/src/index.ts';
 import { askSources, openAsks } from '../../../packages/asks/src/index.ts';
 import type { AskKind, Asks } from '../../../packages/asks/src/index.ts';
+import { withPlans } from '../plans.ts';
 
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
@@ -136,7 +137,7 @@ export async function seed(home: string, fill: (s: Seeding) => Promise<void>, st
   mkdirSync(rootOf(home), { recursive: true, mode: 0o700 });
   let now = start;
   const record = await openRecord({ path: join(rootOf(home), 'ledger.db'), now: () => now });
-  const asks = await openAsks({ record, now: () => now, deliver: () => undefined });
+  const asks = withPlans(await openAsks({ record, now: () => now, deliver: () => undefined }));
   try {
     await fill({
       asks,

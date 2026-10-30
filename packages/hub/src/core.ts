@@ -19,7 +19,7 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
-import { openLeases } from '@deepbuild/leases';
+import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
@@ -41,9 +41,10 @@ import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
+import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
+import { derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -213,9 +214,6 @@ const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.
   + `"data":${r.data},"evidence":${r.evidence ?? '[]'}${r.subject === null ? '' : `,"subject":${q(r.subject)}`}${r.seq === null ? '' : `,"seq":${q(r.seq)}`}`
   + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
 
-/** A ULID at `ms` whose random part is a hash of `key`, so the same source line always gets the same ID. */
-const derivedId = (ms: number, key: string): string => ulid(ms, sha256Hex(new TextEncoder().encode(key)).slice(0, 20));
-
 export class Core {
   private readonly root: Root;
   private readonly now: () => number;
@@ -231,6 +229,8 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  /** The kernel's lease table (#237), read by deep env down for who holds a port now. */
+  private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -428,7 +428,7 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
@@ -746,7 +746,7 @@ export class Core {
         count.changed = false;
         const session = this.sessions.get(meta.session);
         if (session && verified) {
-          for (const task_ref of tasks) opens.push(this.tasks.opened({ session: meta.session, agent: meta.agent, cwd: meta.cwd, thread: session.thread, task_ref, text: String(data.text), ...(item ? { item } : {}) }));
+          for (const task_ref of tasks) opens.push(this.tasks.opened({ session: meta.session, agent: meta.agent, cwd: meta.cwd, thread: session.thread, task_ref, text: String(data.text), prompt: draft.id, at: draft.ts, ...(item ? { item } : {}) }));
         }
       }
       if (draft.fill === 'turn') {
@@ -1018,7 +1018,7 @@ export class Core {
     const rows = (await this.record.raw(`SELECT id, options FROM asks WHERE session_id = '${sql(session)}' AND kind = 'authority' AND status IN ('open', 'later')`)) as { id: string; options: string | null }[];
     for (const row of rows) {
       const option = (JSON.parse(row.options ?? '[]') as { id: string; decision?: string }[]).find((o) => o.decision === 'allow');
-      if (option) await this.asks.answer(this.connection('app'), `ask:${row.id}`, { option: option.id, plan_hash: null, token: `os-confirm:${ulid(this.now())}` });
+      if (option) await this.asks.answer(this.connection('app'), `ask:${row.id}`, { option: option.id, plan_hash: (await this.asks.card(`ask:${row.id}`)).plan?.hash ?? null, token: `os-confirm:${ulid(this.now())}` });
     }
   }
   /** The notes as the agent reads them, each labelled as yours, sent from the app, with its request ID. */
@@ -1647,7 +1647,7 @@ export class Core {
     const asked = await this.holds.asked(offer.meta, offer.about);
     // Its answer is yours, given here: nothing is delivered to the session.
     this.prompts.add(asked.ask);
-    if (!asked.decision) await this.asks.answer(as, asked.ask, { option: 'approve', plan_hash: null, token: `os-confirm:${ulid(this.now())}` }).catch((error: unknown) => { throw asRefused(error); });
+    if (!asked.decision) await this.asks.answer(as, asked.ask, { option: 'approve', plan_hash: (await this.asks.card(asked.ask)).plan?.hash ?? null, token: `os-confirm:${ulid(this.now())}` }).catch((error: unknown) => { throw asRefused(error); });
     await this.syncStanding().catch(() => undefined);
     const [saved] = (await this.record.raw(`SELECT id, data FROM events WHERE kind = 'decision.created' AND subject = '${sql(asked.ask)}' ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
     return { offer: handle, ask: asked.ask, decision: saved ? `decision:${saved.id}` : asked.decision ?? null, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : offer.scope };
@@ -2538,10 +2538,18 @@ export class Core {
   private async inbox(): Promise<Obj> {
     const rows = (await this.record.raw('SELECT id, question, options FROM asks')) as { id: string; question: string | null; options: string | null }[];
     const texts = new Map(rows.map((r) => [r.id, r]));
+    // An authority ask's plan, by the digest an approval binds: what `deep inbox` shows before you answer (#69).
+    // The first the core proposed for each ask, as the asks core holds it; an agent's plan.proposed binds nothing.
+    const plans = (await this.record.raw("SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' ORDER BY log_pos")) as { data: string }[];
+    const planOf = new Map<string, { hash: string; steps: unknown }>();
+    for (const { data } of plans) {
+      const d = JSON.parse(data) as { ask: string; hash: string; steps: unknown };
+      if (!planOf.has(d.ask)) planOf.set(d.ask, { hash: d.hash, steps: d.steps });
+    }
     return {
       asks: (await this.asks.inbox()).map((row) => {
         const text = texts.get(row.ask.slice(4));
-        return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [] };
+        return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [], plan: planOf.get(row.ask) ?? null };
       }),
       // Permissions you said yes to in the terminal, offered back as decisions to save: never asks (#23).
       offers: await this.openOffers(),
@@ -2573,6 +2581,8 @@ export class Core {
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
+    // `deep inbox answer` names an option, and its prompt named the plan the card shows: an approval binds that one (#69).
+    if (context.role === 'cli' && chosen?.decision === 'allow' && input.plan_hash === undefined) input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
@@ -2587,6 +2597,9 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT question, status FROM asks WHERE id = '${handle.slice(4)}'`)) as { question: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
     if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
+    // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
+    const locked = await this.tasks.lockedOn(handle);
+    if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
     await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle);
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = '${handle.slice(4)}'`)) as { deadline: number }[];
@@ -2771,6 +2784,7 @@ export class Core {
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
+        case 'deep_env': return await this.deepEnv(session!, String(args.action));
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3319,10 +3333,24 @@ export class Core {
     }
   }
   private envUp(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.inTurn(worktree, () => this.riseIn(worktree));
+    return this.upFor(this.worktreeOf(params));
   }
-  private async riseIn(worktree: string): Promise<Obj> {
+  private upFor(worktree: string, holder?: string): Promise<Obj> {
+    return this.inTurn(worktree, () => this.riseIn(worktree, holder));
+  }
+  /**
+   * deep_env (#331): the bound session's own worktree's stack, up or down, as `deep env up` and `deep env down` run
+   * there. The worktree is the session's, from its hooks, never from the call, so a child session in a worktree of its
+   * own leases its own ports there and never its parent's. Its leases name the session's deep mcp as their holder; a
+   * stack already up in that worktree is reused as it is, so the holder says who leased it, not who uses it.
+   */
+  private async deepEnv(session: string, action: string): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
+    const worktree = realpathSync(cwd);
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' });
+  }
+  private async riseIn(worktree: string, holder?: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
     // A stack is reused only while its process runs and its health route still answers 200.
     if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
@@ -3335,7 +3363,7 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
@@ -3352,29 +3380,31 @@ export class Core {
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
   private envDown(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
+    return this.downFor(this.worktreeOf(params), { path: '/params/worktree', remedy: 'deep env up' });
+  }
+  /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
+  private downFor(worktree: string, at: { path: string; remedy: string }): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
     if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, rising));
+    return this.inTurn(worktree, () => this.downIn(worktree, at, rising));
   }
-  private async downIn(worktree: string, interrupted?: string): Promise<Obj> {
+  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string): Promise<Obj> {
     const stack = this.stacks.get(worktree);
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
-    if (!stack) throw new Refused(refusal('not_found', '/params/worktree', `No stack runs for ${worktree}; start one with deep env up.`, worktree));
+    if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
     const ports = Object.values(stack.ports);
     const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
     const before = recorded.filter(running);
-    // The planted wrong program stops whatever listens on the leased ports, the run's or not.
-    if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
     this.stacks.delete(worktree);
-    const cleaned = await this.takeDown(stack.run);
+    const { result: cleaned, left } = await downLeaving(ports, { listen: listening, leases: async () => (await this.leases.leases()).map((v) => v.lease) }, async () => {
+      // The planted wrong program stops whatever listens on the leased ports, the run's or not.
+      if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+      return this.takeDown(stack.run);
+    });
     const stopped = [...new Set([...before.filter((pid) => !running(pid)), ...cleaned.stopped])];
-    const left = new Map<number, { pid: number; port?: number }>();
-    for (const name of cleaned.left) if (name.startsWith('pid:')) left.set(Number(name.slice(4)), { pid: Number(name.slice(4)) });
-    for (const port of ports) for (const pid of await listening(port)) left.set(pid, { pid, port });
-    return { run: stack.run, stopped, left: [...left.values()] };
+    return { run: stack.run, stopped, left };
   }
 
   // ---- Spool, retention and the test load.

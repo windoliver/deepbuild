@@ -19,6 +19,7 @@ mod packs;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
+mod ring;
 mod scene3d;
 mod shared;
 mod snapshot;
@@ -528,6 +529,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         _ => {}
     }
+    if let Some(r) = ring::parse_call(name, c) {
+        return Some(Call::Ring(Box::new(r)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -854,6 +858,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             placement_planted.evaluates_hidden = true;
             None
         }
+        Some(Some("accepts_any_ring_serial")) => {
+            placement_planted.accepts_any_ring_serial = true;
+            None
+        }
         Some(Some(p)) => Some(match p {
             "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
             "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -917,6 +925,17 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
             "frame_index_i64_product" => Planted::FrameIndexI64Product,
             "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
+            "panel_policy_open" => Planted::PanelPolicyOpen,
+            "toasts_ignore_card" => Planted::ToastsIgnoreCard,
+            "script_ops_need_no_serial" => Planted::ScriptOpsNeedNoSerial,
+            "placement_moves_yours" => Planted::PlacementMovesYours,
+            "refresh_restamps_cached" => Planted::RefreshRestampsCached,
+            "sends_without_serial" => Planted::SendsWithoutSerial,
+            "serial_carries_many_sends" => Planted::SerialCarriesManySends,
+            "bound_value_a_frame_late" => Planted::BoundValueAFrameLate,
+            "keymap_unchecked" => Planted::KeymapUnchecked,
+            "conflicts_unreported" => Planted::ConflictsUnreported,
+            "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
             _ => return None,
         }),
     };
