@@ -25,6 +25,11 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 name = "deep-replica"
 path = "src/main.rs"
 
+# Issue #806: the app's canvas panel, headless, connected to the hub as the app is.
+[[bin]]
+name = "deep-replica-canvas"
+path = "src/canvas.rs"
+
 [[bin]]
 name = "deep-live"
 path = "src/live.rs"

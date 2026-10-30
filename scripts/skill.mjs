@@ -49,6 +49,10 @@ const TOOLS = {
     use: 'Run a check the repo\'s spec names, for your claim at its commit; it answers with the run\'s outcome and its evidence once the run finishes.',
     proves: 'One run\'s outcome does not prove your claim passes: only a verdict over the runs a claim needs says so.',
   },
+  deep_show: {
+    use: 'Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document\'s issues and snapshots by hash.',
+    proves: 'A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are.',
+  },
 };
 
 /** Table text as an agent reads it: no backticks or bold. */

@@ -16,6 +16,7 @@ pub mod hub;
 pub mod notify;
 pub mod record;
 pub mod setup;
+pub mod show;
 pub mod states;
 pub mod text;
 pub mod views;

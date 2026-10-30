@@ -42,6 +42,7 @@ import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { checkArguments } from './tools.js';
+import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
@@ -82,6 +83,12 @@ const FOREIGN = new Set(['cursor', 'grok']);
 const AUTHORITY = new Set(['deep off', 'deep on', 'deep hub stop', 'deep hub use', 'deep setup --undo']);
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
+/** The PIDs a test says another process now holds (DEEP_HUB_TEST_PID_REUSE, a JSON list read at each check); only tests set it. */
+const reusedPids = (): number[] => {
+  const file = process.env.DEEP_HUB_TEST_PID_REUSE;
+  if (!file) return [];
+  try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
+};
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const running = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
@@ -2199,10 +2206,13 @@ export class Core {
    * hooks established them. The first checked event of a session establishes it.
    */
   private async verify(meta: HookMeta): Promise<boolean> {
-    if (!meta.session || !meta.cwd || !isAbsolute(meta.transcript)) return false;
+    // A Codex hook may carry no transcript path (its facts: `transcript_path: string|null`); such a session is checked by
+    // its working folder and process tree alone, and nothing is read from a transcript for it (#806).
+    const none = meta.agent === 'codex' && !meta.transcript;
+    if (!meta.session || !meta.cwd || (!none && !isAbsolute(meta.transcript))) return false;
     const home = meta.agent === 'codex' ? join(homedir(), '.codex', 'sessions') : join(homedir(), '.claude', 'projects');
-    const transcript = resolve(meta.transcript);
-    if (!isUnder(transcript, home)) return false;
+    const transcript = none ? '' : resolve(meta.transcript);
+    if (!none && !isUnder(transcript, home)) return false;
     const start = await this.startOf(meta.ppid);
     if (!start) return false;
     const session = this.sessions.get(meta.session);
@@ -2212,7 +2222,7 @@ export class Core {
       const cursor = this.cursors.get(meta.session);
       this.cursors.delete(meta.session);
       const left = cursor?.transcript === transcript && typeof cursor.read === 'number' && Array.isArray(cursor.reached) ? cursor : undefined;
-      const read = left ? left.read : await stat(transcript).then((s) => s.size, () => 0);
+      const read = left ? left.read : none ? 0 : await stat(transcript).then((s) => s.size, () => 0);
       this.sessions.set(meta.session, { id: meta.session, thread: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map(), prompts: new Map(), entries: [] });
       // A session's first cursor is written at once: a restart before it would read the session from its end.
       this.writeCursors();
@@ -2275,6 +2285,11 @@ export class Core {
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
       case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
+      case 'canvas.show': return this.showCli(params, context);
+      case 'canvas.revisions': return this.canvasCall({ call: 'revisions', doc: String(params.doc) });
+      case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
+      case 'canvas.user': return this.canvasUser(params, context);
+      case 'canvas.drawn': return this.drawnBy(context);
       case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => ({ reported: true }));
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
@@ -2630,6 +2645,8 @@ export class Core {
     const seen = new Set<number>();
     for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
       seen.add(pid);
+      // A PID another process now holds, with a start time no session recorded (#806's test seam): no agent's tree.
+      if (reusedPids().includes(pid)) continue;
       // After a `/clear` the process's session is its newest one.
       const session = [...this.sessions.values()].filter((s) => s.pid === pid).at(-1);
       if (session && (await this.startOf(pid, true)) === session.start) return session.id;
@@ -2692,8 +2709,10 @@ export class Core {
       // after the call it follows, not before the work it claims.
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search'));
+      // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show'));
       switch (tool) {
+        case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -2743,6 +2762,114 @@ export class Core {
     this.stamps.splice(this.stamps.indexOf(bound), 1);
     return bound.session;
   }
+  // ---- The canvas side (#806): deep_show, `deep show`, render-back, and what the app draws.
+
+  /** The canvas core, started at the first canvas call; the world file a test gives it; the app's presentations. */
+  private canvasCore?: Canvas;
+  private readonly worldFile = new WorldFile(process.env.DEEP_HUB_TEST_SHOW);
+  /** Each presented revision for the app, in order; an app's `canvas.drawn` takes those after the last it took. */
+  private readonly presented: Obj[] = [];
+  private readonly drawnUpTo = new Map<string, number>();
+  /** When an app last took what was presented: an app that took it within the last 250 ms is open (it asks every 100 ms), and draws it. */
+  private appSeen = 0;
+  private readonly appOpen = (): boolean => Date.now() - this.appSeen < 250;
+
+  /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
+  private async canvasWorld(): Promise<CanvasWorld> {
+    const file = this.worldFile.read();
+    const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
+    const record: Obj = {};
+    const asks = (await this.record.raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
+    for (const a of asks) record[`ask:${a.id}`] = { session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' };
+    const readings = (await this.record.raw("SELECT e.session_id AS session, e.data AS data FROM events e WHERE e.kind = 'reading.recorded' ORDER BY e.log_pos")) as { session: string | null; data: string }[];
+    for (const r of readings) {
+      const d = JSON.parse(r.data) as Obj;
+      if (typeof d.reading === 'string' && typeof d.value === 'number') record[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
+    }
+    return { sessions, record, file };
+  }
+  private canvas(): Canvas {
+    return (this.canvasCore ??= new Canvas(this.root.evidence));
+  }
+  private async canvasCall(call: Obj): Promise<Obj> {
+    return (await this.canvas().call(await this.canvasWorld(), call)).reply;
+  }
+
+  /**
+   * deep_show for a session, or for none (the call binds to no session), or `deep show` from the CLI acting as the
+   * session the peer check found, or as you: the writer is the binding's, never the payload's.
+   */
+  private async show(as: { session: string | null } | { you: true }, call: Obj): Promise<Obj> {
+    // The planted hub stamps the writer the payload claims (#806's wrong program): a session whose thread it names.
+    if (this.options.plant === 'deep-show-writer-from-payload' && 'session' in as && isObj(call.document) && typeof call.document.writer === 'string') {
+      const claimed = [...this.sessions.values()].find((s) => `agent:${s.thread}` === (call.document as Obj).writer);
+      if (claimed) {
+        const { writer: _writer, ...document } = call.document;
+        as = { session: claimed.id };
+        call = { ...call, document };
+      }
+    }
+    if (call.call === 'render_back') {
+      // Render-back of a revision the document has had, at a time: the session's own, never one bound to none.
+      if (!('session' in as) || !as.session) return { outcome: 'refused', code: 'no_session', issues: [], snapshots: [] };
+      let rev = call.rev;
+      if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
+      return this.canvasCall({ ...call, rev, session: as.session });
+    }
+    const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
+    const name = 'you' in as ? 'deep show' : 'deep_show';
+    const { reply, presented } = await this.canvas().call(await this.canvasWorld(), { call: name, ...via, ...call });
+    if (presented) await this.recordRevision(as, presented, reply);
+    // The planted hub waits for an app to draw the revision instead of rendering back headless.
+    if (this.options.plant === 'deep-show-waits-for-app' && reply.outcome === 'presented' && !(await waitForApp(this.appOpen))) {
+      return { ...reply, outcome: 'not_presented', reason: 'timeout', snapshots: [] };
+    }
+    return reply;
+  }
+  /** A revision the canvas core made current: recorded by its hash, its canonical document in evidence, and presented to the app. */
+  private async recordRevision(as: { session: string | null } | { you: true }, p: Obj, reply: Obj): Promise<void> {
+    const session = 'session' in as ? as.session : null;
+    const writer = p.writer as { kind: string; id: string };
+    const hash = String(p.hash);
+    // The canvas core wrote the canonical document under its hash; the store's index takes it, origin from the binding.
+    await this.stored(await this.store.connect(session ? { role: 'agent', session } : { role: 'deepbuild', via: 'job' }).put({
+      bytes: new Uint8Array(readFileSync(join(this.root.evidence, hash.slice(0, 2), hash.slice(2)))), kind: 'canvas.revision', source: `doc:${String(p.doc)}`,
+      redaction: 'complete', license: { name: 'session', allows: [] },
+    }), "the revision's canonical document");
+    const ts = this.now();
+    const agent = session ? this.sessions.get(session)?.agent : undefined;
+    const connection = session ? this.agentConnection(session) : this.connection('cli');
+    const count = (k: string) => ((reply[k] as unknown[] | undefined) ?? []).length;
+    await this.append({ ...connection, ...(agent ? { agent } : {}) }, {
+      v: 2, id: ulid(ts), kind: 'doc.patched', ts, subject: `doc:${String(p.doc)}`, evidence: [hash],
+      data: {
+        doc: `doc:${String(p.doc)}`, rev: Number(p.rev), patch: null, writer: writer.kind,
+        achieved: { created: {}, updated: count('changed'), deleted: {}, unchanged: count('changed') + count('created') + count('removed') === 0 },
+        hash, layer: String(p.layer), thread: writer.kind === 'agent' ? writer.id : null,
+      } as JsonValue,
+    });
+    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers });
+  }
+  /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
+  private async showCli(params: Obj, context: CallContext): Promise<Obj> {
+    const session = await this.agentAbove(context.peer);
+    return this.show(session ? { session } : { you: true }, showCall(params));
+  }
+  /** The user's side the app plays (#384, #393): its input, asks and window, through the canvas core. */
+  private async canvasUser(params: Obj, context: CallContext): Promise<Obj> {
+    if (context.role !== 'app') throw refuse('role', '/method', 'Only the app plays your input on the canvas.', 'canvas.user');
+    const call = isObj(params.call) ? params.call : {};
+    return this.canvasCall(call);
+  }
+  /** What the app has yet to draw: every revision presented after the last it took. */
+  private drawnBy(context: CallContext): Obj {
+    this.appSeen = Date.now();
+    const key = context.role;
+    const from = this.drawnUpTo.get(key) ?? 0;
+    this.drawnUpTo.set(key, this.presented.length);
+    return { presented: this.presented.slice(from) };
+  }
+
   /** The connection a session's deep mcp writes through: writer mcp:<session>, from the binding, never the call. */
   private agentConnection(session: string): Connection {
     const agent = this.sessions.get(session)?.agent;
@@ -3498,6 +3625,7 @@ export class Core {
     await this.replaying;
     await this.chain;
     this.writeCursors();
+    this.canvasCore?.close();
     for (const { stop } of this.runs.values()) stop();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);
