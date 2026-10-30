@@ -100,6 +100,18 @@ export function writeStanding(dir: string, standing: readonly unknown[]): void {
 }
 
 /** Copies the directions you rejected into `<dir>/rules.json` as `rejected-*` entries (#111), keeping every other. */
+export function dropEntries(dir: string, drops: (name: string) => boolean): void {
+  const file = join(dir, 'rules.json');
+  let current: Obj;
+  try {
+    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
+  } catch {
+    return;
+  }
+  if (!isObj(current.entries) || !Object.keys(current.entries).some(drops)) return;
+  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries: Object.fromEntries(Object.entries(current.entries).filter(([name]) => !drops(name))) }, null, 2)}\n`));
+}
+
 export function writeRejected(dir: string, rejected: Obj): void {
   const file = join(dir, 'rules.json');
   let current: Obj;
