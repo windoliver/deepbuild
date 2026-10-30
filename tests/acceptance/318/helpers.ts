@@ -13,6 +13,7 @@ import type { Connection, Event, RecordStore, Row } from '../../../packages/reco
 import { AskRefused, askSources, openAsks } from '../../../packages/asks/src/index.ts';
 import type { AskKind, Asks, Delivery } from '../../../packages/asks/src/index.ts';
 import { bare, makeClock, ulid, type Clock } from './data.ts';
+import { withPlans } from '../plans.ts';
 
 export * from './data.ts';
 
@@ -78,7 +79,7 @@ export async function openWorld(plant: Planting = {}, dir = mkdtempSync(join(tmp
     row: async (ask: string) => (await record.table('asks')).rows.find((r) => r.id === bare(ask)),
     close: async () => { await real.close(); rmSync(dir, { recursive: true, force: true }); },
   });
-  const asks = await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(d); } });
+  const asks = withPlans(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(d); } }));
   w.asks = plant.asks ? plant.asks(asks, w) : asks;
   return w;
 }

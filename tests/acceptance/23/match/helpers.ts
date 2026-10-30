@@ -14,6 +14,7 @@ import { openAsks } from '../../../../packages/asks/src/index.ts';
 import type { Asks, AsksPlant, Card, Delivery, InboxRow, Resolver } from '../../../../packages/asks/src/index.ts';
 import { resolverDecisions } from '../../../../packages/resolver-decisions/src/index.ts';
 import { makeClock, ulid, type Clock, type Obj } from './data.ts';
+import { shownPlanHash, withPlans } from '../../plans.ts';
 
 export * from './data.ts';
 
@@ -83,7 +84,7 @@ export async function openWorld(plant: Planting = {}, options: { resolver?: bool
   const real = await openRecord({ path: join(dir, 'record.db'), now: clock.now });
   const record = plant.record ? plant.record(real) : real;
   const deliveries: Delivery[] = [];
-  const opened = await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d)); }, ...(plant.core ? { plant: plant.core } : {}) });
+  const opened = withPlans(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d)); }, ...(plant.core ? { plant: plant.core } : {}) }));
   const w = { clock, record, deliveries, dir } as World;
   w.asks = plant.asks ? plant.asks(opened, w) : opened;
   const resolver = resolverDecisions({ record });
@@ -107,10 +108,10 @@ export async function openWorld(plant: Planting = {}, options: { resolver?: bool
     },
     raise: (session: string, source: string, ask: Obj) => w.asks.raise(source.startsWith('deep_ask.') ? agent(session) : core(session), source, ask),
     answer: async (ask: string, option: string) => {
-      // An approval binds to the plan its card showed (none here) and to the click's token.
+      // An approval binds to the plan its card showed and to the click's token.
       const shown = await w.asks.card(ask);
       const allow = shown.options.find((o) => o.id === option)?.decision === 'allow';
-      await w.asks.answer(card, ask, allow ? { option, plan_hash: null, token: `click-${ulid(clock.now())}` } : { option });
+      await w.asks.answer(card, ask, allow ? { option, plan_hash: await shownPlanHash(w.asks, ask), token: `click-${ulid(clock.now())}` } : { option });
     },
     shown: async () => (await w.asks.needsYou()).map((c) => c.ask),
     card: (ask: string) => w.asks.card(ask),

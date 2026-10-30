@@ -881,6 +881,42 @@ export interface AskAnsweredV2 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV3PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@3 */
+export interface AskAnsweredV3 {
+  v: 3;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session";
+    verified: boolean;
+    on: AskAnsweredV3PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -1631,6 +1667,26 @@ export interface CapabilityRefused {
   evidence?: Array<string>;
 }
 
+/** card_rule.set@1 */
+export interface CardRuleSet {
+  v: 1;
+  id: string;
+  kind: "card_rule.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    seller: string;
+    max_usd: number;
+    card: string;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
 /** check.code@1 */
 export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
 
@@ -1778,6 +1834,27 @@ export interface ClaimStalled {
   data: {
     claim: string;
     rule: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** command.staged@1 */
+export interface CommandStaged {
+  v: 1;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    until: number;
   };
   evidence?: Array<string>;
 }
@@ -2384,6 +2461,7 @@ export interface HookRequestV3 {
   ppid: number;
   matched: Array<string>;
   notes?: { [key: string]: string };
+  stage?: { [key: string]: Array<string> };
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
@@ -4365,7 +4443,8 @@ export interface UserAsk {
     msg: number;
     text: string;
     tasks: Array<string>;
-    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "unknown";
+    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
+    request?: string;
   };
   evidence?: Array<string>;
 }

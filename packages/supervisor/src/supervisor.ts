@@ -29,6 +29,8 @@ const RECHECK_MS = 60_000;
 /** The ask.sources@1 row the supervisor raises its unblock asks from. */
 const UNBLOCK_SOURCE = 'supervisor.cleanup';
 const RUN = /^run:[0-9A-Za-z]+$/;
+/** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
+const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const alive = (pid: number): boolean => {
@@ -54,6 +56,8 @@ interface Run {
   /** The process.ended events that prove its processes gone: what its leases' release cites. */
   gone: string[];
   leases: { kind: string; key: string }[];
+  /** Who holds its leases (StartSpec.holder); the core when unset. */
+  holder?: string;
   /** What its cleanup recorded, once it has run. */
   cleaned?: Cleanup;
   /** Its cleanup while it runs: a second call shares it. */
@@ -101,6 +105,8 @@ class LocalSupervisor implements Supervisor {
   /** Each run between leaving the queue and its launch settling. */
   private readonly launching = new Map<string, Promise<unknown>>();
   private recheckedAt = 0;
+  /** Each run whose cleanup left a process running: checked again each tick until every one is proven gone. */
+  private readonly lingering = new Set<Run>();
   private closed = false;
   private readonly sandbox: SandboxBackend;
 
@@ -144,7 +150,11 @@ class LocalSupervisor implements Supervisor {
     return Number(row?.head ?? 0);
   }
   private async lease(kind: 'lease.acquired' | 'lease.stale', run: string, lease: { kind: string; key: string }, expires = this.options.now() + (this.options.lease_ms ?? DAY)): Promise<void> {
-    await this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: 'core', mode: 'exclusive', expires }, run);
+    await this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: this.holderOf(run), mode: 'exclusive', expires }, run);
+  }
+  /** The holder a run's leases name: its spec's, or the core. */
+  private holderOf(run: string): string {
+    return this.runs.get(run)?.holder ?? 'core';
   }
   /** A run's lease ends: through the lease table when there is one, citing what proves it over. */
   private async release(run: string, lease: { kind: string; key: string }, proof: string[]): Promise<void> {
@@ -155,7 +165,7 @@ class LocalSupervisor implements Supervisor {
       if (id) await this.options.leases.release(id, proof);
       return;
     }
-    await this.append('lease.released', { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: 'core', mode: 'exclusive', expires: this.options.now() + (this.options.lease_ms ?? DAY) }, run);
+    await this.append('lease.released', { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: this.holderOf(run), mode: 'exclusive', expires: this.options.now() + (this.options.lease_ms ?? DAY) }, run);
   }
   private async track(r: Run, pid: number, start: string, token: string | null): Promise<void> {
     // A known ID with another start time is a new process of the run's: the one it named is gone.
@@ -192,8 +202,10 @@ class LocalSupervisor implements Supervisor {
         case 'lease.acquired':
         case 'lease.stale':
         case 'lease.released': {
-          // Only a run's leases, held by the core, are the supervisor's: a session's in the same table never joins a pool.
-          if (d.holder !== 'core') break;
+          // Only a run's leases, the core's or its named holder's, are the supervisor's: a session's in the same table never joins a pool.
+          if (!ours(d.holder)) break;
+          // The holder is kept here only without a table, where the run's start precedes its leases; the table folds its own.
+          if (r && d.holder !== 'core') r.holder = d.holder as string;
           const res = d.resource as { kind: string; key: string };
           const name = `${res.kind}:${res.key}`;
           let key = this.keys.get(name);
@@ -248,6 +260,8 @@ class LocalSupervisor implements Supervisor {
           break;
       }
     }
+    // A run whose cleanup left a process the record never saw end is checked again, as before the restart.
+    for (const r of this.runs.values()) if (r.state === 'cleaned' && [...r.tracked.keys()].some((pid) => !r.ended.has(pid))) this.lingering.add(r);
     for (const e of settled) if (this.asked.has(e.subject!)) await this.settleAsk(e);
     // Leases the table granted a run a crash cut before its start was recorded: nothing ran on them.
     for (const [run, leases] of this.early) {
@@ -418,7 +432,7 @@ class LocalSupervisor implements Supervisor {
         if (table) {
           // Another want waits: the run takes nothing until every want can be had.
           if (on.length) break;
-          const got = await table.lease({ holder: 'core', run: spec.run }, { host: 'local', kind: want.kind, key: c.key }, 'exclusive');
+          const got = await table.lease({ holder: spec.holder ?? 'core', run: spec.run }, { host: 'local', kind: want.kind, key: c.key }, 'exclusive');
           if (got.status === 'granted') { this.leaseIds.set(name, got.lease.id); free = c; break; }
           if (got.status === 'BLOCKED') { await giveBack(); return { kind: 'blocked', on: want.kind }; }
           if (got.reason === 'taken') outside++;
@@ -479,7 +493,7 @@ class LocalSupervisor implements Supervisor {
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
-    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases };
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}) };
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
@@ -518,11 +532,14 @@ class LocalSupervisor implements Supervisor {
     return { run: spec.run, status: 'started', pid, pgid: pid, start, leases };
   }
 
-  /** Records each process a live run's sandbox holds that it hasn't recorded yet, by ID and start time. */
+  /**
+   * Records each process a live run's sandbox holds that it hasn't recorded yet, by ID and start time; and a run its
+   * cleanup left running, so what its leftovers fork counts among them.
+   */
   private scanOnce(): Promise<void> {
     if (this.options.plant === 'records-only-started' || this.closed) return this.scanning;
     const next = this.scanning.then(async () => {
-      const live = [...this.runs.values()].filter((r) => r.sandboxed && r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held');
+      const live = [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
       if (!live.length) return;
       const found = await scan(live.map((r) => markerOf(r.run)));
       const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
@@ -641,7 +658,8 @@ class LocalSupervisor implements Supervisor {
       while (proven.some((p) => alive(p.pid)) && Date.now() < until) await sleep(20);
     }
     await this.scanOnce().catch(() => undefined);
-    const left = (await this.leftovers(r)).map((pid) => `pid:${pid}`);
+    const left = (await this.leftovers(r, this.rescan)).map((pid) => `pid:${pid}`);
+    if (left.length) this.lingering.add(r);
     // The leases end only once every process recorded for the run is gone; a key its check finds bound is left,
     // and so is every key while a process is, each one held for the unblock ask.
     if (left.length) {
@@ -698,18 +716,35 @@ class LocalSupervisor implements Supervisor {
     this.ticking ??= this.tickOnce().finally(() => { this.ticking = undefined; });
     return this.ticking;
   }
-  /** Each tracked process proven gone gets its end recorded; the ones still running with their start times are returned. */
-  private async leftovers(r: Run): Promise<number[]> {
-    // Only the live ones are looked up: a gone ID has no start time to compare.
-    const procs = await table([...r.tracked.keys()].filter((pid) => !r.ended.has(pid) && alive(pid)));
-    const left: number[] = [];
-    for (const [pid, t] of r.tracked) {
-      if (r.ended.has(pid)) continue;
-      if (procs.get(pid)?.start === t.start) { left.push(pid); continue; }
+  /** A scan whose failure leaves things as they are: `leftovers` runs it between finding processes gone and recording it. */
+  private readonly rescan = async (): Promise<boolean> => {
+    await this.scanOnce().catch(() => undefined);
+    return true;
+  };
+  /**
+   * The same for a lingering run's recheck, false once closed, when a scan no longer runs: nothing is then recorded
+   * gone, and a supervisor opened again checks those processes once more. A cleanup under way at close still
+   * records what it stopped.
+   */
+  private readonly recheck = async (): Promise<boolean> => (await this.rescan()) && !this.closed;
+  /**
+   * Each tracked process proven gone gets its end recorded; the ones still running are returned. `before` runs once
+   * they are found gone and before their ends are recorded: a scan there records what they forked first, since a
+   * gone process forks nothing more.
+   */
+  private async leftovers(r: Run, before: () => Promise<boolean>): Promise<number[]> {
+    // Only the live ones are looked up: a gone ID has no start time to compare. Only those tracked before the lookup
+    // are judged: one a scan tracks meanwhile isn't in it, and still runs.
+    const open = [...r.tracked].filter(([pid]) => !r.ended.has(pid));
+    const procs = await table(open.map(([pid]) => pid).filter(alive));
+    const gone = open.filter(([pid, t]) => procs.get(pid)?.start !== t.start).map(([pid, t]) => ({ pid, start: t.start }));
+    for (const { pid, start } of (await before()) ? gone : []) {
+      // Its ID, recorded again by the scan, names a new process of the run: that one still runs.
+      if (r.ended.has(pid) || r.tracked.get(pid)?.start !== start) continue;
       r.ended.add(pid);
       r.gone.push(await this.append('process.ended', { run: r.run, pid }, r.run));
     }
-    return left;
+    return [...r.tracked.keys()].filter((pid) => !r.ended.has(pid));
   }
 
   private async tickOnce(): Promise<void> {
@@ -720,6 +755,10 @@ class LocalSupervisor implements Supervisor {
       key.stale = true;
       await this.lease('lease.stale', key.holder, parts(name), key.expires);
     }
+    // A run its cleanup left running is checked again: each of its processes found gone gets its end recorded, which
+    // is what ends a lease the lease table holds for the run. Its sandbox is scanned once they are found gone and
+    // before their ends are recorded, so what they forked is recorded first: a gone process forks nothing more.
+    for (const r of this.closed ? [] : [...this.lingering]) if (!(await this.leftovers(r, this.recheck)).length) this.lingering.delete(r);
     // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
     if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
     if (this.asked.size) await this.options.asks.tick();
@@ -749,7 +788,7 @@ class LocalSupervisor implements Supervisor {
   /** Whether every process the run that left `name` dirty is recorded with is gone, and its kind's cleanup check passes. */
   private async clean(name: string): Promise<boolean> {
     const r = this.runs.get(this.keys.get(name)?.dirty?.run ?? '');
-    if (r && (await this.leftovers(r)).length) return false;
+    if (r && (await this.leftovers(r, this.rescan)).length) return false;
     const { kind, key } = parts(name);
     const check = this.kinds.get(kind)?.check;
     return !check || this.step(check, key);
