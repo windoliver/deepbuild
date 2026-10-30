@@ -45,7 +45,9 @@ export type Plant =
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
   // contradicted claim deleted.
-  | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted';
+  | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
+  // #27's: deep_ask raised without its subject, so a repeated question reaches you.
+  | 'repeat-reaches-you';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -76,6 +78,7 @@ const PLANTS: readonly string[] = [
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
+  'repeat-reaches-you',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
