@@ -1,11 +1,22 @@
 {
-  "readBy": "loop facts for the gate runner (#29), from a session's own tool calls: a wake-up or cron job it scheduled, with when it fires; one it cancelled; and a background subagent it started, which keeps the session looping until its report arrives as a subagent prompt",
+  "readBy": "loop facts for the gate runner (#29), from a session's own tool calls: a wake-up or cron job it scheduled, with when it fires; one it cancelled; and a background subagent it started, which keeps the session looping until its report arrives as a subagent prompt; for Codex (#39), from the records it keeps: each goal's status in the rollout, each heartbeat automation in its home, and its windows and billing from token events",
   "agents": {
     "claude": {
       "wakeups": { "ScheduleWakeup": { "delaySeconds": "tool_input.delaySeconds" } },
       "crons": { "CronCreate": { "due": "tool_response.nextFireAt", "id": "tool_response.id", "recurring": "tool_input.recurring" } },
       "cancels": { "CronDelete": { "id": "tool_input.id" } },
       "background": { "Agent": "tool_input.run_in_background", "Task": "tool_input.run_in_background" }
+    },
+    "codex": {
+      "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2"],
+      "windows": { "limit": "codex", "weeklyMinutes": 10080, "ignoredOtherwise": "a token event's rate_limits with another limit_id, such as image_gen, says nothing of these windows" },
+      "billing": { "plan": "plan_type" },
+      "goals": {
+        "record": "a goal tool's output in the rollout, {\"goal\":{\"threadId\",\"status\"}}, as the corpus's goal sessions hold it",
+        "statuses": ["active", "paused", "blocked", "usage_limited", "budget_limited", "complete"],
+        "continuing": ["active"]
+      },
+      "heartbeats": { "folder": "automations", "file": "automation.toml", "kind": "heartbeat", "active": "ACTIVE", "target": "target_thread_id", "schedule": "rrule", "lastRun": "last_run_at" }
     }
   }
 }
