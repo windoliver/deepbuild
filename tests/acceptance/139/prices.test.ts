@@ -6,7 +6,7 @@
 // adapter is a `provides` row with `adapter: { from: 'ext.acme.prices@2' }` whose reading the package serves in code.
 // The host gains `edges()`: each use of an installed package, what it names and what it is wired to (README).
 import { describe, expect, it } from 'vitest';
-import { d1Digest } from '../../../packages/contracts/src/index.ts';
+import { d1Digest, extensionApi } from '../../../packages/contracts/src/index.ts';
 import type { ExtensionHost } from '../../../packages/extension-host/src/index.ts';
 import { shownPlanHash } from '../plans.ts';
 import { admit, approveCard, makePackage, openHost, openWorld, releaseOf, sleep, tempDir, waitUntil, YOU, type Json, type World } from './helpers.ts';
@@ -33,16 +33,24 @@ const stocksIndex = `export default function (deep: any): void {
   });
 }
 `;
+// Criterion 13: a package lists the preview methods it calls; none of these declares itself stable (criterion 3).
+const PROVIDER_PREVIEW = { preview: ['deep.provide'] };
+// The published API the host is given (README: preview methods at install are by the API the host is given): the three
+// methods these packages call are preview, so the scenario doesn't depend on what the real contract marks (`deep.read` has no entry at the base).
+const previewApi = () => {
+  const api = extensionApi().map((e) => (['deep.provide', 'deep.use', 'deep.read'].includes(e.method) ? { ...e, stability: 'preview', tracking: '#139' } : e));
+  return api.some((e) => e.method === 'deep.read') ? api : [...api, { ...api.find((e) => e.method === 'deep.use')!, method: 'deep.read', tracking: '#139' }];
+};
 const provides = (names: string[], adapter: boolean) => names.map((interface_) => ({ interface: interface_, kind: 'reading', minor: 0, ...(adapter && interface_ === P1 ? { adapter: { from: P2 } } : {}) }));
 
 interface Scene { w: World; h: ExtensionHost; v2: string }
 /** The stocks view and prices 1.0.0 installed and loaded; `v2` is the update's folder, with or without the adapter. */
 async function scene(adapter: boolean, plant?: string): Promise<Scene> {
-  const stocks = await makePackage({ id: 'acme/stocks', manifest: { checks: ['ext.stocks.report'], uses: [{ interface: P1, minor: 0, digest: d1Digest(SHAPE1) }] }, index: stocksIndex });
-  const v1 = await makePackage({ id: 'acme/acme', version: '1.0.0', manifest: { provides: provides([P1], false) }, index: v1Index });
-  const v2 = await makePackage({ id: 'acme/acme', version: '2.0.0', manifest: { provides: provides(adapter ? [P2, P1] : [P2], adapter) }, index: v2Index(adapter) });
+  const stocks = await makePackage({ id: 'acme/stocks', manifest: { requires: { preview: ['deep.use', 'deep.read'] }, checks: ['ext.stocks.report'], uses: [{ interface: P1, minor: 0, digest: d1Digest(SHAPE1) }] }, index: stocksIndex });
+  const v1 = await makePackage({ id: 'acme/acme', version: '1.0.0', manifest: { requires: PROVIDER_PREVIEW, provides: provides([P1], false) }, index: v1Index });
+  const v2 = await makePackage({ id: 'acme/acme', version: '2.0.0', manifest: { requires: PROVIDER_PREVIEW, provides: provides(adapter ? [P2, P1] : [P2], adapter) }, index: v2Index(adapter) });
   const w = await openWorld();
-  const h = await openHost(w, { release: await releaseOf(stocks, v1, v2), ...(plant ? { plant } : {}) });
+  const h = await openHost(w, { release: await releaseOf(stocks, v1, v2), api: previewApi(), ...(plant ? { plant } : {}) });
   for (const dir of [v1, stocks]) {
     const got = await admit(h, dir);
     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? '' : got.reason}`).toBe(true);

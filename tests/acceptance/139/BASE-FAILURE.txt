@@ -1418,3 +1418,108 @@ AssertionError: expected [Function] to throw error matching /passed the hub regi
    Duration  104.49s (tests 99%, import 1%)
 
 exit 1
+
+
+===== Blind redraft of the AC10 tests (prices.test.ts), at the base f2867254 =====
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/139 prices --no-file-parallelism
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-139-tests/tests/acceptance/139
+
+ ❯ prices.test.ts (4 tests | 4 failed) 855ms
+   ❯ #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view (4)
+     × AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output 322ms
+     × AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge 115ms
+     × AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it 124ms
+     × AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was 114ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output
+AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-dZ9IdL admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scene prices.test.ts:56:88
+     54|   for (const dir of [v1, stocks]) {
+     55|     const got = await admit(h, dir);
+     56|     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? ''…
+       |                                                                                        ^
+     57|   }
+     58|   return { w, h, v2 };
+ ❯ updateWithAdapter prices.test.ts:84:21
+ ❯ prices.test.ts:95:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge
+AssertionError: expected [Function] to throw error matching /…/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2 but got 'the starting world: /private/tmp/dh13…'
+
+- Expected:
+/the edge acme\/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2/
+
++ Received:
+"the starting world: /private/tmp/dh139-pkg-acme-acme-ObSsDK admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {\"preview\":[\"deep.provide\"]}: expected false to be true // Object.is equality"
+
+ ❯ prices.test.ts:99:57
+     97|
+     98|   it('AC10 (wrong program) an installer that rewires the view to price…
+     99|     await expect(updateWithAdapter('rewires-to-newest')).rejects.toThr…
+       |                                                         ^
+    100|   }, 180_000);
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it
+AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-LAghEy admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scene prices.test.ts:56:88
+     54|   for (const dir of [v1, stocks]) {
+     55|     const got = await admit(h, dir);
+     56|     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? ''…
+       |                                                                                        ^
+     57|   }
+     58|   return { w, h, v2 };
+ ❯ prices.test.ts:103:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was
+AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-HZyZe0 admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scene prices.test.ts:56:88
+     54|   for (const dir of [v1, stocks]) {
+     55|     const got = await admit(h, dir);
+     56|     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? ''…
+       |                                                                                        ^
+     57|   }
+     58|   return { w, h, v2 };
+ ❯ prices.test.ts:120:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  01:26:58
+   Duration  1.58s (tests 58%, import 32%, transform 9%)
+
+
+exit 1
