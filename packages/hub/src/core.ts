@@ -3047,10 +3047,11 @@ export class Core {
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
     await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
+    // First: a retry finds a revoked decision done, so a guard left behind would never go.
+    dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
     await this.syncStanding().catch(() => undefined);
     await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
-    dropKept(this.root.dir, row.key);
     return { overruled: id };
   }
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
