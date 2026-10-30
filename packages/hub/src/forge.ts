@@ -89,9 +89,9 @@ interface Issue { number: number; state: string; body: string; url: string }
 const issueOf = (i: Obj): Issue => ({ number: Number(i.number), state: String(i.state), body: typeof i.body === 'string' ? i.body : '', url: typeof i.html_url === 'string' ? i.html_url : '' });
 
 export class Forge {
-  private readonly deadline = Date.now() + BUDGET_MS;
+  private readonly deadline: number;
   /** `api` is the REST root (https://api.github.com); `token` goes as a bearer when set. */
-  constructor(private readonly api: string, private readonly token: string | undefined) {}
+  constructor(private readonly api: string, private readonly token: string | undefined, budget_ms = BUDGET_MS) { this.deadline = Date.now() + budget_ms; }
   /** One page: its body and the URL of the next page when the forge names one. */
   private async page(path: string): Promise<{ body: unknown; next: string | undefined }> {
     const left = this.deadline - Date.now();
@@ -193,7 +193,7 @@ export class Forge {
           issue_opened_at: isObj(issue) && typeof issue.created_at === 'string' ? Date.parse(issue.created_at) : null,
           reviews: reviews.map((r) => ({ at: Date.parse(String(r.submitted_at)), state: String(r.state) })),
         });
-      } catch { return undefined; }
+      } catch { return Date.now() >= this.deadline && out.length ? out : undefined; }
     }
     return out;
   }

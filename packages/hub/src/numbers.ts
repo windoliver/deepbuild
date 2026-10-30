@@ -18,6 +18,8 @@ const CLASSIFIERS = { is_it_done: isItDone, rework: isRework };
 const quoted = KINDS.map((k) => `'${k}'`).join(', ');
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 const SAMPLE = 120;
+/** A refresh is yours to wait for, and reads a call or two per pull request: longer than a receipt's forge budget. */
+const REFRESH_MS = 60_000;
 /** An event's id holds its time; the sample hides it behind a hash. */
 const opaque = (id: string): string => createHash('sha256').update(id).digest('hex').slice(0, 16);
 
@@ -81,6 +83,7 @@ export class Numbers {
     return Object.entries(CLASSIFIERS).map(([id, classifier]) => {
       try {
         const { threshold, before, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; labels: { message: string; label: boolean }[] };
+        if (typeof threshold !== 'number') return { id, check: null };
         // A message labelled twice is one message.
         const sample = [...new Map(labels.map((l) => [l.message, l])).values()].flatMap((l): LabelledMessage[] => {
           const e = typed.get(l.message);
@@ -139,7 +142,7 @@ export class Numbers {
     const unread: string[] = [];
     for (const repo of repos) {
       const [owner, name] = repo.split('/') as [string, string];
-      const prs: MergedPr[] | undefined = await new Forge(this.o.forge, token).merged(owner, name);
+      const prs: MergedPr[] | undefined = await new Forge(this.o.forge, token, REFRESH_MS).merged(owner, name);
       if (!prs) { unread.push(repo); continue; }
       for (const n of lifecycleNumbers(repo, prs)) {
         const ts = this.o.now();
@@ -149,13 +152,13 @@ export class Numbers {
     return { repos: [...repos], unread };
   }
   /** Your sample to label: your own messages at random, both sides of a date, with no date or period to see, only an opaque id. */
-  async sample(before: number): Promise<{ before: number; messages: { message: string; text: string }[] }> {
+  async sample(before: number): Promise<{ before: number; label_in: string; messages: { message: string; text: string }[] }> {
     await this.catchUp();
     const typed = [...this.typed()];
     const shuffled = (list: typeof typed) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
     const half = SAMPLE / 2;
     const drawn = shuffled([...shuffled(typed.filter(([, e]) => e.ts < before)).slice(0, half), ...shuffled(typed.filter(([, e]) => e.ts >= before)).slice(0, half)]);
-    return { before, messages: drawn.map(([message, e]) => ({ message, text: String(e.data.text) })) };
+    return { before, label_in: `${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, labels: [{ message, label }] }`, messages: drawn.map(([message, e]) => ({ message, text: String(e.data.text) })) };
   }
 }
 /** `owner/name` of a worktree's origin on GitHub, or undefined. */

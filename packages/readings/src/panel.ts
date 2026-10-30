@@ -31,12 +31,12 @@ export function panelRows(readings: Reading[], options: Freshness): PanelRow[] {
 
 const words = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 export interface ReadingHit { reading: Reading; source: string; as_of: number }
-/** Each word of the query in the reading's id, subject, unit or source. */
+/** Each word of the query in the reading's id, subject, unit or source; a recorded id runs its words together, so within the id too. */
 export function searchReadings(readings: Reading[], query: string): ReadingHit[] {
   const wanted = words(query);
   if (!wanted.length) return [];
   return readings.filter((r) => {
     const have = new Set(words(`${r.id} ${r.subject ?? ''} ${r.unit} ${r.source}`));
-    return wanted.every((w) => have.has(w));
+    return wanted.every((w) => have.has(w) || r.id.toLowerCase().includes(w));
   }).map((reading) => ({ reading, source: reading.source, as_of: reading.as_of }));
 }
