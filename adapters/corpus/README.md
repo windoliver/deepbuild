@@ -11,9 +11,11 @@ adapters/corpus/<agent>/<version>/<session>/
 
 - `node scripts/corpus.mjs replay` maps every payload through its adapter as a live event of its set's version and compares the events with `expect`, field by field, both ways.
 - `node scripts/corpus.mjs check` is the preflight's corpus lane: each version a facts file covers has a set holding every event the facts list for it, each set replays clean, and the corpus stays under 200 MB.
-- `node scripts/corpus.mjs record --agent claude-code|codex --out <dir>` records a fresh set into `<dir>`, with no `expect`, for a new version. It joins the corpus only through a diff you approve, after its expected events are written and reviewed.
+- `node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir>` records a fresh set into `<dir>`, with no `expect`, for a new version. It joins the corpus only through a diff you approve, after its expected events are written and reviewed.
 
 ## Recording and redaction
+
+pi's sets (#40) are real pi in RPC mode with the package and a real hub, only the model scripted: a tee on the hub's socket keeps each payload the package sends, and the transcript is pi's session file. pi's hook names are its own (`input`, `tool_call`, `agent_before_settle`); `agent_start`, `agent_end` and `agent_settled` are `session.activity`, and only `agent_before_settle` is `agent.stop`.
 
 Sessions are scripted (`record`'s scenarios) in a pseudo-terminal for Claude Code, through `codex exec` for Codex, and in Codex's terminal UI for a goal, with a hook on every event the adapter handles that keeps each payload byte for byte. Claude Code sessions use `--setting-sources project --strict-mcp-config`, Codex sessions `--ignore-user-config` where they can, and hooks come from the session's own settings, so your own hooks, MCP servers and instructions stay out. Codex's hooks run under `--dangerously-bypass-hook-trust`, so recording never writes trust into your Codex config; the goal session runs in a folder your config already trusts, named by `DEEP_CORPUS_CODEX_TRUSTED`.
 
