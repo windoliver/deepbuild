@@ -3081,7 +3081,7 @@ mod tests {
 
     #[test]
     fn a_reader_runs_after_its_writer_whatever_their_names_and_readers_share() {
-        // Bevy's schedule `ambiguity` and `read_only` cases: a read and a write of one value
+        // The `ambiguity` and `read_only` cases: a read and a write of one value
         // are ordered by the read, never by name, and two reads of it seal clean.
         fn a(r: &mut Registrar) {
             r.operator("read", "items", &["z.x"], &[]);
