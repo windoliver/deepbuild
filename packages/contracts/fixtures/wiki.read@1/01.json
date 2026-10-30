@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "wiki.read",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760099851123,
+  "data": {
+    "source": "session:0000000100004000800000000001",
+    "count": 3,
+    "last": "m3"
+  }
+}

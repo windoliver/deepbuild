@@ -250,6 +250,17 @@
             "last_assistant_message": "string"
           }
         },
+        "FileChanged": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "file_path": "string", "event": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
         "SessionEnd": {
           "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "reason": "string" },
           "optional": {
@@ -423,6 +434,17 @@
             "agent_type": "string",
             "error_details": "any",
             "last_assistant_message": "string"
+          }
+        },
+        "FileChanged": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "file_path": "string", "event": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
           }
         },
         "SessionEnd": {
@@ -640,6 +662,17 @@
             "agent_type": "string",
             "error_details": "any",
             "last_assistant_message": "string"
+          }
+        },
+        "FileChanged": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "file_path": "string", "event": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
           }
         },
         "SessionEnd": {

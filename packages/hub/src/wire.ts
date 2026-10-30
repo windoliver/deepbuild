@@ -93,9 +93,9 @@ export interface HookMeta {
   watchOnly?: boolean;
   /**
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
-   * subagent, a stop's last message, and Codex's turn.
+   * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
    */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string };
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string; file_path?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
