@@ -187,6 +187,20 @@ pub enum Planted {
     ConflictsUnreported,
     /// #401: every key, the escape chord too, goes to the focused panel alone.
     FocusedPanelTakesEscape,
+    /// #402: the terminal applies at most 30 updates a second, merging the rest.
+    Terminal30PerSecond,
+    /// #402: the cell grid draws each patch a frame after the frame it should.
+    CellsAFrameLate,
+    /// #402: a video stream shows the frames a pause queued when its panel resumes.
+    VideoShowsLate,
+    /// #402: a video stream drops frames and its counter stays 0.
+    VideoDropsUncounted,
+    /// #402: the terminal tab draws the terminal's text as text items, outside the cell grid.
+    TabDrawsText,
+    /// #402: the terminal tab redraws at most 30 times a second.
+    TabRedrawsAt30hz,
+    /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
+    TabDrawsCapture,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -232,6 +246,10 @@ pub struct Session {
     pub name: String,
     /// The agent's process, the parent its hooks came from: (pid, start time).
     pub process: (u64, i64),
+    /// #402: where a session runs in a terminal the hub doesn't host, and the captured screen
+    /// of it the page must never draw; both `None` for a hosted one or none.
+    pub runs_in: Option<String>,
+    pub capture: Option<Vec<String>>,
 }
 
 pub struct Process {
@@ -447,6 +465,14 @@ pub enum Call {
     Layout,
     /// The question card as it stands now (#400).
     CardState,
+    /// A press on the card's option, stamped by its platform at `t` and delivered now (#327).
+    Press {
+        t: i64,
+        phase: PressPhase,
+        option: String,
+    },
+    /// One of the card's `rearm_on` changes, now (#327).
+    Rearm(String),
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
     /// Your words from a panel's ask box to a session, about what you point at (#384).
@@ -509,6 +535,8 @@ pub enum Call {
     },
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
+    /// Terminals, streams and the session page's terminal tab (#402).
+    Term(Box<crate::terminal::TermCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -636,10 +664,26 @@ pub struct Hub<'a> {
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
+    /// Terminals, streams and session pages (#402).
+    pub terms: crate::terminal::Terms,
+    /// The card's `rearm_on` changes the scenario reported, each when (#327).
+    pub card_rearms: Vec<i64>,
+    /// A press down the card holds until its release: its platform stamp and its option (#327).
+    pub card_down: Option<(i64, String)>,
+    /// What answered the card: the option and the release's platform stamp (#327).
+    pub card_answer: Option<(String, i64)>,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
 pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
+
+/// Which half of a press, or a key repeat (#327).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PressPhase {
+    Down,
+    Up,
+    Repeat,
+}
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
 /// Mac's on a reference Mac, and scaled by its own speed anywhere else.
@@ -740,6 +784,10 @@ impl<'a> Hub<'a> {
                 scenario.layout.as_ref(),
                 scenario.placement_planted,
             ),
+            terms: crate::terminal::Terms::default(),
+            card_rearms: Vec::new(),
+            card_down: None,
+            card_answer: None,
         };
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
@@ -768,10 +816,75 @@ impl<'a> Hub<'a> {
 
     /// `card`: the question card as it stands now, or `None` before its ask (#400).
     pub fn card_json(&self) -> Option<placement::CardState> {
+        self.card_at(self.now)
+    }
+
+    /// The card as it stood at `t`, with the `rearm_on` changes reported and the answer (#327).
+    fn card_at(&self, t: i64) -> Option<placement::CardState> {
         match &self.scenario.card.as_ref()?.slot {
             Slot::Reserved(_) => None,
-            Slot::Placed { ask, size, at } => self.placement.card(ask, *at, *size, self.now),
+            Slot::Placed { ask, size, at } => self.placement.card_with(
+                ask,
+                *at,
+                *size,
+                &self.card_rearms,
+                self.card_answer.as_ref().map(|(o, at)| (o.as_str(), *at)),
+                t,
+            ),
         }
+    }
+
+    /// `press` (#327): a press on the card's option, judged by its own platform stamp `t` against the
+    /// card's states then, never by its delivery: a down counts on an armed option, and the release
+    /// answers only if the card stayed armed since that down; a repeat never counts. The planted
+    /// `arms_from_delivery` judges by delivery instead.
+    fn press(&mut self, t: i64, phase: PressPhase, option: &str) -> Value {
+        let judged_at = if self.placement.planted().arms_from_delivery {
+            self.now
+        } else {
+            t
+        };
+        let Some(card) = self.card_at(judged_at) else {
+            return json!({"outcome": "ignored"});
+        };
+        if card.answer.is_some() {
+            return json!({"outcome": "ignored"});
+        }
+        // When the card last armed, if it is armed at `judged_at`.
+        let armed_since = card
+            .states
+            .last()
+            .filter(|(state, _)| *state == "armed")
+            .map(|(_, at)| *at);
+        let outcome = match phase {
+            PressPhase::Repeat => "ignored",
+            PressPhase::Down => match armed_since {
+                Some(_) => {
+                    self.card_down = Some((judged_at, option.to_string()));
+                    "ignored"
+                }
+                None => "refused",
+            },
+            PressPhase::Up => match (self.card_down.take(), armed_since) {
+                (Some((down_at, down_option)), Some(since))
+                    if down_option == option && since <= down_at =>
+                {
+                    self.card_answer = Some((option.to_string(), judged_at));
+                    "answered"
+                }
+                (Some(_), None) => "refused",
+                _ => "ignored",
+            },
+        };
+        json!({"outcome": outcome})
+    }
+
+    /// `rearm` (#327): a `rearm_on` change now returns the card to presented and restarts its
+    /// interval; a held press is let go of.
+    fn rearm(&mut self, on: &str) -> Value {
+        self.card_rearms.push(self.now);
+        self.card_down = None;
+        json!({"rearmed": on, "at": self.now})
     }
 
     /// `install_pack` (#306): one pack version read from its folder and put through the pack
@@ -1076,6 +1189,8 @@ impl<'a> Hub<'a> {
             Call::Windows => self.placement.windows_json(),
             Call::Layout => self.placement.layout_json(),
             Call::CardState => json!({"card": self.card_json().map(|c| c.to_json())}),
+            Call::Press { t, phase, option } => self.press(*t, *phase, option),
+            Call::Rearm(on) => self.rearm(on),
             Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
             Call::Ask {
@@ -1116,6 +1231,7 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Term(t) => self.term_call(t),
         };
         self.stamp(&mut reply);
         reply

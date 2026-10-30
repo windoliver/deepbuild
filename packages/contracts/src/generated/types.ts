@@ -917,6 +917,44 @@ export interface AskAnsweredV3 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV4PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@4 */
+export interface AskAnsweredV4 {
+  v: 4;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session";
+    verified: boolean;
+    on: AskAnsweredV4PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -1642,6 +1680,29 @@ export interface AskSuperseded {
   log_pos?: number;
   data: {
     by: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** call.overrun@1 */
+export interface CallOverrun {
+  v: 1;
+  id: string;
+  kind: "call.overrun";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    kind: string;
+    command: string | null;
+    expected_ms: number;
+    ran_ms: number;
+    deadline: "attached" | "recorded" | "none";
   };
   evidence?: Array<string>;
 }
@@ -3325,6 +3386,90 @@ export interface ProcessTracked {
   evidence?: Array<string>;
 }
 
+/** promise.blocked@1 */
+export interface PromiseBlocked {
+  v: 1;
+  id: string;
+  kind: "promise.blocked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    status: "BLOCKED";
+    quote: string;
+    cause: "set_again" | "past_end";
+    owner: "service" | "you";
+    ask: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.due@1 */
+export interface PromiseDue {
+  v: 1;
+  id: string;
+  kind: "promise.due";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    due: number;
+    route: "wake" | "next_hook";
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.set@1 */
+export interface PromiseSet {
+  v: 1;
+  id: string;
+  kind: "promise.set";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    quote: string;
+    due: number;
+    times_set: number;
+    end: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** promise.woken@1 */
+export interface PromiseWoken {
+  v: 1;
+  id: string;
+  kind: "promise.woken";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    promise: string;
+    via: "waiter" | "next_prompt" | "stop_hold";
+  };
+  evidence?: Array<string>;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
@@ -3592,6 +3737,36 @@ export interface RunStarted {
   evidence?: Array<string>;
 }
 
+/** run.started@2 */
+export interface RunStartedV2 {
+  v: 2;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    commit: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+  };
+  evidence?: Array<string>;
+}
+
 /** sandbox.denied@1 */
 export interface SandboxDenied {
   v: 1;
@@ -3608,6 +3783,30 @@ export interface SandboxDenied {
     run: string;
     operation: string;
     target: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** seed.cloned@1 */
+export interface SeedCloned {
+  v: 1;
+  id: string;
+  kind: "seed.cloned";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    stack: string;
+    source: string;
+    copied_at: string;
+    migration: string;
+    template: string;
+    cloned_at: number;
   };
   evidence?: Array<string>;
 }
@@ -3818,6 +4017,30 @@ export interface SpendApproved {
   evidence?: Array<string>;
 }
 
+/** spend.approved@2 */
+export interface SpendApprovedV2 {
+  v: 2;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    runs?: number;
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
 /** spend.asked@1 */
 export interface SpendAsked {
   v: 1;
@@ -3907,6 +4130,34 @@ export interface SpoolRefused {
     file: string;
     offset: number;
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** stop.held@1 */
+export interface StopHeld {
+  v: 1;
+  id: string;
+  kind: "stop.held";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    stop: string;
+    claim: string | null;
+    total: number;
+    question: number;
+    slow: number;
+    fast: number;
+    snapshot_start: number;
+    queue_wait: number;
+    code_changing: boolean;
+    budget_cost: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -4712,6 +4963,26 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** wiki.read@1 */
+export interface WikiRead {
+  v: 1;
+  id: string;
+  kind: "wiki.read";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    count: number;
+    last: string | null;
+  };
+  evidence?: Array<string>;
+}
 
 /** work.broke@1 */
 export interface WorkBroke {

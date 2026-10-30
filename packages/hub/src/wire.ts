@@ -93,9 +93,9 @@ export interface HookMeta {
   watchOnly?: boolean;
   /**
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
-   * subagent, a stop's last message, and Codex's turn.
+   * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
    */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string };
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string; file_path?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
@@ -113,8 +113,14 @@ export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']
  * A PreToolUse held for the core: its label, the effect classes that need your authority, an MCP tool, and the
  * classes a standing rule decides (#23) with the shell command they're read from.
  */
+/** The prefix of Claude in Chrome's tools, whose steps act in your own Chrome (#332). */
+export const CHROME = 'mcp__claude-in-chrome__';
+/** The prefixes of the agent's tools whose steps act on a screen or in your own browser (#332). */
+export const SCREEN_TOOLS = ['mcp__computer-use__', 'mcp__remote-devices__computer_', CHROME];
 export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
+  /** A computer-use step: allowed only on what its session leases (#332). */
+  screen?: boolean;
   /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
   stage?: string[] | null;
 }

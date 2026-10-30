@@ -5,12 +5,12 @@
 // start time and stops only those. A compose stack runs as its own compose project, named from its run, so two
 // worktrees never share one; `docker compose up` and its `down` run through the host too.
 import { execFile, execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { constants, copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { SlotFill } from '@deepbuild/conformance';
 import type { Grant, Host, ResourceKind, Supervisor } from '@deepbuild/supervisor';
 import { parse } from 'yaml';
@@ -25,9 +25,34 @@ interface Environment {
   ports: string[];
   /** Ready only once GET on this URL, its `${name}`s filled with the leased ports, answers 200, within `within` seconds. */
   ready: { http: string; within: number };
+  /** The variable the stack reads its worktree's own host name from (#332). */
+  host?: string;
+  /** Each variable a resource key is passed in, leased per session from the kind's keys (#332). */
+  leases: { env: string; kind: string; keys: string[] }[];
+  /** Each variable a credential is loaded into, by its source; never its value (#332). */
+  credentials: { env: string; source: Source }[];
+  /** The seed step, and the variable that hands it the template and each run its clone (#332). */
+  seed?: { run: string; database: string };
 }
+/** Where a credential's value is read when its stack starts: a dotfile's `NAME=value` line, a CLI login's output, or a keychain item. */
+type Source = { dotfile: string } | { cli: string[] } | { keychain: { service: string; account?: string } };
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** The kinds a stack leases per session, besides its ports (#332). */
+export const SESSION_KINDS: readonly string[] = ['account', 'screen', 'window', 'deploy', 'gpu'];
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+/** A credential's source as done.yaml gives it, or nothing when it isn't one of the three. */
+function sourceOf(v: unknown): Source | undefined {
+  if (!isObj(v) || Object.keys(v).length !== 1) return undefined;
+  if (isText(v.dotfile)) return { dotfile: v.dotfile };
+  if (Array.isArray(v.cli) && v.cli.length && v.cli.every(isText)) return { cli: v.cli as string[] };
+  const k = v.keychain;
+  if (isObj(k) && isText(k.service) && Object.keys(k).every((key) => key === 'service' || (key === 'account' && isText(k.account)))) {
+    return { keychain: { service: k.service, ...(isText(k.account) ? { account: k.account } : {}) } };
+  }
+  return undefined;
+}
 // The health route is on this machine's loopback, on a leased port when the stack has any: an answer from anywhere
 // else can't say the stack is ready.
 const ROUTE = /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(?:\$\{(\w+)\}|(\d+))(?:[/?#]|$)/;
@@ -38,7 +63,7 @@ function readEnvironment(folder: string): Environment {
   const doc = parse(readFileSync(file, 'utf8')) as { environment?: unknown } | null;
   const env = doc?.environment as Record<string, unknown> | undefined;
   if (typeof env !== 'object' || env === null) throw Error(`${file} has no environment: block`);
-  const { up, compose, ports = [], ready } = env as { up?: unknown; compose?: unknown; ports?: unknown; ready?: unknown };
+  const { up, compose, ports = [], ready, host, leases = {}, credentials = {}, seed } = env as Record<string, unknown>;
   if ((typeof up === 'string') === (typeof compose === 'string')) throw Error(`${file}: environment names exactly one of up (a command) or compose (a file)`);
   if (!Array.isArray(ports) || ports.some((p) => typeof p !== 'string' || !NAME.test(p))) throw Error(`${file}: environment.ports is a list of variable names`);
   const r = ready as { http?: unknown; within?: unknown } | undefined;
@@ -50,15 +75,52 @@ function readEnvironment(folder: string): Environment {
   }
   const within = r.within ?? 60;
   if (typeof within !== 'number' || !(within > 0) || !Number.isFinite(within)) throw Error(`${file}: environment.ready.within is a finite number of seconds`);
-  return { ...(typeof up === 'string' ? { up } : { compose: compose as string }), ports: ports as string[], ready: { http: r.http, within } };
+  // Every variable the stack is handed is named once, and none is the run's own (DEEP_) or one that steers its shell.
+  const names = [...(ports as string[])];
+  const variable = (name: unknown, what: string): string => {
+    if (typeof name !== 'string' || !NAME.test(name) || name.startsWith('DEEP_') || STEERING.test(name) || names.includes(name)) {
+      throw Error(`${file}: ${what} names a variable of its own: letters, digits and _, not DEEP_, PATH, HOME or a compose, Docker or git one, and no other entry's`);
+    }
+    names.push(name);
+    return name;
+  };
+  if (!isObj(leases)) throw Error(`${file}: environment.leases maps each variable to {kind, keys}`);
+  const leased = Object.entries(leases).map(([name, l]) => {
+    const kind = isObj(l) ? l.kind : undefined;
+    const keys = isObj(l) ? l.keys : undefined;
+    if (typeof kind !== 'string' || !SESSION_KINDS.includes(kind) || !Array.isArray(keys) || !keys.length || !keys.every(isText) || Object.keys(l as object).length !== 2) {
+      throw Error(`${file}: environment.leases.${name} is {kind, keys}: kind one of ${SESSION_KINDS.join(', ')}, keys a list of names`);
+    }
+    return { env: variable(name, `environment.leases.${name}`), kind, keys: [...new Set(keys as string[])] };
+  });
+  if (!isObj(credentials)) throw Error(`${file}: environment.credentials maps each variable to its source`);
+  const loaded = Object.entries(credentials).map(([name, s]) => {
+    const source = sourceOf(s);
+    if (!source) throw Error(`${file}: environment.credentials.${name} names one source: {dotfile: "~/..."}, {cli: [program, args...]} or {keychain: {service, account}}`);
+    return { env: variable(name, `environment.credentials.${name}`), source };
+  });
+  let seeded: Environment['seed'];
+  if (seed !== undefined) {
+    if (!isObj(seed) || !isText(seed.run) || Object.keys(seed).length !== 2) throw Error(`${file}: environment.seed is {run, database}: the seed step's command and the variable its database is handed in`);
+    seeded = { run: seed.run, database: variable(seed.database, 'environment.seed.database') };
+  }
+  return {
+    ...(typeof up === 'string' ? { up } : { compose: compose as string }), ports: ports as string[], ready: { http: r.http, within },
+    ...(host === undefined ? {} : { host: variable(host, 'environment.host') }), leases: leased, credentials: loaded, ...(seeded ? { seed: seeded } : {}),
+  };
 }
 
 /** The port kind as `lease.kind@1` data: ports match by exact key. */
 const PORT_KIND = { name: 'port', match: 'exact', cap: 1000, cooldown: 0, cost: 0 } as const;
 /** A compose project's name, as `lease.kind@1` data: one stack's project at a time, by exact key. */
 const COMPOSE_KIND = { name: 'compose', match: 'exact', cap: 1000, cooldown: 0, cost: 0 } as const;
+/**
+ * The kinds a session leases through the hub for its stack (#332): test accounts, screens, app windows, deploy targets
+ * and GPUs, by exact key, each held by one session at a time. A key is the repo's own name for it, as done.yaml lists it.
+ */
+const SESSION_KIND = (name: string) => ({ name, match: 'exact', cap: 1000, cooldown: 0, cost: 0 } as const);
 /** env-local's resource kinds, as its manifest declares them in the kernel's lease table (#237). */
-export const leaseKinds = [PORT_KIND, COMPOSE_KIND];
+export const leaseKinds = [PORT_KIND, COMPOSE_KIND, ...SESSION_KINDS.map(SESSION_KIND)];
 const HOSTS = ['127.0.0.1', '0.0.0.0', '::'];
 /** Whether lsof shows no listener on the port, on any address; a failed lsof is not proof, so not free. */
 const unlisted = (port: number): Promise<boolean> => new Promise((resolve) => {
@@ -122,13 +184,132 @@ function get(url: string): Promise<{ status: number | null; error?: string }> {
 }
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** What a run's database clone carries (#332): the template's seed record, the template's digest and when it was cloned. */
+export interface SeedRecord { source: string; copied_at: string; migration: string; template: string; cloned_at: number }
 export interface Stack {
   run: string; pid: number; ports: Record<string, number>; /** Its health route, its ports filled in. */ url: string;
   /** The compose project its containers carry, for a compose stack. */ project?: string;
+  /** Its database's clone record, when the environment seeds one. */ seed?: SeedRecord;
 }
 /** Whether the stack's health route answers 200 now. */
 export const answers = async (stack: Stack): Promise<boolean> => (await get(stack.url)).status === 200;
 export type Up = { status: 'ready'; stack: Stack } | { status: 'BLOCKED'; run: string; cause: string };
+/** One key of the kind from `keys`, leased to the stack's holder for its run; or why none could be. */
+export type Take = (kind: string, keys: string[]) => Promise<{ key: string } | { cause: string }>;
+
+/** The worktree's own host name: its folder's name and a digest of its real path, under `.localhost`, which resolves to this machine. */
+function hostName(folder: string): string {
+  const name = basename(folder).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'worktree';
+  return `${name}-${createHash('sha256').update(realpathSync(folder)).digest('hex').slice(0, 8)}.localhost`;
+}
+
+/**
+ * Runs one step through the host, as you, in the folder: a credential's CLI or keychain read, or the seed step. Its
+ * stdout comes back to the caller alone, never to the record; the host keeps only its digest.
+ */
+/** How long a credential's login command or the seed step may run: one that hangs (a prompt nobody answers) is stopped. */
+const STEP_MS = 5 * 60_000;
+async function step(host: Host, argv: string[], cwd: string, env: Record<string, string>): Promise<{ code: number | null; stdout: string }> {
+  const run = newRun();
+  const out: Buffer[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const started = await host.start({ run, argv, cwd, env, grant: { run_as_you: true }, output: { stdout: (c) => { out.push(c); }, stderr: () => undefined } });
+    if (started.status === 'BLOCKED') return { code: null, stdout: '' };
+    const exit = await Promise.race([host.wait(run), new Promise<undefined>((done) => { timer = setTimeout(() => done(undefined), STEP_MS); })]);
+    if (!exit) {
+      await host.signal(run, 'SIGKILL').catch(() => undefined);
+      return { code: null, stdout: '' };
+    }
+    return { code: exit.code, stdout: Buffer.concat(out).toString('utf8') };
+  } finally {
+    clearTimeout(timer);
+    await (host as Partial<Supervisor>).cleanup?.(run)?.catch(() => undefined);
+  }
+}
+/** A dotfile's value for `name`: its `NAME=value` line, `export` and quotes allowed. */
+function dotfileValue(text: string, name: string): string | undefined {
+  for (const line of text.split('\n')) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+    if (m?.[1] !== name) continue;
+    const v = m[2]!;
+    return /^(["']).*\1$/.test(v) ? v.slice(1, -1) : v;
+  }
+  return undefined;
+}
+/**
+ * Each credential's value, read from its source into the stack's environment alone; or why one couldn't be, naming the
+ * variable and the source as done.yaml writes it, never the value or a path it resolved.
+ */
+async function loadCredentials(host: Host, env: Environment, folder: string): Promise<{ values: Record<string, string> } | { cause: string }> {
+  const values: Record<string, string> = {};
+  for (const { env: name, source } of env.credentials) {
+    let value: string | undefined;
+    let where: string;
+    if ('dotfile' in source) {
+      where = `the dotfile ${source.dotfile}`;
+      const path = source.dotfile.startsWith('~/') ? join(homedir(), source.dotfile.slice(2)) : resolve(folder, source.dotfile);
+      // A value kept in the checkout, or linked into it, is one the agent reads there: it stays outside the worktree.
+      let real = path;
+      try { real = realpathSync(path); } catch { /* read below */ }
+      const within = (base: string, p: string) => { const r = relative(base, p); return r !== '..' && !r.startsWith(`..${sep}`) && !isAbsolute(r); };
+      if (within(folder, path) || within(realpathSync(folder), path) || within(realpathSync(folder), real)) return { cause: `credential ${name}: ${where} is inside the worktree, where the agent reads it; keep it outside, as ~/ names your home folder` };
+      let text: string | undefined;
+      try { text = readFileSync(path, 'utf8'); } catch { /* named below */ }
+      value = text === undefined ? undefined : dotfileValue(text, name);
+      if (text === undefined) return { cause: `credential ${name}: ${where} can't be read` };
+    } else {
+      const argv = 'cli' in source ? source.cli
+        : ['/usr/bin/security', 'find-generic-password', '-s', source.keychain.service, ...(source.keychain.account ? ['-a', source.keychain.account] : []), '-w'];
+      where = 'cli' in source ? `the login command ${source.cli[0]}` : `the keychain item ${source.keychain.service}`;
+      const ran = await step(host, argv, folder, {});
+      if (ran.code !== 0) return { cause: `credential ${name}: ${where} gave no value (exit ${String(ran.code)})` };
+      value = ran.stdout.replace(/\r?\n$/, '');
+    }
+    if (!value) return { cause: `credential ${name}: ${where} holds no value for it` };
+    // A value is kept out of the record by scrubbing it from all hook text, which a short one would mangle.
+    if (value.length < 8) return { cause: `credential ${name}: ${where} holds a value too short to keep out of the record; use one of 8 characters or more` };
+    values[name] = value;
+  }
+  return { values };
+}
+
+/** Each stack's seed folder, its template and its clone, removed when the stack goes down. */
+const seeds = new Map<string, string>();
+/**
+ * The seed step and the run's clone (#332): the step writes the template database at its variable and its completion
+ * record, `{source, copied_at, migration}`, at $DEEP_SEED_RECORD. A template without that record is never cloned, so
+ * nothing runs on it; otherwise the run's database is a copy of the template, which carries the record with the
+ * template's digest and the time it was cloned.
+ */
+async function seedClone(host: Host, seed: NonNullable<Environment['seed']>, folder: string, run: string, env: Record<string, string>): Promise<{ database: string; record: SeedRecord } | { cause: string }> {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-seed-')));
+  seeds.set(run, dir);
+  const template = join(dir, 'template', 'database');
+  const at = join(dir, 'template', 'seed-record.json');
+  mkdirSync(dirname(template));
+  const what = `the seed step (${seed.run})`;
+  const ran = await step(host, ['/bin/sh', '-c', seed.run, run], folder, { ...env, [seed.database]: template, DEEP_SEED_RECORD: at });
+  if (ran.code !== 0) return { cause: `${what} exited ${String(ran.code)}, so no database was seeded` };
+  if (!existsSync(template) || !statSync(template).isFile()) return { cause: `${what} left no database file at $${seed.database}` };
+  let record: Record<string, unknown> | undefined;
+  try { record = JSON.parse(readFileSync(at, 'utf8')) as Record<string, unknown>; } catch { /* named below */ }
+  const fields = ['source', 'copied_at', 'migration'] as const;
+  if (!isObj(record) || !fields.every((f) => isText(record![f])) || Number.isNaN(Date.parse(record.copied_at as string))) {
+    return { cause: `${what} left no seed record at $DEEP_SEED_RECORD: its completion record (its source, when that source was copied and its migration revision) is missing, so its database template is kept without one and no run is cloned from it` };
+  }
+  // Read in chunks: a template can be larger than one buffer holds.
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(template)) hash.update(chunk as Buffer);
+  const digest = hash.digest('hex');
+  const clone = join(dir, 'clone', 'database');
+  mkdirSync(dirname(clone));
+  copyFileSync(template, clone, constants.COPYFILE_FICLONE);
+  const carried: SeedRecord = { source: record.source as string, copied_at: record.copied_at as string, migration: record.migration as string, template: digest, cloned_at: Date.now() };
+  // The clone carries its record beside it, as the template did.
+  writeFileSync(join(dir, 'clone', 'seed-record.json'), JSON.stringify(carried));
+  return { database: clone, record: carried };
+}
 interface UpOptions {
   run: string;
   /** The folder the stack starts from and reads its environment block in: a worktree, or a check's checkout. */
@@ -141,6 +322,12 @@ interface UpOptions {
   compose?: { dir: string; docker?: string | undefined } | undefined;
   /** The planted wrong program: compose runs under the file's own project name, shared by every worktree. */
   sharedProject?: boolean;
+  /** Who holds the stack's leases (StartSpec.holder): the session whose deep_env call starts it; the core unless given. */
+  holder?: string;
+  /** Leases each per-session key the environment names, for `holder`, through the hub's lease table; without it, a stack that names one is BLOCKED. */
+  take?: Take;
+  /** Hears the credential values loaded for the stack before anything of it starts, so what it prints is scrubbed of them by value. */
+  scrub?: (values: string[]) => void;
 }
 
 /**
@@ -407,6 +594,26 @@ export async function upStack(host: Host, o: UpOptions): Promise<Up> {
   const given = o.ports ?? {};
   const missing = env.ports.filter((name) => given[name] === undefined);
   if (o.ports && missing.length) return { status: 'BLOCKED', run: o.run, cause: `no port given for ${missing.join(', ')}` };
+  // A compose stack resolves its file with what it is given, into files of the hub's: a credential would land there.
+  if (env.compose !== undefined && env.credentials.length) return { status: 'BLOCKED', run: o.run, cause: 'env-local loads credentials into an up command\'s process alone; a compose stack would write them into the file compose resolves' };
+  // Credentials first, by reference, into this stack's environment alone; then each per-session key, leased to its holder.
+  const loaded = await loadCredentials(host, env, o.folder);
+  if ('cause' in loaded) return { status: 'BLOCKED', run: o.run, cause: loaded.cause };
+  if (Object.keys(loaded.values).length) o.scrub?.(Object.values(loaded.values));
+  const extra: Record<string, string> = { ...loaded.values, ...(env.host ? { [env.host]: hostName(o.folder) } : {}) };
+  for (const l of env.leases) {
+    if (!o.take) return { status: 'BLOCKED', run: o.run, cause: `${l.env} names a ${l.kind}, which is leased per session through the hub, and this stack was started without it` };
+    const got = await o.take(l.kind, l.keys);
+    if ('cause' in got) return { status: 'BLOCKED', run: o.run, cause: got.cause };
+    extra[l.env] = got.key;
+  }
+  let seed: SeedRecord | undefined;
+  if (env.seed) {
+    const cloned = await seedClone(host, env.seed, o.folder, o.run, { ...o.env, ...extra });
+    if ('cause' in cloned) return { status: 'BLOCKED', run: o.run, cause: cloned.cause };
+    extra[env.seed.database] = cloned.database;
+    seed = cloned.record;
+  }
   const listen = Object.values(given).map((p) => `127.0.0.1:${p}`);
   // Your files and programs, as you, and the leased ports to listen on (the supervisor adds the ones it leases).
   const grant: Grant = { run_as_you: true, ...(listen.length ? { listen, hosts: listen } : {}) };
@@ -428,15 +635,16 @@ export async function upStack(host: Host, o: UpOptions): Promise<Up> {
     if (info.code !== 0) return { status: 'BLOCKED', run: o.run, cause: `the Docker daemon is unreachable (docker version: ${info.stderr.trim().split('\n').slice(-1)[0] || `exit ${info.code}`}), so no compose stack can run` };
     mkdirSync(join(dir, 'runs'), { recursive: true });
     folders = { work: realpathSync(mkdtempSync(join(tmpdir(), 'deep-compose-run-'))), judged: realpathSync(mkdtempSync(join(dir, 'runs', 'run-'))) };
-    argv = ['/bin/sh', '-c', COMPOSE(docker, dir, env.ports), $0, o.sharedProject ? 'shared' : '', env.compose, folders.work, folders.judged];
+    argv = ['/bin/sh', '-c', COMPOSE(docker, dir, [...env.ports, ...Object.keys(extra)]), $0, o.sharedProject ? 'shared' : '', env.compose, folders.work, folders.judged];
     // The Docker CLI talks to its daemon over its socket; the containers are the daemon's, labelled with the project.
     grant.sockets = reached.socket;
     leases.push({ kind: 'compose', env: 'DEEP_COMPOSE_PROJECT' });
   }
   const started = await host.start({
     run: o.run, argv, cwd: o.folder, grant,
-    env: { ...o.env, ...Object.fromEntries(Object.entries(given).map(([k, v]) => [k, String(v)])) },
+    env: { ...o.env, ...extra, ...Object.fromEntries(Object.entries(given).map(([k, v]) => [k, String(v)])) },
     ...(leases.length ? { leases } : {}),
+    ...(o.holder ? { holder: o.holder } : {}),
   });
   if (started.status === 'BLOCKED') {
     for (const f of Object.values(folders ?? {})) rmSync(f, { recursive: true, force: true });
@@ -454,7 +662,9 @@ export async function upStack(host: Host, o: UpOptions): Promise<Up> {
       return { status: 'BLOCKED', run: o.run, cause: refused };
     }
     const up = await ready(host, o, env, started.pid, ports);
-    return up.status === 'ready' && project !== undefined ? { ...up, stack: { ...up.stack, project } } : up;
+    return up.status === 'ready'
+      ? { ...up, stack: { ...up.stack, ...(project !== undefined ? { project } : {}), ...(seed ? { seed } : {}) } }
+      : up;
   } catch (error) {
     // Whatever goes wrong once it started, the stack is signalled down, never left running unrecorded.
     await downStack(host, o.run);
@@ -494,7 +704,8 @@ export async function downStack(host: Host, run: string): Promise<void> {
     await Promise.race([exited, sleep(2000)]);
   }
   composed.delete(run);
-  for (const f of Object.values(folders ?? {})) rmSync(f, { recursive: true, force: true });
+  for (const f of [...Object.values(folders ?? {}), seeds.get(run)]) if (f) rmSync(f, { recursive: true, force: true });
+  seeds.delete(run);
 }
 
 // ---- env-local as an environment@1 fill (#314's kit): up(spec, lease, checkout), down(handle).
@@ -512,7 +723,8 @@ export function envLocal(options: { host: Host }): SlotFill {
       const up = await upStack(host, { run, folder: checkout, ports: { [env.ports[0]!]: lease.port }, env: { DEEP_RUN_TOKEN: lease.token } })
         .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }));
       if (up.status === 'BLOCKED') {
-        // A stack refused before it started is no run of the host's; its cause is what the kit hears.
+        // A stack refused before it started is no run of the host's; its cause is what the kit hears. Its seed folder goes.
+        await downStack(host, run).catch(() => undefined);
         await (host as Partial<Supervisor>).cleanup?.(run)?.catch(() => undefined);
         throw Error(up.cause);
       }

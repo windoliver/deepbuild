@@ -1,0 +1,22 @@
+{
+  "spike": 402,
+  "what": "a busy terminal's changes fed to the cell grid in the gpui-kit app: 600 full-screen repaints of 120 × 36 cells through the cells module's emulator, each drawn as one frame of the app's window on GPUI's headless test platform, after 30 not counted",
+  "fingerprint": {
+    "model": "Mac15,7",
+    "chip": "Apple M3 Pro",
+    "power": "Now drawing from 'AC Power'",
+    "load": "{ 66.70 48.03 29.93 }"
+  },
+  "updates": 600,
+  "ms_per_update": {
+    "p50": 1.995333,
+    "p95": 2.415375,
+    "max": 6.943790999999999,
+    "emulator_p50": 0.068125
+  },
+  "budget_ms": 16.666666666666668,
+  "keeps_up": true,
+  "failures": [],
+  "build": "release (cargo test --release -p deep-app --test spike_402); a debug build of the same run reads p50 43.8 ms, p95 49.5 ms, under a 1-minute load of 23.6",
+  "note": "The machine was loaded past its core count while this ran (load 66.7 on 12 cores, from other work on the machine), so these readings are an upper bound, not a reference-Mac budget result; the budget results are tests/acceptance/402/budgets.test.ts."
+}
