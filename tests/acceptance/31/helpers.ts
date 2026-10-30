@@ -8,7 +8,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, expect } from 'vitest';
@@ -84,15 +84,33 @@ export function makeRepo(files: Record<string, string> = {}): string {
   git(dir, ['commit', '-q', '--allow-empty', '-m', 'base']);
   return dir;
 }
-/** Clones the repo's installed dependencies into `dir`, copy-on-write where the file system can: the sample's install, ignored by its .gitignore. */
+/**
+ * Clones the repo's installed dependencies into `dir`, copy-on-write where the file system can: the sample's install, ignored
+ * by its .gitignore, and self-contained wherever the repo's node_modules comes from. An entry that is a link, at the top or
+ * in a `@scope/`, becomes real files; links inside an entry (`.bin/*`) stay as they are. The repo's own workspace packages
+ * (`@deepbuild/*`) stay out: nothing the sample runs imports them.
+ */
 export function install(dir: string): void {
   const from = join(REPO, 'node_modules');
   if (!existsSync(join(from, 'vitest'))) throw Error('BLOCKED: the repo\'s node_modules has no vitest (run npm ci once)');
-  try {
-    execFileSync('/bin/cp', ['-cR', from, join(dir, 'node_modules')], { stdio: 'pipe' });
-  } catch {
-    execFileSync('/bin/cp', ['-R', from, join(dir, 'node_modules')], { stdio: 'pipe' });
-  }
+  const clone = (source: string, into: string): void => {
+    mkdirSync(into, { recursive: true });
+    const entries: string[] = [];
+    for (const name of readdirSync(source)) {
+      const path = join(source, name);
+      if (name === '@deepbuild' || !existsSync(path)) continue;
+      if (name.startsWith('@') && statSync(path).isDirectory()) clone(path, join(into, name));
+      else entries.push(path);
+    }
+    if (!entries.length) return;
+    // -H follows the links named here and keeps their names; -R copies every link below them as a link, so nothing loops.
+    try {
+      execFileSync('/bin/cp', ['-cRH', ...entries, into], { stdio: 'pipe' });
+    } catch {
+      execFileSync('/bin/cp', ['-RH', ...entries, into], { stdio: 'pipe' });
+    }
+  };
+  clone(from, join(dir, 'node_modules'));
 }
 
 // ---- The sample repo: a seeded bug on main, and the fix on a branch.
