@@ -493,3 +493,237 @@ Received: "running"
    Duration  8.22s (tests 88%, transform 8%, import 4%)
 
 # exit 1
+
+# ---- Appended: tests/acceptance/822/hub.test.ts (AC3, the hub's check-run deadline from done.yaml), run against the working tree, whose hub code is still the base's (packages/hub/src at ff81b0d2), 2026-10-30T19:50Z, Node v24.22.0
+# node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json   (the hub's build, which the test loads)
+# node node_modules/vitest/vitest.mjs run tests/acceptance/822/hub.test.ts
+
+
+ RUN  v5.0.5 <repo>
+
+deep supervisor: the system log never showed a sandbox report, so denials go unrecorded
+deep supervisor: the system log never showed a sandbox report, so denials go unrecorded
+deep supervisor: the system log never showed a sandbox report, so denials go unrecorded
+ ❯ tests/acceptance/822/hub.test.ts (7 tests | 6 failed) 78484ms
+   ❯ AC3 #822 a check run's deadline of 30d in done.yaml waits its full time (1)
+     × AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at 30 days 3878ms
+   ❯ AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it (6)
+     × AC3 hub deep_run: a check with deadline: 0m is refused before its run starts, naming deadline and 0m 12215ms
+     × AC3 hub deep_run: a check with deadline: -5m is refused before its run starts, naming deadline and -5m 11425ms
+     × AC3 hub deep_run: a check with deadline: 1.5h is refused before its run starts, naming deadline and 1.5h 13050ms
+     × AC3 hub deep_run: a check with deadline: soon is refused before its run starts, naming deadline and soon 12427ms
+     × AC3 hub deep_run: a check with deadline: .inf is refused before its run starts, naming deadline and .inf 11267ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline of 30d in done.yaml waits its full time > AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at 30 days
+AssertionError: a 30-day deadline ended the run at its start: {"run":"run:01M675SMV9J0ERGEZXFE5X5AAN","outcome":"overran","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","27a57639a2498004d06fa610946eda520db56643fb5d2cf12558bdcaf413c076"],"check":"month","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":["still running at its deadline of 30 days, so it was stopped"],"environment":"darwin-arm64"}: expected { …(14) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "actual": null,
+  "assertion": null,
+  "check": "month",
+  "environment": "darwin-arm64",
+  "evidence": [
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "27a57639a2498004d06fa610946eda520db56643fb5d2cf12558bdcaf413c076",
+  ],
+  "expected": null,
+  "findings": [
+    "still running at its deadline of 30 days, so it was stopped",
+  ],
+  "outcome": "overran",
+  "passed": 0,
+  "points_to": null,
+  "run": "run:01M675SMV9J0ERGEZXFE5X5AAN",
+  "runs": 1,
+  "step": null,
+  "tests_run": 0,
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:163:123
+    161|     await realSleep(1_500);
+    162|     const start = await h.runsOf('month');
+    163|     expect(start.finished?.data, `a 30-day deadline ended the run at i…
+       |                                                                                                                           ^
+    164|     expect(alive(pid), `its process ${String(pid)} is alive`).toBe(tru…
+    165|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: 0m is refused before its run starts, naming deadline and 0m
+AssertionError: a run started for a check with deadline: 0m: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675SPSS4YAJH7ZER06RNRHN",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675SPST68D38ANAQ5P76ZDV",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: -5m is refused before its run starts, naming deadline and -5m
+AssertionError: a run started for a check with deadline: -5m: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675T2PQYQY6J9QX1YPHHXEW",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675T2PXM16BPYGHCR5QGP39",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: 1.5h is refused before its run starts, naming deadline and 1.5h
+AssertionError: a run started for a check with deadline: 1.5h: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675TEAZFPMMEF2PPW1616PH",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675TEB147DJM4531XAH4RYV",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: soon is refused before its run starts, naming deadline and soon
+AssertionError: a run started for a check with deadline: soon: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675TTKR4537C03EPF24087S",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675TTM8N8B6ABPDEGTFC170",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: .inf is refused before its run starts, naming deadline and .inf
+AssertionError: a run started for a check with deadline: .inf: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675V6RBT7Y6QEBVHFTNSQSB",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675V6RDATQP8NVY0YBYX3GD",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 1 passed (7)
+   Start at  12:50:07
+   Duration  79.17s (tests 99%)
+
+# exit 1
