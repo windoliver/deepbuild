@@ -16,7 +16,8 @@ export async function envCommand(args: readonly string[]): Promise<number> {
   let usage = command !== 'up' && command !== 'down';
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--json') json = true;
-    else if (rest[i] === '--root' && rest[i + 1]) root = rest[++i];
+    // A flag where the folder goes is a usage error, not a folder named for it.
+    else if (rest[i] === '--root' && rest[i + 1] && !rest[i + 1]!.startsWith('--')) root = rest[++i];
     else usage = true;
   }
   if (usage) {
@@ -42,7 +43,8 @@ export async function envCommand(args: readonly string[]): Promise<number> {
     say(result, result.status === 'ready' ? `ready: ${ports} (${String(result.run)})` : `BLOCKED: ${String(result.cause)}`);
     return result.status === 'ready' ? 0 : 3;
   }
-  const left = (result.left ?? []) as { pid: number; port?: number }[];
-  say(result, `down: stopped ${(result.stopped as number[]).length}${left.length ? `; left, unproven and not stopped: ${left.map((l) => `pid ${l.pid}${l.port ? ` on port ${l.port}` : ''}`).join(', ')}` : ''}`);
+  const left = (result.left ?? []) as { pid?: number; port?: number; cause?: string }[];
+  const named = (l: (typeof left)[number]) => l.pid === undefined ? `unchecked: ${l.cause}` : `pid ${l.pid}${l.port ? ` on port ${l.port}` : ''}`;
+  say(result, `down: stopped ${(result.stopped as number[]).length}${left.length ? `; left, unproven and not stopped: ${left.map(named).join(', ')}` : ''}`);
   return left.length ? 1 : 0;
 }
