@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 const made: string[] = [];
 afterEach(() => { for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-function world(): { repo: string; service: ReturnType<typeof openCheckouts>; git(...args: string[]): void } {
+function world(kinds: CheckoutsOptions['kinds'] = []): { repo: string; service: ReturnType<typeof openCheckouts>; git(...args: string[]): void } {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-checkouts-')));
   made.push(dir);
   const repo = join(dir, 'repo');
@@ -23,7 +23,7 @@ function world(): { repo: string; service: ReturnType<typeof openCheckouts>; git
   mkdirSync(join(repo, 'node_modules'));
   writeFileSync(join(repo, 'node_modules/dep.js'), 'dep\n');
   git('add', '-A');
-  const service = openCheckouts({ store: join(dir, 'store'), root: join(dir, 'checkouts'), kinds: [], host: {} as CheckoutsOptions['host'], leases: {} as CheckoutsOptions['leases'], now: Date.now });
+  const service = openCheckouts({ store: join(dir, 'store'), root: join(dir, 'checkouts'), kinds, host: {} as CheckoutsOptions['host'], leases: {} as CheckoutsOptions['leases'], now: Date.now });
   return { repo, service, git };
 }
 
@@ -225,6 +225,23 @@ describe('checkouts from where a session sits', () => {
     expect(existsSync(join(base.dir, 'node_modules/dep.js')), 'the ignored rest is cloned').toBe(true);
     expect(existsSync(join(base.dir, 'node_modules/added.js')), 'what only the fix has stays out').toBe(false);
     expect(existsSync(join(base.dir, 'node_modules/node_modules')), 'no nested clone').toBe(false);
+    await s.close();
+  }, 60_000);
+
+  it('a run that counts as nothing isn\'t started again and again', async () => {
+    let calls = 0;
+    const kind: CheckoutsOptions['kinds'][number] = {
+      slot: 'check.kind@1', revision: 1, kind: 'seen',
+      // A wrong program stops here rather than never.
+      run: () => ({ outcome: ++calls > 5 ? 'passed' : 'uncounted', testsRun: 0, failures: [], evidence: [], read: [], mask: 'a child it can\'t see into' }),
+    };
+    const { repo, service, git } = world([kind]);
+    git('commit', '-qm', 'base');
+    const s = await service;
+    const check = { check: 'c', spec: { kind: 'seen', runner: 'x', inputs: [], depth: 'unit' as const, oracle: 'code' as const, contract: null }, deadline: 1_000, on_base: 'passes' as const, own: [] };
+    const r = await s.runClaim({ claim: 'claim:c', worktree: repo, onto: 'HEAD', checks: [check] });
+    expect(r.checks[0]!.head.outcome).toBe('uncounted');
+    expect(r.verdict).not.toBe('PASS');
     await s.close();
   }, 60_000);
 });
