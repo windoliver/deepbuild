@@ -4,14 +4,14 @@
 // leases, an agent's heavy commands, and a timing check under load. The core never imports an extension.
 export { claimsFor } from './claims.js';
 export type { ClaimIntake, ClaimSource, MadeClaim, OpenAsk } from './claims.js';
-export { floor, lockDefinition, recomputeHash } from './floor.js';
-export type { DefinitionParts, Finding, FloorInput, FloorResult, Lock, SessionLog, SessionRun } from './floor.js';
+export { floor, lockDefinition, recomputeHash, validityGate } from './floor.js';
+export type { DefinitionParts, Finding, FloorInput, FloorResult, Lock, SessionLog, SessionRun, ValidityInput } from './floor.js';
 export { blanked, maskIn, segmentsOf, wordsOf } from './mask.js';
 export { checkSource } from './own.js';
 export type { ApprovedCheck } from './own.js';
 export { headTrust, pushRecordKit, runPushRecordKit } from './head.js';
 export type { HeadInput, HeadPlan, HeadResult, ProviderPush, PushKit, PushReading, PushRecordReader } from './head.js';
-export { executeClaim, runHeavy, runTiming, slot, snapshotOf, verdictMemory } from './exec.js';
+export { checkoutOf, executeClaim, runHeavy, runTiming, slot, snapshotOf, verdictMemory } from './exec.js';
 export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, HeavyResult, Load, TimedRun, VerdictMemory } from './exec.js';
 export { attributeStack } from './stack.js';
 export type { Served, StackRecords, Trees } from './stack.js';

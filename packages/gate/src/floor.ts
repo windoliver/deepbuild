@@ -104,13 +104,18 @@ const LINK = /^https?:\/\/\S+$|^[\w./@-]+#[\w-]+$/;
 const TEST = /^(.+?)\s+›\s+(.+)$/;
 const FILE_LINE = /^([\w./@-]+?)(?::(\d+))?$/;
 
-/** The validity gate's findings: each cite that doesn't resolve or wasn't read or run here, and each missing deliverable. */
-function validity(input: FloorInput, plant: FloorPlant | undefined): Finding[] {
+/** What the validity gate reads: the claim and its final message, its checkout, the deliverables named, the session's log. */
+export interface ValidityInput { claim: { claim: string; message: string }; checkout: string; deliverables: string[]; session: SessionLog }
+/**
+ * The validity gate's findings, before any check runs, with no model: each cite that doesn't resolve or wasn't read
+ * or run here, each cited run whose exit status was masked, and each missing deliverable.
+ */
+export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[] {
   const { checkout, session } = input;
   const found: Finding[] = [];
   const read = new Set(session.read.map((p) => normalize(p)));
   if (plant !== 'no-deliverable-check') {
-    for (const d of input.definition.deliverables) {
+    for (const d of input.deliverables) {
       if (!existsSync(inside(checkout, d) ?? '\0')) found.push({ kind: 'deliverable', ref: d, why: `the deliverable ${d} the definition names doesn't exist in the claim's checkout` });
     }
   }
@@ -171,6 +176,6 @@ export function floor(input: FloorInput, options: { safe?: boolean; doneGate?: (
       findings: [{ kind: 'definition_hash', ref: hash.changed.join(', '), changed: hash.changed, why: `${input.claim.claim}: the definition's hash differs from the one locked; changed: ${hash.changed.join(', ')}` }],
     };
   }
-  const findings = validity(input, plant);
+  const findings = validityGate({ claim: input.claim, checkout: input.checkout, deliverables: input.definition.deliverables, session: input.session }, plant);
   return findings.length ? { ok: false, action: 'send_back', findings, claim: input.claim.claim } : { ok: true };
 }
