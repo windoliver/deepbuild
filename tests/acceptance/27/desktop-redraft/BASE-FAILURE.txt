@@ -1,0 +1,48 @@
+#27 AC3 #27.f8331d25, blind redraft: desktop.test.ts at base 38b7a1a5 (origin/main), Oct 29 2026, on a shared Mac
+(12 cores, 1-minute load 69 to 111 during these runs). Node 24.22.0, Vitest 5.0.5, deep-hook built debug.
+
+THE BASE: PASSES (1 test, 233 s).
+
+  npx vitest run --root tests/acceptance/27/desktop-redraft --no-file-parallelism
+   Test Files  1 passed (1)
+        Tests  1 passed (1)
+     Duration  232.89s
+
+  The base already keeps what this criterion asks for where an app doesn't wake: the waiter's hand-off reads stalled,
+  a session.reading says the session wasn't woken and the answer goes with its next prompt, the next prompt carries
+  it, and the session's later answers skip the waiter. So the base is not a wrong program for this test; the two below
+  are.
+
+  The earlier suite's desktop.test.ts fails at the same base, at its step 3, on step 1's own waiter exit: its matcher
+  takes the bare option ID "green", which every ask's answer text contains (README: Readings, 5):
+      AssertionError: AC3 #27.f8331d25 session 7dc8d118-… showed its app doesn't wake, a known limit: your answer to
+      ask:01M64YZ4AAR72GP50M18TJZSCE must not be handed to its waiter again (it exited 2 with it)
+      + Received: { "at": 1793315530999, "code": 2, "dropped": true, "stderr": "DeepBuild delivers your answers:
+        Your answer to ask:01M64YXHRFMVS0BD3KRYEWE4NB (…): Green header efa8a046 (green).\n" }
+  The exit names the first ask (…YXHR…), not the second (…YZ4A…).
+
+WRONG PROGRAM 1: DEEP_HUB_PLANT=wake-assumed (merged plant: the waiter's hand-off is recorded delivered). FAILS at
+step 1 (166 s):
+
+  DEEP_HUB_PLANT=wake-assumed npx vitest run --root tests/acceptance/27/desktop-redraft --no-file-parallelism
+  AssertionError: #27.f8331d25 step 1: no turn showed your answer to ask:01M64ZB61M08PAM8M3SEF8KWM5, so its delivery
+  must read stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: expected undefined to be defined
+   ❯ desktop.test.ts:72:209
+
+WRONG PROGRAM 2: a scratch mutant of the base that forgets the session's limit. FAILS at step 3 (215 s).
+  The checkout was copied to /tmp/dh27-mut-known-limit (no .git, node_modules linked as the earlier suite's
+  mergeBase() links them, target linked), and only its built packages/hub/dist/core.js was changed: offer()'s guard
+  `if (!r.covered || !r.shown.has('waiter') || r.capped || r.wakes === false || !idle())` lost `r.wakes === false`.
+  The test ran from the copy; the copy was then removed. Nothing in this worktree changed.
+
+  AssertionError: #27.f8331d25 step 3: session b072d5ba-b607-4d1b-b554-f5f81b899e80 showed its app doesn't wake, so your
+  answer to ask:01M64ZP4DVVG8DA4JP5SFC3GWQ (Green header 1f6d74e0) must not be handed to its waiter, which exited 2
+  with it: expected { pid: 44959, …(5) } to be undefined
+  + Received: { "at": 1793316395563, "code": 2, "dropped": true, "pid": 44959, "session": "b072d5ba-…",
+    "stderr": "DeepBuild delivers your answers:\nYour answer to ask:01M64ZP4DVVG8DA4JP5SFC3GWQ (\"Which header colour for
+    the checkout page (1f6d74e0)?\"): Green header 1f6d74e0 (green).\n" }
+   ❯ desktop.test.ts:95:202
+  Here the exit is the second ask's own (…ZP4D…, its own tag 1f6d74e0), handed over after the answer was given.
+
+NOT RUN: a wrong program for step 2 alone (the next prompt not carrying the answer); `delivered-on-waiter-exit` (the
+same branch of core.ts as wake-assumed); the desktop app itself (the earlier suite's MANUAL.md, by a person).
