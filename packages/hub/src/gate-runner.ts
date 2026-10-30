@@ -170,7 +170,7 @@ export class GateRunner {
       const c = list.find((x) => x.claim === claim);
       if (!c) continue;
       for (const e of c.entries.values()) {
-        if (e.lane !== 'slow' || e.runs.length || e.stale) continue;
+        if (e.lane !== 'slow' || e.runs.length || e.running || e.stale) continue;
         this.queue.set(`${c.session}\0${e.check.check}`, e);
       }
     }
@@ -180,6 +180,8 @@ export class GateRunner {
   private async pump(): Promise<void> {
     for (const [key, e] of [...this.queue]) {
       if (this.o.slots().free <= 0) return;
+      // Another pump took it, or a newer snapshot did, while this one waited on a checkout.
+      if (this.queue.get(key) !== e) continue;
       this.queue.delete(key);
       const c = [...this.claims.values()].flat().find((x) => x.claim === e.claim)!;
       e.running = true;
