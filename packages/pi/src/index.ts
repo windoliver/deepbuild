@@ -5,7 +5,7 @@
 // a process per call would cost more than a pi event may add.
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -48,25 +48,27 @@ function hookBinary(): string | undefined {
 }
 
 /** What deep-hook read of a call: the fields of its hook request, and what holds the call with the hub away. */
-interface Ruling { matched: string[]; notes?: Obj; stage?: Obj; denials: string[] }
+interface Ruling { matched: string[]; notes?: Obj; stage?: Obj; denials: string[]; unread?: boolean }
 const MATCH_MS = 1000;
 /** One `deep-hook match` for the session, off pi's exit: it ends when its stdin closes. */
 class Matcher {
   private child: ChildProcess | undefined;
-  private buffer = '';
   private readonly waiting: ((ruling?: Ruling) => void)[] = [];
-  constructor(readonly binary: string) {}
+  /** `build` tells one build at the path from the next, so a rebuilt deep-hook isn't left running as the old one. */
+  constructor(readonly binary: string, readonly build: number) {}
   private start(): ChildProcess {
     const child = spawn(this.binary, ['match'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    let buffer = '';
     child.on('error', () => this.stop(child));
     child.on('exit', () => this.stop(child));
     child.stdin!.on('error', () => this.stop(child));
     child.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
-      this.buffer += chunk;
-      for (let i = this.buffer.indexOf('\n'); i >= 0; i = this.buffer.indexOf('\n')) {
-        const text = this.buffer.slice(0, i);
-        this.buffer = this.buffer.slice(i + 1);
-        this.waiting.shift()?.(JSON.parse(text) as Ruling);
+      if (child !== this.child) return;
+      buffer += chunk;
+      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+        const text = buffer.slice(0, i);
+        buffer = buffer.slice(i + 1);
+        try { this.waiting.shift()?.(JSON.parse(text) as Ruling); } catch { this.stop(child); return; }
       }
     });
     child.unref();
@@ -86,7 +88,6 @@ class Matcher {
   stop(child = this.child): void {
     if (!child || child !== this.child) return;
     this.child = undefined;
-    this.buffer = '';
     child.kill();
     for (const answer of this.waiting.splice(0)) answer();
   }
@@ -229,6 +230,17 @@ export default function deepbuild(pi: Pi): void {
   const held: { asks: string[]; text: string }[] = [];
   const delivered = new Set<string>();
   let matcher: Matcher | undefined;
+  /** A call read against your rules: 'no setup' in a home with no rules to read it against, 'unread' when there are and nothing could. */
+  async function read(call: Obj): Promise<Ruling | 'unread' | 'no setup'> {
+    const binary = hookBinary();
+    if (!binary) return existsSync(join(process.env.HOME ?? homedir(), '.deepbuild', 'rules.json')) ? 'unread' : 'no setup';
+    let build: number;
+    try { build = statSync(binary).mtimeMs; } catch { return 'unread'; }
+    if (binary !== matcher?.binary || build !== matcher.build) { matcher?.stop(); matcher = new Matcher(binary, build); }
+    // Once more on a fresh process: one that died between calls is no reason to hold this one.
+    const ruling = await matcher.ask(call) ?? await matcher.ask(call);
+    return !ruling || ruling.unread ? 'unread' : ruling;
+  }
 
   /** In the order pi fired them: each goes once the one before is acknowledged, so the handler that sent it doesn't wait. */
   function hook(event: string, fields: Obj, ruling?: Ruling): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
@@ -426,17 +438,17 @@ export default function deepbuild(pi: Pi): void {
     const name = String(event.toolName);
     // Our own native tools read as `deep mcp`'s do, so nothing downstream counts them as change.
     const call = { tool_name: own.has(name) ? `mcp__deep__${name}` : name, tool_input: (event.input ?? {}) as Obj };
-    const binary = hookBinary();
-    if (binary && binary !== matcher?.binary) { matcher?.stop(); matcher = new Matcher(binary); }
-    const ruling = binary ? await matcher!.ask({ ...call, cwd: ctx?.cwd ?? process.cwd() }) : undefined;
+    const ruling = await read({ ...call, cwd: ctx?.cwd ?? process.cwd() });
     const reply = await hook('tool_call', {
       ...call, tool_use_id: String(event.toolCallId),
       ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}),
-    }, ruling);
+    }, ruling === 'unread' || ruling === 'no setup' ? undefined : ruling);
+    // A call nothing read against your rules never passes for one that matched nothing, whatever the hub says.
+    if (ruling === 'unread') return { block: true, reason: 'DeepBuild blocked this: deep-hook couldn\'t read this call against your guards. Run `deep setup` if this repeats, then retry.' };
+    if (ruling === 'no setup') return undefined;
     if (reply) return reply.exit !== 0 ? { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' } : undefined;
     // The hub didn't answer: a fail-closed entry still holds the call, as deep-hook holds Claude Code's.
-    if (binary && !ruling) return { block: true, reason: 'DeepBuild blocked this: neither the hub nor deep-hook answered, so its guards can\'t be checked. Retry.' };
-    return ruling?.denials.length ? { block: true, reason: ruling.denials.join('\n') } : undefined;
+    return ruling.denials.length ? { block: true, reason: ruling.denials.join('\n') } : undefined;
   });
   on('tool_execution_start', (event) => { sentBack = 0; if (!event.parentToolCallId) { toolCalls++; place(true); } });
   on('tool_execution_end', (event) => { if (!event.parentToolCallId) toolCalls = Math.max(0, toolCalls - 1); });
