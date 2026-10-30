@@ -1,0 +1,144 @@
+{
+  "title": "spend.approved@2",
+  "description": "You approved a spending budget, on the card or from deep inbox: its scope, how many runs it covers when it counts them, its dollar cap and when it ends. The event's ID is the budget's. Only the core appends it, and only from the trusted path.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "spend.approved"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "resource",
+                "project",
+                "work"
+              ],
+              "description": "What the budget is for: an issue, a resource, a project or a kind of work.",
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "Which one: the issue, the resource key, the project or the kind of work."
+            }
+          },
+          "required": [
+            "kind",
+            "ref"
+          ],
+          "additionalProperties": false
+        },
+        "runs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "How many runs it covers, counting every run reserved against it, charged or not; with none, any number."
+        },
+        "cap_usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The most it may spend, in US dollars."
+        },
+        "ends": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When it ends, in milliseconds since the Unix epoch."
+        },
+        "via": {
+          "type": "string",
+          "enum": [
+            "card",
+            "inbox"
+          ],
+          "description": "The channel you approved it on.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        }
+      },
+      "required": [
+        "scope",
+        "cap_usd",
+        "ends",
+        "via"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
