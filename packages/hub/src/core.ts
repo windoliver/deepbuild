@@ -23,7 +23,7 @@ import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_
 import { headTrust, slot, validityGate, type SessionLog } from '@deepbuild/gate';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
-import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { after, openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
@@ -3420,15 +3420,14 @@ export class Core {
     try { real = realpathSync(folder); } catch { return undefined; }
     return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
-  /** The checks a worktree's spec names, by name, with the command each runs and its deadline in ms, where it gives one. */
-  private checksOf(worktree: string): Map<string, { run: string; deadline?: number }> {
+  /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
+  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown }> {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      const deadline = duration(c.deadline as JsonValue | undefined);
-      return [[name, { run: c.run, ...(deadline ? { deadline } : {}) }] as const];
+      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}) }] as const];
     }));
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
@@ -3590,11 +3589,16 @@ export class Core {
     const cwd = this.sessions.get(session)!.cwd;
     const check = this.checksOf(cwd).get(String(args.check));
     if (check === undefined) throw this.unknownCheck(cwd, args.check);
+    // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
+    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+    if (check.deadline !== undefined && !deadline) {
+      throw refuse('pattern', `/checks/${String(args.check)}/deadline`, `Give the check's deadline in .deepbuild/done.yaml as a whole number above 0 of m, h or d, such as 30m, not ${String(check.deadline)}.`, String(check.deadline));
+    }
     const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
     const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, check.deadline);
+    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, deadline);
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait();
     for (;;) {
@@ -3912,9 +3916,9 @@ export class Core {
     }
     // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed.
     let overran = false;
-    const due = run.deadline ? setTimeout(() => { overran = true; stop(); }, run.deadline) : undefined;
+    const disarm = run.deadline ? after(run.deadline, () => { overran = true; stop(); }) : undefined;
     const done = ended.then(async ({ code, failed, missing }) => {
-      clearTimeout(due);
+      disarm?.();
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
       await writes;
