@@ -1,7 +1,7 @@
 // The base-commit service's checkouts from where a session really sits (#31): a subfolder of the repo, and a dependency
 // folder git partly tracks. Real git, no hub; the host and leases only serve stand-ins, which these declare none of.
 import { execFileSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openCheckouts, type CheckoutsOptions } from '@deepbuild/gate';
@@ -119,6 +119,46 @@ describe('checkouts from where a session sits', () => {
     const base = await s.baseCheckout({ worktree: repo, onto: 'HEAD', claim: commit, own: [], dependencies: ['node_modules'], runs: ['r'] });
     expect(existsSync(join(base.dir, 'pkg/node_modules/dep.js')), 'the install is there').toBe(true);
     expect(readFileSync(join(base.dir, 'pkg/node_modules/patched.js'), 'utf8')).toBe('broken\n');
+    await s.close();
+  }, 60_000);
+
+  it('a read-only folder, cloned or made by a run, stops neither the checkout nor its removal nor the next open', async () => {
+    const { repo, service, git } = world();
+    mkdirSync(join(repo, 'node_modules/ro'));
+    writeFileSync(join(repo, 'node_modules/ro/patched.js'), 'broken\n');
+    git('add', '-f', 'node_modules/ro/patched.js');
+    git('commit', '-qm', 'base');
+    chmodSync(join(repo, 'node_modules/ro'), 0o555);
+    try {
+      const s = await service;
+      const { commit } = await s.snapshot(repo);
+      const c = await s.checkout({ worktree: repo, commit, dependencies: ['node_modules'], runs: ['r'] });
+      mkdirSync(join(c.dir, 'cache'));
+      writeFileSync(join(c.dir, 'cache/x'), 'x');
+      chmodSync(join(c.dir, 'cache'), 0o555);
+      await s.ended(c, 'r');
+      expect(existsSync(c.dir), 'removed').toBe(false);
+      const crashed = join(repo, '..', 'checkouts', 'c-left');
+      mkdirSync(join(crashed, 'cache'), { recursive: true });
+      chmodSync(join(crashed, 'cache'), 0o555);
+      await s.close();
+      const again = await openCheckouts({ store: join(repo, '..', 'store'), root: join(repo, '..', 'checkouts'), kinds: [], host: {} as CheckoutsOptions['host'], leases: {} as CheckoutsOptions['leases'], now: Date.now });
+      expect(existsSync(crashed), 'what a crash left is removed').toBe(false);
+      await again.close();
+    } finally { chmodSync(join(repo, 'node_modules/ro'), 0o755); }
+  }, 60_000);
+
+  it('a module stand-in is never written through a link in the base tree', async () => {
+    const { repo, service, git } = world();
+    const other = join(repo, '..', 'other');
+    mkdirSync(other);
+    symlinkSync(other, join(repo, 'vendor'));
+    git('add', '-A');
+    git('commit', '-qm', 'base');
+    const s = await service;
+    const { commit } = await s.snapshot(repo);
+    await s.baseCheckout({ worktree: repo, onto: 'HEAD', claim: commit, own: [], surfaces: [{ kind: 'module', check: 'c', path: 'vendor/new.ts', exports: ['a'] }], runs: ['r'] });
+    expect(existsSync(join(other, 'new.ts')), 'nothing written outside').toBe(false);
     await s.close();
   }, 60_000);
 
