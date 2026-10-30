@@ -38,7 +38,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::shell::{self, glob, lexical, real, Arg, Run};
+use crate::shell::{self, glob, lexical, real, same_name, Arg, Run};
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
@@ -435,8 +435,9 @@ impl Call {
         } else {
             vec![lexical(written), real(written)]
         };
+        let patterns: Vec<String> = patterns.iter().map(|p| same_name(p)).collect();
         forms.iter().any(|form| {
-            let text = form.to_string_lossy();
+            let text = same_name(&form.to_string_lossy());
             patterns.iter().any(|p| {
                 if anchored {
                     glob_path(p.as_bytes(), text.as_bytes())
@@ -514,7 +515,7 @@ fn plain<'a>(words: &[&'a str]) -> Vec<&'a str> {
 fn stops_service(run: &Run) -> bool {
     let words = run.words();
     let sub = plain(&words).first().copied().unwrap_or("");
-    let names = |name: &str| words.iter().any(|w| w.contains(name));
+    let names = |name: &str| words.iter().any(|w| same_name(w).contains(name));
     (run.is("launchctl")
         && matches!(
             sub,
@@ -1175,6 +1176,52 @@ mod tests {
             .is_some());
         assert!(bash("echo x > /h/.deepbuild/workspaces/a")
             .matches(m)
+            .is_none());
+    }
+
+    /// Paths under a folder that isn't there, so nothing resolves them on disk.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_name_the_mac_takes_for_a_guarded_one_is_guarded() {
+        let m = "write:.deepbuild/* ~/.deepbuild/* !~/.deepbuild/workspaces/*";
+        for line in [
+            "echo x > /nowhere/.DEEPBUILD/done.yaml",
+            "echo x > /nowhere/.DeepBuild/done.yaml",
+            "echo x > /nowhere/.deepbuild/ſpec.md",
+            "echo x > /nowhere/.deepbuild/\u{212A}ey",
+            "echo x > /nowhere/.deepbuild/ﬁle",
+            "echo x > /H/.DEEPBUILD/config.json",
+        ] {
+            assert!(bash(line).matches(m).is_some(), "{line}");
+        }
+        assert!(bash("echo x > /H/.deepbuild/WORKSPACES/a")
+            .matches(m)
+            .is_none());
+        let ss = "write:.pi/settings.json";
+        assert!(bash("echo x > /nowhere/.PI/SETTINGS.json")
+            .matches(ss)
+            .is_some());
+        assert!(bash("echo x > /nowhere/.pi/settingſ.json")
+            .matches(ss)
+            .is_some());
+        assert!(bash("echo x > /nowhere/.deepbuild/a")
+            .matches("write:.DeepBuild/a")
+            .is_some());
+        assert!(
+            bash("launchctl unload ~/Library/LaunchAgents/COM.DEEPBUILD.HUB.plist")
+                .matches("hub:service")
+                .is_some()
+        );
+        assert!(bash("ſed -i '' s/a/b/ .deepbuild/a")
+            .matches("write:.deepbuild/a")
+            .is_some());
+        assert!(bash("baſh -c 'pkill x'").matches("run:pkill").is_some());
+        let sharp = "write:.deepbuild/pass";
+        assert!(bash("echo x > /nowhere/.deepbuild/paß")
+            .matches(sharp)
+            .is_some());
+        assert!(bash("echo x > /nowhere/.deepbuild/other")
+            .matches(sharp)
             .is_none());
     }
 
