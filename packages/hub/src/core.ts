@@ -169,7 +169,7 @@ interface Live {
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
    * one that lands later goes with the next prompt.
    */
-  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
+  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; heldClaim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
 }
 /**
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
@@ -239,7 +239,7 @@ export class Core {
   /** Each session's last stop's final message, what its claims cite (#29). */
   private readonly lastMessage = new Map<string, string>();
   /** What each claim's stop waits on: its fast lane, and what the hold reports of it. */
-  private readonly lanes = new Map<string, Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; budgetCost?: string[]; findings: string[] }>>();
+  private readonly lanes = new Map<string, Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; budgetCost?: string[]; changed?: boolean; findings: string[] }>>();
   private readonly numbers: Numbers;
   /** Each live session's running usage, from its transcript and its subagents'. */
   private readonly tails = new Map<string, UsageTail>();
@@ -2054,6 +2054,7 @@ export class Core {
     const stopAt = ulidTime(meta.id);
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
     let proceeded = false;
+    let questionMs = 0;
     try {
       // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
       const proceed = await this.holds.proceed(meta, until);
@@ -2061,7 +2062,12 @@ export class Core {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold'));
         block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
-      } else block = lane?.sendBack ?? await this.stopHold(meta, r, until);
+      } else if (lane?.sendBack) block = lane.sendBack;
+      else {
+        const waited = this.now();
+        block = await this.stopHold(meta, r, until);
+        questionMs = this.now() - waited;
+      }
     } finally {
       r.holding--;
       if (block) {
@@ -2084,7 +2090,11 @@ export class Core {
     // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end.
     if (lane && judged?.claim && !block && !proceeded) this.gate.turnEnded(judged.claim);
     if (lane && judged?.claim) {
-      await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: lane.readyAt, fastEndedAt: lane.fastEndedAt, replyAt: this.now(), question: false, codeChanging: lane.fast.length + lane.slow.length > 0, budgetCost: lane.budgetCost ?? [] }).catch(() => undefined);
+      // A later stop on the same claim ran no lane: only its own hold counts, never the lane's times or its budget cost again.
+      const again = judged.heldClaim === judged.claim;
+      judged.heldClaim = judged.claim;
+      const replyAt = this.now();
+      await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: again ? replyAt : lane.readyAt, fastEndedAt: again ? replyAt : lane.fastEndedAt, replyAt, questionMs, codeChanging: !again && lane.changed === true, budgetCost: again ? [] : lane.budgetCost ?? [] }).catch(() => undefined);
     }
     return { ...(block ? { block } : {}), ...(line ? { message: line } : {}) };
   }
@@ -2108,7 +2118,7 @@ export class Core {
    * A claim's fast lane as the stop's hold sees it (#29), waited for until `until`: the validity gate's findings and a
    * fast-lane check that failed send the claim back, naming what's missing or which check failed.
    */
-  private async laneOf(claim: string, until: number): Promise<{ fast: string[]; slow: string[]; readyAt: number; fastEndedAt: number; budgetCost?: string[]; sendBack?: string } | undefined> {
+  private async laneOf(claim: string, until: number): Promise<{ fast: string[]; slow: string[]; readyAt: number; fastEndedAt: number; budgetCost?: string[]; changed?: boolean; sendBack?: string } | undefined> {
     const lane = this.lanes.get(claim);
     if (!lane) return undefined;
     let timer: NodeJS.Timeout | undefined;
@@ -2118,7 +2128,7 @@ export class Core {
     const failed = this.gate.standing(claim).filter((c) => c.lane === 'fast' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
     const sendBack = ran.findings.length ? `DeepBuild sent this claim back before any check ran:\n${ran.findings.map((f) => `- ${f}`).join('\n')}`
       : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
-    return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, fastEndedAt: ran.fastEndedAt, ...(ran.budgetCost ? { budgetCost: ran.budgetCost } : {}), ...(sendBack ? { sendBack } : {}) };
+    return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, fastEndedAt: ran.fastEndedAt, ...(ran.budgetCost ? { budgetCost: ran.budgetCost } : {}), ...(ran.changed === undefined ? {} : { changed: ran.changed }), ...(sendBack ? { sendBack } : {}) };
   }
   /** A stop held while the agent left a question: what it is sent back with, or nothing. */
   private async stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined> {
@@ -2671,9 +2681,9 @@ export class Core {
       case 'inbox.read': return this.reflecting(() => this.inbox());
       case 'sessions.read': return this.reflecting(async () => ({ sessions: (await this.record.table('sessions')).rows }));
       case 'numbers.read': return this.reflecting(async () => this.numbers.read() as unknown as Obj);
-      case 'numbers.baseline': return this.numbers.baseline(String(params.manifest));
-      case 'numbers.refresh': return this.numbers.refresh();
-      case 'numbers.sample': return this.numbers.sample(Number(params.before), Number(params.size ?? 120));
+      case 'numbers.baseline': await this.notAnAgent(context, method); return this.numbers.baseline(String(params.manifest));
+      case 'numbers.refresh': await this.notAnAgent(context, method); return this.numbers.refresh();
+      case 'numbers.sample': await this.notAnAgent(context, method); return this.numbers.sample(Number(params.before));
       case 'changes.read': return this.change(params);
       case 'evidence.read': return this.evidence(params);
       case 'ask.answer': return this.answer(params, context);
@@ -2977,6 +2987,11 @@ export class Core {
    * too, and your confirmation trusts that key for the package first. A deep command inside an agent's process tree
    * acts as that session, and no agent installs a package. The installer's refusal comes back as the result.
    */
+  /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
+  private async notAnAgent(context: CallContext, method: string): Promise<void> {
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent feeds its own numbers. Run it from your own terminal.`, method));
+  }
   private async install(params: Obj, context: CallContext): Promise<Obj> {
     const from = params.from;
     if (typeof from !== 'string' || !isAbsolute(from)) throw new Refused(refusal('type', '/params/from', 'Give the package folder as an absolute path.', from));

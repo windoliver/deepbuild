@@ -35,6 +35,8 @@ function typed(text: string): string[] {
   });
 }
 function count(kind: string, texts: string[]): number | null {
+  // A window that catches nothing was named wrong or never archived: that's missing, never a measured zero.
+  if (!texts.some((t) => t.trim())) return null;
   if (kind === 'tokens.total') {
     const t = countTexts(texts).totals;
     return t.input + t.output + t.cache_write + t.cache_read;

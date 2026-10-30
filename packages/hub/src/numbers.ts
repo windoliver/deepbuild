@@ -2,6 +2,7 @@
 // deep_search, with `deep numbers` over them. Your labelled samples, the private baseline and the forge are read only when
 // you name them; a number any of them should give and doesn't reads missing.
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkClassifier, decisionOneInputs, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
@@ -15,6 +16,9 @@ const KINDS = ['user.ask', 'agent.stop', 'stop.held', 'run.started', 'run.finish
 const CLASSIFIERS = { is_it_done: isItDone, rework: isRework };
 const quoted = KINDS.map((k) => `'${k}'`).join(', ');
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
+const SAMPLE = 120;
+/** An event's id holds its time; the sample hides it behind a hash. */
+const opaque = (id: string): string => createHash('sha256').update(id).digest('hex').slice(0, 16);
 
 export interface NumbersOptions {
   raw(query: string): Promise<unknown[]>;
@@ -34,12 +38,18 @@ export class Numbers {
   private state: ReadingsState = recompute([]);
   private events: RecordEvent[] = [];
   private at = 0;
+  private catching: Promise<void> = Promise.resolve();
   /** The session each claim and run belongs to: the core writes a run with no session of its own. */
   private readonly claims = new Map<string, string>();
   private readonly runs = new Map<string, string>();
   constructor(private readonly o: NumbersOptions) {}
 
-  private async catchUp(): Promise<void> {
+  /** One at a time, so two reads never fold the same rows. */
+  private catchUp(): Promise<void> {
+    this.catching = this.catching.then(() => this.fold(), () => this.fold());
+    return this.catching;
+  }
+  private async fold(): Promise<void> {
     const rows = (await this.o.raw(`SELECT id, kind, v, ts, session_id, subject, data, log_pos FROM events WHERE log_pos > ${this.at} AND (kind IN (${quoted}) OR (kind = 'tool.after' AND json_extract(data, '$.outcome') = 'failed')) ORDER BY log_pos`)) as Row[];
     if (!rows.length) return;
     const fresh = rows.map((r): RecordEvent => {
@@ -54,12 +64,25 @@ export class Numbers {
     this.events.push(...fresh);
     this.state = update(this.state, fresh);
   }
-  /** Your labels, as `<root>/labels/<reading>.json`: `{ threshold, messages }`. A file that can't be read is no check. */
+  /** Your own typed messages, by the opaque id `deep numbers sample` showed you. */
+  private typed(): Map<string, RecordEvent> {
+    return new Map(this.events.filter((e) => e.kind === 'user.ask' && e.data.from === 'person' && typeof e.data.text === 'string').map((e) => [opaque(e.id), e]));
+  }
+  /**
+   * Your labels, as `<root>/labels/<reading>.json`: `{ threshold, before, labels: [{ message, label }] }`. Each message's
+   * text and period come from the record, never the file, and one the record doesn't hold doesn't count. A file that
+   * can't be read is no check.
+   */
   private checks() {
+    const typed = this.typed();
     return Object.entries(CLASSIFIERS).map(([id, classifier]) => {
       try {
-        const { threshold, messages } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; messages: LabelledMessage[] };
-        return { id, check: checkClassifier({ id, classifier, sample: messages, threshold }) };
+        const { threshold, before, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; labels: { message: string; label: boolean }[] };
+        const sample = labels.flatMap((l): LabelledMessage[] => {
+          const e = typed.get(l.message);
+          return e ? [{ message: l.message, text: String(e.data.text), label: l.label, period: e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' }] : [];
+        });
+        return { id, check: checkClassifier({ id, classifier, sample, threshold }) };
       } catch { return { id, check: null }; }
     });
   }
@@ -86,6 +109,7 @@ export class Numbers {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { baseline_sha256: string; archive_dir?: string; measures: BaselineMeasure[] };
     const bytes = new Map<string, Uint8Array | null>();
     for (const sha of new Set(manifest.measures.flatMap((m) => m.transcripts.map((t) => t.sha256)))) {
+      if (!/^[0-9a-f]{64}$/.test(sha)) { bytes.set(sha, null); continue; }
       const path = manifest.archive_dir ? join(manifest.archive_dir, sha) : undefined;
       bytes.set(sha, path && existsSync(path) ? readFileSync(path) : await this.o.evidence(sha));
     }
@@ -94,7 +118,7 @@ export class Numbers {
     for (const m of result.measures) {
       if (m.value === null) continue;
       const ts = this.o.now();
-      await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence, data: { reading: `reading:baseline${letters(m.id)}`, value: m.value, unit: 'count', as_of: ts, source: `baseline:${manifest.baseline_sha256.slice(0, 8)}`, n: m.transcripts.length, outside: false } });
+      await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence, data: { reading: `reading:baseline${manifest.baseline_sha256.slice(0, 8)}${letters(m.id)}`, value: m.value, unit: 'count', as_of: ts, source: `baseline:${manifest.baseline_sha256.slice(0, 8)}`, n: m.transcripts.length, outside: false } });
     }
     return { baseline_sha256: result.baseline_sha256, script: result.script.sha256, output: result.output.sha256, measures: result.measures };
   }
@@ -116,14 +140,14 @@ export class Numbers {
     }
     return { repos: [...repos], unread };
   }
-  /** Your sample to label: your own messages at random, both sides of a date, with the dates hidden. */
-  async sample(before: number, size: number): Promise<{ messages: Omit<LabelledMessage, 'label'>[] }> {
+  /** Your sample to label: your own messages at random, both sides of a date, with no date or period to see, only an opaque id. */
+  async sample(before: number): Promise<{ before: number; messages: { message: string; text: string }[] }> {
     await this.catchUp();
-    const typed = this.events.filter((e) => e.kind === 'user.ask' && e.data.from === 'person' && typeof e.data.text === 'string');
-    const shuffled = (list: RecordEvent[]) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
-    const half = Math.ceil(size / 2);
-    const drawn = shuffled([...shuffled(typed.filter((e) => e.ts < before)).slice(0, half), ...shuffled(typed.filter((e) => e.ts >= before)).slice(0, half)]);
-    return { messages: drawn.map((e) => ({ message: e.id, text: String(e.data.text), period: e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' })) };
+    const typed = [...this.typed()];
+    const shuffled = (list: typeof typed) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
+    const half = SAMPLE / 2;
+    const drawn = shuffled([...shuffled(typed.filter(([, e]) => e.ts < before)).slice(0, half), ...shuffled(typed.filter(([, e]) => e.ts >= before)).slice(0, half)]);
+    return { before, messages: drawn.map(([message, e]) => ({ message, text: String(e.data.text) })) };
   }
 }
 /** `owner/name` of a worktree's origin on GitHub, or undefined. */
@@ -140,7 +164,7 @@ export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows'])
   return rows.map((r) => {
     const value = r.value === null ? 'unknown' : String(r.value);
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
-    const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n} ${r.agreement.status}` : '';
+    const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n} ${r.agreement.status}` : r.id in CLASSIFIERS ? ' not checked against your labels' : '';
     return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}`;
   });
 }

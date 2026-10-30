@@ -128,12 +128,15 @@ export function billingMode(sessionStart: RecordEvent): 'api_key' | 'plan' | 'un
   return set.includes(true) ? 'api_key' : set.length ? 'plan' : 'unknown';
 }
 /** A session's spend as turn.usage records it: per turn as it stands, a running total as the difference from the one before. */
-interface Used { turn: string; tokens: number; cost: Cost; ts: number; tasks: string[] }
+interface Used { turn: string; tokens: number; cost: Cost; ts: number; tasks: string[]; mode: ReturnType<typeof billingMode> }
 function usedIn(list: readonly RecordEvent[]): Used[] {
   const out: Used[] = [];
   let tasks: string[] = [];
   let last = { tokens: 0, usd: 0 };
+  // The mode in force when the tokens were spent: a resume can change it.
+  let mode: ReturnType<typeof billingMode> = 'unknown';
   for (const e of list) {
+    if (e.kind === 'session.start') mode = billingMode(e);
     if (e.kind === 'user.ask') tasks = Array.isArray(e.data.tasks) ? (e.data.tasks as string[]) : [];
     if (e.kind !== 'turn.usage') continue;
     const t = e.data.tokens as { input?: unknown; cached?: unknown; output?: unknown } | undefined;
@@ -142,9 +145,9 @@ function usedIn(list: readonly RecordEvent[]): Used[] {
     if (e.data.covers === 'session') {
       const usd = 'usd' in cost ? cost.usd : 0;
       // A running total is a baseline, never new use: what a resumed thread starts from was counted already.
-      out.push({ turn: String(e.data.turn), tokens: Math.max(0, tokens - last.tokens), cost: 'usd' in cost ? { ...cost, usd: Math.max(0, usd - last.usd) } : cost, ts: e.ts, tasks });
+      out.push({ turn: String(e.data.turn), tokens: Math.max(0, tokens - last.tokens), cost: 'usd' in cost ? { ...cost, usd: Math.max(0, usd - last.usd) } : cost, ts: e.ts, tasks, mode });
       last = { tokens: Math.max(tokens, last.tokens), usd: Math.max(usd, last.usd) };
-    } else out.push({ turn: String(e.data.turn), tokens, cost, ts: e.ts, tasks });
+    } else out.push({ turn: String(e.data.turn), tokens, cost, ts: e.ts, tasks, mode });
   }
   return out;
 }
@@ -154,21 +157,23 @@ export function planWindowTokens(events: RecordEvent[]) {
   for (const [session, list] of bySession(events)) {
     const start = list.filter((e) => e.kind === 'session.start').at(-1);
     const mode = start ? billingMode(start) : 'unknown';
-    const tokens = usedIn(list).reduce((sum, u) => sum + u.tokens, 0);
-    // Only a session known to be on a plan counts; an unknown one is never read as using its window.
-    const counted = mode === 'plan';
-    if (counted) counted_tokens += tokens;
-    sessions.push({ session, mode, tokens, counted });
+    const used = usedIn(list);
+    const tokens = used.reduce((sum, u) => sum + u.tokens, 0);
+    // Only tokens known to be on a plan count; an unknown session's are never read as using its window.
+    counted_tokens += used.reduce((sum, u) => sum + (u.mode === 'plan' ? u.tokens : 0), 0);
+    sessions.push({ session, mode, tokens, counted: mode === 'plan' });
   }
   return { counted_tokens, sessions };
 }
 
-interface Spend { usd: number; priced: boolean; complete: boolean; as_of: number }
+/** `card` is the rate card behind any estimated part: a sum with any estimate in it is an estimate. */
+interface Spend { usd: number; priced: boolean; card: string | null; complete: boolean; as_of: number }
 const addSpend = (to: Map<string, Spend>, key: string, s: Spend): void => {
-  const o = to.get(key) ?? { usd: 0, priced: false, complete: true, as_of: 0 };
-  to.set(key, { usd: o.usd + s.usd, priced: o.priced || s.priced, complete: o.complete && s.complete, as_of: Math.max(o.as_of, s.as_of) });
+  const o = to.get(key) ?? { usd: 0, priced: false, card: null, complete: true, as_of: 0 };
+  to.set(key, { usd: o.usd + s.usd, priced: o.priced || s.priced, card: o.card ?? s.card, complete: o.complete && s.complete, as_of: Math.max(o.as_of, s.as_of) });
 };
-const spendReading = (subject: string, s: Spend): Reading => ({ id: 'spend.usd', subject, value: s.priced ? s.usd : null, unit: 'usd', source: RECORD, as_of: s.as_of, basis: 'modeled', complete: s.complete });
+const spendCost = (s: Spend): Cost => (!s.priced ? { basis: 'unpriced' } : s.card ? { basis: 'estimated', usd: s.usd, rate_card: s.card } : { basis: 'reported', usd: s.usd });
+const spendReading = (subject: string, s: Spend): Reading => ({ id: 'spend.usd', subject, value: s.priced ? s.usd : null, unit: 'usd', source: RECORD, as_of: s.as_of, basis: s.priced && !s.card ? 'observed' : 'modeled', complete: s.complete, cost: spendCost(s) });
 
 /** What one session gives: its own readings, and what is summed across sessions. */
 interface Part { readings: Reading[]; tasks: Map<string, Spend>; plan: number; failed: Map<string, { n: number; as_of: number }> }
@@ -201,22 +206,43 @@ function foldSession(session: string, list: RecordEvent[]): Part {
   const tasks = new Map<string, Spend>();
   const own = new Map<string, Spend>();
   const used = usedIn(list);
+  const byTurn = new Map<string, { usd: number | null; cost: Cost; as_of: number }>();
   let tokens = 0;
+  let plan = 0;
   for (const u of used) {
     tokens += u.tokens;
+    if (u.mode === 'plan') plan += u.tokens;
     const usd = 'usd' in u.cost ? u.cost.usd : null;
-    readings.push({ id: 'cost.turn', subject: u.turn, value: usd, unit: 'usd', source: RECORD, as_of: u.ts, basis: u.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: u.cost });
-    const s: Spend = { usd: usd ?? 0, priced: usd !== null, complete: usd !== null, as_of: u.ts };
+    // Two stops of one turn are one row: what the turn spent.
+    const turn = byTurn.get(u.turn);
+    if (turn && turn.usd !== null && usd !== null && 'usd' in turn.cost) byTurn.set(u.turn, { usd: turn.usd + usd, cost: { ...turn.cost, usd: turn.usd + usd }, as_of: u.ts });
+    else byTurn.set(u.turn, { usd: turn && usd === null ? null : usd, cost: u.cost, as_of: u.ts });
+    const s: Spend = { usd: usd ?? 0, priced: usd !== null, card: u.cost.basis === 'estimated' ? u.cost.rate_card : null, complete: usd !== null, as_of: u.ts };
     addSpend(own, subject, s);
     for (const task of u.tasks) addSpend(tasks, task, s);
   }
-  // A turn that ended with no usage, such as one that crashed, leaves what it sums short.
+  for (const [turn, t] of byTurn) readings.push({ id: 'cost.turn', subject: turn, value: t.usd, unit: 'usd', source: RECORD, as_of: t.as_of, basis: t.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: t.cost });
+  // A turn with no usage, such as one that crashed, leaves what the session sums short. A turn runs from its first ask to
+  // the next ask after a stop, so a message typed mid-turn is the same turn, and its usage lands just behind its stop.
   const asks = list.filter((e) => e.kind === 'user.ask');
-  const unknownTurns = asks.slice(0, -1).filter((a, i) => !list.some((e) => e.kind === 'turn.usage' && e.ts >= a.ts && e.ts < asks[i + 1]!.ts)).length;
+  let inTurn = false;
+  let stopped = false;
+  let spent = false;
+  let unknownTurns = 0;
+  for (const e of list) {
+    if (e.kind === 'user.ask' && (!inTurn || stopped)) {
+      if (inTurn && !spent) unknownTurns++;
+      inTurn = true;
+      stopped = false;
+      spent = false;
+    } else if (e.kind === 'agent.stop' || e.kind === 'stop.held') stopped = true;
+    else if (e.kind === 'turn.usage') spent = true;
+  }
+  if (inTurn && !spent) unknownTurns++;
   if (used.length) {
-    if (unknownTurns) addSpend(own, subject, { usd: 0, priced: false, complete: false, as_of: 0 });
+    if (unknownTurns) addSpend(own, subject, { usd: 0, priced: false, card: null, complete: false, as_of: 0 });
     readings.push(spendReading(subject, own.get(subject)!));
-    count('tokens.session', tokens, used.at(-1)!.ts, 'tokens');
+    readings.push({ id: 'tokens.session', subject, value: tokens, unit: 'tokens', source: RECORD, as_of: used.at(-1)!.ts, basis: 'observed', complete: !unknownTurns });
   }
   const start = list.filter((e) => e.kind === 'session.start').at(-1);
   const mode = start ? billingMode(start) : 'unknown';
@@ -242,7 +268,7 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     const sig = e.kind === 'tool.after' && e.data.outcome === 'failed' ? str(e.data.signature) : null;
     if (sig) failed.set(sig, { n: (failed.get(sig)?.n ?? 0) + 1, as_of: e.ts });
   }
-  return { readings, tasks, plan: mode === 'plan' ? tokens : 0, failed };
+  return { readings, tasks, plan, failed };
 }
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)]!;

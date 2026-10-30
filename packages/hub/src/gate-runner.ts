@@ -6,6 +6,7 @@
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
 // check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
 // with its split. Pure rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
+import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { checkoutOf, snapshotOf } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
@@ -31,7 +32,10 @@ export interface GateOptions {
 
 /** A claim's check on one snapshot: its runs, its lane, and whether a newer claim outdated it. */
 interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean; newer?: string }
-interface Claim { claim: string; session: string; checkout: string | null; entries: Map<string, Entry> }
+interface Claim { claim: string; session: string; checkout: string | null; tree: string | undefined; entries: Map<string, Entry> }
+const treeOf = (checkout: string): Promise<string | undefined> => new Promise((done) => {
+  execFile('git', ['-C', checkout, 'rev-parse', 'HEAD^{tree}'], { timeout: 5000 }, (error, stdout) => done(error ? undefined : stdout.trim()));
+});
 
 const RESULT = (outcome: string | null): 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'pending' =>
   outcome === null ? 'pending' : outcome === 'passed' ? 'PASS' : outcome === 'failed' || outcome === 'overran' ? 'FAIL' : outcome === 'missing' ? 'BLOCKED' : 'INCONCLUSIVE';
@@ -55,12 +59,16 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; budgetCost: string[] }> {
+  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; budgetCost: string[]; changed: boolean }> {
     const snapshot = await snapshotOf(r.cwd);
     const checkout = await checkoutOf(r.cwd, snapshot);
     const readyAt = this.o.now();
-    const claim: Claim = { claim: r.claim, session: r.session, checkout, entries: new Map() };
+    // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
+    const tree = await treeOf(checkout);
+    const claim: Claim = { claim: r.claim, session: r.session, checkout, tree, entries: new Map() };
     const older = this.claims.get(r.session) ?? [];
+    const last = older.at(-1)?.tree;
+    const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     this.claims.set(r.session, [...older, claim]);
     // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue.
     for (const c of r.checks) {
@@ -99,7 +107,7 @@ export class GateRunner {
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([Promise.allSettled(runs), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
     void Promise.allSettled(runs).then(() => this.cleanup(claim));
-    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt, budgetCost };
+    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt, budgetCost, changed };
   }
 
   /** The claim's checks as they stand: each check's result, and the slow checks still to start. */
@@ -160,11 +168,10 @@ export class GateRunner {
   }
 
   /** Records a stop's held time and its split: each moment goes to the first reason that applies. */
-  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; fastEndedAt: number; replyAt: number; question: boolean; codeChanging: boolean; budgetCost: string[] }): Promise<void> {
+  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; fastEndedAt: number; replyAt: number; questionMs: number; codeChanging: boolean; budgetCost: string[] }): Promise<void> {
     const total = Math.max(0, r.replyAt - r.stopAt);
-    const split = r.question
-      ? { question: total, slow: 0, fast: 0, snapshot_start: 0, queue_wait: 0 }
-      : { question: 0, slow: Math.max(0, r.replyAt - r.fastEndedAt), fast: Math.max(0, Math.min(r.replyAt, r.fastEndedAt) - Math.min(r.replyAt, r.readyAt)), snapshot_start: Math.max(0, Math.min(r.replyAt, r.readyAt) - r.stopAt), queue_wait: 0 };
+    const question = Math.min(r.questionMs, total);
+    const split = { question, slow: Math.max(0, r.replyAt - r.fastEndedAt - question), fast: Math.max(0, Math.min(r.replyAt, r.fastEndedAt) - Math.min(r.replyAt, r.readyAt)), snapshot_start: Math.max(0, Math.min(r.replyAt, r.readyAt) - r.stopAt), queue_wait: 0 };
     const ts = this.o.now();
     await this.o.append(this.o.core, {
       v: 1, id: ulid(ts), kind: 'stop.held', ts,
