@@ -441,14 +441,14 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const head = await checkout({ worktree: claim.worktree, commit, dependencies: claim.dependencies ?? [], runs: toDo.map((c) => c.check) });
       try {
         for (const c of toDo) {
-          // A failed run starts up to two more, as any check's does (#28).
+          // A failed run starts up to two more, as any check's does (#28). An uncounted run ends it: nothing says another would count.
           const outcomes: CheckResult['outcome'][] = [];
           let r: CheckResult;
           do {
             r = await runOne(c, head.dir);
             outcomes.push(r.outcome);
             record(c, r, outcomes.length);
-          } while (moreRuns({}, outcomes) > 0);
+          } while (r.outcome !== 'uncounted' && moreRuns({}, outcomes) > 0);
           let base: BaseRun | null = null;
           // A fix check always; a check of what must not change only when it failed, for what it inherits.
           const onBase = (c.on_base === 'fails' || r.outcome !== 'passed') && !(o.plant === 'base-in-command-check' && c.spec.kind !== 'command');
