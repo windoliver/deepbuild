@@ -1,0 +1,34 @@
+# Claude Code: a promised check wakes the idle session at its time, nobody typing
+
+Claude Code 2.1.308 (the desktop app's bundled build; the facts cover 2.1.299-2.1.308), `--model haiku`,
+default permission mode, in a terminal (script(1), 120 x 40), on 2026-10-29 local time. Its hooks are DeepBuild's
+entries (deep-hook from PR #804), run with a scratch DeepBuild home; a test shim re-roots the payload's
+transcript path under that home and execs deep-hook, so its parent stays Claude Code.
+After the stop nothing is typed: the waiter (the Stop entry's asyncRewake) wakes the session at the due time.
+
+## Typed
+> Do not call any tool. Reply with exactly this sentence and nothing else: The deploy is running. I'll check the deploy again in 1 minute.
+
+## The record (ledger.db), session 13c4d59c-50cd-4d54-8421-d1dfc9c02d43, hub clock UTC
+06:33:24.844  session.start   {"agent": "claude-code", "worktree": "/private/tmp/dh120-e2e/work"}
+06:33:28.083  user.ask        {"text": "Do not call any tool. Reply with exactly this sentence and nothing else: The deploy is running. I'll check the deploy again in 1 minute."}
+06:33:31.085  promise.set     {"promise": "01M65R6XPCNYWWA40EHB9BRDAF", "quote": "I'll check the deploy again in 1 minute.", "due": 1793342071084, "times_set": 1, "end": 1793428471084}
+06:33:31.078  agent.stop      {"turn": 1, "did_work": false, "claim": false, "outcome": "finished", "cause": "unknown", "usage": null}
+06:34:31.087  promise.due     {"promise": "01M65R6XPCNYWWA40EHB9BRDAF", "due": 1793342071084, "route": "wake"}
+06:34:31.157  user.ask        {"text": "<task-notification>\n<summary>Stop hook feedback</summary>\n</task-notification>\n<system-reminder>\nStop hook blocking error from command \"Stop\": DeepBuild: your promised check is due (2026-10-29 23:34): \"I'll check the deploy again in 1 minute.\" Do it now, and report what you find; t
+06:34:31.172  promise.woken   {"promise": "01M65R6XPCNYWWA40EHB9BRDAF", "via": "waiter"}
+06:34:34.325  tool.before     {"call": "toolu_01Nob2MgkN4C1bLk717iUnVW", "kind": "shell", "command": "ls -la && (ls -la .github .deploy deploy scripts 2>/dev/null; find . -maxdepth 2 \\( -iname '*deploy*' -o -iname '*.log' \\) 2>/dev/null | head -50)"}
+06:34:40.346  tool.after      {"call": "toolu_01Nob2MgkN4C1bLk717iUnVW", "kind": "shell", "command": "ls -la && (ls -la .github .deploy deploy scripts 2>/dev/null; find . -maxdepth 2 \\( -iname '*deploy*' -o -iname '*.log' \\) 2>/dev/null | head -50)", "outcome": "ok"}
+06:34:42.499  tool.before     {"call": "toolu_0117eahWcCxiTVkAdXHaptrk", "kind": "shell", "command": "for f in job.sh long.sh dur dur2 app.log; do echo \"== $f\"; cat \"$f\"; echo; done; echo \"== ps\"; ps aux | grep -E 'job.sh|long.sh|deploy' | grep -v grep"}
+06:34:42.638  tool.after      {"call": "toolu_0117eahWcCxiTVkAdXHaptrk", "kind": "shell", "command": "for f in job.sh long.sh dur dur2 app.log; do echo \"== $f\"; cat \"$f\"; echo; done; echo \"== ps\"; ps aux | grep -E 'job.sh|long.sh|deploy' | grep -v grep", "outcome": "ok"}
+06:34:45.263  agent.stop      {"turn": 2, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": {"covers": "turn", "model": "claude-haiku-5-5", "input": {"value": 996, "exact": true}, "cached": {"value": 72956, "exact": true}, "output": {"value": 532, "exact": true}, "context_fill": null, "cost": {
+06:34:46.150  session.end     {"reason": "prompt_input_exit"}
+
+## On screen (the terminal stream, escapes stripped; ⏎ is a line break)
+… ──────────────────────── ⏎  ⏎ ⏸manualmodeon◐medium·/effort ⏎  ⏎  ⏎ ❯ Do not call any tool. Reply with exactly this sentence and nothing else: The deploy is running. I'll check the deploy  ⏎  again in 1 minute.  ⏎  ⏎ ✢ Hyperspacing… (running UserPromptSubmit hook · 0s) ⏎  ⏎  ⏎ ───────────────────────────────────────────────────────────────────────────────── …
+… ─────────────────────── ⏎  ⏎ ⏸manualmodeon·esctointerrupt·←foragents◐medium·/effort ⏎  ⏎  ⏎ 2 ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✻Cogitated for 3s ·done11:33 PM ⏎ ❯  ⏎ ? for shortcuts · ← for agents  ⏎  ⏎  ⏎ check the deploy status ⏎  ⏎  ⏎  ⏎  ⏎ ✔ Update installed · Restart to update ⏎  ⏎ ◐medium·/effort ⏎  ⏎  ⏎   ⏎  ⏎  ⏎ ✻ Beboppin'…  ⏎  ⎿  Tip: Send messages to Claude while it works to steer Claude in real- …
+… ttoupdate ⏎  ⏎  ⏎ Bebop'…running Stop hook… 1/3 · 14s · ↓897 tokens) ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⎿  Stop says: says done · next: DeepBuild · receipt ⏎  ⏎ ✻ Crunched for14 · done 11:34 PM ⏎ ❯ check the deploy status ⏎ ? for shortcuts  ⏎  ⏎  …
+
+## In the transcript
+06:34:31.108  queue-operation: DeepBuild: your promised check is due (2026-10-29 23:34): "I'll check the deploy again in 1 minute." Do it now, and report what you find; this wake-up sets itself no further. (promise:01M65R6XPCNYWWA40EHB9BRDAF:1)\n\n</system-reminder>
+06:34:31.140  user: DeepBuild: your promised check is due (2026-10-29 23:34): "I'll check the deploy again in 1 minute." Do it now, and report what you find; this wake-up sets itself no further. (promise:01M65R6XPCNYWWA40EHB9BRDAF:1)\n\n</system-reminder>

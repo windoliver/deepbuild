@@ -19,7 +19,7 @@ import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type O
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
-import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
+import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
@@ -48,7 +48,7 @@ import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
+import { CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -88,6 +88,8 @@ const AUTHORITY = new Set(['deep off', 'deep on', 'deep hub stop', 'deep hub use
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** A per-session key's holder, as a person reads it. */
+const owned = (holder: string): string => (holder === 'core' ? 'your own terminal\'s deep env up' : `session ${holder.slice('mcp:'.length)}`);
 const running = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 };
@@ -282,6 +284,12 @@ export class Core {
   private readonly turns = new Map<string, Promise<unknown>>();
   /** Every stack run started and not yet cleaned up, a run's or a worktree's, so the hub's stop takes each down. */
   private readonly stackRuns = new Set<string>();
+  /** The per-session keys each stack run leased through the table (#332), by lease ID, ended once its processes are gone. */
+  private readonly taken = new Map<string, string[]>();
+  /** Who leased each stack run's per-session keys: its session's deep mcp, or the core. */
+  private readonly owners = new Map<string, string>();
+  /** The screen each session's computer use last switched to, one it leases (#332). */
+  private readonly onScreen = new Map<string, string>();
   /** Each worktree's stack run while it waits for its health route, so a down can end it rather than wait. */
   private readonly rising = new Map<string, string>();
   private readonly subscribers = new Map<string, number>();
@@ -357,7 +365,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
@@ -456,6 +464,15 @@ export class Core {
         ...compose.guarded,
       ],
     });
+    // The keys a stack leased per session before this start (#332): its processes were reaped as the supervisor opened,
+    // so each ends now that the record proves them gone.
+    for (const v of await leases.leases()) {
+      if (!SESSION_KINDS.includes(v.lease.resource.kind) || !(v.lease.holder === 'core' || v.lease.holder.startsWith('mcp:'))) continue;
+      const [row] = (await this.record.raw(`SELECT json_extract(data, '$.run') AS run FROM events WHERE kind = 'lease.acquired' AND subject = '${sql(v.lease.id)}' LIMIT 1`)) as { run: string | null }[];
+      if (!row?.run) continue;
+      this.taken.set(row.run, [...(this.taken.get(row.run) ?? []), v.lease.id]);
+      await this.giveBack(row.run).catch(() => undefined);
+    }
     this.host = this.options.host
       ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
       : this.supervisor;
@@ -706,6 +723,7 @@ export class Core {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
       if (meta.event === 'SessionEnd') {
         session.ended = true;
+        this.endStacks(session.id);
         this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
       }
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
@@ -713,6 +731,8 @@ export class Core {
     }
     const call = session && verified && drafts.length ? meta.toolUse : undefined;
     if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
+    // A switch to a leased screen counts once it ran: Claude Code sends PostToolUse only for a call that succeeded (#332).
+    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) await this.switched(session.id, String(meta.call.input.display ?? ''));
     if (session && verified) {
       await this.readTranscript(session);
       if (meta.event === 'SessionEnd') this.endTurn(session);
@@ -1569,7 +1589,7 @@ export class Core {
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
-      for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted]) map.delete(meta.session);
+      for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted, this.onScreen]) map.delete(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and starts no waiter of its own: the one its session's
       // earlier stop started still waits, and may wake the idle session (#85). Only the newest turn's: a prompt you
@@ -1815,6 +1835,11 @@ export class Core {
   /** A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321). */
   async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
     await this.ready;
+    // Computer use stays on what the session leases (#332), so your own screen and browser are never touched.
+    if (call.screen && meta.call) {
+      const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
+      if (deny) return { deny };
+    }
     // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
     // can't be worked out runs only staged.
     if (FOREIGN.has(meta.agent) || !meta.session) {
@@ -1831,6 +1856,45 @@ export class Core {
     // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
     const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
     return about ? this.holds.decide(meta, about) : {};
+  }
+
+  /** The session is on `display` once its switch ran, if that is a screen it leases. */
+  private async switched(session: string, display: string): Promise<void> {
+    const leased = (await this.leases.leases()).some((v) => v.lease.holder === `mcp:${session}` && v.lease.resource.kind === 'screen' && v.lease.resource.key === display);
+    if (leased) this.onScreen.set(session, display);
+  }
+  /**
+   * Why a computer-use or Chrome step is denied, or nothing when it acts on what its session leases (#332): a switch
+   * to a screen it leases, an app whose window it leases, and any other step on the leased screen it last switched
+   * to. Claude in Chrome, a session that leases no screen, a step naming another, and one before any switch are
+   * denied, so your own screen, your browser and their windows are never touched.
+   */
+  private async offScreen(session: string, action: string, input: Record<string, unknown>): Promise<string | undefined> {
+    const holder = `mcp:${session}`;
+    const mine = (await this.leases.leases()).filter((v) => v.lease.holder === holder && v.lease.resource.host === 'local');
+    const keys = (kind: string) => mine.filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.resource.key);
+    const screens = keys('screen');
+    const windows = keys('window');
+    const leased = screens.length ? `it leases ${screens.join(', ')}` : 'it leases no screen; deep env up leases one when the environment names a screen pool';
+    const why = (what: string) => `DeepBuild blocked this: computer use acts only on a screen and windows its session leases, so your own are never touched. This step ${what}, and ${leased}${windows.length ? ` and the windows of ${windows.join(', ')}` : ''}.`;
+    // Claude in Chrome acts in your own Chrome profile, with your sign-ins, which no window lease covers.
+    if (action.startsWith(CHROME)) return why('acts in your own Chrome, which no lease covers');
+    if (/(^|_)switch_display$/.test(action)) {
+      const display = String(input.display ?? '');
+      // The screen counts as the session's once the switch has run (`switched`), never on the asking alone.
+      return screens.includes(display) ? undefined : why(`switches to ${display || 'a screen it doesn\'t name'}`);
+    }
+    const current = this.onScreen.get(session);
+    if (current === undefined || !screens.includes(current)) return why('acts on the screen the session is on, which it hasn\'t switched to a leased one');
+    // Your clipboard is yours whichever screen a session is on.
+    if (/clipboard/.test(action) || input.clipboardRead || input.clipboardWrite) return why('acts on your clipboard, which no lease covers');
+    if (input.systemKeyCombos) return why('asks for key combos that act on your whole machine');
+    // Any step naming apps, granting, teaching or opening them, names only apps whose windows it leases.
+    const apps = [...(input.app === undefined ? [] : [input.app]), ...(Array.isArray(input.apps) ? input.apps : [])];
+    if (!apps.length && /(^|_)(open_application|request_access|request_teach_access)$/.test(action)) return why('names no app');
+    const off = apps.find((app) => typeof app !== 'string' || !windows.includes(app));
+    if (off !== undefined) return why(`acts on the window of ${typeof off === 'string' ? off : JSON.stringify(off)}, which it doesn't lease`);
+    return undefined;
   }
 
   /**
@@ -2532,7 +2596,8 @@ export class Core {
     if (known && !fresh) return known;
     const read = startOf(pid);
     // A fresh read replaces the kept one once it is in: a hook's check meanwhile reads the kept one, never waits on it.
-    if (known) void read.then(() => this.starts.set(pid, read));
+    // One that fails keeps the kept one, since a failed ps proves nothing about the process.
+    if (known) void read.then((start) => { if (start !== undefined) this.starts.set(pid, read); });
     else this.starts.set(pid, read);
     return read;
   }
@@ -2613,8 +2678,8 @@ export class Core {
       case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
-      case 'env.up': return this.envUp(params);
-      case 'env.down': return this.envDown(params);
+      case 'env.up': return this.envUp(params, context);
+      case 'env.down': return this.envDown(params, context);
       case 'wiki.build': return this.wikiBuild.build();
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
@@ -2981,7 +3046,9 @@ export class Core {
       seen.add(pid);
       // After a `/clear` the process's session is its newest one.
       const session = [...this.sessions.values()].filter((s) => s.pid === pid).at(-1);
-      if (session && (await this.startOf(pid, true)) === session.start) return session.id;
+      // A start that can't be read (ps failing under load) proves nothing: the session's process still running counts.
+      const start = session ? await this.startOf(pid, true) : undefined;
+      if (session && (start === undefined ? running(pid) : start === session.start)) return session.id;
     }
     return undefined;
   }
@@ -3509,10 +3576,15 @@ export class Core {
       const stackRun = run.environment ? newRun(this.now()) : undefined;
       if (stackRun) this.stackRuns.add(stackRun);
       const stack: Promise<Up | undefined> = stackRun
-        ? upStack(this.host, { run: stackRun, folder: run.cwd, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' }).catch((error: Error) => ({ status: 'BLOCKED' as const, run: stackRun, cause: error.message }))
+        ? upStack(this.host, { run: stackRun, folder: run.cwd, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', take: this.take('core', stackRun), scrub: (v) => { values?.held.push(...v); this.scrubValues(v); } })
+          .catch((error: Error) => ({ status: 'BLOCKED' as const, run: stackRun, cause: error.message }))
         : Promise.resolve(undefined);
-      const started = stack.then<Started | { run: string; status: 'missing'; cause: string }>((up) => {
+      const started = stack.then<Started | { run: string; status: 'missing'; cause: string }>(async (up) => {
         if (up?.status === 'BLOCKED') return { run: run.run, status: 'missing', cause: up.cause };
+        if (up) {
+          // Its database's clone is recorded (#332).
+          await this.cloned(run.run, up.stack);
+        }
         const ports = Object.entries(up?.stack.ports ?? {});
         const hosts = ports.map(([, port]) => `127.0.0.1:${port}`);
         return this.host.start({
@@ -3590,17 +3662,126 @@ export class Core {
     void turn.catch(() => undefined).then(() => { if (this.turns.get(worktree) === turn) this.turns.delete(worktree); });
     return turn;
   }
-  /** Signals a stack run down through the host, then the supervisor stops what's left of it and releases its leases. */
+  /**
+   * Signals a stack run down through the host, then the supervisor stops what's left of it and releases its leases;
+   * the keys its session leased through the table (#332) end once every process recorded for it is gone, citing those ends.
+   */
   private async takeDown(run: string): Promise<{ stopped: number[]; left: string[] }> {
     try {
       await downStack(this.host, run);
       return await this.supervisor.cleanup(run);
     } finally {
       this.stackRuns.delete(run);
+      await this.giveBack(run).catch(() => undefined);
     }
   }
-  private envUp(params: Obj): Promise<Obj> {
-    return this.upFor(this.worktreeOf(params));
+  /**
+   * Ends the per-session keys a stack run leased once every process recorded for it has its process.ended, citing
+   * those; while one runs, or for a run whose start nothing recorded, the record decides, never a guess.
+   */
+  private async giveBack(run: string): Promise<void> {
+    const ids = this.taken.get(run) ?? [];
+    if (!ids.length) return;
+    const rows = await this.record.raw(`SELECT kind, id, json_extract(data, '$.pid') AS pid FROM events WHERE kind IN ('process.tracked', 'process.ended') AND json_extract(data, '$.run') = '${sql(run)}'`) as { kind: string; id: string; pid: number }[];
+    const ended = rows.filter((r) => r.kind === 'process.ended');
+    if (rows.some((r) => r.kind === 'process.tracked' && !ended.some((e) => e.pid === r.pid))) return;
+    this.taken.delete(run);
+    this.owners.delete(run);
+    for (const id of ids) await this.leases.release(id, ended.map((r) => r.id));
+  }
+  /**
+   * env-local's Take for one stack run (#332): one of the keys, leased to the holder for the run through the kernel's
+   * table, or BLOCKED naming each lease that holds them, so a session never starts on a key another one holds.
+   */
+  private take(holder: string, run: string): Take {
+    // Two variables leased from one pool get two keys: a key this stack already holds isn't leased to it again.
+    const mine = new Set<string>();
+    return async (kind, keys) => {
+      // Keys of a stack already taken down, whose cleanup left a process the supervisor has since seen end, go back.
+      for (const other of [...this.taken.keys()]) if (!this.stackRuns.has(other)) await this.giveBack(other).catch(() => undefined);
+      // A worktree's stack whose process ended on its own is cleaned up first, which records its ends and gives its keys back.
+      for (const [worktree, stack] of [...this.stacks]) {
+        if (!this.taken.has(stack.run)) continue;
+        // A stack whose session is gone without a SessionEnd goes down with it, so its keys don't outlive it.
+        if (this.owners.has(stack.run) && (await this.ownerOf(stack.run)) === undefined) {
+          if (this.stacks.get(worktree) === stack) this.stacks.delete(worktree);
+          await this.takeDown(stack.run).catch(() => undefined);
+          continue;
+        }
+        if (!(await this.gone(stack.run))) continue;
+        if (this.stacks.get(worktree) === stack) this.stacks.delete(worktree);
+        await this.takeDown(stack.run).catch(() => undefined);
+      }
+      const held: string[] = [];
+      for (const key of keys) {
+        if (mine.has(`${kind}:${key}`)) continue;
+        const got = await this.leases.lease({ holder, run }, { host: 'local', kind, key }, 'exclusive');
+        if (got.status === 'granted') {
+          mine.add(`${kind}:${key}`);
+          this.taken.set(run, [...(this.taken.get(run) ?? []), got.lease.id]);
+          this.owners.set(run, holder);
+          return { key };
+        }
+        held.push(got.message);
+      }
+      return { cause: `no ${kind} of ${keys.join(', ')} is free to lease: ${held.join('; ')}` };
+    };
+  }
+  /** A session that ended takes the stacks its keys back down with it, so no key outlives its session (#332). */
+  private endStacks(session: string): void {
+    for (const [worktree, stack] of this.stacks) {
+      if (this.owners.get(stack.run) === `mcp:${session}`) void this.downFor(worktree, { path: '/params/worktree', remedy: 'deep env up' }).catch(() => undefined);
+    }
+  }
+  /** Whether a stack run ended on its own: its first process exited, and none recorded for it still runs in the background. */
+  private async gone(run: string): Promise<boolean> {
+    if ((await this.supervisor.status(run).catch(() => undefined))?.state !== 'exited') return false;
+    const pids = await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${sql(run)}'`) as { pid: number }[];
+    return !pids.some((r) => running(r.pid));
+  }
+  /**
+   * Who a stack run's per-session keys stay with: its owner, unless that is a session that has ended, which owns
+   * nothing; one that ended without a SessionEnd (its agent killed) is ended once its agent's process is gone. A start
+   * that can't be read (ps failing under load) proves nothing, so the session keeps its stack while its process runs.
+   */
+  private async ownerOf(run: string): Promise<string | undefined> {
+    const owner = this.owners.get(run);
+    const session = owner?.startsWith('mcp:') ? this.sessions.get(owner.slice('mcp:'.length)) : undefined;
+    if (!session) return owner;
+    if (session.ended) return undefined;
+    const start = await this.startOf(session.pid, true);
+    return (start === undefined ? running(session.pid) : start === session.start) ? owner : undefined;
+  }
+  /** Values env-local loaded into a stack: scrubbed by value from hook text and evidence from now on (#332). */
+  private scrubValues(values: string[]): void {
+    const fresh = [...new Set(values)].filter((value) => !this.options.held.includes(value));
+    if (!fresh.length) return;
+    this.options.held.push(...fresh);
+    this.scrubbing(fresh);
+  }
+  /** A run's database clone, kept in the record: the template's seed record, the template's digest and when it was cloned (#332). */
+  private async cloned(run: string, stack: Stack): Promise<void> {
+    // The planted wrong program copies the database and drops its record.
+    if (!stack.seed || this.options.plant === 'env-clone-without-record') return;
+    const held = { held: this.options.held };
+    const { source, copied_at, migration, template } = stack.seed;
+    await this.appendCore('seed.cloned', { run, stack: stack.run, source: scrubText(source, held), copied_at: scrubText(copied_at, held), migration: scrubText(migration, held), template, cloned_at: this.now() }, { subject: run });
+  }
+  /** `deep env up`: its leases are held by the agent session whose process runs the command, found by the peer check, or by the core from your own terminal. */
+  private async envUp(params: Obj, context: CallContext): Promise<Obj> {
+    const worktree = this.worktreeOf(params);
+    return this.upFor(worktree, await this.envCaller(context.peer, worktree));
+  }
+  /**
+   * The agent session a `deep env` caller runs under, or none for your own terminal (#332). A caller whose start can't
+   * be read is refused, so a ps failing under load never credits an agent's keys to your terminal.
+   */
+  private async envCaller(peer: CallContext['peer'], worktree: string): Promise<string | undefined> {
+    if (peer && (!peer.start || (await this.startOf(peer.pid, true)) === undefined)) {
+      throw new Refused(refusal('unavailable', '', 'The hub couldn\'t read when the process asking started, so it can\'t tell which session asks; try again.', worktree, true));
+    }
+    const session = await this.agentAbove(peer);
+    return session ? `mcp:${session}` : undefined;
   }
   private upFor(worktree: string, holder?: string): Promise<Obj> {
     return this.inTurn(worktree, () => this.riseIn(worktree, holder));
@@ -3615,12 +3796,25 @@ export class Core {
     const cwd = this.sessions.get(session)!.cwd;
     if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
     const worktree = realpathSync(cwd);
-    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' });
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' }, `mcp:${session}`);
   }
   private async riseIn(worktree: string, holder?: string): Promise<Obj> {
-    const running = this.stacks.get(worktree);
-    // A stack is reused only while its process runs and its health route still answers 200.
-    if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
+    let running = this.stacks.get(worktree);
+    // A stack that ended on its own is no one's: it is cleaned up, which gives its keys back, and a new one starts.
+    if (running && (await this.gone(running.run))) {
+      this.stacks.delete(worktree);
+      await this.takeDown(running.run).catch(() => undefined);
+      running = undefined;
+    }
+    // A stack is reused only while its process runs and its health route still answers 200, and by an agent session
+    // only when no other session leased its keys: they stay that session's (#332).
+    const owner = running ? await this.ownerOf(running.run) : undefined;
+    if (running && holder && owner && owner !== holder) return { status: 'BLOCKED', worktree, cause: `the stack in ${worktree} runs on leases ${(this.taken.get(running.run) ?? []).join(', ')} held by ${owned(owner)}, so it stays theirs; their deep env down, or yours from your own terminal, ends it` };
+    // A stack whose keys an ended session leased starts again under its new holder, so no key outlives its session's use.
+    const orphaned = running !== undefined && this.owners.has(running.run) && owner === undefined && this.owners.get(running.run) !== (holder ?? 'core');
+    if (running && !orphaned && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) {
+      return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
+    }
     // Any other is taken down, and a new one started.
     if (running) {
       this.stacks.delete(worktree);
@@ -3630,13 +3824,24 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', ...(holder ? { holder } : {}) })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
       // What it started is stopped and its leases released; a stack that never started has nothing to clean.
       await this.takeDown(run).catch(() => undefined);
       return { status: 'BLOCKED', worktree, cause: up.cause };
+    }
+    // A session that ended while its stack came up leaves no key behind: the stack goes down with it.
+    const ended = this.owners.get(run);
+    if (ended && (await this.ownerOf(run)) === undefined) {
+      await this.takeDown(run).catch(() => undefined);
+      return { status: 'BLOCKED', worktree, cause: `${owned(ended)} ended while its stack came up` };
+    }
+    const unrecorded = await this.cloned(run, up.stack).then(() => undefined, (error: Error) => error.message);
+    if (unrecorded) {
+      await this.takeDown(run).catch(() => undefined);
+      return { status: 'BLOCKED', worktree, cause: `its database's clone record couldn't be kept: ${unrecorded}` };
     }
     this.stacks.set(worktree, up.stack);
     return { status: 'ready', run, worktree, ports: up.stack.ports, ...(up.stack.project ? { project: up.stack.project } : {}) };
@@ -3646,21 +3851,27 @@ export class Core {
    * prove is the run's and ends its leases once every recorded process is gone. A process it can't prove, or one
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
-  private envDown(params: Obj): Promise<Obj> {
-    return this.downFor(this.worktreeOf(params), { path: '/params/worktree', remedy: 'deep env up' });
+  private async envDown(params: Obj, context: CallContext): Promise<Obj> {
+    const worktree = this.worktreeOf(params);
+    return this.downFor(worktree, { path: '/params/worktree', remedy: 'deep env up' }, await this.envCaller(context.peer, worktree));
   }
   /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
-  private downFor(worktree: string, at: { path: string; remedy: string }): Promise<Obj> {
+  /** `caller` is the agent session's deep mcp asking; a stack whose keys another session leased stays up for it (#332). */
+  private async downFor(worktree: string, at: { path: string; remedy: string }, caller?: string): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
+    const owner = rising ? await this.ownerOf(rising) : undefined;
+    if (rising && caller && owner && owner !== caller) throw (new Refused(refusal('role', at.path, `The stack coming up in ${worktree} runs on keys ${owned(owner!)} leased, so only they, or you from your own terminal, take it down.`, worktree)));
     if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, at, rising));
+    return this.inTurn(worktree, () => this.downIn(worktree, at, rising, caller));
   }
-  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string): Promise<Obj> {
+  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string, caller?: string): Promise<Obj> {
     const stack = this.stacks.get(worktree);
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
     if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
+    const owner = await this.ownerOf(stack.run);
+    if (caller && owner && owner !== caller) throw new Refused(refusal('role', at.path, `The stack in ${worktree} runs on keys ${owned(owner)} leased, so only they, or you from your own terminal, take it down.`, worktree));
     const ports = Object.values(stack.ports);
     const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
     const before = recorded.filter(running);

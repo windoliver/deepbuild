@@ -3759,6 +3759,30 @@ export interface SandboxDenied {
   evidence?: Array<string>;
 }
 
+/** seed.cloned@1 */
+export interface SeedCloned {
+  v: 1;
+  id: string;
+  kind: "seed.cloned";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    stack: string;
+    source: string;
+    copied_at: string;
+    migration: string;
+    template: string;
+    cloned_at: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.attention@1 */
 export interface SessionAttention {
   v: 1;
@@ -3978,6 +4002,30 @@ export interface SpendApproved {
       kind: "issue" | "resource" | "project" | "work";
       ref: string;
     };
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.approved@2 */
+export interface SpendApprovedV2 {
+  v: 2;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    runs?: number;
     cap_usd: number;
     ends: number;
     via: "card" | "inbox";
