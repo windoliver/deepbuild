@@ -13,7 +13,10 @@ const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** Refusals that leave the answer undecided: not confirmed, an agent's command, or a hub that couldn't. */
 const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
-interface Row { ask: string; kind: string; session: string; status: string; age: number; question: string; options: string[] }
+/** How far back `deep inbox` lists what was decided for you. */
+const DAY_MS = 86_400_000;
+
+interface Row { ask: string; kind: string; session: string; status: string; outcome: string; age: number; question: string; options: string[]; decision: string | null; answer?: string | null }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
 interface Offer { offer: string; session: string; command: string; scope: string }
 
@@ -68,6 +71,10 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   const rows = (reply.result.asks as Row[]).filter((r) => r.status !== 'closed');
   if (!rows.length) process.stdout.write('No open asks.\n');
   for (const r of rows) process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${age(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
+  // What was decided for you in the last day (#27), each line led by its label so no reader takes it for an open ask.
+  for (const r of (reply.result.asks as Row[]).filter((r) => r.outcome === 'decided_for_you' && r.age < DAY_MS)) {
+    process.stdout.write(`decided for you  ${r.ask}  ${r.decision ?? ''}  ${r.session}  ${age(r.age)}  ${r.question}  → ${r.answer ?? ''}\n`);
+  }
   // What you said yes to in the terminal, offered back: one click saves it as a decision.
   for (const o of (reply.result.offers ?? []) as Offer[]) process.stdout.write(`${o.offer}  offered  ${o.session}  save \`${o.command}\` as a decision for ${o.scope}  (deep inbox save ${o.offer})\n`);
   return 0;

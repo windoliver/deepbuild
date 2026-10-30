@@ -34,7 +34,9 @@ export type Plant =
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
   | 'runs-disk-bytes'
   // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
-  | 'stages-without-ceiling' | 'stages-unpredicted-writes';
+  | 'stages-without-ceiling' | 'stages-unpredicted-writes'
+  // #27's: deep_ask raised without its subject, so a repeated question reaches you.
+  | 'repeat-reaches-you';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -60,6 +62,7 @@ const PLANTS: readonly string[] = [
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
   'stages-without-ceiling', 'stages-unpredicted-writes',
+  'repeat-reaches-you',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

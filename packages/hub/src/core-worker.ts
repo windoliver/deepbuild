@@ -18,6 +18,7 @@ export type CoreRequest =
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
   | { op: 'waiter-gone'; key: number }
+  | { op: 'hook-gone'; id: string; session: string }
   | { op: 'unsubscribe'; sub: string }
   | (CoreRequest & { n: number });
 
@@ -47,6 +48,7 @@ if (parentPort && workerData?.core) {
   port.on('message', (message: CoreMessage) => {
     if (message.op === 'hook') return void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
+    if (message.op === 'hook-gone') return core.hookGone(message.id, message.session);
     if (message.op === 'unsubscribe') return core.unsubscribe(message.sub);
     const { n } = message;
     answer(core, message).then((result) => port.postMessage({ n, result }), (error: unknown) => port.postMessage({ n, error: asRefusal(error) }));
