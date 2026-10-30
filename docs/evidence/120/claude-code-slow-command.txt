@@ -1,0 +1,69 @@
+# Claude Code: a slow command shows its line while it runs, and a long wait is announced at its start
+
+Claude Code 2.1.308 (the desktop app's bundled build; the facts cover 2.1.299-2.1.308), `--model haiku`,
+default permission mode, in a terminal (script(1), 120 x 40), on 2026-10-29 local time. Its hooks are DeepBuild's
+entries (deep-hook from PR #804), run with a scratch DeepBuild home; a test shim re-roots the payload's
+transcript path under that home and execs deep-hook, so its parent stays Claude Code.
+`job.sh` sleeps the seconds in `dur`: three 2 s runs set its history, then one 25 s run; `long.sh` runs 62 s twice.
+
+## Typed
+> Run `./job.sh` three times, as three separate Bash tool calls made one after another, never in parallel and never in the background. Then reply with only DONE.
+> Run `./job.sh` once with the Bash tool, in the foreground, not in the background. Then reply with only DONE.
+> Run `./long.sh` once with the Bash tool, in the foreground, not in the background, with a timeout of 120000 ms. Then reply with only DONE.  (twice)
+
+## The record (ledger.db), session 2d3a2fa6-877b-4fea-b812-109abd011e47, hub clock UTC
+02:52:45.947  session.start   {"agent": "claude-code", "worktree": "/private/tmp/dh120-e2e/work"}
+02:52:49.084  user.ask        {"text": "Run `./job.sh` three times, as three separate Bash tool calls made one after another, never in parallel and never in the background. Then reply with only DONE."}
+02:52:50.464  tool.before     {"call": "toolu_01TAKT79tZq8U1Uau7bDAcQu", "kind": "shell", "command": "./job.sh"}
+02:52:52.525  call.overrun    {"call": "toolu_01TAKT79tZq8U1Uau7bDAcQu", "kind": "shell", "command": "./job.sh", "expected_ms": 2058, "ran_ms": 2059, "deadline": "none"}
+02:52:53.200  session.reading {"reading": "still waiting on `./job.sh` · 2 s so far, about 2 s was expected"}
+02:52:54.558  session.reading {"reading": "`./job.sh` ran 4 s, about 2 s was expected"}
+02:52:54.557  tool.after      {"call": "toolu_01TAKT79tZq8U1Uau7bDAcQu", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+02:52:57.246  tool.before     {"call": "toolu_01DKD3w1RbkdpR6zqwz9wdqt", "kind": "shell", "command": "cat ./job.sh"}
+02:52:57.277  tool.after      {"call": "toolu_01DKD3w1RbkdpR6zqwz9wdqt", "kind": "shell", "command": "cat ./job.sh", "outcome": "ok"}
+02:52:59.134  tool.before     {"call": "toolu_01Vp3savCSaeUhgYRvrCxCbY", "kind": "shell", "command": "./job.sh"}
+02:53:01.207  call.overrun    {"call": "toolu_01Vp3savCSaeUhgYRvrCxCbY", "kind": "shell", "command": "./job.sh", "expected_ms": 2058, "ran_ms": 2059, "deadline": "none"}
+02:53:01.224  session.reading {"reading": "`./job.sh` ran 2 s, about 2 s was expected"}
+02:53:01.208  tool.after      {"call": "toolu_01Vp3savCSaeUhgYRvrCxCbY", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+02:53:02.494  tool.before     {"call": "toolu_0173CCBgN8Nn4vwHvCioyNtr", "kind": "shell", "command": "./job.sh"}
+02:53:04.546  tool.after      {"call": "toolu_0173CCBgN8Nn4vwHvCioyNtr", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+02:53:05.620  agent.stop      {"turn": 1, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": {"covers": "turn", "model": "claude-haiku-5-5", "input": {"value": 7260, "exact": true}, "cached": {"value": 139152, "exact": true}, "output": {"value": 662, "exact": true}, "context_fill": null, "cost":
+02:53:06.130  user.ask        {"text": "Run `./job.sh` once with the Bash tool, in the foreground, not in the background. Then reply with only DONE."}
+02:53:07.527  tool.before     {"call": "toolu_01GGddVo3C2bkjJ63iomWKDs", "kind": "shell", "command": "./job.sh"}
+02:53:09.589  call.overrun    {"call": "toolu_01GGddVo3C2bkjJ63iomWKDs", "kind": "shell", "command": "./job.sh", "expected_ms": 2058, "ran_ms": 2059, "deadline": "none"}
+02:53:10.224  session.reading {"reading": "still waiting on `./job.sh` · 2 s so far, about 2 s was expected"}
+02:53:32.602  session.reading {"reading": "`./job.sh` ran 25 s, about 2 s was expected"}
+02:53:32.597  tool.after      {"call": "toolu_01GGddVo3C2bkjJ63iomWKDs", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+02:53:34.031  agent.stop      {"turn": 2, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": {"covers": "turn", "model": "claude-haiku-5-5", "input": {"value": 73, "exact": true}, "cached": {"value": 37157, "exact": true}, "output": {"value": 82, "exact": true}, "context_fill": null, "cost": {"u
+02:53:34.684  user.ask        {"text": "Run `./long.sh` once with the Bash tool, in the foreground, not in the background, with a timeout of 120000 ms. Then reply with only DONE."}
+02:53:36.204  session.reading {"reading": "waiting on `./long.sh` · about 1 min expected"}
+02:53:36.200  tool.before     {"call": "toolu_017Xd3zt8XxmMfHYP4vCeZwK", "kind": "shell", "command": "./long.sh"}
+02:54:38.262  tool.after      {"call": "toolu_017Xd3zt8XxmMfHYP4vCeZwK", "kind": "shell", "command": "./long.sh", "outcome": "ok"}
+02:54:39.357  agent.stop      {"turn": 3, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": {"covers": "turn", "model": "claude-haiku-5-5", "input": {"value": 167, "exact": true}, "cached": {"value": 37411, "exact": true}, "output": {"value": 106, "exact": true}, "context_fill": null, "cost": {
+02:54:40.020  user.ask        {"text": "Run `./long.sh` once with the Bash tool, in the foreground, not in the background, with a timeout of 120000 ms. Then reply with only DONE."}
+02:54:41.478  session.reading {"reading": "waiting on `./long.sh` · about 1 min expected"}
+02:54:41.475  tool.before     {"call": "toolu_011BYf7t4f3yjbTKXefS2Mw8", "kind": "shell", "command": "./long.sh"}
+02:55:43.591  call.overrun    {"call": "toolu_011BYf7t4f3yjbTKXefS2Mw8", "kind": "shell", "command": "./long.sh", "expected_ms": 62109, "ran_ms": 62111, "deadline": "none"}
+02:55:44.141  session.reading {"reading": "`./long.sh` ran 1 min, about 1 min was expected"}
+02:55:44.133  tool.after      {"call": "toolu_011BYf7t4f3yjbTKXefS2Mw8", "kind": "shell", "command": "./long.sh", "outcome": "ok"}
+02:55:45.328  agent.stop      {"turn": 4, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": {"covers": "turn", "model": "claude-haiku-5-5", "input": {"value": 86, "exact": true}, "cached": {"value": 37713, "exact": true}, "output": {"value": 106, "exact": true}, "context_fill": null, "cost": {"
+02:55:45.825  user.ask        {"text": "Run exactly `tail -f /tmp/dh120-e2e/work/app.log` with the Bash tool, in the foreground, not in the background, and with no timeout parameter. It never ends on its own; that is expected."}
+02:55:47.589  tool.before     {"call": "toolu_01VtiS6BtQyXdPSW1ZK8zfM4", "kind": "shell", "command": "tail -f /tmp/dh120-e2e/work/app.log"}
+02:55:57.723  session.end     {"reason": "prompt_input_exit"}
+
+## On screen (the terminal stream, escapes stripped; ⏎ is a line break)
+…  ⏎  ⏎ ✢ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ · ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✔ Update installed · Restart to update ⏎  ⏎ ◐medium·/effort ⏎  ⏎  ⏎ Whirlpooling… ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ Whirlling… ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✔ Update installed · Restart to update ⏎  ⏎ DeepBuild:stillwaitingon`./job.sh`·2ssofar,about2swasexpected ⏎  ⏎  ⏎ ✢lo ⏎  ✔ Update installed · Restart to update ⏎ DeepBuild: still waiting on `./job.sh` · 2 s so far, about 2 s was expected ⏎  …
+… ──────────────────────────────────────────────────────────────────────────────────────────────── ⏎  ⏎ ⏸manualmodeon·esctointerrupt✔Updateinstalled·Restarttoupdate ⏎  ⏎ DeepBuild:stillwaitingon`./job.sh`·2ssofar,about2swasexpected ⏎  ⏎  ⏎ ✻31thinking ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✶h69 ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ Thehooksaysthefirstruntook4sagainstanexpected2s,andthatitseffectisunknown.I'llreadjob.s …
+… ─────────────────────────────────────────────────────────────────────────────────── ⏎ ⏸ manual mode on · esc to interrupt ✔ Update installed · Restart to update ⏎  ⏎ DeepBuild:stillwaitingon`./job.sh`·2ssofar,about2swasexpected ⏎  ⏎  ⏎ ✳894 ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✢W219 ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  Reading 1 file… (ctrl+o to expand) ⏎  ⎿ $ cat ./job.sh ⏎  ⏎ ✢ Whirlpooling… (running PreToolUse ho …
+…  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ Incubating… ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✢ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ⏺ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✳ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✶ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ✻4 ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ running FileChanged hook · 4s · ↓18 tokens) ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ 4s · ↓ 18 tokens) ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ DeepBuild:stillwaitingon`./job.sh`·2ssofar,about2swasexpected ⏎  ⏎  ⏎ ✽ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎   ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  (3s) ⏎ (ctrl+b to run in background) ⏎  ⏎ ✽ Incubating… (4s · ↓ 18 tokens) ⏎  ⎿  Tip: Use /theme to ch …
+… ───────────────────────────────────────────────── ⏎  ⏸ manual mode on · esc to interrupt ✔ Update installed · Restart to update ⏎  ⏎ ✻ ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎  ⏎ ⏺ ⏎ PreToolUse:Bashsays: DeepBuild: waiting on `./long.sh` · about 1 min expected ⏎  ⎿  longdone ⏎  ⎿  (timeout 2m) ⏎  ⏎ ✻Shimmying… (1m 4s · ↓106 tokens) ⏎  ⎿  Tip: Run /install-github-app to tag @claude right from  …
+
+## In the transcript
+The in-call line comes by FileChanged, whose notification Claude Code saves no line for (#80); the record keeps it as
+session.reading. Below, the lines the calls' next hooks carried.
+02:52:54.559  attachment: DeepBuild: your call `./job.sh` ran 4 s, past the 2 s expected for it. Its effect is unknown: read what it did before retrying it."},"systemMessage":"DeepBuild: `./job.sh` ran 4 s, about 2 s was expected"}
+02:52:54.559  attachment: DeepBuild: `./job.sh` ran 4 s, about 2 s was expected
+02:52:54.559  attachment: DeepBuild: your call `./job.sh` ran 4 s, past the 2 s expected for it. Its effect is unknown: read what it did before retrying it. | DeepBuild: your call `./job.sh` ran 4 s, past the 2 s expected for it. Its effect is unknown: read what it did before retrying it.\n</system-reminder>
+02:53:01.225  attachment: DeepBuild: your call `./job.sh` ran 2 s, past the 2 s expected for it. Its effect is unknown: read what it did before retrying it."},"systemMessage":"DeepBuild: `./job.sh` ran 2 s, about 2 s was expected"}
+02:53:01.225  attachment: DeepBuild: `./job.sh` ran 2 s, about 2 s was expected
+02:53:01.225  attachment: DeepBuild: your call `./job.sh` ran 2 s, past the 2 s expected for it. Its effect is unknown: read what it did before retrying it. | DeepBuild: your call `./job.sh` ran 2 s, past the 2 s expected for it. Its effect is unknown: read what it did before retrying it.\n</system-reminder>
