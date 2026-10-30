@@ -187,6 +187,11 @@ pub fn open_asks<'a>(events: &'a [Value], session: Option<&str>) -> Vec<&'a Valu
         .collect()
 }
 
+/// Whether the ask `handle` is open, as the core reads the record.
+pub fn is_open(events: &[Value], handle: &str) -> bool {
+    reading(events, handle).0
+}
+
 /// When the ask's default applies: the deadline the core's undo of its default gave it, else its own.
 pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
     reading(events, &handle(ask))

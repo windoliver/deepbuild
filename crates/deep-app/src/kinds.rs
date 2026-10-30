@@ -260,6 +260,9 @@ impl Model {
                         own_member = index;
                     }
                     batch.push((member.to_owned(), hash));
+                    if member != handle && !states::is_open(events, member) {
+                        continue;
+                    }
                     let Some(plan) = plan else { continue };
                     // The diff's digest, short, as a commit is named.
                     diffs.push(text(&plan["data"]["diff"]).chars().take(12).collect());
@@ -463,16 +466,24 @@ fn past_calls(events: &[Value], ask: &Value) -> Vec<PastCall> {
     if screen.is_null() {
         return Vec::new();
     }
+    // Revoked, overruled everywhere (not at one scope) or judged revoked, by the core.
     let revoked: Vec<&str> = events
         .iter()
-        .filter(|event| event["kind"] == "decision.revoked")
+        .filter(|event| event["writer"] == "core")
+        .filter(|event| match event["kind"].as_str() {
+            Some("decision.revoked") => true,
+            Some("decision.overruled") => !event["data"]["at"].is_string(),
+            Some("decision.judged") => event["data"]["state"] == "revoked",
+            _ => false,
+        })
         .filter_map(|event| event["data"]["decision"].as_str())
+        .map(|decision| decision.trim_start_matches("decision:"))
         .collect();
     events
         .iter()
         .rev()
         .filter(|event| event["kind"] == "decision.created")
-        .filter(|event| !revoked.contains(&format!("decision:{}", text(&event["id"])).as_str()))
+        .filter(|event| !revoked.contains(&text(&event["id"]).as_str()))
         .filter_map(|decision| {
             let about = find(events, decision["data"]["ask"].as_str()?)?;
             let answer = text(&decision["data"]["answer"]);
@@ -515,21 +526,13 @@ fn moved(events: &[Value], ask: &Value) -> Option<(String, String, String)> {
         .map(|commit| text(&commit["data"]["sha"]))
         .filter(|sha| *sha != pinned)?;
     let short = |sha: &str| sha.chars().take(7).collect::<String>();
-    let checks: Vec<String> = events
-        .iter()
-        .filter(|event| {
-            event["kind"] == "run.started" && event["data"]["commit"] == latest.as_str()
-        })
-        .map(|started| {
-            let outcome = events
-                .iter()
-                .find(|event| {
-                    event["kind"] == "run.finished"
-                        && event["data"]["run"] == started["data"]["run"]
-                })
+    let checks: Vec<String> = runs_on(events, &latest)
+        .into_iter()
+        .map(|(check, finished)| {
+            let outcome = finished
                 .map(|finished| text(&finished["data"]["outcome"]))
                 .unwrap_or_else(|| "running".to_owned());
-            format!("{} {outcome}", text(&started["data"]["check"]))
+            format!("{check} {outcome}")
         })
         .collect();
     let checks = if checks.is_empty() {
@@ -549,31 +552,8 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
     if pin["kind"] != "commit" {
         return None;
     }
-    let commit = text(&pin["ref"]);
-    let mut runs: Vec<&Value> = Vec::new();
-    for event in events.iter().filter(|event| event["kind"] == "run.started") {
-        if !runs.contains(&&event["data"]["run"]) {
-            runs.push(&event["data"]["run"]);
-        }
-    }
-    let mut starts: Vec<(usize, &Value, &Value)> = runs
-        .into_iter()
-        .filter_map(|run| {
-            let started = run_event(events, "run.started", run)?;
-            let at = events
-                .iter()
-                .position(|event| std::ptr::eq(event, started))?;
-            Some((at, run, started))
-        })
-        .collect();
-    starts.sort_by_key(|(at, _, _)| *at);
     let mut latest: Vec<(String, Option<&Value>)> = Vec::new();
-    for (_, run, started) in starts {
-        if started["data"]["commit"] != commit.as_str() {
-            continue;
-        }
-        let finished = run_event(events, "run.finished", run);
-        let check = text(&started["data"]["check"]);
+    for (check, finished) in runs_on(events, &text(&pin["ref"])) {
         latest.retain(|(seen, _)| *seen != check);
         latest.push((check, finished));
     }
@@ -609,6 +589,37 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
                 .map(|(check, _)| format!("{check}, still running"))
         });
     Some((passed, latest.len(), look))
+}
+
+/// The runs on `commit`, each once, in the order of its start as the record takes it, with its check and its finish.
+fn runs_on<'a>(events: &'a [Value], commit: &str) -> Vec<(String, Option<&'a Value>)> {
+    let mut runs: Vec<&Value> = Vec::new();
+    for event in events.iter().filter(|event| event["kind"] == "run.started") {
+        if !runs.contains(&&event["data"]["run"]) {
+            runs.push(&event["data"]["run"]);
+        }
+    }
+    let mut starts: Vec<(usize, &Value, &Value)> = runs
+        .into_iter()
+        .filter_map(|run| {
+            let started = run_event(events, "run.started", run)?;
+            let at = events
+                .iter()
+                .position(|event| std::ptr::eq(event, started))?;
+            Some((at, run, started))
+        })
+        .filter(|(_, _, started)| started["data"]["commit"] == commit)
+        .collect();
+    starts.sort_by_key(|(at, _, _)| *at);
+    starts
+        .into_iter()
+        .map(|(_, run, started)| {
+            (
+                text(&started["data"]["check"]),
+                run_event(events, "run.finished", run),
+            )
+        })
+        .collect()
 }
 
 /// A run's start or finish as the record takes it: the core's whenever it lands, until then the first.
@@ -820,6 +831,34 @@ mod tests {
     }
 
     #[test]
+    fn a_moved_choice_lists_each_run_on_the_new_commit_as_the_record_takes_it() {
+        let new = "1".repeat(40);
+        let mut choice = ask("C", "choice", json!({"provisional": true}));
+        choice["session"] = json!("s1");
+        let start = |run: &str, check: &str, writer: &str, commit: &str| json!({"kind": "run.started", "writer": writer, "data": {"run": run, "check": check, "claim": "c", "commit": commit}});
+        let finish = |run: &str, writer: &str, outcome: &str| json!({"kind": "run.finished", "writer": writer, "data": {"run": run, "check": "x", "outcome": outcome, "points_to": null, "findings": []}});
+        let events = vec![
+            choice,
+            json!({"kind": "commit.made", "session": "s1", "log_pos": 2, "data": {"sha": new}}),
+            start("r1", "unit", "core", &new),
+            start("r1", "unit", "core", &new),
+            finish("r1", "hook", "passed"),
+            finish("r1", "core", "failed"),
+            // A hook names the new commit for a run the core started on another.
+            start("r2", "lint", "core", &"2".repeat(40)),
+            start("r2", "lint", "hook", &new),
+            start("r3", "e2e", "hook", &new),
+        ];
+        let model = Model::read(&events, "ask:C", 0).unwrap();
+        let checks = model
+            .fields
+            .iter()
+            .find(|(name, _)| name.starts_with("checks on"))
+            .map(|(_, value)| value.as_str());
+        assert_eq!(checks, Some("unit failed, e2e running"));
+    }
+
+    #[test]
     fn a_batch_member_runs_or_skips_whole_and_starts_off_with_a_step_that_cant_be_undone() {
         let push = json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}});
         let plan = |ask: &str, steps: Value| {
@@ -876,6 +915,15 @@ mod tests {
         let model = Model::read(&events, "ask:A", 1_000_000).unwrap();
         assert!(model.own_on());
         assert_eq!(model.runs(), [0, 1]);
+
+        // B was superseded before the approval: the core drops it, so the card neither draws nor counts its steps.
+        let mut closed = events.clone();
+        closed.push(
+            json!({"kind": "ask.superseded", "writer": "core", "subject": "ask:B", "data": {}}),
+        );
+        let model = Model::read(&closed, "ask:A", 1_000_000).unwrap();
+        assert!(model.steps.is_empty());
+        assert_eq!(model.runs(), [0]);
     }
 
     #[test]
@@ -955,6 +1003,37 @@ mod tests {
         ];
         let model = Model::read(&events, "ask:T3", 0).unwrap();
         assert_eq!(model.past.len(), 1);
+        for (gone, revoke) in [
+            (
+                true,
+                json!({"kind": "decision.revoked", "writer": "core", "data": {"decision": "decision:D1"}}),
+            ),
+            (
+                true,
+                json!({"kind": "decision.overruled", "writer": "core", "data": {"decision": "decision:D1"}}),
+            ),
+            (
+                true,
+                json!({"kind": "decision.judged", "writer": "core", "data": {"decision": "decision:D1", "state": "revoked"}}),
+            ),
+            (
+                false,
+                json!({"kind": "decision.overruled", "writer": "core", "data": {"decision": "decision:D1", "at": "repo:shop"}}),
+            ),
+            (
+                false,
+                json!({"kind": "decision.judged", "writer": "core", "data": {"decision": "decision:D1", "state": "frozen"}}),
+            ),
+            (
+                false,
+                json!({"kind": "decision.revoked", "writer": "mcp:agent", "data": {"decision": "decision:D1"}}),
+            ),
+        ] {
+            let mut later = events.clone();
+            later.push(revoke.clone());
+            let past = Model::read(&later, "ask:T3", 0).unwrap().past.len();
+            assert_eq!(past, usize::from(!gone), "{revoke}");
+        }
         assert_eq!(model.past[0].question, "taste T1?");
         assert_eq!(
             model.past[0].answer, "Yes",
