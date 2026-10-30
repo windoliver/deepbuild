@@ -363,7 +363,7 @@ impl Render for Shipped {
                     .events
                     .iter()
                     .filter(|event| mine.contains(&&states::handle(event)))
-                    .filter_map(|ask| ask["data"]["deadline"].as_u64())
+                    .filter_map(|ask| states::deadline(&record.events, ask))
                     .map(|deadline| (deadline as f64 - now as f64) / 3_600_000.0)
                     .collect();
                 let points = hours.len();

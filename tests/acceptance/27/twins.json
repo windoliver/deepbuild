@@ -1,0 +1,19 @@
+{
+  "#27.778c531d": [
+    "waiter-never-wakes"
+  ],
+  "#27.6e863673": [
+    "repeat-reaches-you"
+  ],
+  "#27.f8331d25": [
+    "wake-assumed"
+  ],
+  "#27.e6116d56": [
+    "skip-default-at-deadline",
+    "waiter-outlives-session",
+    "answer-skips-held-stop"
+  ],
+  "#27.ffbe7d6f": [
+    "waiter-checks-every-5s"
+  ]
+}

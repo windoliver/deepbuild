@@ -9,7 +9,10 @@ pub mod shell;
 pub mod snapshot;
 
 pub use deep_app::notify::{Notifier, Sound, NOTIFY_AFTER};
-pub use replica::{Posted, Replica, Seen};
+pub use replica::{
+    Approve, CardSeen, Client, Confirmation, Input, Killed, On, Phase, Planted, Posted, Replica,
+    Seen, Slot, Source, Step,
+};
 
 use std::{
     path::{Path, PathBuf},

@@ -63,6 +63,7 @@ const wrap = (store: RecordStore): RecordStore => ({
   resolve: (handle) => store.resolve(handle),
   keep: (connection, file) => store.keep(connection, file),
   rollBack: (connection, what) => store.rollBack(connection, what),
+  backup: (path) => store.backup(path),
   close: () => store.close(),
 });
 const approve = (cap: number): Promise<string> => ledger.approve(card, { scope: { kind: 'issue', ref: ISSUE }, cap_usd: cap, ends: T0 + 30 * DAY });
@@ -119,6 +120,21 @@ it('one raise asks for every covering budget without room, and your yes starts t
   await yes(askOf(blocked));
   expect(await ledger.request(core, r)).toMatchObject({ status: 'started' });
   expect([(await ledger.budget(issue)).left_usd, (await ledger.budget(gpu)).left_usd]).toEqual([2, 1]);
+});
+
+it('a budget that counts runs: the run past its count asks, and your yes adds one run and its price (#332)', async () => {
+  const budget = await ledger.approve(card, { scope: { kind: 'issue', ref: ISSUE }, runs: 2, cap_usd: 100, ends: T0 + 30 * DAY });
+  expect((await ledger.request(core, run('a'))).status).toBe('started');
+  expect((await ledger.request(core, run('b'))).status).toBe('started');
+  const c = run('c');
+  const blocked = await ledger.request(core, c);
+  expect(blocked).toMatchObject({ status: 'BLOCKED', cause: 'budget', budget });
+  const raised = (await record.read({ after: 0, limit: 1000 })).filter((e) => e.kind === 'ask.created' && JSON.stringify(e).includes(askOf(blocked).slice(4)));
+  expect(JSON.stringify(raised), 'the ask names the runs it adds as well as the price').toContain('from 2 runs and $100.00 to 3 runs and $103.00');
+  await yes(askOf(blocked));
+  expect(await ledger.request(agent, run('d')), 'a run you never said yes to').toMatchObject({ status: 'BLOCKED', cause: 'budget', budget });
+  expect((await ledger.request(core, c)).status).toBe('started');
+  expect(await ledger.budget(budget)).toMatchObject({ runs: 3, runs_used: 3, cap_usd: 103 });
 });
 
 it('a yes to re-run failed inputs covers one run, and a run that overran counts as failed', async () => {

@@ -1,0 +1,24 @@
+{
+  "v": 4,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.answered",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "answer": "merge",
+    "plan_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "decision": "allow",
+    "via": "card",
+    "verified": true,
+    "on": {
+      "kind": "commit",
+      "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+    },
+    "token": "click-01K74FKZ",
+    "words": "ship it before the demo",
+    "image": null
+  }
+}

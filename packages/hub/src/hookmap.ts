@@ -158,7 +158,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
   const fields: NonNullable<HookMeta['fields']> = {};
-  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
+  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
   const tool = str(payload.tool_name);
   if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };

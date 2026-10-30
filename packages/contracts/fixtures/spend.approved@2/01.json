@@ -1,0 +1,19 @@
+{
+  "v": 2,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H0",
+  "kind": "spend.approved",
+  "data": {
+    "scope": {
+      "kind": "issue",
+      "ref": "windoliver/deepbuild#41"
+    },
+    "runs": 10,
+    "cap_usd": 10,
+    "ends": 1762609051123,
+    "via": "card"
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}

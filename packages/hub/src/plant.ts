@@ -5,7 +5,7 @@
 export type Plant =
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
-  | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project'
+  | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
   | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
@@ -33,6 +33,8 @@ export type Plant =
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
   | 'runs-disk-bytes'
+  // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
+  | 'line-at-stop'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
   | 'app-note-unrecorded' | 'app-note-as-person'
   // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
@@ -43,11 +45,13 @@ export type Plant =
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
   // contradicted claim deleted.
-  | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted';
+  | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
+  // #27's: deep_ask raised without its subject, so a repeated question reaches you.
+  | 'repeat-reaches-you';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
-  'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project',
+  'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
   'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
@@ -68,11 +72,13 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'line-at-stop',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
+  'repeat-reaches-you',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
