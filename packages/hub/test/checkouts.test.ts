@@ -1,7 +1,7 @@
 // The base-commit service's checkouts from where a session really sits (#31): a subfolder of the repo, and a dependency
 // folder git partly tracks. Real git, no hub; the host and leases only serve stand-ins, which these declare none of.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openCheckouts, type CheckoutsOptions } from '@deepbuild/gate';
@@ -41,6 +41,25 @@ describe('checkouts from where a session sits', () => {
     expect(existsSync(join(c.dir, 'node_modules/dep.js'))).toBe(true);
     const base = await s.baseCheckout({ worktree: from, onto: 'HEAD', claim: commit, own: [], dependencies: ['node_modules'], runs: ['r'] });
     expect(readFileSync(join(base.dir, 'root.txt'), 'utf8')).toBe('root\n');
+    await s.close();
+  }, 60_000);
+
+  it('a linked install that `node_modules/` doesn\'t ignore stays out of the snapshot, and the checkout gets a clone of it', async () => {
+    const { repo, service, git } = world();
+    git('commit', '-qm', 'base');
+    const s = await service;
+    const shared = join(repo, '..', 'shared');
+    mkdirSync(shared);
+    writeFileSync(join(shared, 'dep.js'), 'dep\\n');
+    rmSync(join(repo, 'node_modules'), { recursive: true });
+    symlinkSync(shared, join(repo, 'node_modules'));
+    writeFileSync(join(repo, 'root.txt'), 'edited\\n');
+    const { commit } = await s.snapshot(repo);
+    const c = await s.checkout({ worktree: repo, commit, dependencies: ['node_modules'], runs: ['r'] });
+    expect(lstatSync(join(c.dir, 'node_modules')).isDirectory(), 'a real folder, no link').toBe(true);
+    writeFileSync(join(c.dir, 'node_modules/x'), 'written\\n');
+    expect(existsSync(join(shared, 'x')), 'a write in the checkout stays there').toBe(false);
+    expect(existsSync(join(c.dir, 'node_modules/dep.js'))).toBe(true);
     await s.close();
   }, 60_000);
 
