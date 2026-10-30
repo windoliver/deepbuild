@@ -61,6 +61,10 @@
         "@types/better-sqlite3": {
           "spec": "7.6.13",
           "why": "Issue #14: the types of better-sqlite3 for the record package."
+        },
+        "@microsoft/api-extractor": {
+          "spec": "7.60.0",
+          "why": "Issue #139: API Extractor's report of the TypeScript extension API, compared in the local preflight with the copy committed in contracts/api-report, so an interface change shows in the pull request that made it."
         }
       }
     },

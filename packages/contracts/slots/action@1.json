@@ -1,6 +1,8 @@
 {
   "title": "action@1",
   "description": "An action a package registers, deep.registerAction(name, { declares, input }, fn): named as its manifest lists it, declaring read, change or send, with the input JSON Schema the host checks before fn runs.",
+  "x-since": "R2",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {
@@ -19,7 +21,11 @@
       "description": "The action, ext.<plugin>.<name>, as the package's manifest lists it."
     },
     "declares": {
-      "enum": ["read", "change", "send"],
+      "enum": [
+        "read",
+        "change",
+        "send"
+      ],
       "description": "What the action does: reads, changes something, or sends outside."
     }
   },

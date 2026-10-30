@@ -2277,7 +2277,7 @@ export interface DocPatched {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -2391,6 +2391,15 @@ export interface EvidenceStored {
 
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
+
+/** extension.contract@1 */
+export interface ExtensionContract {
+  stability?: "stable" | "preview";
+  requires?: {
+    preview?: Array<string>;
+  };
+  calls?: Array<string>;
+}
 
 /** extension.edges@1 */
 export interface ExtensionEdges {

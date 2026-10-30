@@ -1,6 +1,8 @@
 {
   "title": "task.closed@1",
   "description": "A task was closed by a verdict.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "tasks"
   ],

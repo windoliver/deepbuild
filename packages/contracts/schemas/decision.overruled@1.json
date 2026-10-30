@@ -1,6 +1,8 @@
 {
   "title": "decision.overruled@1",
   "description": "You overruled a saved decision on the trusted path, so it answers nothing from then on. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "decisions"
   ],

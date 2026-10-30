@@ -1,6 +1,8 @@
 {
   "title": "worktree.removed@1",
   "description": "You removed a worktree; nothing removes one on its own.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],
