@@ -238,13 +238,27 @@ impl Controller {
         }
     }
 
-    /// The record changed while the card shows. The card doesn't follow it: its scope and count are fixed at
-    /// presentation. The planted twin re-reads them.
+    /// The record changed while the card shows. Its scope and count stay as presented (the planted twin re-reads
+    /// them). What DeepBuild saw can change (a check finishing): the card shows it and, as any change to what it
+    /// shows, is presented again unarmed.
     pub fn record_changed(&mut self, events: &[Value], now: u64) {
+        let Some(fresh) = Model::read(events, &self.model.ask, now) else {
+            return;
+        };
         if self.faults.count_follows_record {
-            if let Some(fresh) = Model::read(events, &self.model.ask, now) {
-                self.model.scope = fresh.scope;
-            }
+            self.model.scope = fresh.scope.clone();
+        }
+        if fresh.fields != self.model.fields
+            && matches!(
+                self.machine.state(),
+                State::Presented { .. } | State::Armed { .. }
+            )
+        {
+            self.model.fields = fresh.fields;
+            self.machine.present(now, self.slot);
+            self.send_waiting = None;
+            self.holding = None;
+            self.record("presented", now);
         }
     }
 
@@ -1053,5 +1067,48 @@ mod tests {
             Did::Answered
         );
         assert_eq!(card.take_answers()[0]["option"], "green");
+    }
+
+    #[test]
+    fn a_check_finishing_while_the_card_shows_changes_what_it_says_and_presents_it_again_unarmed() {
+        let start = json!({"kind": "run.started", "writer": "core", "data": {"run": "r1", "check": "unit", "claim": "c", "commit": "abc"}});
+        let mut events = vec![taste("A"), start];
+        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
+        assert!(card
+            .lines()
+            .contains(&"look at: unit, still running".to_owned()));
+        card.tick(NOW + ARM_AFTER);
+        let first = card.seq();
+        assert_eq!(card.state_name(), "armed");
+
+        // A change the card doesn't show leaves it armed on the same presentation.
+        events.push(json!({"kind": "note.added", "writer": "core", "data": {}}));
+        card.record_changed(&events, NOW + ARM_AFTER + 10);
+        assert_eq!((card.state_name(), card.seq()), ("armed", first));
+
+        events.push(json!({"kind": "run.finished", "writer": "core", "data": {"run": "r1", "check": "unit", "outcome": "failed", "points_to": "src/a.rs:3", "findings": []}}));
+        card.record_changed(&events, NOW + ARM_AFTER + 20);
+        let lines = card.lines();
+        assert!(
+            lines.contains(&"checks: 0 of 1 passed".to_owned()),
+            "{lines:?}"
+        );
+        assert!(
+            lines.contains(&"look at: src/a.rs:3".to_owned()),
+            "{lines:?}"
+        );
+        assert_eq!(card.state_name(), "presented");
+        assert_ne!(card.seq(), first);
+        assert_eq!(
+            click(&mut card, &events, NOW + ARM_AFTER + 30, Target::Option(1)),
+            Did::Refused,
+            "a press on what it said before is refused"
+        );
+        let rows: Vec<String> = card
+            .take_usage()
+            .iter()
+            .map(|row| row["row"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(rows, ["presented", "presented", "refused"]);
     }
 }
