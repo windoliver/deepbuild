@@ -1731,6 +1731,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
+ "quickjs-jit-runtime",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -1921,6 +1922,17 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "vello_cpu",
+]
+
+[[package]]
+name = "deep-panel-host"
+version = "0.0.0"
+dependencies = [
+ "deep-app",
+ "gpui-kit",
+ "gpui-shell",
+ "quickjs-jit-runtime",
+ "serde_json",
 ]
 
 [[package]]
@@ -7102,7 +7114,6 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-runtime"
 version = "0.12.11"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7a54440ac060a391b8baea7e9a3cf1393"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
