@@ -29,7 +29,7 @@ import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, Environm
 import { canonicalize, checkManifest, frozenDigests, hubSlots, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
-import type { Cleanup, Supervisor } from '@deepbuild/supervisor';
+import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
@@ -360,11 +360,11 @@ function declaredPath(schema: unknown, path: string): string {
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
 async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
+  let disarm = (): void => undefined;
   try {
-    return await Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Overran(`${what} took longer than ${ms} ms`)), ms); })]);
+    return await Promise.race([work, new Promise<never>((_, reject) => { disarm = after(ms, () => reject(new Overran(`${what} took longer than ${ms} ms`))); })]);
   } finally {
-    clearTimeout(timer);
+    disarm();
   }
 }
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
@@ -1360,6 +1360,8 @@ class Host implements ExtensionHost {
   }
   private async hookRequest(request: HookRequest): Promise<HookReply> {
     const { kind, deadline } = request;
+    const bad = badDeadline('deadline', deadline);
+    if (bad) throw Error(`a hook request's ${bad}`);
     const failed: HookReply['failed'] = [];
     const contributions: HookContribution[] = [];
     await Promise.all([...this.exts.values()].filter((ext) => ext.live && ext.subscribed.has(kind)).map(async (ext) => {
@@ -1461,6 +1463,9 @@ class Host implements ExtensionHost {
     return [...new Set([...this.exts.values()].flatMap((ext) => [...ext.subscribed]))].sort();
   }
   async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult> {
+    // Refused before any package is asked.
+    const bad = badDeadline('deadline', ctx.deadline);
+    if (bad) throw Error(`a check run's ${bad}`);
     const ext = this.kindOwner(kind);
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
     try {

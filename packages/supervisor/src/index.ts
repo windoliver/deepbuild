@@ -6,6 +6,7 @@ export { HELPER } from './procs.js';
 export { seatbelt } from './seatbelt.js';
 export { plantedBackends, sandboxSuite, type SuiteFixtures, type SuiteResult } from './suite.js';
 export { openSupervisor } from './supervisor.js';
+export { after, badDeadline } from './timer.js';
 export type {
   Cleanup, Exit, Grant, Host, HostFacts, Launch, Plant, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor,
   SupervisorOptions,
