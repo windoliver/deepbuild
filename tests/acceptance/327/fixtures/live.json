@@ -1,0 +1,185 @@
+{
+  "taste": {
+    "v": 4,
+    "id": "01MD3270000000000000000000",
+    "kind": "ask.created",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "kind": "taste",
+      "question": "Which header colour on the checkout total?",
+      "options": [
+        {
+          "id": "blue",
+          "label": "Blue header",
+          "decision": "none"
+        },
+        {
+          "id": "green",
+          "label": "Green header",
+          "decision": "none"
+        }
+      ],
+      "recommended": "blue",
+      "deadline": 1800259200000,
+      "fallback": "you",
+      "default": "blue",
+      "provisional": false,
+      "owner": "you",
+      "key": "539c4df1e78db9007c78ba41531fadba910ddaa34b2327b1ae02923e1ff0cf3d",
+      "pinned_to": {
+        "kind": "commit",
+        "ref": "e9cef72c1b547c88386cb22fb5370f80c854d76c"
+      },
+      "subject": {
+        "screen": "checkout",
+        "element": "total"
+      }
+    }
+  },
+  "taste-abc": {
+    "v": 4,
+    "id": "01MD3270000000000000000000",
+    "kind": "ask.created",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "kind": "taste",
+      "question": "Which header colour on the checkout total?",
+      "options": [
+        {
+          "id": "a",
+          "label": "A: amber header",
+          "decision": "none"
+        },
+        {
+          "id": "c",
+          "label": "C: cobalt header",
+          "decision": "none"
+        },
+        {
+          "id": "b",
+          "label": "B: bone header",
+          "decision": "none"
+        }
+      ],
+      "recommended": "b",
+      "deadline": 1800259200000,
+      "fallback": "you",
+      "default": "b",
+      "provisional": false,
+      "owner": "you",
+      "key": "539c4df1e78db9007c78ba41531fadba910ddaa34b2327b1ae02923e1ff0cf3d",
+      "pinned_to": {
+        "kind": "commit",
+        "ref": "d9e92c88c7671ec1fc084264464dc2a2a9f01dbe"
+      },
+      "subject": {
+        "screen": "checkout",
+        "element": "total"
+      }
+    }
+  },
+  "push": {
+    "v": 4,
+    "id": "01MD3270000000000000000000",
+    "kind": "ask.created",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "kind": "authority",
+      "question": "Push feat/cart to origin?",
+      "options": [
+        {
+          "id": "approve",
+          "label": "Allow",
+          "decision": "allow"
+        },
+        {
+          "id": "decline",
+          "label": "Decline",
+          "decision": "deny"
+        }
+      ],
+      "recommended": null,
+      "deadline": 1800086400000,
+      "fallback": "you",
+      "default": "decline",
+      "provisional": false,
+      "owner": "you",
+      "key": "7c1d96501bc894a0441714b1929c5c196f699b5a0c688c441c3226d9a8a6460e",
+      "pinned_to": {
+        "kind": "commit",
+        "ref": "e84470ae7c7fc4350e46a2eb3791c200e91683f6"
+      },
+      "subject": {
+        "effect": "push",
+        "target": {
+          "kind": "branch",
+          "ref": "branch:feat/cart",
+          "owner": "thread:01MD327SESS000000000000S01"
+        },
+        "change": {
+          "kind": "feature",
+          "lines": 42,
+          "paths": [
+            "src/cart/total.ts"
+          ]
+        }
+      }
+    }
+  },
+  "plan.proposed": {
+    "v": 1,
+    "id": "01MD3270000000000000000000",
+    "kind": "plan.proposed",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "ask": "ask:01MD327E00000000000000000",
+      "steps": [
+        {
+          "does": "git push origin feat/cart",
+          "changes": [
+            "origin/feat/cart"
+          ],
+          "undo": "git push --force-with-lease to the old tip",
+          "public": true,
+          "cost": 0
+        }
+      ],
+      "diff": "0c637f43dfad19defaacd6e5645a0fb74c418ad44bff49c4e6af15bab1f3c2fc",
+      "hash": "eb80bfbc1a5620422be3342e1ed49ebf0b0505ba26c2a150f84c2cbb998b8ab4"
+    }
+  },
+  "ask.answered": {
+    "v": 2,
+    "id": "01MD3270000000000000000000",
+    "kind": "ask.answered",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "answer": "blue",
+      "plan_hash": null,
+      "decision": "none",
+      "via": "card",
+      "verified": true,
+      "on": {
+        "kind": "commit",
+        "ref": "e9cef72c1b547c88386cb22fb5370f80c854d76c"
+      },
+      "token": null
+    },
+    "subject": "ask:01MD327E00000000000000000"
+  }
+}
