@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "call.overrun",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "subject": "session:5a2d3e4f111142228333444455556666",
+  "data": {
+    "call": "toolu_01ABCDEF",
+    "kind": "shell",
+    "command": "npm test",
+    "expected_ms": 60000,
+    "ran_ms": 61000,
+    "deadline": "none"
+  }
+}
