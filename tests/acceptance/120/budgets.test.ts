@@ -6,15 +6,13 @@
 // carries the overrun line (its call has run 30 minutes of hub time) and one that carries none, medians over 150 calls
 // each; the instrument first checks that the "with" replies do carry a line, so a hub that says nothing can't pass by
 // costing nothing. The merge base's hub answers the same lines with none; its round trip is the reading nothing may
-// regress from. An idle session is a Claude Code session that promised a check and stopped, its waiter waiting: the
-// waiter's process group and the hub use no CPU over 3 s. Readings count only on a reference Mac (Mac15,7 or Mac15,12),
+// regress from. The idle half is budgets-idle-redraft.test.ts (AC9-IDLE-REDRAFT.md). Readings count only on a reference Mac (Mac15,7 or Mac15,12),
 // Low Power Mode off, thermal state nominal, not loaded past its core count; anywhere else the test skips as
 // INCONCLUSIVE with the readings, never PASS.
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, type TestContext } from 'vitest';
 import {
-  AC9, allEvents, awaitEvent, bash, begin, callId, cleanup, CURRENT, edits, groupOf, hasDuration, hubWithSetup, inconclusiveIfLoaded, judge, load, makeHome, median,
-  mergeBase, MINUTE, moveOn, newSession, payload, processes, QUOTE, rawHook, rawOutput, REPO, stop, stopHub, waitFor, wakeupEvents, type Checkout, type Hub, type Session,
+  AC9, awaitEvent, bash, begin, callId, cleanup, CURRENT, hasDuration, hubWithSetup, inconclusiveIfLoaded, judge, load, makeHome, median, mergeBase, MINUTE, moveOn, newSession, payload, rawHook, rawOutput, REPO, stopHub, type Checkout, type Session,
 } from './helpers.ts';
 
 afterAll(cleanup, 120_000);
@@ -22,7 +20,6 @@ afterAll(cleanup, 120_000);
 const FILE = 'tests/acceptance/120/budgets.test.ts';
 const LINE_LIMIT_MS = 1;
 const CALLS = 150;
-const IDLE_S = 3;
 
 interface Reading { checkout: string; withLine: number[]; without: number[]; lines: number; loads: { one: number; cores: number }[] }
 const shownReading = (r: Reading) => `${r.checkout}: with the line median ${median(r.withLine).toFixed(2)} ms over ${r.withLine.length} (${r.lines} carried a line), without ${median(r.without).toFixed(2)} ms over ${r.without.length}; load ${r.loads.map((l) => l.one.toFixed(1)).join(' to ')} on ${r.loads[0]?.cores} cores`;
@@ -109,34 +106,6 @@ describe(`${AC9} Budgets, on the reference Mac in the local preflight, compared 
     if (judged.verdict === 'INCONCLUSIVE') ctx.skip(`INCONCLUSIVE ${judged.text}`);
   }, 7_200_000);
 
-  it(`${AC9} on the reference Mac, an idle session that promised a check costs no CPU while it waits: its waiter's process group and the hub use none over ${IDLE_S} s`, async (ctx: TestContext) => {
-    const h = makeHome();
-    const hub: Hub = await hubWithSetup(h);
-    const s = newSession(h);
-    const { claude } = await begin(h, s, 'Deploy the fix and make sure it is up.');
-    await edits(claude, s);
-    await stop(claude, s, QUOTE);
-    const waiter = await waitFor(async () => (await claude.liveWaiters(s.id))[0], 30_000, 'the waiter, waiting once the stop went through');
-    // The instrument: the session waits on a promised check, which the record carries.
-    const wakeup = await waitFor(async () => wakeupEvents(await allEvents(hub), s.id)[0], 15_000, 'the wake-up recorded with the quote').catch(() => undefined);
-    expect(wakeup, `${AC9} the idle session's promise ${JSON.stringify(QUOTE)} is recorded as a wake-up, so it waits on something; the session's events: ${(await allEvents(hub)).filter((e) => e.session === s.id).map((e) => e.kind).join(', ')}`).toBeDefined();
-    const loads = [load()];
-    const cpu = (table = processes()) => ({ waiter: groupOf(waiter.pid, table).reduce((sum, p) => sum + p.cpuS, 0), hub: table.find((p) => p.pid === hub.pid)?.cpuS ?? NaN });
-    const samples: { waiter: number; hub: number }[] = [];
-    for (let i = 0; i < 5; i++) {
-      const before = cpu();
-      await new Promise((resolve) => setTimeout(resolve, IDLE_S * 1000));
-      const after = cpu();
-      samples.push({ waiter: after.waiter - before.waiter, hub: after.hub - before.hub });
-    }
-    loads.push(load());
-    console.log(`${AC9} idle CPU over ${IDLE_S} s, five runs: waiter ${samples.map((x) => x.waiter.toFixed(2)).join(', ')} s; hub ${samples.map((x) => x.hub.toFixed(2)).join(', ')} s`);
-    inconclusiveIfLoaded(ctx, loads, `readings only: ${JSON.stringify(samples)}`);
-    expect(samples.some((x) => Number.isNaN(x.hub) || Number.isNaN(x.waiter)), 'ps read both the waiter and the hub').toBe(false);
-    // No CPU: the waiter's group used none (ps counts hundredths of a second); the hub under 0.5% of a core (its idle budget).
-    expect(Math.max(...samples.map((x) => x.waiter)), `${AC9} the waiter uses no CPU while it waits: ${JSON.stringify(samples)}`).toBeLessThanOrEqual(0.01);
-    expect(Math.max(...samples.map((x) => x.hub)), `${AC9} the hub stays under 0.5% of a core while the session waits: ${JSON.stringify(samples)}`).toBeLessThanOrEqual(0.005 * IDLE_S + 0.01);
-    await claude.end();
-    await stopHub(hub);
-  }, 300_000);
+  // The idle half (an idle session costs no CPU while it waits) is budgets-idle-redraft.test.ts, the blind redraft
+  // that replaced this file's first draft of it (AC9-IDLE-REDRAFT.md).
 });
