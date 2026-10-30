@@ -47,41 +47,7 @@ mod suite {
         }
     }
 
-    fn ac1_a_card_that_shows_no_scope_fails_naming_the_scope() {
-        let message = caught("NoScope", || {
-            let mut replica = Replica::planted(&fixture("base.events.jsonl"), Planted::NoScope);
-            let first = raise_taste(&mut replica, S1, "Darker header on the checkout total?");
-            let _second = raise_taste(&mut replica, S2, "Header colour over the total?");
-            let card = replica.present(0, &first);
-            assert!(
-                card.text.to_lowercase().contains("repo") && card.text.contains("shop"),
-                "{first}: before it arms the card doesn't say in words that the answer is saved for the repo shop (no scope); text: {:?}",
-                card.text
-            );
-        });
-        assert!(message.contains("scope"), "the failure names the scope: {message}");
-    }
-
-    fn ac1_a_count_that_changes_while_it_shows_fails_naming_the_count() {
-        let message = caught("CountFollowsRecord", || {
-            let mut replica = Replica::planted(&fixture("base.events.jsonl"), Planted::CountFollowsRecord);
-            let first = raise_taste(&mut replica, S1, "Darker header on the checkout total?");
-            let _second = raise_taste(&mut replica, S2, "Header colour over the total?");
-            let _third = raise_taste(&mut replica, S3, "Which header on the total line?");
-            let card = replica.present(0, &first);
-            assert!(card.text.contains("2 more"), "{first}: the card says {:?}, not that it answers 2 more", card.text);
-            replica.advance(ms(200));
-            let fourth = raise_taste(&mut replica, S2, "Header on the total, take four?");
-            replica.advance(ms(100));
-            let during = replica.card_seen(0).unwrap();
-            assert!(
-                during.text.contains("2 more"),
-                "{first}: the count changed while the card showed, after {fourth} came to match; text: {:?}",
-                during.text
-            );
-        });
-        assert!(message.contains("count changed"), "the failure names the count: {message}");
-    }
+    // AC1's wrong programs run in ac1_redraft.rs, the test redrafted blind after a dispute.
 
     fn ac2_a_card_that_maps_the_click_to_the_records_index_delivers_b_and_fails_naming_the_option() {
         let message = caught("ClickByRecordIndex", || {
@@ -224,8 +190,6 @@ mod suite {
 
     pub fn run() -> i32 {
         super::common::run(&[
-            ("ac1_a_card_that_shows_no_scope_fails_naming_the_scope", ac1_a_card_that_shows_no_scope_fails_naming_the_scope),
-            ("ac1_a_count_that_changes_while_it_shows_fails_naming_the_count", ac1_a_count_that_changes_while_it_shows_fails_naming_the_count),
             ("ac2_a_card_that_maps_the_click_to_the_records_index_delivers_b_and_fails_naming_the_option", ac2_a_card_that_maps_the_click_to_the_records_index_delivers_b_and_fails_naming_the_option),
             ("ac3_a_notification_action_that_writes_an_answer_fails", ac3_a_notification_action_that_writes_an_answer_fails),
             ("ac6_a_card_that_leaves_out_the_default_fails_naming_the_kind", ac6_a_card_that_leaves_out_the_default_fails_naming_the_kind),

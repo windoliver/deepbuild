@@ -40,45 +40,7 @@ mod suite {
 
     use super::common::*;
 
-    // ---- AC1 #327.fab7d30b: the card says its scope and how many more it answers; the receipt lists them.
-
-    fn ac1_the_card_says_its_scope_and_that_it_answers_2_more_and_the_receipt_lists_a_third() {
-        let mut replica = Replica::open(&fixture("base.events.jsonl"));
-        let first = raise_taste(&mut replica, S1, "Darker header on the checkout total?");
-        let _second = raise_taste(&mut replica, S2, "Header colour over the total?");
-        let _third = raise_taste(&mut replica, S3, "Which header on the total line?");
-        let card = replica.present(0, &first);
-        // Before it arms: the scope in words, and the count.
-        assert!(
-            card.text.to_lowercase().contains("repo") && card.text.contains("shop"),
-            "{first}: before it arms the card doesn't say in words that the answer is saved for the repo shop; text: {:?}",
-            card.text
-        );
-        assert!(card.text.contains("2 more"), "{first}: with two matching asks open the card doesn't say it answers 2 more; text: {:?}", card.text);
-        // A fourth comes to match while the card shows: the card doesn't change.
-        replica.advance(ms(200));
-        let fourth = raise_taste(&mut replica, S2, "Header on the total, take four?");
-        replica.advance(ms(100));
-        let during = replica.card_seen(0).expect("the card is still up");
-        assert!(during.text.contains("2 more"), "{first}: the count changed while the card showed, after {fourth} came to match; text: {:?}", during.text);
-        assert_eq!(during.seq, card.seq, "{first}: the card was presented again when {fourth} came to match");
-        replica.advance(ms(ARM_AFTER));
-        let armed = replica.card_seen(0).expect("the card is still up");
-        assert_eq!(armed.state, "armed", "{first}: {armed:?}");
-        click(&mut replica, 0, On::Option(option_index(&armed, "Green header")));
-        let answers = answers_for(&replica, &first);
-        assert_eq!(answers.len(), 1, "{first}: the click sent one answer: {answers:?}");
-        assert_eq!(answers[0]["option"], "green", "{first}: {answers:?}");
-        // The receipt: one line with Undo, listing the one that came to match while the card showed.
-        let receipt = replica.card_seen(0).expect("the answered card keeps its slot as a receipt");
-        assert_eq!(receipt.state, "answered", "{first}: {receipt:?}");
-        assert!(receipt.text.contains("Undo"), "{first}: the receipt has no Undo; text: {:?}", receipt.text);
-        assert!(
-            receipt.text.contains("Header on the total, take four?") || receipt.text.contains(&fourth),
-            "{first}: the receipt doesn't list {fourth}, which came to match while the card showed; text: {:?}",
-            receipt.text
-        );
-    }
+    // ---- AC1 #327.fab7d30b: redrafted blind after a dispute; see ac1_redraft.rs.
 
     // ---- AC2 #327.da06e3b1: a hardware click on C sends option C, never the record's index.
 
@@ -534,7 +496,6 @@ mod suite {
 
     pub fn run() -> i32 {
         super::common::run(&[
-            ("ac1_the_card_says_its_scope_and_that_it_answers_2_more_and_the_receipt_lists_a_third", ac1_the_card_says_its_scope_and_that_it_answers_2_more_and_the_receipt_lists_a_third),
             ("ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first", ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first),
             ("ac3_with_the_window_hidden_every_ask_notifies_with_its_question_default_and_when", ac3_with_the_window_hidden_every_ask_notifies_with_its_question_default_and_when),
             ("ac4_a_click_inside_the_arm_interval_never_answers", ac4_a_click_inside_the_arm_interval_never_answers),
