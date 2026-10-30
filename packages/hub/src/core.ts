@@ -2990,17 +2990,17 @@ export class Core {
     return { device };
   }
 
+  /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
+  private async notAnAgent(context: CallContext, method: string): Promise<void> {
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent feeds its own numbers. Run it from your own terminal.`, method));
+  }
   /**
    * `deep install` (#351): installs the package in a folder once the OS confirms you, the prompt naming it, after the
    * CLI showed its source and permissions; with `trust_key`, the prompt names the publisher key its envelope names
    * too, and your confirmation trusts that key for the package first. A deep command inside an agent's process tree
    * acts as that session, and no agent installs a package. The installer's refusal comes back as the result.
    */
-  /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
-  private async notAnAgent(context: CallContext, method: string): Promise<void> {
-    const agent = await this.agentAbove(context.peer);
-    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent feeds its own numbers. Run it from your own terminal.`, method));
-  }
   private async install(params: Obj, context: CallContext): Promise<Obj> {
     const from = params.from;
     if (typeof from !== 'string' || !isAbsolute(from)) throw new Refused(refusal('type', '/params/from', 'Give the package folder as an absolute path.', from));

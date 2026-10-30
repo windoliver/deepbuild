@@ -2,7 +2,7 @@
 // approval wait, and pricing by exact model.
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, staleRuns, type RecordEvent } from '../src/index.js';
+import { billingMode, countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, staleRuns, type RecordEvent } from '../src/index.js';
 
 const MIN = 60_000;
 let n = 0;
@@ -96,6 +96,14 @@ describe('spend from the record', () => {
     expect(find(events, 'review.wait')?.value).toBe(39);
     const status = [person(0, 1), usage(1, 't', 1, paid), ev('user.ask', 2, 'A', { msg: 2, text: 'all done?', tasks: [], from: 'person', no_model: true }), start(3, false)];
     expect(find(status, 'tokens.session')?.complete).toBe(true);
+  });
+
+  it('another agent\'s key in the shell doesn\'t bill this session', () => {
+    const begun = (agent: string, billing: object) => ev('session.start', 0, 'A', { agent, billing });
+    expect(billingMode(begun('claude-code', { OPENAI_API_KEY: true, ANTHROPIC_API_KEY: false }))).toBe('plan');
+    expect(billingMode(begun('claude-code', { OPENAI_API_KEY: false, ANTHROPIC_API_KEY: true }))).toBe('api_key');
+    expect(billingMode(begun('codex', { OPENAI_API_KEY: false, ANTHROPIC_API_KEY: true }))).toBe('plan');
+    expect(billingMode(begun('codex', { OPENAI_API_KEY: true }))).toBe('api_key');
   });
 
   it('your time answering at a code-changing stop isn\'t the fast lane\'s', () => {
