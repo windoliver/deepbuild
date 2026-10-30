@@ -17,7 +17,7 @@
     "conformance": "pi/launch/flags",
     "readOnlyJob": {
       "readBy": "DeepBuild's own jobs: read tools only, none of the user's extensions, skills or project files, no session file, prompt on stdin",
-      "args": ["--mode", "json", "-p", "--tools", "read,grep,find,ls", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-approve", "--no-session", "--offline"],
+      "args": ["--mode", "json", "-p", "--tools", "read,grep,find,ls", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-approve", "--no-context-files", "--no-session", "--offline"],
       "prompt": "stdin"
     }
   },
@@ -68,6 +68,7 @@
       "authentication": "sign_in_required",
       "unauthorized": "sign_in_required",
       "invalid api key": "sign_in_required",
+      "no api key": "sign_in_required",
       "429": "rate_limited",
       "rate limit": "rate_limited",
       "overloaded": "rate_limited",

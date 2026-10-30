@@ -2693,6 +2693,11 @@ export class Core {
       this.writeCursors();
       return true;
     }
+    // pi resumes a session from a new process, by its file: its start takes the session over once the old process is gone.
+    if (meta.agent === 'pi' && meta.event === 'SessionStart' && transcript === session.transcript && (await this.startOf(session.pid, true)) !== session.start) {
+      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd });
+      return true;
+    }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
   }
 
