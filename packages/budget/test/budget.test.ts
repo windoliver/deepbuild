@@ -63,6 +63,7 @@ const wrap = (store: RecordStore): RecordStore => ({
   resolve: (handle) => store.resolve(handle),
   keep: (connection, file) => store.keep(connection, file),
   rollBack: (connection, what) => store.rollBack(connection, what),
+  backup: (path) => store.backup(path),
   close: () => store.close(),
 });
 const approve = (cap: number): Promise<string> => ledger.approve(card, { scope: { kind: 'issue', ref: ISSUE }, cap_usd: cap, ends: T0 + 30 * DAY });
