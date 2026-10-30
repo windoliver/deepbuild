@@ -1,12 +1,38 @@
 // What the blind suite leaves open, on real pi with the real package and hub: only the model is scripted. Without
 // DEEP_PI_CLI (pi's dist/cli.js) these don't run; the #40 suite, which blocks on it, stands for the package then.
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CLI, Client, NODE, Pi, answer, askCreated, askStep, childEnv, cleanup, openWorld, outcomesOf, pendingAsk, run, sleep, startHub, tempDir, waitFor, word } from '../../../tests/acceptance/40/helpers.ts';
 
 afterEach(cleanup, 60_000);
+
+/** Only what the package sees of a hub: the acknowledgement, then the reply to each hook, as late as a slow check makes it. */
+async function fakeHub(home: string, answer: (event: string, payload: Record<string, unknown>) => { stdout?: string; ms?: number }): Promise<net.Server> {
+  mkdirSync(join(home, '.deepbuild'), { recursive: true });
+  const server = net.createServer((sock) => {
+    sock.on('error', () => undefined);
+    sock.write('{"v":1,"hub":true}\n');
+    let buffer = '';
+    sock.setEncoding('utf8').on('data', (chunk: string) => {
+      buffer += chunk;
+      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+        const m = JSON.parse(buffer.slice(0, i)) as { hello?: string; event?: string; id?: string; payload?: Record<string, unknown> };
+        buffer = buffer.slice(i + 1);
+        if (m.hello) sock.write('{"v":1,"role":"mcp"}\n');
+        else if (m.event) {
+          sock.write('{"v":1,"ack":true}\n');
+          const { stdout = '', ms = 0 } = answer(m.event, m.payload ?? {});
+          setTimeout(() => { if (!sock.destroyed) sock.write(`${JSON.stringify({ v: 1, exit: 0, stderr: '', stdout })}\n`); }, ms);
+        } else setTimeout(() => { if (!sock.destroyed) sock.write(`${JSON.stringify({ v: 1, id: m.id, error: {} })}\n`); }, 1000);
+      }
+    });
+  });
+  await new Promise<void>((done) => server.listen(join(home, '.deepbuild', 'hub.sock'), done));
+  return server;
+}
+const BLOCK = '{"decision":"block","reason":"Check failed: again."}';
 
 describe.skipIf(!process.env.DEEP_PI_CLI)('the pi package', () => {
   it('runs with no hub, and adds no wait', async () => {
@@ -127,40 +153,69 @@ describe.skipIf(!process.env.DEEP_PI_CLI)('the pi package', () => {
     process.kill(hub.pid);
   }, 240_000);
 
+  it('a judged stop\'s verdict line reaches the person, and not the model', async () => {
+    const tmp = tempDir();
+    const [home, cwd] = [join(tmp, 'h'), join(tmp, 'w')];
+    mkdirSync(cwd);
+    const server = await fakeHub(home, (event) => (event === 'agent_before_settle' ? { stdout: '{"systemMessage":"PASS: the checks ran."}' } : {}));
+    const pi = await Pi.start(home, cwd, { steps: [{ text: 'first' }, { text: 'second' }] });
+    await pi.call({ type: 'prompt', message: 'go' });
+    await pi.until('agent_settled', 1, 60_000);
+    await sleep(200);
+    expect(pi.events.filter((e) => e.type === 'extension_ui_request' && e.method === 'notify').map((e) => e.message)).toEqual(['PASS: the checks ran.']);
+    expect(pi.requests(), 'the model read nothing of it').toHaveLength(1);
+    await pi.stop();
+    server.close();
+  }, 120_000);
+
+  it('a stop sent back again and again ends at the cap, and the stop says what the model said', async () => {
+    const tmp = tempDir();
+    const [home, cwd] = [join(tmp, 'h'), join(tmp, 'w')];
+    mkdirSync(cwd);
+    const said: unknown[] = [];
+    const server = await fakeHub(home, (event, payload) => {
+      if (event !== 'agent_before_settle') return {};
+      said.push(payload.last_assistant_message);
+      return { stdout: BLOCK };
+    });
+    const pi = await Pi.start(home, cwd, { steps: [{ text: 'I fixed src/nope.ts:999.' }] });
+    await pi.call({ type: 'prompt', message: 'go' });
+    await pi.until('agent_settled', 1, 60_000);
+    expect(pi.requests(), 'the first request and eight send-backs').toHaveLength(9);
+    expect(said[0]).toBe('I fixed src/nope.ts:999.');
+    await pi.stop();
+    server.close();
+  }, 120_000);
+
+  it('a run that failed settles, however the hub answers its stop', async () => {
+    const tmp = tempDir();
+    const [home, cwd] = [join(tmp, 'h'), join(tmp, 'w')];
+    mkdirSync(cwd);
+    const server = await fakeHub(home, (event) => (event === 'agent_before_settle' ? { stdout: BLOCK } : {}));
+    const pi = await Pi.start(home, cwd, { steps: [{ error: 'the scripted model has nothing to say' }] });
+    await pi.call({ type: 'prompt', message: 'go' });
+    await pi.until('agent_settled', 1, 60_000);
+    expect(pi.requests()).toHaveLength(1);
+    await pi.stop();
+    server.close();
+  }, 120_000);
+
   it('a stop the hub holds past 15 s still gets its send-back', async () => {
     const tmp = tempDir();
     const [home, cwd] = [join(tmp, 'h'), join(tmp, 'w')];
-    mkdirSync(join(home, '.deepbuild'), { recursive: true });
     mkdirSync(cwd);
-    // Only what a slow check looks like from the package: the acknowledgement, then the reply much later.
-    const server = net.createServer((sock) => {
-      sock.on('error', () => undefined);
-      sock.write('{"v":1,"hub":true}\n');
-      let buffer = '';
-      sock.setEncoding('utf8').on('data', (chunk: string) => {
-        buffer += chunk;
-        for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-          const m = JSON.parse(buffer.slice(0, i)) as { hello?: string; event?: string; id?: string };
-          buffer = buffer.slice(i + 1);
-          if (m.hello) sock.write('{"v":1,"role":"mcp"}\n');
-          else if (m.event) {
-            sock.write('{"v":1,"ack":true}\n');
-            const block = m.event === 'agent_before_settle' && !sent;
-            if (block) sent = true;
-            setTimeout(() => { if (!sock.destroyed) sock.write(`${JSON.stringify({ v: 1, exit: 0, stderr: '', stdout: block ? '{"decision":"block","reason":"Check failed: again."}' : '' })}\n`); }, block ? 17_000 : 0);
-          } else setTimeout(() => { if (!sock.destroyed) sock.write(`${JSON.stringify({ v: 1, id: m.id, error: {} })}\n`); }, 1000);
-        }
-      });
-    });
     let sent = false;
-    await new Promise<void>((done) => server.listen(join(home, '.deepbuild', 'hub.sock'), done));
+    const server = await fakeHub(home, (event) => {
+      if (event !== 'agent_before_settle' || sent) return {};
+      sent = true;
+      return { stdout: BLOCK, ms: 17_000 };
+    });
     const pi = await Pi.start(home, cwd, { steps: [{ text: 'first' }, { text: 'second' }] });
     await pi.call({ type: 'prompt', message: 'go' });
     await pi.until('agent_settled', 1, 60_000);
     expect(pi.requests(), 'the send-back continued the run').toHaveLength(2);
     await pi.stop();
     server.close();
-    rmSync(join(home, '.deepbuild', 'hub.sock'), { force: true });
   }, 120_000);
 
   it('an answer refused for a replaced session stays refused when that session resumes', async () => {

@@ -2089,7 +2089,8 @@ export class Core {
     let proceeded = false;
     try {
       // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
-      const proceed = await this.holds.proceed(meta, until);
+      // pi's package places its own answers: a reply here would hand them over a second time.
+      const proceed = r.places ? undefined : await this.holds.proceed(meta, until);
       if (proceed) {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold'));
