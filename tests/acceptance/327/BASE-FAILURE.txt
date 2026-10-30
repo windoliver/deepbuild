@@ -1,0 +1,140 @@
+Base commit: 5a6d09a4 (Merge pull request #785 …; origin/main, no implementation of #327)
+Date:        2026-10-29
+Machine:     darwin-arm64; Node 24.22.0; rustc 1.99.1 (rust-toolchain.toml); the workspaces built from the checkout
+             (npm run build --workspaces); the two [[test]] entries this folder adds to crates/deep-replica/Cargo.toml
+             in place. Hubs and homes under /tmp/dh16-* (the #16 helpers), removed by their cleanup.
+Commands:    node node_modules/typescript/bin/tsc -p tests/acceptance/327/tsconfig.json          exit 0 (0 errors)
+             node node_modules/vitest/vitest.mjs run --root tests/acceptance/327 --no-file-parallelism --reporter=json
+                                                                                                exit 1
+             cargo test --locked -p deep-replica --test acceptance_327_card                      exit 101
+             cargo test --locked -p deep-replica --test acceptance_327_planted                   exit 101
+Trimmed:     stack frames past the test's own line, rustc's caret drawings and the Compiling lines are cut.
+
+== vitest: 3 files, 15 tests, 8 passed, 7 failed
+
+scope.test.ts (AC1 #327.fab7d30b)
+  FAILED  with two matching asks open the card says it answers 2 more; answering closes exactly those two …
+          AssertionError: with two matching asks open: the card ask:01M61639G0Z19TK76PYSK5JDM5 says, before it arms,
+          what the answer will be saved as (Card.saves: {scope, also}); got undefined: expected undefined to be truthy
+            at savesOf (tests/acceptance/327/scope.test.ts:34)
+          → the base's Card has no `saves`: the card says nothing about the scope or the count.
+  passed  wrong program: a card that shows no scope fails this test
+          → at the base every card shows no scope, so the planted one is "caught" by the same failure; it proves
+            something only once a right card exists beside it.
+  FAILED  wrong program: a count that changes while it shows fails this test
+          AssertionError: the failure names the scope or the count: expected 'with two matching asks open: the card…'
+          to match /count|answers \d+ more/
+            at tests/acceptance/327/scope.test.ts:115
+          → the base can't reach the count (it fails on the scope first), so this plant isn't judged there.
+
+answers.test.ts
+  AC2 #327.da06e3b1
+  passed  the app's answer C to a taste call (options A, C, B in the record; B recommended) records option C in
+          ask.answered, the held Stop continues with C's ID and label, and delivery.outcome says delivered
+          → the hub half holds at the base (#34's ask.answer, #25's stop hold): regression protection. The half the
+            criterion adds, the card's click on C sent as option c and not the record's index, is card.rs
+            ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first, which doesn't compile at the
+            base (below), and planted.rs ac2_….
+  AC7 #327.b12554f8
+  FAILED  an option with your words as its reason: the agent gets the option and the words once, and ask.answered
+          keeps the words beside the decision
+          AssertionError: the words are kept with the answer, beside its decision (ask.answered.data.words); got
+          {"answer":"green","plan_hash":null,"decision":"none","via":"card","verified":true,"on":{"kind":"commit",
+          "ref":"f104f5de…"},"token":null}: expected undefined to be 'go with the cobalt, and keep the tota…'
+            at tests/acceptance/327/answers.test.ts:79
+          → the base records the option and drops the words.
+  FAILED  a screenshot with the answer: the agent gets the image by its hash, and ask.answered keeps it beside the
+          decision
+          AskRefused: an answer has no field image
+            at packages/asks/src/index.ts:570
+          → the base's ANSWER_FIELDS are option, words, plan_hash, token.
+  passed  words alone, no option: the agent gets them once with decision none, and nothing is saved as a decision
+          → holds at the base (a words-only answer is decision none, delivered once).
+  AC15 #327.2459a9a6
+  passed  typing "darker, and keep the total in view" and Send: decision none with the words, delivered once; the
+          second ask with the same key stays open
+  passed  wrong program: a resolver that answers the second ask from the first one's words fails this test
+          → the record half holds at the base; the card half ("Answers this ask only" before arming, Send sending the
+            words alone) is card.rs ac15_…, which doesn't compile at the base.
+  AC16 #327.f9d8bea9
+  passed  typing "yes" and Send: decision none with the words, the plan not authorized, the agent told so
+  passed  pressing Allow, with the plan's hash and the click's token, runs the plan
+  passed  wrong program: a card that reads the typed "yes" as allow fails this test
+          → the record half holds at the base; the card half ("Sends your words as the reason; this won't run", Send
+            sending the words alone, Allow sending approve with plan_hash and token) is card.rs ac16_….
+
+arming.test.ts (AC14 #327.74732631); deep-show built from the base by the test itself
+  FAILED  a press stamped 499 ms after presentation answers nothing and one at 500 ms answers; …
+          AssertionError: a press at 499 ms: down and up: deep-show run answers the scenario ok (…); got
+          {"ok":false,"code":"bad_input"}: expected false to be true
+            at runShow (tests/acceptance/400/helpers.ts:187), at arming (tests/acceptance/327/arming.test.ts)
+          → the base's deep-show refuses a scenario with a `press` call.
+  FAILED  wrong program: a card that times arming from event delivery fails this test, naming the trigger
+          AssertionError: a press at 499 ms (planted arms_from_delivery): the scope of x: deep-show run answers the
+          scenario ok (…, planted arms_from_delivery); got {"ok":false,"code":"bad_input"}
+          → the base refuses the planted name before any call.
+  FAILED  wrong program: a card that never re-arms fails this test, naming the trigger
+          AssertionError: … (planted never_rearms) … got {"ok":false,"code":"bad_input"}
+
+== cargo test --test acceptance_327_card: doesn't compile; none of its 21 cases runs
+
+error[E0432]: unresolved imports `deep_replica::CardSeen`, `deep_replica::Input`, `deep_replica::On`,
+              `deep_replica::Phase`, `deep_replica::Source`
+  --> tests/acceptance/327/common.rs:11:31
+error[E0432]: unresolved imports `deep_replica::Client`, `deep_replica::On`, `deep_replica::Phase`,
+              `deep_replica::Slot`, `deep_replica::Source`
+  --> tests/acceptance/327/card.rs:38:24
+error[E0599] × 70: no method named … found for `Replica`:
+    present ×14, card_seen ×14, answers ×12, usage ×6, confirmations ×5, confirm ×5, press ×4, key ×3, type_words ×2,
+    present_in, hide_window, toggle_step, kill, and no associated function `relaunch`
+error: could not compile `deep-replica` (test "acceptance_327_card") due to 72 previous errors
+
+`repo_root`, `Posted`, `Replica` (open, now, advance, append, notifications, click, card) and `NOW` resolve: they
+are the base's. No other error: nothing in the file fails for its own sake. Every case opens a `Replica` and presents
+a card, so each fails for the missing surface the README pins:
+
+  AC1  ac1_the_card_says_its_scope_and_that_it_answers_2_more_and_the_receipt_lists_a_third   present, card_seen, press, answers
+  AC2  ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first              present, press, answers
+  AC3  ac3_with_the_window_hidden_every_ask_notifies_with_its_question_default_and_when       hide_window, answers, usage
+  AC4  ac4_a_click_inside_the_arm_interval_never_answers                                      present, press, usage
+  AC4  ac4_a_synthetic_click_answers_only_after_the_os_confirms_you                           press (Synthetic), confirmations, confirm
+  AC5  ac5_an_unknown_client_action_answers_only_after_the_os_confirms_you                    press (Accessibility), confirmations, confirm
+  AC5  ac5_a_test_client_that_cant_pass_the_confirmation_never_answers                        press, confirm
+  AC5  ac5_with_full_keyboard_access_tab_reaches_each_option_of_every_kind_and_space_answers… key, CardSeen.focused
+  AC5  ac5_with_voice_control_…, ac5_with_switch_control_…, ac5_voiceover_…                   BLOCKED: a person at a Mac (the manual
+                                                                                              step is printed by each case); unrun here
+  AC6  ac6_each_kind_renders_from_its_fixture_with_question_options_deadline_default_and_its_fields   present, CardSeen.text
+  AC6  ac6_a_batched_approval_shows_the_diff_public_and_undo_and_approving_part_runs_only_those       CardSeen.steps/approve, toggle_step
+  AC8  ac8_a_taste_card_lists_your_past_calls_on_the_same_screen_and_step                     present
+  AC9  ac9_a_provisional_choice_whose_pin_moved_shows_the_diff_and_its_checks_before_arming   present
+  AC10 ac10_killing_the_app_with_an_armed_card_answers_nothing_and_relaunch_presents_unarmed  kill, relaunch, open_asks
+  AC11 ac11_one_confirmation_answers_one_card_and_the_next_card_raises_a_new_prompt           confirmations, confirm
+  AC12 ac12_a_1x1_slot_or_one_scrolled_1_px_out_never_arms_and_a_press_is_refused             present_in, usage
+  AC13 ac13_three_presented_one_refused_one_answer_and_one_undo_produce_exactly_those_rows    usage, press (Undo)
+  AC15 ac15_typing_with_no_option_says_answers_this_ask_only_and_sends_the_words_alone        type_words, press (Send)
+  AC16 ac16_a_typed_yes_on_a_push_card_says_it_wont_run_and_only_allow_runs_the_plan          type_words, press, answers
+
+== cargo test --test acceptance_327_planted: doesn't compile; none of its 11 cases runs
+
+error[E0432]: unresolved imports (common.rs:11, planted.rs:34), as above
+error[E0599] × 19: no associated function `Replica::planted` ×11 (one per case), and common.rs's press, present,
+    card_seen, answers, usage
+error: could not compile `deep-replica` (test "acceptance_327_planted") due to 21 previous errors
+
+== Manual section (a person fills this in; nothing here is a result yet)
+
+AC5 with Voice Control, every card kind through the confirmation:     not run
+AC5 with Switch Control, every card kind through the confirmation:    not run
+AC5 VoiceOver reads each card's question, options, deadline, default: not run
+
+== The fixtures
+
+All 97 events in fixtures/**/*.events.jsonl and fixtures/live.json validate against their kind's published schema
+through packages/contracts (validate(name, event), dist built from the base); each record's log_pos runs 1, 2, 3 …
+and every line has a session_id. The loop in README.md (Fixtures) printed: 97 events, 0 invalid.
+
+== Not done
+
+The Rust files were not compiled against a stand-in of the pinned surface (as #326's job did): they are type-checked
+only as far as rustc gets before the missing names, which is through name resolution and method lookup on the whole
+file (every E0599 is a missing `Replica` method, none a type error of the test's own), not through borrow checking.
