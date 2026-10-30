@@ -7,6 +7,7 @@ import { askSources } from '../../../packages/asks/src/index.ts';
 import { BudgetRefused } from '../../../packages/budget/src/index.ts';
 import type { Ledger } from '../../../packages/budget/src/index.ts';
 import { core, DAY, type Planting } from './helpers.ts';
+import { planOf } from '../plans.ts';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -45,7 +46,7 @@ export const asksEachRun: Planting = {
         const fixture = structuredClone(askSources().find((r) => r.source === 'generation.paid')!.fixture.ask) as Obj;
         await world.asks.raise({ writer: 'core', actor: 'you', scope: 'you', ...(connection.session ? { session: connection.session } : {}) }, 'generation.paid', {
           ...fixture, question: `Start ${run.run} for its price?`, deadline: world.clock.now() + DAY,
-        });
+        }, planOf('generation.paid'));
       }
       return outcome;
     },

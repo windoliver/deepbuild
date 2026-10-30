@@ -12,6 +12,7 @@ import { openRecord } from '../../../packages/record/src/index.ts';
 import type { Connection, Event, RecordStore, Row } from '../../../packages/record/src/index.ts';
 import { askSources, draftAskSettings, openAsks } from '../../../packages/asks/src/index.ts';
 import type { AskKind, Asks, Delivery, InboxRow } from '../../../packages/asks/src/index.ts';
+import { withPlans } from '../plans.ts';
 import { bare, makeClock, T0, ulid, type Clock, type Obj } from './data.ts';
 
 export * from './data.ts';
@@ -87,7 +88,7 @@ export async function openWorld(options: WorldOptions): Promise<World> {
   const open = async () => {
     real = await openRecord({ path: join(dir, 'record.db'), now: clock.now });
     w.record = plant.record ? plant.record(real) : real;
-    const asks = await openAsks({ record: w.record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home: plant.home ? plant.home(w) : home });
+    const asks = withPlans(await openAsks({ record: w.record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home: plant.home ? plant.home(w) : home }));
     w.asks = plant.asks ? plant.asks(asks, w) : asks;
   };
   const events = async (kind?: string): Promise<Event[]> => {

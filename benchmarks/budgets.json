@@ -171,6 +171,17 @@
       "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "plan-preview",
+      "command": [
+        "node",
+        "benchmarks/asks.mjs",
+        "plan-preview"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #69 first measurement: the merge base has plans on authority asks but no task for drafting one's preview. One process drafts ask settings into a temp home, opens a record and the asks core, and raises one authority ask with a 500-step plan whose last step can't be undone, until its card shows the whole plan, with no model in the path; p50 includes Node's start, so the issue's 2 s limit stays in tests/acceptance/69/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "resolver-match-10k",
       "command": [
         "node",
@@ -660,6 +671,50 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-hook-day-overhead",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "day-overhead"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #21 first measurement: the merge base has no day of real tool calls through deep-hook. One process starts the hub on a temp home with the shipped guard entries, runs each distinct recorded call of the fixture corpus once through a forwarder to leave out the calls the hub holds, replays 1,000 of the rest into one session, each call's PreToolUse and PostToolUse through the release deep-hook with a native no-op run between them as the floor, and prints the hooks' p95 minus the floor's p95 as overheadP95Ms, so p50 is the bench's whole run including the pre-pass; the issue's 10 ms at p95 over process start over 1,000 real tool calls stays in tests/acceptance/21/, and the run that set it is docs/spikes/21/record.json. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-hook-day-fail-open",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "day-fail-open"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #21 first measurement: the merge base has no day of real tool calls against a stopped hub. One process starts the hub on a temp home with the shipped guard entries, starts a session there, runs each distinct recorded call of the fixture corpus once through a forwarder to leave out the calls the hub holds, and replays 1,000 of the rest in stretches of 50 calls, the hub stopped with SIGSTOP for each stretch (100 hooks, under the socket's listen queue of 128) and resumed between them until it has taken the queue, each call's PreToolUse and PostToolUse through the release deep-hook four calls at a time, as Claude Code runs the hooks of parallel tool calls, timed from spawn to exit, and prints their p95 as failOpenP95Ms, so p50 is the bench's whole run including the pre-pass and the resumes; the issue's 50 ms to fail open over 1,000 real tool calls stays in tests/acceptance/21/, and the run that set it is docs/spikes/21/record.json. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "panel-bound-value",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "panel-bound-value"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels or bound values in them. One process installs a plug-in whose source answers 600 readings, 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, plays them on the virtual clock through `deep-show run` and reads each surface's frame after every reading, failing unless each shows the reading before it; p50 includes Node's and the binary's start. The issue's one frame per reading stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "panel-pop-out",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "panel-pop-out"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels. One process installs a plug-in with six panels, gives each a click and pops each out onto the second display with its click's serial through `deep-show run`, failing unless every window opens; p50 includes Node's and the binary's start. The issue's 300 ms a pop-out stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

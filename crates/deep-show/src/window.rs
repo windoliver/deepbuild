@@ -239,7 +239,9 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
                 .clone(),
         };
         let panel_id = &hub.scenario.docs[doc];
-        let panel = hub.scenario.panels[panel_id].rect;
+        let panel = hub
+            .slot(panel_id)
+            .expect("a document's panel is in the scenario");
         let size = [
             panel[2].round().clamp(1., 8192.) as u16,
             panel[3].round().clamp(1., 8192.) as u16,
