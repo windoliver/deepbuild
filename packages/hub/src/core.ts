@@ -997,7 +997,7 @@ export class Core {
     const rows = (await this.record.raw(`SELECT id, options FROM asks WHERE session_id = '${sql(session)}' AND kind = 'authority' AND status IN ('open', 'later')`)) as { id: string; options: string | null }[];
     for (const row of rows) {
       const option = (JSON.parse(row.options ?? '[]') as { id: string; decision?: string }[]).find((o) => o.decision === 'allow');
-      if (option) await this.asks.answer(this.connection('app'), `ask:${row.id}`, { option: option.id, plan_hash: null, token: `os-confirm:${ulid(this.now())}` });
+      if (option) await this.asks.answer(this.connection('app'), `ask:${row.id}`, { option: option.id, plan_hash: (await this.asks.card(`ask:${row.id}`)).plan?.hash ?? null, token: `os-confirm:${ulid(this.now())}` });
     }
   }
   /** The notes as the agent reads them, each labelled as yours, sent from the app, with its request ID. */
