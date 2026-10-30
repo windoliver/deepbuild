@@ -19,7 +19,7 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
-import { openLeases } from '@deepbuild/leases';
+import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
@@ -42,6 +42,7 @@ import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
+import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -226,6 +227,8 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  /** The kernel's lease table (#237), read by deep env down for who holds a port now. */
+  private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -408,7 +411,7 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
@@ -2941,6 +2944,7 @@ export class Core {
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
+        case 'deep_env': return await this.deepEnv(session!, String(args.action));
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3489,10 +3493,24 @@ export class Core {
     }
   }
   private envUp(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.inTurn(worktree, () => this.riseIn(worktree));
+    return this.upFor(this.worktreeOf(params));
   }
-  private async riseIn(worktree: string): Promise<Obj> {
+  private upFor(worktree: string, holder?: string): Promise<Obj> {
+    return this.inTurn(worktree, () => this.riseIn(worktree, holder));
+  }
+  /**
+   * deep_env (#331): the bound session's own worktree's stack, up or down, as `deep env up` and `deep env down` run
+   * there. The worktree is the session's, from its hooks, never from the call, so a child session in a worktree of its
+   * own leases its own ports there and never its parent's. Its leases name the session's deep mcp as their holder; a
+   * stack already up in that worktree is reused as it is, so the holder says who leased it, not who uses it.
+   */
+  private async deepEnv(session: string, action: string): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
+    const worktree = realpathSync(cwd);
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' });
+  }
+  private async riseIn(worktree: string, holder?: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
     // A stack is reused only while its process runs and its health route still answers 200.
     if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
@@ -3505,7 +3523,7 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
@@ -3522,29 +3540,31 @@ export class Core {
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
   private envDown(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
+    return this.downFor(this.worktreeOf(params), { path: '/params/worktree', remedy: 'deep env up' });
+  }
+  /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
+  private downFor(worktree: string, at: { path: string; remedy: string }): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
     if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, rising));
+    return this.inTurn(worktree, () => this.downIn(worktree, at, rising));
   }
-  private async downIn(worktree: string, interrupted?: string): Promise<Obj> {
+  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string): Promise<Obj> {
     const stack = this.stacks.get(worktree);
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
-    if (!stack) throw new Refused(refusal('not_found', '/params/worktree', `No stack runs for ${worktree}; start one with deep env up.`, worktree));
+    if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
     const ports = Object.values(stack.ports);
     const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
     const before = recorded.filter(running);
-    // The planted wrong program stops whatever listens on the leased ports, the run's or not.
-    if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
     this.stacks.delete(worktree);
-    const cleaned = await this.takeDown(stack.run);
+    const { result: cleaned, left } = await downLeaving(ports, { listen: listening, leases: async () => (await this.leases.leases()).map((v) => v.lease) }, async () => {
+      // The planted wrong program stops whatever listens on the leased ports, the run's or not.
+      if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+      return this.takeDown(stack.run);
+    });
     const stopped = [...new Set([...before.filter((pid) => !running(pid)), ...cleaned.stopped])];
-    const left = new Map<number, { pid: number; port?: number }>();
-    for (const name of cleaned.left) if (name.startsWith('pid:')) left.set(Number(name.slice(4)), { pid: Number(name.slice(4)) });
-    for (const port of ports) for (const pid of await listening(port)) left.set(pid, { pid, port });
-    return { run: stack.run, stopped, left: [...left.values()] };
+    return { run: stack.run, stopped, left };
   }
 
   // ---- Spool, retention and the test load.
