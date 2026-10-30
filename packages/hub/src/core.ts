@@ -3107,7 +3107,7 @@ export class Core {
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
-    lane.catch(() => undefined);
+    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
   }
   /**
    * Whether a claim's head is trusted: every commit from its base to HEAD was recorded from a DeepBuild session (its
