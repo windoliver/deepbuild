@@ -7,6 +7,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { call } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
+import { clockTime } from './promises.js';
 
 type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
@@ -24,12 +25,15 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const sessions = (await query(`SELECT id, project_id, agent, status, last_seen, worktree, ${causes ? 'cause' : 'NULL AS cause'} FROM sessions`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null }[];
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
+  const due = await duePromises(query);
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
   const rows = sessions.map((s): StatusRow => {
     const open = asks.get(s.id);
+    const promised = due.get(s.id);
     const [state, why]: [State, string] = open ? ['needs you', `${open.n === 1 ? 'an ask' : `${open.n} asks`} open for ${ago(open.since)}`]
       : s.status === 'waiting' ? ['needs you', 'a permission prompt waits on you']
       : s.status === 'stuck' ? ['stuck', `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`]
+      : promised ? ['flagged', `a promised check is due since ${clockTime(promised.due)}, waiting for its next prompt or stop: "${promised.quote}"`]
       : s.status === 'failed' ? ['flagged', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`]
       : gone.has(s.id) && s.status !== 'finished' ? ['flagged', 'its process is gone mid-turn']
       : s.status === 'unknown' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
@@ -40,6 +44,25 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
   return rows;
+}
+
+/**
+ * The promised checks due in sessions no route could wake (#120): each session's latest promise event, when it is the
+ * due one waiting for the session's next prompt or stop, with the quote its set carried.
+ */
+async function duePromises(query: (sql: string) => Promise<unknown[]>): Promise<Map<string, { due: number; quote: string }>> {
+  const events = (await query("SELECT session_id, kind, data FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; kind: string; data: string | Obj }[];
+  const quotes = new Map<string, string>();
+  const out = new Map<string, { due: number; quote: string }>();
+  for (const e of events) {
+    // A session that ended waits for no prompt: its due check is no longer anyone's row.
+    if (e.kind === 'session.end') { out.delete(e.session_id); continue; }
+    const d = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
+    if (e.kind === 'promise.set') { quotes.set(String(d.promise), String(d.quote)); out.delete(e.session_id); }
+    else if (e.kind === 'promise.due' && d.route === 'next_hook') out.set(e.session_id, { due: Number(d.due), quote: quotes.get(String(d.promise)) ?? '' });
+    else out.delete(e.session_id);
+  }
+  return out;
 }
 
 /**

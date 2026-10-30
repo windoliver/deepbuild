@@ -1,0 +1,132 @@
+tests/acceptance/120 at the base commit (nothing of #120 implemented)
+====================================================================
+
+Base commit : 5a6d09a4 (main, "Merge pull request #785 from windoliver/claude/issue-44-implementation-3bb689")
+Date        : 2026-10-29 (run started 2026-10-28 late evening, local time)
+Node        : v24.22.0
+tsc         : node node_modules/typescript/bin/tsc -p tests/acceptance/120/tsconfig.json -> exit 0 (clean)
+Command     : node node_modules/vitest/vitest.mjs run --root tests/acceptance/120 --no-file-parallelism --reporter=verbose
+Machine     : not a quiet reference Mac during the run (1-minute load 300 to 580 on 8 cores from other sessions);
+              no test reached a timing judgement, so none was skipped as INCONCLUSIVE
+Result      : 17 failed | 0 passed | 0 skipped (17), in about 3 minutes
+
+Why each test fails here (its criterion's assertion, never a load or import error)
+----------------------------------------------------------------------------------
+overrun.test.ts
+  AC1  : "within 12000 ms of the call's start a FileChanged hook's reply carried a systemMessage" -> the base's
+         SessionStart reply names no watchPaths, deep setup writes no FileChanged entry, no FileChanged fired.
+  AC8  : "the PreToolUse reply attaches the deadline ... (hookSpecificOutput.updatedInput)" -> the base's reply to a
+         bypassed `tail -f` is empty.
+wakeup.test.ts
+  AC2  : "the promise ... is recorded as a wake-up (an event carrying its quote)" -> the base records agent.stop and
+         nothing about the promise.
+  AC3 (fourth set), AC3 (past its end): the same assertion, in the shared `promised` step.
+codex.test.ts
+  AC4 (Codex session) : "the promise is recorded as a wake-up" -> none.
+  AC4 (flags)         : "Claude Code's wakeIdle flag is true" -> the base's adapter.caps@1 for Claude Code has
+                        wakeIdle: false (Codex's wakeIdle and startTurn are already false and pass).
+deadline.test.ts
+  AC5 (Claude Code, default) : "the overrun of `tail -f /var/log/app.log` is recorded" -> no overrun event; the
+                               no-decision and no-updatedInput checks before it pass on the base (its reply is empty).
+  AC5 (Claude Code, bypass)  : "the deadline is attached as updatedInput" -> empty reply.
+  AC5 (Codex)                : "the Codex call's overrun is recorded" -> none; the no-decision checks pass.
+start.test.ts
+  AC6  : "the PreToolUse reply of a wait expected to take over a minute carries the line the chat shows" -> empty.
+tenminutes.test.ts
+  AC7 (turn of short calls) : "the hook 10.5 minutes into the turn: the hook's reply carries a line you can read" -> empty.
+  AC7 (single call)         : "10.5 minutes into the call a FileChanged hook's reply carries a line" -> no FileChanged fired.
+  AC7 (wrong program)       : the planted hub `line-at-stop` is unknown to the base, which exits at start, so the
+                              failure is "BLOCKED: the hub didn't start with DEEP_HUB_PLANT=line-at-stop", not the
+                              planted one the test expects (README: Open interfaces).
+budgets.test.ts
+  AC9 (lane)       : "some lane must run tests/acceptance/120/budgets.test.ts with --no-file-parallelism" -> no lane does.
+  AC9 (line cost)  : the instrument, "the PostToolUse replies of calls that ran 30 minutes past their start must carry
+                     the overrun line" -> 0 of 150 did (the medians, 0.94 ms with and 0.90 ms without, are the socket's
+                     round trip alone and are not judged).
+  AC9 (idle CPU)   : the instrument, "the idle session's promise ... is recorded as a wake-up" -> none.
+
+The run's output (the JSON reporter, summarized)
+-----------------------------------------------
+0 passed, 17 failed, 0 skipped of 17
+== budgets.test.ts (failed, 32 s)
+  failed  0s AC9 #120.a3880a7d Budgets, on the reference Mac in the local preflight, compared with the merge base: the line costs under 1 ms in the hook path, and an idle se
+     -> AssertionError: some lane must run tests/acceptance/120/budgets.test.ts with --no-file-parallelism (it starts hubs and times them); the lanes' Vitest commands are:
+        unit: run --exclude tests/acceptance/20/** --exclude tests/acceptance/24/** --exclude tests/acceptance/26/** --exclude tests/acceptance/389/** --exclude tests/acceptance/390/** --exclude tests/acceptance/391/** --exclude tests/acceptance/392/** --exclude tests/acceptance/393/** --exclude tests/acceptance/
+        unit: run --no-file-parallelism tests/acceptance/20/ tests/acceptance/24/ tests/acceptance/26/ tests/acceptance/389/ tests/acceptance/390/ tests/acceptance/391/ tests/acceptance/392/ tests/acceptance/393/ tests/acceptance/394/ tests/acceptance/305/ tests/acceptance/387/ tests/acceptance/488/ tests/accepta
+        verdict proofs: run --root tests/acceptance/684 lean.test.ts -t AC3|AC4 --silent=false: expected [] to not deeply equal []
+            at tests/acceptance/120/budgets.test.ts:83:185
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  failed  12s AC9 #120.a3880a7d Budgets, on the reference Mac in the local preflight, compared with the merge base: the line costs under 1 ms in the hook path, and an idle se
+     -> AssertionError: AC9 #120.a3880a7d the PostToolUse replies of calls that ran 30 minutes past their start must carry the overrun line (a systemMessage or additionalContext with a duration); this checkout: with the line median 0.94 ms over 150 (0 carried a line), without 0.90 ms over 150; load 570.0 to 577.5 on 8 cores: expected 0 to be greater than or equal to 135
+            at tests/acceptance/120/budgets.test.ts:90:210
+  failed  19s AC9 #120.a3880a7d Budgets, on the reference Mac in the local preflight, compared with the merge base: the line costs under 1 ms in the hook path, and an idle se
+     -> AssertionError: AC9 #120.a3880a7d the idle session's promise "I'll check the deploy again in 20 minutes." is recorded as a wake-up, so it waits on something; the session's events: session.start, task.created, user.ask, mcp.tools_listed, tool.before, tool.after, agent.stop, claim.made, session.attention: expected undefined to be defined
+            at tests/acceptance/120/budgets.test.ts:122:246
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+== codex.test.ts (failed, 18 s)
+  failed  18s AC4 #120.5568c5c4 Where the adapter can't wake an idle session, as in Codex, whose hooks never start a turn, a wake-up that comes due starts nothing: the sessio
+     -> AssertionError: AC4 #120.5568c5c4 the promise is recorded as a wake-up (an event carrying its quote); the session's events: session.start, task.created, user.ask, task.created, tool.before, tool.after, agent.stop, mcp.tools_listed: expected undefined to be defined
+            at tests/acceptance/120/codex.test.ts:31:210
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  failed  0s AC4 #120.5568c5c4 Where the adapter can't wake an idle session, as in Codex, whose hooks never start a turn, a wake-up that comes due starts nothing: the sessio
+     -> AssertionError: AC4 #120.5568c5c4 Claude Code's wakeIdle flag is true, the route AC2's wake takes: {"holdStop":true,"wakeIdle":false,"steer":false,"followUp":false,"answerPermission":true,"nativeTools":true,"mcp":true,"rewrite":true,"editInput":true,"errorTurnHook":true,"startTurn":false}: expected false to be true // Object.is equality
+            at tests/acceptance/120/codex.test.ts:62:130
+            at new Promise (<anonymous>)
+== deadline.test.ts (failed, 18 s)
+  failed  6s AC5 #120.4494c783 In a Claude Code or Codex session that can ask you about commands, a `tail -f` call is asked about exactly as it would be without DeepBuild, w
+     -> AssertionError: AC5 #120.4494c783 the overrun of `tail -f /var/log/app.log` is recorded (an event naming the call or its command and saying overrun): expected 0 to be greater than 0
+            at tests/acceptance/120/deadline.test.ts:50:138
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  failed  7s AC5 #120.4494c783 In a Claude Code or Codex session that can ask you about commands, a `tail -f` call is asked about exactly as it would be without DeepBuild, w
+     -> AssertionError: AC5 #120.4494c783 the deadline is attached as updatedInput: {"runs":[{"command":"'target/debug/deep-hook' claude-code Pr","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+            at tests/acceptance/120/deadline.test.ts:56:82
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  failed  5s AC5 #120.4494c783 In a Claude Code or Codex session that can ask you about commands, a `tail -f` call is asked about exactly as it would be without DeepBuild, w
+     -> AssertionError: AC5 #120.4494c783 the Codex call's overrun is recorded: expected 0 to be greater than 0
+            at tests/acceptance/120/deadline.test.ts:77:75
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+== overrun.test.ts (failed, 21 s)
+  failed  18s AC1 #120.7edb0b65 In the Claude Code terminal, through the route #80 found (a FileChanged notification), a command running past its expected time shows a line o
+     -> AssertionError: AC1 #120.7edb0b65 within 12000 ms of the call's start a FileChanged hook's reply carried a systemMessage, the notification the terminal shows; SessionStart reply {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"DeepBuild is watching this session. No checks are active in this repo yet. When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it."}} (watch: []); FileChanged entries of DeepBuild's in settings: 0; FileChanged hooks fired: []: expected undefined to be defined
+            at tests/acceptance/120/overrun.test.ts:43:169
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+  failed  3s AC8 #120.af5921ee A command that never ends on its own gets its deadline attached where the adapter can change it, and an overrun reaches the agent at its next 
+     -> AssertionError: AC8 #120.af5921ee the PreToolUse reply attaches the deadline where Claude Code can change the command (hookSpecificOutput.updatedInput): {"runs":[{"command":"'target/debug/deep-hook' claude-code Pr","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+            at tests/acceptance/120/overrun.test.ts:64:171
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+== start.test.ts (failed, 5 s)
+  failed  5s AC6 #120.67021934 A wait expected to take over a minute shows what it waits on and its expected time in the chat when it starts AC6 #120.67021934 after two runs
+     -> AssertionError: AC6 #120.67021934 the PreToolUse reply of a wait expected to take over a minute carries the line the chat shows (systemMessage): {"runs":[{"command":"'target/debug/deep-hook' claude-code Pr","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+            at tests/acceptance/120/start.test.ts:38:166
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+== tenminutes.test.ts (failed, 25 s)
+  failed  5s AC7 #120.557a037b A turn or wait that runs 10 minutes without a line you can read gets one at its next hook after each 10 minutes: the ask, the step, the time s
+     -> AssertionError: AC7 #120.557a037b the hook 10.5 minutes into the turn: the hook's reply carries a line you can read (systemMessage); it carried {"runs":[{"command":"'target/debug/deep-hook' claude-code Pr","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected undefined to be defined
+            at tenMinuteLine (tests/acceptance/120/tenminutes.test.ts:23:126)
+            at turnOfShortCalls (tests/acceptance/120/tenminutes.test.ts:42:3)
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+            at tests/acceptance/120/tenminutes.test.ts:62:5
+  failed  19s AC7 #120.557a037b A turn or wait that runs 10 minutes without a line you can read gets one at its next hook after each 10 minutes: the ask, the step, the time s
+     -> AssertionError: AC7 #120.557a037b 10.5 minutes into the call a FileChanged hook's reply carries a line (systemMessage); FileChanged hooks fired: []: expected undefined to be defined
+            at tests/acceptance/120/tenminutes.test.ts:76:241
+  failed  0s AC7 #120.557a037b A turn or wait that runs 10 minutes without a line you can read gets one at its next hook after each 10 minutes: the ask, the step, the time s
+     -> AssertionError: AC7 #120.557a037b the 25-minute turn must fail on line-at-stop at the hook 10.5 minutes in, with no line: expected 'BLOCKED: the hub (this checkout) didn…' to match /the hook 10\.5 minutes into the turn:…/
+            at tests/acceptance/120/tenminutes.test.ts:88:114
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+== wakeup.test.ts (failed, 58 s)
+  failed  19s AC2 #120.4c1ac190 A promised later check wakes an idle Claude Code session at its time without you typing AC2 #120.4c1ac190 the session that said "I'll check th
+     -> AssertionError: the promise "I'll check the deploy again in 20 minutes." is recorded as a wake-up (an event carrying its quote) once the session stopped; the session's events: session.start, task.created, user.ask, tool.before, tool.after, agent.stop, mcp.tools_listed: expected undefined to be defined
+            at promised (tests/acceptance/120/wakeup.test.ts:31:251)
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+            at tests/acceptance/120/wakeup.test.ts:44:32
+  failed  19s AC3 #120.5f22a00c A promise set again a fourth time, or past its end, becomes BLOCKED with a named owner (the service or you) and at most one ask, and no furthe
+     -> AssertionError: the promise "I'll check the deploy again in 20 minutes." is recorded as a wake-up (an event carrying its quote) once the session stopped; the session's events: task.created, user.ask, tool.before, tool.after, agent.stop: expected undefined to be defined
+            at promised (tests/acceptance/120/wakeup.test.ts:31:251)
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+            at tests/acceptance/120/wakeup.test.ts:101:19
+  failed  19s AC3 #120.5f22a00c A promise set again a fourth time, or past its end, becomes BLOCKED with a named owner (the service or you) and at most one ask, and no furthe
+     -> AssertionError: the promise "I'll check the deploy again in 20 minutes." is recorded as a wake-up (an event carrying its quote) once the session stopped; the session's events: session.start, task.created, user.ask, tool.before, tool.after, agent.stop, claim.made, session.attention, mcp.tools_listed: expected undefined to be defined
+            at promised (tests/acceptance/120/wakeup.test.ts:31:251)
+            at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+            at tests/acceptance/120/wakeup.test.ts:116:19
+

@@ -1,0 +1,19 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "run.started",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "subject": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+  "data": {
+    "run": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "check": "contracts.unit",
+    "claim": "claim:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+    "host": "local",
+    "needs": { "cores": 1, "memory_mb": 0, "stack_slot": 0, "gpus": 0, "expected_ms": 4200 },
+    "lane": "fast"
+  }
+}

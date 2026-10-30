@@ -1,0 +1,237 @@
+# #332 acceptance tests on the base commit 4ee8c992cfe10224c056858e004cc815604ccf9f (main), October 29, 2026
+# macOS 14 (Darwin 23.6.0), Node 24.22.0, after npm ci and npm run build --workspaces.
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/332 --no-file-parallelism --reporter=verbose
+# Temp paths and ULIDs differ run to run. tsc -p tests/acceptance/332/tsconfig.json exits 0 at this base.
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/tests/acceptance/332
+
+ × seed.test.ts > AC4 #332.0d4c185f a journey on a database seeded without its completion record is BLOCKED, naming the missing record > AC4 a seed step that exits 0 without leaving its record makes the journey's run missing (BLOCKED), its findings naming the missing seed record, and the journey never runs 706ms
+   → the journey's run is missing, which the verdict table makes BLOCKED ({"run":"run:01M65BJS6XXMYMTBDW536RAXF9","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:checkout","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'missing' // Object.is equality
+ × seed.test.ts > AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test > AC8 the journey runs on its own clone of the seeded template, and the run's record carries the seed's source, copy time and migration with the template's digest and the time it was cloned 610ms
+   → the journey passed on a seeded database ({"run":"run:01M65BJSTGBYDKJF641PH14XXS","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:checkout","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'passed' // Object.is equality
+ × seed.test.ts > AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test > AC8 a template kept without its record: the run that seeds it and the next run on it are each BLOCKED, naming the missing seed record, and no journey runs 613ms
+   → the run that seeds the template is missing, BLOCKED ({"run":"run:01M65BJTDDQP4YA5MKVXZ2XRF4","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:checkout","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'missing' // Object.is equality
+ × seed.test.ts > AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test > AC8 (wrong program) a cloner that copies the database without its record (DEEP_HUB_PLANT=env-clone-without-record) fails the reading: the run's record carries no seed record for its clone 64ms
+   → BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh332-0B1kfM/root): file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/plant.js:34
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=env-clone-without-record names no planted program
+    at plantOf (file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/plant.js:34:15)
+    at runHub (file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/server.js:875:19)
+    at hubCommand (file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/index.js:44:28)
+    at file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ × screens.test.ts > AC5 #332.447b1838 screens and deploy targets are leased like ports, and each worktree gets its own host name > AC5 two sessions in two worktrees each get a screen, a deploy target and a host name of their own, the screens and targets leased to each session, and one session's down ends only its own leases 1219ms
+   → worktree A's stack was given a leased screen in SCREEN ({"cwd":"/private/tmp/dh332-MLEp8l/wt-a","SHOP_ACCOUNT":null,"GPU":null,"SCREEN":null,"DEPLOY":null,"APP_HOST":null,"DATABASE":null,"credential":{"set":false,"sha256":null}}): expected [ 'screen-1', 'screen-2' ] to include null
+ × screens.test.ts > AC6 #332.346b8a56 a computer-use step on a screen or window the session doesn't lease is denied, so your own browser is never touched > AC6 session A, leasing screen-2, is denied a step on screen-1 and on your browser's window; session B, leasing no screen, is denied any step; A's step on screen-2 is not denied 895ms
+   → session A's step onto screen-1, which it doesn't lease, is denied (reply {"v":1,"exit":0,"stdout":"","stderr":""}): expected false to be true // Object.is equality
+ × accounts.test.ts > AC2 #332.895dd0e2 with session A holding `shop-test-1`, session B's `deep env up` gets another account or is BLOCKED, naming A's lease, and never starts with `shop-test-1` > AC2 with shop-test-1 the only account, session A's stack gets it under A's lease, and session B's deep env up is BLOCKED naming A's lease, or comes up with another account, never shop-test-1 824ms
+   → session A's stack was given its leased account in SHOP_ACCOUNT ({"cwd":"/private/tmp/dh332-eCqrty/wt-a","SHOP_ACCOUNT":null,"GPU":null,"SCREEN":null,"DEPLOY":null,"APP_HOST":null,"DATABASE":null,"credential":{"set":false,"sha256":null}}): expected null to be 'shop-test-1' // Object.is equality
+ × accounts.test.ts > AC2 #332.895dd0e2 with session A holding `shop-test-1`, session B's `deep env up` gets another account or is BLOCKED, naming A's lease, and never starts with `shop-test-1` > AC2 with two accounts, sessions A and B each get one of their own, each leased to its session, and A's down ends only A's 1519ms
+   → session A's stack got an account from the pool in SHOP_ACCOUNT (null): expected [ 'shop-test-1', 'shop-test-2' ] to include null
+ × budgets.test.ts > AC3 #332.bc78ea57 with a budget of 10 runs and $10 approved for an issue, the eleventh run, or one that would pass $10, is the first to ask > AC3 ten $0.50 runs go ahead without an ask, each charged; the eleventh, with $5 still left, is the first to ask 126ms
+   → the eleventh run, past the budget's 10 runs, doesn't go ahead ({"run":"run:01M63RG0G0000000000000000B","status":"started","reserved":[{"budget":"01M63RG0G0JDBBSJM824TG90Q4","usd":0.5}]}): expected 'started' not to be 'started' // Object.is equality
+ ✓ budgets.test.ts > AC3 #332.bc78ea57 with a budget of 10 runs and $10 approved for an issue, the eleventh run, or one that would pass $10, is the first to ask > AC3 three $3 runs go ahead without an ask; the fourth, which would pass $10, is the first to ask 58ms
+ ✓ budgets.test.ts > AC2 #332.895dd0e2 (cap) a run over a resource's cap is BLOCKED with the cap named > AC2 a $3 run on shop-test-1, whose resource budget caps it at $2, is BLOCKED naming the resource's budget and its $2 cap, though its issue's budget has room, and reserves nothing 47ms
+ × credentials.test.ts > AC1 #332.17008cc5 a stack started by `deep env up` gets its credentials without the agent seeing a value or a path > AC1 the stack's process gets SHOP_API_KEY from its dotfile, and neither the value nor the dotfile's path is in what deep env up prints, the record, the worktree or the hub's files 750ms
+   → the stack's process was given SHOP_API_KEY ({"set":false,"sha256":null}): expected false to be true // Object.is equality
+ × gpu.test.ts > AC7 #332.e24a8c75 a GPU is leased to one session at a time, like a port or a test account > AC7 with session A holding gpu-0, session B never starts with it; after A's down ends A's lease, B gets gpu-0 under a lease of its own 931ms
+   → session A's stack was given its leased GPU in GPU ({"cwd":"/private/tmp/dh332-SXJ0sM/wt-a","SHOP_ACCOUNT":null,"GPU":null,"SCREEN":null,"DEPLOY":null,"APP_HOST":null,"DATABASE":null,"credential":{"set":false,"sha256":null}}): expected null to be 'gpu-0' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  accounts.test.ts > AC2 #332.895dd0e2 with session A holding `shop-test-1`, session B's `deep env up` gets another account or is BLOCKED, naming A's lease, and never starts with `shop-test-1` > AC2 with shop-test-1 the only account, session A's stack gets it under A's lease, and session B's deep env up is BLOCKED naming A's lease, or comes up with another account, never shop-test-1
+AssertionError: session A's stack was given its leased account in SHOP_ACCOUNT ({"cwd":"/private/tmp/dh332-eCqrty/wt-a","SHOP_ACCOUNT":null,"GPU":null,"SCREEN":null,"DEPLOY":null,"APP_HOST":null,"DATABASE":null,"credential":{"set":false,"sha256":null}}): expected null to be 'shop-test-1' // Object.is equality
+
+- Expected:
+"shop-test-1"
+
++ Received:
+null
+
+ ❯ accounts.test.ts:28:125
+     26|       const upA = mustBeReady(await A.agent.env(hub, A.s, 'up'), a);
+     27|       const envA = await given(upA.ports.web as number, 'session A\'s …
+     28|       expect(envA.SHOP_ACCOUNT, `session A's stack was given its lease…
+       |                                                                                                                             ^
+     29|       const leaseA = leaseEvents(await client.events(), 'lease.acquire…
+     30|       expect(leaseA, 'the record holds the lease on account shop-test-…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  accounts.test.ts > AC2 #332.895dd0e2 with session A holding `shop-test-1`, session B's `deep env up` gets another account or is BLOCKED, naming A's lease, and never starts with `shop-test-1` > AC2 with two accounts, sessions A and B each get one of their own, each leased to its session, and A's down ends only A's
+AssertionError: session A's stack got an account from the pool in SHOP_ACCOUNT (null): expected [ 'shop-test-1', 'shop-test-2' ] to include null
+ ❯ accounts.test.ts:68:138
+     66|       const accA = (await given(upA.ports.web as number, 'session A\'s…
+     67|       const accB = (await given(upB.ports.web as number, 'session B\'s…
+     68|       expect(['shop-test-1', 'shop-test-2'], `session A's stack got an…
+       |                                                                                                                                          ^
+     69|       expect(['shop-test-1', 'shop-test-2'], `session B's stack got an…
+     70|       expect(accB, 'sessions A and B were given the same account').not…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  budgets.test.ts > AC3 #332.bc78ea57 with a budget of 10 runs and $10 approved for an issue, the eleventh run, or one that would pass $10, is the first to ask > AC3 ten $0.50 runs go ahead without an ask, each charged; the eleventh, with $5 still left, is the first to ask
+AssertionError: the eleventh run, past the budget's 10 runs, doesn't go ahead ({"run":"run:01M63RG0G0000000000000000B","status":"started","reserved":[{"budget":"01M63RG0G0JDBBSJM824TG90Q4","usd":0.5}]}): expected 'started' not to be 'started' // Object.is equality
+ ❯ budgets.test.ts:32:144
+     30|
+     31|     const eleventh = await w.request(CHECK, ISSUE);
+     32|     expect(eleventh.outcome.status, `the eleventh run, past the budget…
+       |                                                                                                                                                ^
+     33|     const ask = (eleventh.outcome as { ask?: string }).ask;
+     34|     expect(typeof ask, `the eleventh run waits on an ask (${JSON.strin…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  credentials.test.ts > AC1 #332.17008cc5 a stack started by `deep env up` gets its credentials without the agent seeing a value or a path > AC1 the stack's process gets SHOP_API_KEY from its dotfile, and neither the value nor the dotfile's path is in what deep env up prints, the record, the worktree or the hub's files
+AssertionError: the stack's process was given SHOP_API_KEY ({"set":false,"sha256":null}): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ credentials.test.ts:40:117
+     38|       // The stack got the value.
+     39|       const env = await given(port, 'the stack');
+     40|       expect(env.credential?.set, `the stack's process was given SHOP_…
+       |                                                                                                                     ^
+     41|       expect(env.credential?.sha256, 'the value it was given is the do…
+     42|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  gpu.test.ts > AC7 #332.e24a8c75 a GPU is leased to one session at a time, like a port or a test account > AC7 with session A holding gpu-0, session B never starts with it; after A's down ends A's lease, B gets gpu-0 under a lease of its own
+AssertionError: session A's stack was given its leased GPU in GPU ({"cwd":"/private/tmp/dh332-SXJ0sM/wt-a","SHOP_ACCOUNT":null,"GPU":null,"SCREEN":null,"DEPLOY":null,"APP_HOST":null,"DATABASE":null,"credential":{"set":false,"sha256":null}}): expected null to be 'gpu-0' // Object.is equality
+
+- Expected:
+"gpu-0"
+
++ Received:
+null
+
+ ❯ gpu.test.ts:24:103
+     22|       const upA = mustBeReady(await A.agent.env(hub, A.s, 'up'), a);
+     23|       const envA = await given(upA.ports.web as number, 'session A\'s …
+     24|       expect(envA.GPU, `session A's stack was given its leased GPU in …
+       |                                                                                                       ^
+     25|       const leaseA = leaseEvents(await client.events(), 'lease.acquire…
+     26|       expect(leaseA, 'the record holds the lease on gpu-0 (lease.acqui…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  screens.test.ts > AC5 #332.447b1838 screens and deploy targets are leased like ports, and each worktree gets its own host name > AC5 two sessions in two worktrees each get a screen, a deploy target and a host name of their own, the screens and targets leased to each session, and one session's down ends only its own leases
+AssertionError: worktree A's stack was given a leased screen in SCREEN ({"cwd":"/private/tmp/dh332-MLEp8l/wt-a","SHOP_ACCOUNT":null,"GPU":null,"SCREEN":null,"DEPLOY":null,"APP_HOST":null,"DATABASE":null,"credential":{"set":false,"sha256":null}}): expected [ 'screen-1', 'screen-2' ] to include null
+ ❯ screens.test.ts:45:124
+     43|       const envB = await given(upB.ports.web as number, 'worktree B\'s…
+     44|
+     45|       expect(['screen-1', 'screen-2'], `worktree A's stack was given a…
+       |                                                                                                                            ^
+     46|       expect(['screen-1', 'screen-2'], `worktree B's stack was given a…
+     47|       expect(envB.SCREEN, 'the two stacks were given the same screen')…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  screens.test.ts > AC6 #332.346b8a56 a computer-use step on a screen or window the session doesn't lease is denied, so your own browser is never touched > AC6 session A, leasing screen-2, is denied a step on screen-1 and on your browser's window; session B, leasing no screen, is denied any step; A's step on screen-2 is not denied
+AssertionError: session A's step onto screen-1, which it doesn't lease, is denied (reply {"v":1,"exit":0,"stdout":"","stderr":""}): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ screens.test.ts:99:139
+     97|       };
+     98|       const toScreen1 = await step(A, 'switch_display', { display: 'sc…
+     99|       expect(denies(toScreen1), `session A's step onto screen-1, which…
+       |                                                                                                                                           ^
+    100|       const browser = await step(A, 'open_application', { app: 'Google…
+    101|       expect(denies(browser), `session A's step onto your browser's wi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  seed.test.ts > AC4 #332.0d4c185f a journey on a database seeded without its completion record is BLOCKED, naming the missing record > AC4 a seed step that exits 0 without leaving its record makes the journey's run missing (BLOCKED), its findings naming the missing seed record, and the journey never runs
+AssertionError: the journey's run is missing, which the verdict table makes BLOCKED ({"run":"run:01M65BJS6XXMYMTBDW536RAXF9","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:checkout","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'missing' // Object.is equality
+
+Expected: "missing"
+Received: "failed"
+
+ ❯ seed.test.ts:76:135
+     74|     try {
+     75|       const { done } = await journey(client, checkout);
+     76|       expect(done.data.outcome, `the journey's run is missing, which t…
+       |                                                                                                                                       ^
+     77|       expect(existsSync(join(checkout, 'seed.json')), 'the seed step r…
+     78|       const findings = ((done.data.findings ?? []) as string[]).join('…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  seed.test.ts > AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test > AC8 the journey runs on its own clone of the seeded template, and the run's record carries the seed's source, copy time and migration with the template's digest and the time it was cloned
+AssertionError: the journey passed on a seeded database ({"run":"run:01M65BJSTGBYDKJF641PH14XXS","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:checkout","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "failed"
+
+ ❯ seed.test.ts:96:107
+     94|     try {
+     95|       const { run, started, done } = await journey(client, checkout);
+     96|       expect(done.data.outcome, `the journey passed on a seeded databa…
+       |                                                                                                           ^
+     97|       const seeded = JSON.parse(readFileSync(join(checkout, 'seed.json…
+     98|       const seen = JSON.parse(readFileSync(join(checkout, 'journey.jso…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  seed.test.ts > AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test > AC8 a template kept without its record: the run that seeds it and the next run on it are each BLOCKED, naming the missing seed record, and no journey runs
+AssertionError: the run that seeds the template is missing, BLOCKED ({"run":"run:01M65BJTDDQP4YA5MKVXZ2XRF4","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:checkout","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'missing' // Object.is equality
+
+Expected: "missing"
+Received: "failed"
+
+ ❯ seed.test.ts:116:98
+    114|         const checkout = makeCheckout(env('--no-record'));
+    115|         const { done } = await journey(client, checkout);
+    116|         expect(done.data.outcome, `${which} is missing, BLOCKED (${JSO…
+       |                                                                                                  ^
+    117|         const findings = ((done.data.findings ?? []) as string[]).join…
+    118|         expect(findings, `${which}: its findings name the seed record …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  seed.test.ts > AC8 #332.92539e14 a run's database cloned from the seed's template carries the template's seed record with the template's digest and the time it was cloned; a clone of a template kept without its record is BLOCKED, naming the missing record, and a cloner that copies the database without its record fails this test > AC8 (wrong program) a cloner that copies the database without its record (DEEP_HUB_PLANT=env-clone-without-record) fails the reading: the run's record carries no seed record for its clone
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh332-0B1kfM/root): file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/plant.js:34
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=env-clone-without-record names no planted program
+    at plantOf (file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/plant.js:34:15)
+    at runHub (file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/server.js:875:19)
+    at hubCommand (file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/hub/dist/index.js:44:28)
+    at file://~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:278:27
+    276|   });
+    277|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    278|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    279|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    280| }
+ ❯ seed.test.ts:130:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  11 failed | 2 passed (13)
+   Start at  19:52:47
+   Duration  9.06s (tests 98%, import 2%, transform 1%)
+
+exit 1

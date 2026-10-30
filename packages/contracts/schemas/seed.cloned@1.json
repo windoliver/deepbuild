@@ -1,0 +1,132 @@
+{
+  "title": "seed.cloned@1",
+  "description": "A run's database was cloned from its environment's seed template (#332). It carries the template's seed record, its source, when that source was copied and its migration revision, with the template's digest and when it was cloned. Only the core appends it.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "seed.cloned"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The run whose database it is: a run: handle."
+        },
+        "stack": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The stack run it was cloned for: a run: handle."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Where the seed copied its data from, as its record names it."
+        },
+        "copied_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "When that source was copied, as its record gives it (ISO 8601)."
+        },
+        "migration": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The migration revision the seeded database is at."
+        },
+        "template": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The SHA-256 of the template's bytes, in lower-case hex.",
+          "maxLength": 8192
+        },
+        "cloned_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When it was cloned, in milliseconds since the Unix epoch."
+        }
+      },
+      "required": [
+        "run",
+        "stack",
+        "source",
+        "copied_at",
+        "migration",
+        "template",
+        "cloned_at"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

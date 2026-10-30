@@ -20,6 +20,7 @@
     "@deepbuild/env-local": "0.0.0",
     "@deepbuild/evidence": "0.0.0",
     "@deepbuild/extension-host": "0.0.0",
+    "@deepbuild/gate": "0.0.0",
     "@deepbuild/leases": "0.0.0",
     "@deepbuild/reading": "0.0.0",
     "@deepbuild/record": "0.0.0",

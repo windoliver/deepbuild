@@ -80,6 +80,7 @@ export async function loadsOf(cwd: string): Promise<Load[]> {
  */
 export async function briefing(cwd: string): Promise<string> {
   let checks: string[] = [];
+  let environment = false;
   for (const dir of upFrom(cwd)) {
     const raw = await text(join(dir, '.deepbuild', 'done.yaml'));
     if (raw === undefined) continue;
@@ -88,10 +89,15 @@ export async function briefing(cwd: string): Promise<string> {
     const claims = isObj(spec) && isObj(spec.claims) ? Object.values(spec.claims) : [];
     checks = [...new Set(claims.flatMap((c) => (isObj(c) && Array.isArray(c.checks) ? c.checks.map(String) : [])))];
     if (!checks.length && isObj(spec) && isObj(spec.checks)) checks = Object.keys(spec.checks);
+    environment = isObj(spec) && isObj(spec.environment);
     break;
   }
   const active = checks.length ? `Active checks in this repo: ${checks.join(', ')}.` : 'No checks are active in this repo yet.';
-  return `DeepBuild is watching this session. ${active} When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it.`;
+  // The repo's stack, as its environment block sets it up (#332): started for you, its keys loaded by reference.
+  const stack = environment
+    ? ' Start this repo\'s stack with `deep env up` and stop it with `deep env down`; DeepBuild leases its ports, accounts and screens to this session and loads its credentials into the stack itself, so don\'t read, print or copy keys or the files that hold them.'
+    : '';
+  return `DeepBuild is watching this session. ${active}${stack} When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it.`;
 }
 
 /** The git folder of the repo `cwd` is in, and the common folder its refs live in (a worktree's differs). */

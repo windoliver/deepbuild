@@ -138,13 +138,35 @@ fn ask_text(events: &[Value], ask: &Value, now: u64) -> String {
         .and_then(|options| options.iter().find(|option| option["id"] == default))
         .and_then(|option| option["label"].as_str())
         .unwrap_or(default);
-    let deadline = data["deadline"].as_u64().unwrap_or(now);
+    // The undo of its default gives it a new deadline.
+    let deadline = states::deadline(events, ask).unwrap_or(now);
     format!(
         "{} {} · {} — {} If you don't answer: {label}, in {}.",
         states::glyph(states::State::NeedsYou.entry()),
         states::title(events, ask["session"].as_str().unwrap_or_default()),
         states::State::NeedsYou.word(),
         data["question"].as_str().unwrap_or_default(),
-        states::span(deadline.saturating_sub(now)),
+        states::span_until(deadline, now),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_notification_says_when_the_default_applies_after_its_undo() {
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Push?", "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let events = vec![
+            ask,
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a1", "data": {}}),
+            json!({"kind": "default.undone", "writer": "core", "subject": "ask:a1",
+                   "data": {"deadline": 2_000 + 2 * 3_600_000}}),
+        ];
+        let text = notification_text(&events, "s1", 2_000);
+        assert!(text.ends_with("If you don't answer: No, in 2 h."), "{text}");
+    }
 }
