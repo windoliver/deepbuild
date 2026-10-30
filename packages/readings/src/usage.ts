@@ -42,7 +42,7 @@ export function beginsTurn(e: Obj, message: Obj): boolean {
   if (e.toolUseResult !== undefined || e.isMeta === true || e.isCompactSummary === true) return false;
   const { content } = message;
   if (Array.isArray(content)) return !content.some((c) => isObj(c) && c.type === 'tool_result');
-  return !(typeof content === 'string' && /^<(command-|local-command-)/.test(content));
+  return !(typeof content === 'string' && /^<(command-|local-command-|bash-|task-notification)/.test(content));
 }
 interface Turn { turn: string; usage: Tokens; unknown: boolean; replied: boolean }
 
