@@ -33,6 +33,8 @@ export type Plant =
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
   | 'runs-disk-bytes'
+  // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
+  | 'line-at-stop'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
   | 'app-note-unrecorded' | 'app-note-as-person'
   // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
@@ -68,6 +70,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'line-at-stop',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',

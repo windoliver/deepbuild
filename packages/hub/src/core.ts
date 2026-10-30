@@ -43,8 +43,10 @@ import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
+import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
+import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
@@ -191,7 +193,7 @@ interface Routes {
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
 }
 /** An answered ask, as a route delivers it. */
-interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null }
+interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
 /** Your words sent from the app into a session (#340), by the delivery's request ID. */
 interface Note { session: string; text: string; request: string }
 /**
@@ -345,6 +347,8 @@ export class Core {
   private readonly offers = new Map<string, { meta: HookMeta; about: About; scope: string }>();
   /** The typed-saves-decision plant's sessions you typed words in. */
   private readonly typedAt = new Map<string, number>();
+  /** Each session's promised check (#120): its state as the record has it, the timer for its due time, and whether its one ask was raised. */
+  private readonly promises = new Map<string, PromiseState & { timer?: NodeJS.Timeout | undefined; asked?: boolean; handed?: boolean }>();
   /** resolver-decisions with no ledger, asked whether a saved decision covers a prompt before anything is raised (#23). */
   private precheck!: Resolver;
 
@@ -531,6 +535,8 @@ export class Core {
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
     if (this.options.plant !== 'restores-at-session-start-only') this.watchSettings();
+    // The promised checks the record still holds wait on, armed again (#120).
+    await this.restorePromises().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
   }
 
@@ -892,7 +898,222 @@ export class Core {
         await this.stopRecords(draft, meta, session);
         const loop = this.loopAt(live);
         if (loop) data.loop = loop;
+        // A check the agent promises for later becomes a wake-up (#120); a subagent's stop promises nothing to you.
+        if (session && !meta.fields?.agent_id) await this.promised(meta).catch(() => undefined);
       }
+    }
+  }
+
+  // ---- Long waits and promised checks (#120; design: Before each command, "Commands end.").
+
+  /** An event about a session, appended as the core. */
+  private appendSession(session: string, agent: string, kind: string, data: Obj): Promise<void> {
+    const ts = this.now();
+    return this.append(this.connection('core', { session, agent }), { v: 1, id: ulid(ts), kind, ts, subject: `session:${letters(session)}`, data: data as JsonValue });
+  }
+  /**
+   * The waits as the record holds them, for a hub starting on it (#120): how long each command took before, and
+   * each session's turn and calls still running, with the last line its chat could read and each call's overrun.
+   */
+  async waitsState(): Promise<{ history: [string, number][]; sessions: Restored[] }> {
+    await this.ready;
+    // One read of the recent events, paired by call in memory: no join the database could not index.
+    const events = (await this.record.raw(`SELECT e.session_id AS session, e.kind, e.ts, e.data, s.agent, s.worktree FROM events e JOIN sessions s ON s.id = e.session_id
+      WHERE e.kind IN ('user.ask', 'agent.stop', 'session.end', 'tool.before', 'tool.after', 'session.reading', 'call.overrun') AND e.log_pos > (SELECT COALESCE(MAX(log_pos), 0) - 20000 FROM events) ORDER BY e.log_pos`)) as { session: string; kind: string; ts: number; data: string | Obj; agent: string | null; worktree: string | null }[];
+    const history: [string, number][] = [];
+    const befores = new Map<string, { ts: number; key: string }>();
+    const state = new Map<string, Restored>();
+    for (const e of events) {
+      const d = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
+      let r = state.get(e.session);
+      if (!r) state.set(e.session, r = { session: e.session, agent: e.agent ?? 'agent', cwd: e.worktree ?? '', lastLine: e.ts, open: [] });
+      const call = typeof d.call === 'string' ? d.call : undefined;
+      switch (e.kind) {
+        case 'user.ask':
+          if (d.from === 'person' || !r.turnStart) { r.ask = excerpt(String(d.text ?? ''), 40) || 'your prompt'; r.turnStart = e.ts; }
+          r.lastLine = e.ts;
+          r.open = [];
+          break;
+        case 'agent.stop': r.lastLine = e.ts; r.open = []; break;
+        case 'session.end': state.delete(e.session); break;
+        case 'tool.before':
+          if (call) {
+            const kind = String(d.kind ?? 'unknown');
+            const tool = String(d.tool ?? '');
+            const command = typeof d.command === 'string' ? d.command : null;
+            befores.set(`${e.session}|${call}`, { ts: e.ts, key: historyKey(kind, command, tool) });
+            r.open.push({ call, kind, tool, command, started: e.ts, shown: e.ts });
+          }
+          break;
+        case 'tool.after': {
+          const before = call ? befores.get(`${e.session}|${call}`) : undefined;
+          // A call that ended well teaches the next one its time.
+          if (before && d.outcome === 'ok' && e.ts >= before.ts) history.push([before.key, e.ts - before.ts]);
+          if (call) befores.delete(`${e.session}|${call}`);
+          r.open = r.open.filter((o) => o.call !== call);
+          break;
+        }
+        case 'call.overrun': for (const o of r.open) if (o.call === call) { o.overrun = e.ts; o.shown = e.ts; } break;
+        case 'session.reading':
+          r.lastLine = e.ts;
+          for (const o of r.open) o.shown = e.ts;
+          break;
+        default:
+      }
+    }
+    return { history, sessions: [...state.values()].filter((r) => r.turnStart !== undefined) };
+  }
+  /** A line the chat showed of a wait: kept as the session's reading, so the next ten minutes count from it after a restart too. */
+  async line(session: string, agent: string, text: string): Promise<void> {
+    await this.ready;
+    await this.queue(() => this.appendReading(session, agent, text.replace(/^DeepBuild: /gm, '')));
+  }
+  /** A call still running past its expected time: recorded as an overrun, and the session's row says so. It never becomes a wait on you. */
+  async overrun(m: { session: string; agent: string; cwd: string; data: Obj }): Promise<void> {
+    await this.ready;
+    // The line itself is recorded by the hook that shows it (`line`), once, where the chat read it.
+    await this.queue(() => this.appendSession(m.session, m.agent, 'call.overrun', m.data));
+  }
+  /** Words for an agent whose hooks take no context: carried by its next prompt. */
+  later(session: string, cwd: string, text: string): void {
+    this.routesOf(session, cwd).later.push(text);
+  }
+  /**
+   * The checks a stop's last message promises for later: the first sets the session's wake-up, or sets it again,
+   * keeping its first end; a wake-up never sets itself again. A promise set a fourth time, or due past its end, is
+   * BLOCKED with its owner and at most one ask, and no further wake-up fires.
+   */
+  private async promised(meta: HookMeta): Promise<void> {
+    const text = meta.fields?.last_assistant_message;
+    if (!text) return;
+    const now = this.now();
+    const [next] = promisesIn(text, now);
+    if (!next) return;
+    const current = this.promises.get(meta.session);
+    // BLOCKED stands until the session ends: no further wake-up is set, and the one ask is not asked again.
+    if (current?.status === 'blocked') return;
+    clearTimeout(current?.timer);
+    const state = setPromise(current, next, ulid(now));
+    const entry = { ...state, timer: undefined, asked: current?.asked ?? false };
+    this.promises.set(meta.session, entry);
+    if (state.status === 'blocked') return this.promiseBlocked(meta.session, meta.agent, meta.cwd, entry);
+    await this.appendSession(meta.session, meta.agent, 'promise.set', { promise: state.id, quote: state.quote, due: state.due, times_set: state.set, end: state.end });
+    this.armPromise(meta.session);
+  }
+  /** One timer per promise, for its due time; nothing polls, so an idle session costs no CPU while it waits. */
+  private armPromise(session: string): void {
+    const p = this.promises.get(session);
+    if (!p || p.status !== 'set' || this.stopping) return;
+    clearTimeout(p.timer);
+    p.timer = setTimeout(() => void this.queue(() => this.promiseDue(session)).catch(() => undefined), Math.min(Math.max(0, p.due - this.now()), 2 ** 31 - 1));
+    p.timer.unref();
+  }
+  /**
+   * A promise's due time: where the session has shown it can be woken when idle (Claude Code's waiter), the wake-up
+   * starts a turn now; elsewhere, as in Codex, whose hooks never start a turn, it starts nothing: the session's row
+   * shows it due, and its next prompt or stop carries it. The route is the session's shown routes, never the agent's name.
+   */
+  private async promiseDue(session: string): Promise<void> {
+    const p = this.promises.get(session);
+    if (!p || p.status !== 'set' || this.stopping) return;
+    if (p.due > this.now()) return this.armPromise(session);
+    const agent = this.sessions.get(session)?.agent ?? this.live.get(session)?.agent ?? 'claude-code';
+    const r = this.routes.get(session);
+    const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && r.busy < r.waiter.since;
+    await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: idle ? 'wake' : 'next_hook' });
+    p.status = 'due';
+    if (idle && r.waiter) return this.handPromise(session, p, r);
+    await this.appendReading(session, agent, dueReading(p));
+    // The event loop holds this session's next stop for it.
+    this.askingSoon();
+  }
+  /**
+   * The wake-up handed to the session's waiter: woken only once the wake's prompt shows it (the `promise:<id>` token
+   * in the waiter's text). A wake that shows no turn within the grace reads stalled, as an ask's does: the route is
+   * marked as not waking, the row shows the check due, and the session's next prompt or stop carries it.
+   */
+  private handPromise(session: string, p: PromiseState & { timer?: NodeJS.Timeout | undefined; handed?: boolean }, r: Routes): void {
+    const waiter = r.waiter;
+    if (!waiter) return;
+    r.waiter = undefined;
+    p.handed = true;
+    waiter.give({ session, text: wakeText(p) });
+    this.armPromiseGrace(session, p, WAKE_GRACE);
+  }
+  private armPromiseGrace(session: string, p: PromiseState & { timer?: NodeJS.Timeout | undefined }, inMs: number): void {
+    if (this.stopping) return;
+    clearTimeout(p.timer);
+    p.timer = setTimeout(() => void this.queue(() => this.promiseUnwoken(session, p.id)).catch(() => undefined), Math.max(0, inMs));
+    p.timer.unref();
+  }
+  private async promiseUnwoken(session: string, id: string): Promise<void> {
+    const p = this.promises.get(session);
+    if (!p || p.id !== id || p.status !== 'due' || p.handed !== true) return;
+    p.handed = false;
+    const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+    const r = this.routes.get(session);
+    // A route never seen working counts as absent: this session's promised checks wait for its next prompt or stop.
+    if (r && r.wakes !== true) r.wakes = false;
+    await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'next_hook' });
+    await this.appendReading(session, agent, `Claude Code didn't wake this session for its promised check: its waiter handed it over and no turn started. ${dueReading(p)}`);
+    this.askingSoon();
+  }
+  /** The due promise a session's prompt or stop carries, taken once, with how it went. */
+  private async promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt = ''): Promise<string | undefined> {
+    const p = this.promises.get(session);
+    if (!p || p.status !== 'due') return undefined;
+    p.status = 'woken';
+    const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+    // The wake's own prompt, carrying the text the waiter was handed, proves the wake; any other hook carries the check
+    // itself. Only a handed wake text carries this set's token, so a late wake (its prompt after the grace) still proves
+    // the route, and a typed prompt that lands while the wake is queued finds it in the transcript, as an ask's does.
+    const token = promiseToken(p);
+    const stalled = p.handed === false;
+    const woke = via === 'next_prompt' && (prompt.includes(token) || (p.handed !== undefined && await this.woken(session, token)));
+    clearTimeout(p.timer);
+    const r = this.routes.get(session);
+    if (woke && r) r.wakes = true;
+    await this.appendSession(session, agent, 'promise.woken', { promise: p.id, via: woke ? 'waiter' : via }).catch(() => undefined);
+    if (woke && stalled) await this.appendReading(session, agent, 'Claude Code woke this session for its promised check after all; the check goes with that wake\'s turn.').catch(() => undefined);
+    this.askingSoon();
+    return woke ? undefined : wakeText(p);
+  }
+  private promiseDueFor(session: string): boolean { return this.promises.get(session)?.status === 'due'; }
+  private async promiseBlocked(session: string, agent: string, cwd: string, p: PromiseState & { asked?: boolean }): Promise<void> {
+    const owner = ownerOf(p.quote);
+    let ask: string | null = null;
+    if (!p.asked) {
+      p.asked = true;
+      const question = `The agent's promised check is BLOCKED (${blockedCause(p) === 'set_again' ? `promised ${p.set} times` : 'promised past its end'}; owner: ${owner}): "${p.quote}" Do the check yourself, or drop it?`;
+      const options = [{ id: 'take', label: 'I will do the check', decision: 'none' }, { id: 'drop', label: 'Drop it', decision: 'none' }];
+      const raised = { kind: 'choice', question, options, recommended: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.pinOf(cwd, question) };
+      ask = await this.asks.raise(this.connection('core', { session, agent }), 'promise.blocked', raised).catch(() => null);
+    }
+    await this.appendSession(session, agent, 'promise.blocked', { promise: p.id, status: 'BLOCKED', quote: p.quote, cause: blockedCause(p), owner, ask });
+    await this.appendReading(session, agent, blockedReading(p, owner));
+    await this.attention(session, agent, 'stuck');
+  }
+  /** The promises the record holds that still wait, after a restart: each set one is armed again, each due one waits for its hook. */
+  private async restorePromises(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
+    const handedAt = new Map<string, number>();
+    for (const row of rows) {
+      // A session's end takes its promise with it: nothing wakes a session that is gone.
+      if (row.kind === 'session.end') { this.promises.delete(row.session); continue; }
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      const p = this.promises.get(row.session);
+      if (row.kind === 'promise.set') this.promises.set(row.session, { id: String(d.promise), quote: String(d.quote), due: Number(d.due), set: Number(d.times_set), end: Number(d.end), status: 'set', timer: undefined, asked: p?.asked ?? false });
+      else if (p && p.id === d.promise) {
+        p.status = row.kind === 'promise.due' ? 'due' : row.kind === 'promise.woken' ? 'woken' : 'blocked';
+        p.handed = row.kind === 'promise.due' && d.route === 'wake';
+        if (p.handed) handedAt.set(row.session, Number(row.ts));
+      }
+      if (row.kind === 'promise.blocked' && p) p.asked = true;
+    }
+    for (const [session, p] of this.promises) {
+      if (p.status === 'set') this.armPromise(session);
+      else if (p.status === 'due' && p.handed) this.armPromiseGrace(session, p, WAKE_GRACE - (this.now() - (handedAt.get(session) ?? this.now())));
+      else if (p.status === 'due') this.askingSoon();
     }
   }
 
@@ -1345,6 +1566,9 @@ export class Core {
       // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
       // it as the folder's last session.
       if (r.later.length) this.routesOf(meta.session).later = r.later;
+      const promise = this.promises.get(meta.session);
+      clearTimeout(promise?.timer);
+      this.promises.delete(meta.session);
       for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted]) map.delete(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and starts no waiter of its own: the one its session's
@@ -1369,9 +1593,18 @@ export class Core {
     await Promise.allSettled([...this.inflight]);
     const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
-    const rows = (await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
-      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Answer[];
-    return rows.filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
+    const rows = ((await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
+      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
+      .filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
+    if (!rows.length) return [];
+    // Your words and the screenshot sent from the card (#327) ride on the answer event, which the asks table doesn't
+    // carry: one read of those events for the rows still waiting, the latest per ask.
+    const events = (await this.record.raw(`SELECT subject, data FROM events WHERE kind = 'ask.answered' AND subject IN (${rows.map((row) => `'ask:${sql(row.id)}'`).join(', ')}) ORDER BY log_pos`)) as { subject: string; data: string }[];
+    const latest = new Map(events.map((e) => [e.subject, JSON.parse(e.data) as { words?: unknown; image?: unknown }]));
+    return rows.map((row) => {
+      const data = latest.get(`ask:${row.id}`) ?? {};
+      return { ...row, words: typeof data.words === 'string' ? data.words : null, image: typeof data.image === 'string' ? data.image : null };
+    });
   }
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
@@ -1379,7 +1612,10 @@ export class Core {
       const chosen = row.answer === null ? null : JSON.parse(row.answer) as unknown;
       const options = row.options === null ? [] : JSON.parse(row.options) as { id: string; label: string }[];
       const label = options.find((o) => o.id === chosen)?.label;
-      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}.`;
+      // An answer of words or a screenshot alone is already the answer: it isn't said twice.
+      const beside = [row.words === null || row.words === chosen ? [] : [`your words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
+      if (row.image !== null && row.image === chosen) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: a screenshot, sha256 ${row.image}${row.words === null ? '' : ` — with your words: "${row.words}"`}.`;
+      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? ` — with ${beside.join(' and ')}` : ''}.`;
     });
     return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
   }
@@ -1422,9 +1658,10 @@ export class Core {
   private async askingNow(): Promise<void> {
     const rows = ((await this.record.raw(`SELECT id, session_id FROM asks WHERE session_id IS NOT NULL AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')`)) as { id: string; session_id: string }[])
       .filter((r) => !this.prompts.has(`ask:${r.id}`));
-    // A session with a send-back planted for its next stop has that stop held too (#25).
+    // A session with a send-back planted for its next stop has that stop held too (#25), and one whose promised check is due (#120).
     const planted = [...this.routes].filter(([, r]) => r.sendBacks.length).map(([id]) => id);
-    const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted])].sort();
+    const promised = [...this.promises].filter(([, p]) => p.status === 'due').map(([id]) => id);
+    const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted, ...promised])].sort();
     const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
     const key = `${sessions.join(' ')}|${judged.join(' ')}`;
     if (key === this.askingSent) return;
@@ -1446,6 +1683,16 @@ export class Core {
     void this.queue(async () => {
       const waiter = r.waiter;
       if (!waiter || !idle()) return;
+      // A promised check that came due before this waiter asked (a hub restarted on the record, the waiter back a
+      // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
+      const p = this.promises.get(session);
+      if (p?.status === 'due' && !p.handed) {
+        // The hand follows its recorded route, or not at all.
+        const agent = this.sessions.get(session)?.agent ?? 'claude-code';
+        await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'wake' });
+        await this.appendReading(session, agent, 'The promised check\'s wake-up is handed to this session\'s waiter.').catch(() => undefined);
+        return this.handPromise(session, p, r);
+      }
       const rows = await this.waitingFor(session);
       const notes = this.notes.get(session) ?? [];
       if (!rows.length && !notes.length) return;
@@ -1518,7 +1765,7 @@ export class Core {
     if (!handed) return;
     clearTimeout(handed.timer);
     this.handed.delete(ask);
-    if ((prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, ask)) {
+    if ((prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, `ask:${ask}`)) {
       const r = this.routes.get(session);
       if (r) r.wakes = true;
       return this.outcome(ask, 'next_prompt', 'delivered');
@@ -1536,12 +1783,12 @@ export class Core {
     this.handedNotes.delete(request);
     this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), { session: note.session, text: note.text, request }]);
   }
-  /** Whether the transcript shows a turn carrying an ask's answer: a queued wake or a prompt naming it. */
-  private async woken(session: string, ask: string): Promise<boolean> {
+  /** Whether the transcript shows a turn carrying a waiter's text (an ask's answer, a promise's wake-up): a queued wake or a prompt naming its token. */
+  private async woken(session: string, token: string): Promise<boolean> {
     const transcript = this.sessions.get(session)?.transcript;
     if (!transcript) return false;
     return (await this.tail(transcript, 1 << 20)).split('\n').some((l) => {
-      if (!l.includes(`ask:${ask}`)) return false;
+      if (!l.includes(token)) return false;
       try {
         const e = JSON.parse(l) as Obj;
         return e.type === 'queue-operation' || (e.type === 'user' && isObj(e.message) && typeof e.message.content === 'string');
@@ -1719,7 +1966,7 @@ export class Core {
         const status = await this.statusReply(meta);
         for (const [ask, handed] of [...this.handed]) if (handed.session === meta.session) await this.unwoken(meta.session, ask, prompt);
         const waiting = await this.waitingFor(meta.session);
-        if (status && !waiting.length && !r.later.length) {
+        if (status && !waiting.length && !r.later.length && !this.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.live.get(meta.session);
           if (live?.state && live.state !== 'working') await this.attention(meta.session, live.agent, live.state);
@@ -1736,7 +1983,8 @@ export class Core {
         const notes = this.carried.get(meta.session);
         this.carried.delete(meta.session);
         const ack = this.acknowledge(meta.session);
-        const context = [answers, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context].filter(Boolean).join('\n\n');
+        const promised = await this.promiseCarried(meta.session, 'next_prompt', prompt);
+        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -1797,6 +2045,9 @@ export class Core {
   /** A stop held while the agent left a question: what it is sent back with, or nothing. */
   private async stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined> {
     const session = meta.session;
+    // A promised check that came due while no route could wake the session goes back with this stop (#120).
+    const promised = await this.queue(() => this.promiseCarried(session, 'stop_hold'));
+    if (promised) return promised;
     const open = async () => ((await this.record.raw(`SELECT 1 FROM asks WHERE session_id = '${sql(session)}' AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered') LIMIT 1`)) as unknown[]).length > 0;
     if (this.options.plant !== 'no-stop-count' && r.continued >= this.cap()) {
       // One more block would pass Claude Code's cap and be overridden: what would continue the turn waits for its next prompt.
@@ -2602,7 +2853,7 @@ export class Core {
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
-    const answer = chosen?.id ?? String(input.words);
+    const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
@@ -3603,6 +3854,7 @@ export class Core {
     this.stopping = true;
     for (const timer of this.timers) clearInterval(timer);
     for (const live of this.live.values()) clearTimeout(live.quiet);
+    for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
     for (const set of this.waiting.values()) for (const wake of set) wake();
     try {
