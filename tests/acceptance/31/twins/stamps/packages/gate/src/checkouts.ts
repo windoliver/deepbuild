@@ -130,6 +130,20 @@ const listening = async (port: number): Promise<boolean> => new Promise((resolve
 
 interface Live { dir: string; runs: Set<string>; standIns: StandIn[] }
 
+const chmodAll = (dir: string): Promise<number | null> => new Promise((resolve) => {
+  const child = spawn('/bin/chmod', ['-R', 'u+rwX', dir], { stdio: 'ignore' });
+  child.on('error', () => resolve(null));
+  child.on('close', resolve);
+});
+
+/** Removes a checkout, a read-only folder in it included: `chmod -R` doesn't follow the links it meets. */
+const clear = async (dir: string): Promise<void> => {
+  await rm(dir, { recursive: true, force: true }).catch(async () => {
+    await chmodAll(dir);
+    await rm(dir, { recursive: true, force: true });
+  });
+};
+
 /** Opens the service: makes the store, and removes whatever checkout a crash left in `root`. */
 export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts> {
   const o: CheckoutsOptions = { ...given, plant: given.plant ?? 'stamps-time' };
@@ -137,7 +151,7 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
   if (!existsSync(join(o.store, 'HEAD'))) await git(o.store, ['init', '-q', '--bare', '.']);
   await mkdir(o.root, { recursive: true });
   const root = await realpath(o.root);
-  await Promise.all((await readdir(root)).map((name) => rm(join(root, name), { recursive: true, force: true })));
+  await Promise.all((await readdir(root)).map((name) => clear(join(root, name))));
   const objects = join(o.store, 'objects');
   const live = new Map<string, Live>();
   // Snapshots and the prune each touch the store's objects: one at a time, so a prune never takes what a snapshot is still writing.
@@ -234,6 +248,8 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
         await rm(join(dir, folder), { recursive: true, force: true });
         if (await copy(['-R']) !== 0) throw Error(`can't copy ${folder} into the checkout`);
       }
+      // A read-only folder keeps its mode in the clone, where the tree's files must still go.
+      await chmodAll(join(dir, folder));
       // What isn't ignored in it comes from the tree alone, so a file only the worktree has isn't left behind.
       // A link the clone keeps on the way to one is removed itself: never what it points at.
       for (const path of (await git(worktree, ['ls-files', '-co', '--exclude-standard', '-z', '--', folder])).split('\0').filter((p) => p && p !== folder)) await rm(linkOn(dir, path) ?? join(dir, path), { recursive: true, force: true });
@@ -296,7 +312,7 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
   const remove = async (l: Live): Promise<void> => {
     live.delete(l.dir);
     for (const s of l.standIns) if (s.run) await o.host.cleanup(s.run).catch(() => undefined);
-    await rm(l.dir, { recursive: true, force: true });
+    await clear(l.dir);
   };
 
   const checkout: Checkouts['checkout'] = async (given) => {
@@ -333,6 +349,8 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
         await writeFile(bin, FORMS.command, { mode: 0o755 });
         built.push({ check: s.check, kind: s.kind, hash: sha256(FORMS.command), bin });
       } else if (s.kind === 'module' && 'path' in s && inside(s.path) && /\.[cm]?[jt]sx?$/.test(s.path) && s.exports.every((e) => /^[A-Za-z_$][\w$]*$/.test(e))) {
+        // Through a link it would land outside the checkout: no stand-in, so the check can't import it.
+        if (linkOn(dir, s.path) || lstatSync(join(dir, s.path), { throwIfNoEntry: false })) continue;
         const form = moduleForm(s.exports);
         await mkdir(dirname(join(dir, s.path)), { recursive: true });
         await writeFile(join(dir, s.path), form);
