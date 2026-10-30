@@ -11,7 +11,7 @@ import { clockTime } from './promises.js';
 
 type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
-export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; calls?: string[]; commits?: string[] }
+export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; calls?: string[]; commits?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
 /** A session with no hook for this long, whatever its last state, reads quiet. */
 const QUIET_MS = 24 * 3_600_000;
@@ -24,6 +24,8 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query);
+  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
+  const notes = new Map(((await query("SELECT session_id, json_extract(data, '$.text') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.text') LIKE '%watch-only%' OR json_extract(data, '$.text') LIKE 'This stop isn''t held%') ORDER BY log_pos")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
   const rows = sessions.map((s): StatusRow => {
     const open = asks.get(s.id);
@@ -37,7 +39,8 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
       : s.status === 'unknown' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
       : s.status === 'finished' ? ['finished', `its turn stopped ${ago(s.last_seen)} ago`]
       : ['working', `last seen ${ago(s.last_seen)} ago`];
-    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why };
+    const note = notes.get(s.id);
+    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why, ...(note ? { note } : {}) };
   });
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));

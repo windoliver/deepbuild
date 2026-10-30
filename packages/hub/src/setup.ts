@@ -12,9 +12,10 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { draftAskSettings } from '@deepbuild/asks';
-import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
+import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
 import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
+import { codexConfig, codexHooks, codexRelations, fixedHook, hasCodex, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
@@ -94,6 +95,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     const groups = ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000)));
     for (const file of [settingsFile, userFile]) keepOriginal(root, record, file);
     saveRecord(root, record);
+    if (hasCodex()) installCodex(root, record, cli, hook);
     const settings = withStatusLine(root, withHooks(root, planned.get(settingsFile)!, groups), `${q(hook)} statusline`);
     writeJson(settingsFile, settings);
     noteWritten(record, settingsFile);
@@ -164,6 +166,25 @@ function lenient(text: string): { value: Obj } | { refused: string } {
     return { refused: `isn't JSON: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
+/**
+ * Codex's entries after yours in its hooks.json, and DeepBuild's MCP server in its config.toml (#39): each written only
+ * when it isn't there yet, through a link if the file is one, so a second setup leaves the bytes and Codex's trust alone.
+ */
+function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli: string, built: string): void {
+  const hook = fixedHook(root, built);
+  const read = (file: string) => { const real = target(file); return existsSync(real) ? readFileSync(real, 'utf8') : ''; };
+  // Both are read before either is written: one that won't parse refuses the pair.
+  const [hooksFile, configFile] = [codexHooks(), codexConfig()];
+  const [hooksText, configText] = [read(hooksFile), read(configFile)];
+  const [hooks, config] = [withEntries(root, hooksText, hook), withServer(configText, process.execPath, cli)];
+  for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
+    if (after === before) continue;
+    keepOriginal(root, record, file);
+    writeThrough(file, after);
+    noteWritten(record, file);
+  }
+}
+
 /** Your status line runs behind ours: its command kept as `statusline.yours` in config.json, which deep-hook runs. */
 function withStatusLine(root: string, settings: Obj, ours: string): Obj {
   const line = isObj(settings.statusLine) ? settings.statusLine : undefined;
@@ -243,6 +264,8 @@ async function undo(): Promise<number> {
   const notes = [
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
+    putBack(root, record, codexHooks(), () => { const f = target(codexHooks()); writeThrough(codexHooks(), withoutEntries(root, readFileSync(f, 'utf8'))); return `you edited ${codexHooks()} since setup, so undo took out only DeepBuild's entries`; }),
+    putBack(root, record, codexConfig(), () => { const f = target(codexConfig()); writeThrough(codexConfig(), withoutServer(readFileSync(f, 'utf8'), process.execPath, join(REPO, 'packages/cli/dist/main.js'))); return `you edited ${codexConfig()} since setup, so undo took out DeepBuild's MCP server if it was as setup wrote it`; }),
   ].filter((n): n is string => n !== undefined);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });
@@ -254,14 +277,22 @@ async function undo(): Promise<number> {
 
 /** deep doctor's item for each timing relation our entries keep, with both values: broken is a failed item. */
 export function relationItems(): { item: string; agent: string; code: string; level: 'ok' | 'fail'; evidence: string; fix: string }[] {
-  return relations(installedRoot()).map((r) => ({
+  const codex = codexRelations(installedRoot()).map((r) => ({
+    item: `timing.codex_${r.name.replaceAll(' ', '_')}`,
+    agent: 'codex',
+    code: r.holds ? 'healthy' : 'timing_relation_broken',
+    level: r.holds ? 'ok' as const : 'fail' as const,
+    evidence: r.text,
+    fix: r.holds ? 'Nothing to do.' : `Put the value back as the reading says; setup never changes it, since Codex asks for trust again when an entry's timeout changes.`,
+  }));
+  return [...codex, ...relations(installedRoot()).map((r) => ({
     item: `timing.${r.name.replaceAll(' ', '_')}`,
     agent: 'claude-code',
     code: r.holds ? 'healthy' : 'timing_relation_broken',
     level: r.holds ? 'ok' as const : 'fail' as const,
     evidence: r.text,
     fix: r.holds ? 'Nothing to do.' : `Run deep setup, which writes the entry's timeout again, or raise it in ${claudeSettings()}.`,
-  }));
+  }))];
 }
 
 /**
