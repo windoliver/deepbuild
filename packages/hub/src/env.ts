@@ -3,6 +3,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { call } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { startOf } from './wire.js';
 
 const USAGE = 'Usage: deep env up|down [--root <folder>] [--json]';
 
@@ -30,7 +31,8 @@ export async function envCommand(args: readonly string[]): Promise<number> {
   const say = (out: Obj, text: string) => process.stdout.write(json ? `${JSON.stringify(out)}\n` : `${text}\n`);
   let result: Obj;
   try {
-    const reply = await call(socket, readFileSync(at.token, 'utf8').trim(), `env.${command}`, { worktree });
+    // Named as this process, so the hub's peer check finds the agent session above it: its leases are that session's (#332).
+    const reply = await call(socket, readFileSync(at.token, 'utf8').trim(), `env.${command}`, { worktree }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
     if ('error' in reply) throw Error(reply.error.remediation);
     result = reply.result;
   } catch (error) {

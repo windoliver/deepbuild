@@ -14,10 +14,17 @@ export type CoreRequest =
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
   | { op: 'permission'; meta: HookMeta }
   | { op: 'subscribe'; sub: string; after: number }
+  | { op: 'waits' }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
   | { op: 'waiter-gone'; key: number }
+  // A call still running past its expected time (#120): recorded as an overrun, with the line the chat shows of it.
+  | { op: 'overrun'; session: string; agent: string; cwd: string; data: { call: string; kind: string; command: string | null; expected_ms: number; ran_ms: number; deadline: 'attached' | 'recorded' | 'none' } }
+  // Words for an agent whose hooks take no context: they go with its next prompt (#120).
+  | { op: 'later'; session: string; cwd: string; text: string }
+  // A line the chat showed of a wait (#120): kept as the session's reading.
+  | { op: 'line'; session: string; agent: string; text: string }
   | { op: 'unsubscribe'; sub: string }
   | (CoreRequest & { n: number });
 
@@ -32,6 +39,7 @@ export async function answer(core: Core, request: CoreRequest): Promise<unknown>
     case 'tool-gate': return core.toolGate(request.meta, request.call);
     case 'permission': return core.permission(request.meta);
     case 'subscribe': return core.subscribe(request.sub, request.after);
+    case 'waits': return core.waitsState();
     case 'stop': return core.stop(request.reason);
   }
 }
@@ -39,7 +47,7 @@ export const asRefusal = (error: unknown) => (error instanceof Refused ? error.r
 
 if (parentPort && workerData?.core) {
   const port = parentPort;
-  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged) => port.postMessage({ op: 'asking', sessions, judged }), (session) => port.postMessage({ op: 'acking', session }));
+  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged) => port.postMessage({ op: 'asking', sessions, judged }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
@@ -47,6 +55,9 @@ if (parentPort && workerData?.core) {
   port.on('message', (message: CoreMessage) => {
     if (message.op === 'hook') return void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
+    if (message.op === 'overrun') return void core.overrun(message).catch(() => undefined);
+    if (message.op === 'later') return core.later(message.session, message.cwd, message.text);
+    if (message.op === 'line') return void core.line(message.session, message.agent, message.text).catch(() => undefined);
     if (message.op === 'unsubscribe') return core.unsubscribe(message.sub);
     const { n } = message;
     answer(core, message).then((result) => port.postMessage({ n, result }), (error: unknown) => port.postMessage({ n, error: asRefusal(error) }));

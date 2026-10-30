@@ -104,7 +104,7 @@ function readCodexUsage(transcript: readonly JsonValue[]): TurnUsage[] {
 export const claudeParts: AdapterParts = {
   // Claude Code's hooks: a Stop hook can block, a PermissionRequest hook decides and may carry updatedInput, a
   // PreToolUse hook may rewrite the input, and StopFailure fires for a turn that ends in an error.
-  caps: { holdStop: true, wakeIdle: false, steer: false, followUp: false, answerPermission: true, nativeTools: true, mcp: true, rewrite: true, editInput: true, errorTurnHook: true, startTurn: false },
+  caps: { holdStop: true, wakeIdle: true, steer: false, followUp: false, answerPermission: true, nativeTools: true, mcp: true, rewrite: true, editInput: true, errorTurnHook: true, startTurn: false },
   unsupported: TERMINAL_ONLY,
   doctor: () => notChecked('claude'),
   readUsage: readClaudeUsage,
