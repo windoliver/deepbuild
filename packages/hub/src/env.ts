@@ -43,7 +43,8 @@ export async function envCommand(args: readonly string[]): Promise<number> {
     say(result, result.status === 'ready' ? `ready: ${ports} (${String(result.run)})` : `BLOCKED: ${String(result.cause)}`);
     return result.status === 'ready' ? 0 : 3;
   }
-  const left = (result.left ?? []) as { pid: number; port?: number }[];
-  say(result, `down: stopped ${(result.stopped as number[]).length}${left.length ? `; left, unproven and not stopped: ${left.map((l) => `pid ${l.pid}${l.port ? ` on port ${l.port}` : ''}`).join(', ')}` : ''}`);
+  const left = (result.left ?? []) as { pid?: number; port?: number; cause?: string }[];
+  const named = (l: (typeof left)[number]) => l.pid === undefined ? `unchecked: ${l.cause}` : `pid ${l.pid}${l.port ? ` on port ${l.port}` : ''}`;
+  say(result, `down: stopped ${(result.stopped as number[]).length}${left.length ? `; left, unproven and not stopped: ${left.map(named).join(', ')}` : ''}`);
   return left.length ? 1 : 0;
 }
