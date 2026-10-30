@@ -111,7 +111,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 µs at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 \u00b5s at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "corpus-replay",
@@ -671,6 +671,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "wiki-build",
+      "command": [
+        "node",
+        "benchmarks/wiki.mjs",
+        "build"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #356 first measurement: the merge base has no wiki build at setup. One process archives 212 seeded sessions (30 days of history in four repos, twelve messages each), builds the wiki from them as setup does with a reading agent that finds nothing, then builds it again, failing unless the first build wrote a page for each repo and the second changed no page, read no message again and started no new reading job; p50 includes Node's start, the archive pass, pattern matching, the claims, the pages and the read positions. The issue's 5% of a plan window and 4,000-token start slice stay in tests/acceptance/356/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "deep-hook-day-overhead",
