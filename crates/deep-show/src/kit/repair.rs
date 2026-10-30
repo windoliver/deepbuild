@@ -58,6 +58,19 @@ pub fn play_scene(hub: &Hub<'_>, scene: &Value) -> Vec<Value> {
     if let Some(q) = scene.get("quotas") {
         input["quotas"] = q.clone();
     }
+    // The packs a scene installs before its first call, each folder under this crate (#402: the
+    // core's `derived_item` fixture patches a derived item of an installed pack's recipe).
+    if let Some(packs) = scene.get("packs").and_then(Value::as_array) {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let list: Vec<Value> = packs
+            .iter()
+            .map(|p| {
+                let dir = root.join(p["dir"].as_str().unwrap_or_default());
+                json!({"id": p["id"], "dir": dir.to_string_lossy()})
+            })
+            .collect();
+        input["packs"] = json!(list);
+    }
     let calls: Vec<Value> = scene["calls"]
         .as_array()
         .into_iter()

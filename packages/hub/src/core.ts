@@ -4,7 +4,7 @@
 // output or a backfill never holds up the event loop that acknowledges hooks.
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { availableParallelism, homedir, networkInterfaces } from 'node:os';
@@ -23,7 +23,7 @@ import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_
 import { headTrust, openCheckouts, slot, validityGate, type Checkouts, type SessionLog } from '@deepbuild/gate';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
-import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { after, openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
@@ -331,6 +331,8 @@ export class Core {
   private readonly settingsReadings: string[] = [];
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
+  /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
+  private readonly settling = new Map<string, Set<() => void>>();
   /** Each session's routes back into it, by session ID. */
   private readonly routes = new Map<string, Routes>();
   /** Answers handed to a waiter that no turn has shown yet, by ask ID. */
@@ -417,10 +419,17 @@ export class Core {
     // never on how many arrived together, so a cut at any one can be replayed.
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
+    if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
-    this.record = streamed(this.record, (kind) => {
+    this.record = streamed(this.record, ({ kind, subject, data }) => {
       this.stream();
       if (kind.startsWith('ask.') || kind.startsWith('delivery.')) this.askingSoon();
+      // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
+      // appender's next commit holds this thread with its sync (#823).
+      const about = kind === 'decision.applied' && isObj(data) ? data.ask : subject;
+      const woken = typeof about === 'string' ? [...this.settling.get(about) ?? []] : [];
+      for (const wake of woken) wake();
+      return woken.length ? new Promise((done) => setImmediate(done)) : undefined;
     });
     // A start that finds the last run still marked running records that run's stop as a crash.
     try {
@@ -2408,13 +2417,27 @@ export class Core {
     return { planted: true };
   }
   private answerOrTimeout(session: string, ms: number): Promise<void> {
-    return new Promise((done) => {
-      const set = this.waiting.get(session) ?? new Set();
-      this.waiting.set(session, set);
-      const wake = () => { clearTimeout(timer); set.delete(wake); done(); };
-      const timer = setTimeout(wake, Math.max(0, ms));
-      set.add(wake);
+    return this.wakeable(this.waiting, session, ms).woken;
+  }
+  /**
+   * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
+   * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
+   */
+  private wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
+    const set = waits.get(key) ?? new Set();
+    waits.set(key, set);
+    let wake = (): void => undefined;
+    const woken = new Promise<void>((done) => {
+      wake = () => {
+        clearTimeout(timer);
+        set.delete(wake);
+        if (!set.size && waits.get(key) === set) waits.delete(key);
+        done();
+      };
     });
+    const timer = setTimeout(wake, Math.max(0, ms));
+    set.add(wake);
+    return { woken, cancel: wake };
   }
 
   /** The hook kinds some loaded extension handles, read once the extensions have started. */
@@ -3275,15 +3298,14 @@ export class Core {
     try { real = realpathSync(folder); } catch { return undefined; }
     return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
-  /** The checks a worktree's spec names, by name, with the command each runs and its deadline in ms, where it gives one. */
-  private checksOf(worktree: string): Map<string, { run: string; deadline?: number }> {
+  /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
+  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown }> {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      const deadline = duration(c.deadline as JsonValue | undefined);
-      return [[name, { run: c.run, ...(deadline ? { deadline } : {}) }] as const];
+      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}) }] as const];
     }));
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
@@ -3355,18 +3377,26 @@ export class Core {
   }
   private async waitFor(session: string, handle: string): Promise<Obj> {
     const until = Date.now() + this.askWait();
+    // The deep-wait-polls plant reads the ask every 100 ms, as the hub did before #823.
+    const polls = this.options.plant === 'deep-wait-polls';
     for (;;) {
-      const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
-      if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
-      // Decided for you (#27): the answer is the one the decision that closed it saved.
-      if (row.status === 'decided' && row.answer === null) {
-        const [d] = (await this.record.raw(`SELECT d.answer AS answer FROM events e JOIN decisions d ON 'decision:' || d.id = json_extract(e.data, '$.decision') WHERE e.kind = 'decision.applied' AND json_extract(e.data, '$.ask') = '${sql(handle)}' ORDER BY e.log_pos DESC LIMIT 1`)) as { answer: string | null }[];
-        return { ask: handle, status: row.status, answer: d?.answer ? JSON.parse(d.answer) : null };
+      // The ask is read again only once an event about it lands, the hub stops or the wait runs out (#823).
+      const wait = polls ? { woken: new Promise((done) => setTimeout(done, 100)), cancel: () => undefined } : this.wakeable(this.settling, handle, until - Date.now());
+      try {
+        const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
+        if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
+        // Decided for you (#27): the answer is the one the decision that closed it saved.
+        if (row.status === 'decided' && row.answer === null) {
+          const [d] = (await this.record.raw(`SELECT d.answer AS answer FROM events e JOIN decisions d ON 'decision:' || d.id = json_extract(e.data, '$.decision') WHERE e.kind = 'decision.applied' AND json_extract(e.data, '$.ask') = '${sql(handle)}' ORDER BY e.log_pos DESC LIMIT 1`)) as { answer: string | null }[];
+          return { ask: handle, status: row.status, answer: d?.answer ? JSON.parse(d.answer) : null };
+        }
+        if (row.status !== 'open' && row.status !== 'later') return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
+        if (this.stopping && this.options.plant !== 'stop-answers-waiting') throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
+        if (this.stopping || Date.now() >= until) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+        await wait.woken;
+      } finally {
+        wait.cancel();
       }
-      if (row.status !== 'open' && row.status !== 'later') return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
-      if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
-      if (Date.now() >= until) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
-      await new Promise((done) => setTimeout(done, 100));
     }
   }
 
@@ -3437,21 +3467,32 @@ export class Core {
     const cwd = this.sessions.get(session)!.cwd;
     const check = this.checksOf(cwd).get(String(args.check));
     if (check === undefined) throw this.unknownCheck(cwd, args.check);
+    // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
+    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+    if (check.deadline !== undefined && !deadline) {
+      throw refuse('pattern', `/checks/${String(args.check)}/deadline`, `Give the check's deadline in .deepbuild/done.yaml as a whole number above 0 of m, h or d, such as 30m, not ${String(check.deadline)}.`, String(check.deadline));
+    }
     const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
     const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, check.deadline);
+    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, deadline);
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait();
     for (;;) {
-      const [done] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = '${sql(String(run))}' LIMIT 1`)) as { data: string }[];
-      if (done) {
-        const d = JSON.parse(done.data) as { outcome: string; evidence: string[] };
-        return { run, claim: `claim:${claim.id}`, outcome: d.outcome, evidence: d.evidence.map((sha) => `ev:${sha}`) };
+      // Read again only once an event about the run lands, the hub stops or the wait runs out (#823).
+      const wait = this.wakeable(this.settling, String(run), until - Date.now());
+      try {
+        const [done] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = '${sql(String(run))}' LIMIT 1`)) as { data: string }[];
+        if (done) {
+          const d = JSON.parse(done.data) as { outcome: string; evidence: string[] };
+          return { run, claim: `claim:${claim.id}`, outcome: d.outcome, evidence: d.evidence.map((sha) => `ev:${sha}`) };
+        }
+        if (this.stopping || Date.now() >= until) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
+        await wait.woken;
+      } finally {
+        wait.cancel();
       }
-      if (this.stopping || Date.now() >= until) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
-      await new Promise((wake) => setTimeout(wake, 100));
     }
   }
   private refusedAppend(error: unknown, what: string): Refused {
@@ -3753,9 +3794,9 @@ export class Core {
     }
     // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed.
     let overran = false;
-    const due = run.deadline ? setTimeout(() => { overran = true; stop(); }, run.deadline) : undefined;
+    const disarm = run.deadline ? after(run.deadline, () => { overran = true; stop(); }) : undefined;
     const done = ended.then(async ({ code, failed, missing }) => {
-      clearTimeout(due);
+      disarm?.();
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
       await writes;
@@ -4241,7 +4282,7 @@ export class Core {
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
-    for (const set of this.waiting.values()) for (const wake of set) wake();
+    for (const waits of [this.waiting, this.settling]) for (const set of [...waits.values()]) for (const wake of set) wake();
     try {
       await this.ready;
     } catch {
@@ -4283,11 +4324,32 @@ function withAppend(record: RecordStore, append: RecordStore['append']): RecordS
   });
 }
 
-/** The record, calling `appended` after each append it took. */
-function streamed(record: RecordStore, appended: (kind: string) => void): RecordStore {
+/**
+ * The record, each read it serves first logged to `file` as a JSON line: when it began, the method, and its SQL or
+ * arguments (DEEP_HUB_TEST_READS, #823). Only tests set it.
+ */
+function readsLogged(record: RecordStore, file: string): RecordStore {
+  writeFileSync(file, '');
+  const reads = new Set(['raw', 'read', 'table', 'session', 'resolve', 'startSlice', 'loadLearned']);
+  return new Proxy(record, {
+    get: (target, key) => {
+      const value = Reflect.get(target, key, target) as unknown;
+      if (typeof value !== 'function') return value;
+      const bound = (value as (...a: unknown[]) => unknown).bind(target);
+      if (typeof key !== 'string' || !reads.has(key)) return bound;
+      return (...args: unknown[]) => {
+        appendFileSync(file, `${JSON.stringify({ at: Date.now(), via: key, query: key === 'raw' ? args[0] : JSON.stringify(args) })}\n`);
+        return bound(...args);
+      };
+    },
+  });
+}
+
+/** The record, calling `appended` after each append it took, and waiting for what it returns. */
+function streamed(record: RecordStore, appended: (input: EventInput) => Promise<unknown> | undefined): RecordStore {
   return withAppend(record, async (connection, input) => {
     const event = await record.append(connection, input);
-    appended(input.kind);
+    await appended(input);
     return event;
   });
 }
