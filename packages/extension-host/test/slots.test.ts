@@ -87,7 +87,7 @@ let seq = 0;
 const line = (agent: string, session: string, event: string): HookRequestLine => ({ v: 1, agent, event, seq: String(++seq), id: `01K7${String(seq).padStart(22, '0')}`, pid: 1, ppid: 1, matched: [], payload: { session_id: session, hook_event_name: event, cwd: '/' } });
 const hooks = async (h: ExtensionHost, agent: string, session: string, ...events: string[]): Promise<void> => { for (const e of events) await h.hook(line(agent, session, e)); };
 let asked = 0;
-const answer = (session: string): Delivery => ({ ask: `ask:A${++asked}`, session, option: 'approve', decision: 'allow', words: null, provisional: false, undoes: null });
+const answer = (session: string): Delivery => ({ ask: `ask:A${++asked}`, session, option: 'approve', decision: 'allow', words: null, image: null, provisional: false, undoes: null, because: null, budget: null });
 
 describe('#349 gating comes from the hook deep-hook held', () => {
   it('an adapter that maps SessionStart to a gate kind doesn\'t gate the session; the adapter whose PreToolUse line is mapped does', async () => {

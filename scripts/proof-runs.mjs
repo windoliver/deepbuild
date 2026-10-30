@@ -288,8 +288,9 @@ function runVitest(directory, files, env) {
   const vitest = join(directory, 'node_modules/vitest/vitest.mjs');
   if (!existsSync(vitest)) return { results, fileErrors, unrunnable: new Map(files.map((file) => [file, 'vitest is not installed in the checkout'])) };
   const reports = temporary('deep-proof-report-'), report = join(reports, 'report.json'), errors = join(reports, 'errors.jsonl');
-  // vitest's JSON report for what ran, and ours for how each failure failed.
-  const result = spawnSync(process.execPath, [vitest, 'run', '--reporter=json', `--outputFile.json=${report}`, `--reporter=${VITEST_REPORTER}`, ...files], { cwd: directory, env: { ...childEnv(env), DEEP_PROOF_VITEST_REPORT: errors }, encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
+  // vitest's JSON report for what ran, and ours for how each failure failed. Files run one at a time: an acceptance
+  // file starts its own hub, and hubs side by side lease the same ports, so one file's stack answers for another's.
+  const result = spawnSync(process.execPath, [vitest, 'run', '--no-file-parallelism', '--reporter=json', `--outputFile.json=${report}`, `--reporter=${VITEST_REPORTER}`, ...files], { cwd: directory, env: { ...childEnv(env), DEEP_PROOF_VITEST_REPORT: errors }, encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
   if (timedOut(result)) return { results, fileErrors, unrunnable: stopped(files) };
   if (!existsSync(report)) return { results, fileErrors, unrunnable: new Map(files.map((file) => [file, `vitest wrote no report: ${firstLine(result.stderr)}`])) };
   const failures = new Map();

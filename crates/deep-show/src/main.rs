@@ -89,7 +89,8 @@ use serde_json::{json, Map, Value};
 
 use hub::{
     flicks, Body, Call, Card, Claim, Eval, Fault as HoldFault, Hold, Include, Panel, PatchCall,
-    Planted, Process, RecordObject, Requirement, Scenario, Session, Show, Slot, Startup, Via,
+    Planted, PressPhase, Process, RecordObject, Requirement, Scenario, Session, Show, Slot,
+    Startup, Via,
 };
 use shared::{Clock, CommitFault, Quota};
 
@@ -323,6 +324,37 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "windows" => return Some(Call::Windows),
         "layout" => return Some(Call::Layout),
         "card" => return Some(Call::CardState),
+        "press" => {
+            if c.get("source")?.as_str()? != "hid" {
+                return None;
+            }
+            return Some(Call::Press {
+                t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
+                phase: match c.get("phase")?.as_str()? {
+                    "down" => PressPhase::Down,
+                    "up" => PressPhase::Up,
+                    "repeat" => PressPhase::Repeat,
+                    _ => return None,
+                },
+                option: c.get("option")?.as_str()?.to_string(),
+            });
+        }
+        "rearm" => {
+            let on = c.get("on")?.as_str()?;
+            if ![
+                "content",
+                "move",
+                "resize",
+                "occluded",
+                "display",
+                "activation",
+            ]
+            .contains(&on)
+            {
+                return None;
+            }
+            return Some(Call::Rearm(on.to_string()));
+        }
         "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
@@ -807,11 +839,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 }
                 _ => return None,
             };
+            let options = c.get("options")?.as_array()?;
             Some(Card {
                 question: c.get("question")?.as_str()?.to_string(),
-                options: c
-                    .get("options")?
-                    .as_array()?
+                options: options
                     .iter()
                     .map(|o| o.get("label")?.as_str().map(str::to_string))
                     .collect::<Option<_>>()?,
@@ -876,6 +907,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }
         Some(Some("evaluates_hidden")) => {
             placement_planted.evaluates_hidden = true;
+            None
+        }
+        Some(Some("arms_from_delivery")) => {
+            placement_planted.arms_from_delivery = true;
+            None
+        }
+        Some(Some("never_rearms")) => {
+            placement_planted.never_rearms = true;
             None
         }
         Some(Some("accepts_any_ring_serial")) => {
