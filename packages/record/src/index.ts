@@ -142,6 +142,22 @@ export interface RecordStore {
   close(): Promise<void>;
 }
 
+/**
+ * The events of `kinds` after `cursor`, in log order, and the cursor to read from next: the log's head read before
+ * the first page, so the other kinds are scanned once and never decoded, and what lands after the head is read next
+ * time. Every fold that follows the log with a cursor reads it this way.
+ */
+export async function readSince(record: RecordStore, cursor: number, kinds: readonly string[], each: (event: Event) => void): Promise<number> {
+  const [row] = (await record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+  const head = Number(row?.head ?? 0);
+  for (;;) {
+    const page = await record.read({ after: cursor, limit: 1000, kinds });
+    for (const e of page) each(e);
+    if (page.length) cursor = page[page.length - 1]!.log_pos;
+    if (page.length < 1000) return Math.max(cursor, head);
+  }
+}
+
 /** The record's JSON for one event: seq as its decimal string. */
 export const toJson = (event: Event): string => JSON.stringify(event, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
 
