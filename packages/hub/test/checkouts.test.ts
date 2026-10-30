@@ -75,6 +75,53 @@ describe('checkouts from where a session sits', () => {
     await s.close();
   }, 60_000);
 
+  // A package a tree tracks in the ignored folder, now a link in the worktree: the clone keeps that link.
+  const linkedPackage = (repo: string, git: (...args: string[]) => void): { real: string; big: Buffer } => {
+    const big = Buffer.alloc(2 << 20, 'b');
+    mkdirSync(join(repo, 'node_modules/foo'));
+    writeFileSync(join(repo, 'node_modules/foo/patched.js'), 'broken\n');
+    writeFileSync(join(repo, 'node_modules/foo/big.bin'), big);
+    git('add', '-f', 'node_modules/foo');
+    git('commit', '-qm', 'base');
+    const real = join(repo, '..', 'shared-foo');
+    mkdirSync(real);
+    writeFileSync(join(real, 'patched.js'), 'real\n');
+    writeFileSync(join(real, 'big.bin'), big);
+    rmSync(join(repo, 'node_modules/foo'), { recursive: true });
+    symlinkSync(real, join(repo, 'node_modules/foo'));
+    return { real, big };
+  };
+
+  it('making a checkout never changes what a link in a dependency folder points at, and the tree\'s bytes are written in its place', async () => {
+    const { repo, service, git } = world();
+    const { real, big } = linkedPackage(repo, git);
+    const s = await service;
+    const { commit } = await s.snapshot(repo);
+    const base = await s.baseCheckout({ worktree: repo, onto: 'HEAD', claim: commit, own: [], dependencies: ['node_modules'], runs: ['r'] });
+    expect(readFileSync(join(real, 'patched.js'), 'utf8'), 'the small file outside').toBe('real\n');
+    expect(readFileSync(join(real, 'big.bin')).equals(big), 'the big file outside').toBe(true);
+    expect(lstatSync(join(base.dir, 'node_modules/foo')).isSymbolicLink(), 'no link left in the tree\'s folder').toBe(false);
+    expect(readFileSync(join(base.dir, 'node_modules/foo/patched.js'), 'utf8')).toBe('broken\n');
+    expect(readFileSync(join(base.dir, 'node_modules/foo/big.bin')).equals(big)).toBe(true);
+    await s.close();
+  }, 60_000);
+
+  it('a linked install with a stale tracked file under it is still cloned', async () => {
+    const { repo, service, git } = world();
+    mkdirSync(join(repo, 'pkg/node_modules'));
+    writeFileSync(join(repo, 'pkg/node_modules/patched.js'), 'broken\n');
+    git('add', '-f', 'pkg/node_modules/patched.js');
+    git('commit', '-qm', 'base');
+    const s = await service;
+    rmSync(join(repo, 'pkg/node_modules'), { recursive: true });
+    symlinkSync(join(repo, 'node_modules'), join(repo, 'pkg/node_modules'));
+    const { commit } = await s.snapshot(repo);
+    const base = await s.baseCheckout({ worktree: repo, onto: 'HEAD', claim: commit, own: [], dependencies: ['node_modules'], runs: ['r'] });
+    expect(existsSync(join(base.dir, 'pkg/node_modules/dep.js')), 'the install is there').toBe(true);
+    expect(readFileSync(join(base.dir, 'pkg/node_modules/patched.js'), 'utf8')).toBe('broken\n');
+    await s.close();
+  }, 60_000);
+
   it('in a folder git partly tracks, the base sees the tree\'s bytes, the ignored rest, and nothing else of the worktree\'s', async () => {
     const { repo, service, git } = world();
     writeFileSync(join(repo, 'node_modules/patched.js'), 'broken\n');

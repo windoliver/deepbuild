@@ -235,9 +235,18 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         if (await copy(['-R']) !== 0) throw Error(`can't copy ${folder} into the checkout`);
       }
       // What isn't ignored in it comes from the tree alone, so a file only the worktree has isn't left behind.
-      const isLink = linked && !await git(worktree, ['ls-files', '--', folder]);
-      if (!isLink) for (const path of (await git(worktree, ['ls-files', '-co', '--exclude-standard', '-z', '--', folder])).split('\0').filter(Boolean)) await rm(join(dir, path), { recursive: true, force: true });
+      // A link the clone keeps on the way to one is removed itself: never what it points at.
+      for (const path of (await git(worktree, ['ls-files', '-co', '--exclude-standard', '-z', '--', folder])).split('\0').filter((p) => p && p !== folder)) await rm(linkOn(dir, path) ?? join(dir, path), { recursive: true, force: true });
     }
+  };
+  /** The first link on the way to `path` in `dir`, if there is one. */
+  const linkOn = (dir: string, path: string): string | undefined => {
+    const parts = path.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      const at = join(dir, ...parts.slice(0, i));
+      if (lstatSync(at, { throwIfNoEntry: false })?.isSymbolicLink()) return at;
+    }
+    return undefined;
   };
   /**
    * Writes `tree` into `dir`. A big file whose blob the worktree's bytes are is cloned from there, then its clone hashed
@@ -258,6 +267,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         if (e.type !== 'blob' || e.mode === '120000' || e.size < BIG) continue;
         const from = join(worktree, e.path);
         const to = join(dir, e.path);
+        if (linkOn(dir, e.path)) continue;
         try {
           if (!(await lstat(from)).isFile() || (await stat(from)).size !== e.size) continue;
           await mkdir(dirname(to), { recursive: true });
