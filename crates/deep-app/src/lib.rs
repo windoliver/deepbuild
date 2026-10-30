@@ -10,6 +10,7 @@
 
 pub mod canvas;
 pub mod card;
+pub mod cells;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
