@@ -12,9 +12,11 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use crate::hub::{HubClient, HubError};
+use crate::states::closes;
 
 /// The kinds that close an ask, and the outcome the inbox shows for each, as the asks core names them.
-const CLOSING: [(&str, &str); 6] = [
+const CLOSING: [(&str, &str); 7] = [
+    ("decision.applied", "decided_for_you"),
     ("ask.answered", "answered"),
     ("ask.defaulted", "defaulted"),
     ("ask.escalated", "escalated"),
@@ -52,10 +54,25 @@ impl View {
                 }));
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
-            let ask = event["subject"].as_str().unwrap_or_default();
-            for row in self.inbox.iter_mut().filter(|row| row["ask"] == ask) {
+            // The close rule the rest of the app reads, and the first close to append decides, as in the core.
+            for row in self.inbox.iter_mut().filter(|row| {
+                row["status"] != "closed" && closes(&event, row["ask"].as_str().unwrap_or_default())
+            }) {
                 row["status"] = json!("closed");
                 row["outcome"] = json!(outcome);
+            }
+        } else if kind == "default.undone"
+            && event["writer"] == "core"
+            && event["data"]["deadline"].is_u64()
+        {
+            // Open again, still shown, as in the core.
+            for row in self
+                .inbox
+                .iter_mut()
+                .filter(|row| row["ask"] == event["subject"] && row["outcome"] == "defaulted")
+            {
+                row["status"] = json!("shown");
+                row["outcome"] = json!("unanswered");
             }
         }
         self.events.push(event);
@@ -250,4 +267,54 @@ pub fn with_view<R>(read: impl FnOnce(&View) -> R) -> Option<R> {
             Source::Local(view) => read(view),
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(view: &View, ask: &str) -> (String, String) {
+        let row = view
+            .inbox
+            .iter()
+            .find(|row| row["ask"] == ask)
+            .expect("a row");
+        (
+            row["status"].as_str().unwrap().to_owned(),
+            row["outcome"].as_str().unwrap().to_owned(),
+        )
+    }
+
+    #[test]
+    fn the_inbox_closes_an_ask_as_the_core_does() {
+        let mut view = View::default();
+        for id in ["a1", "a2", "a3"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
+        }
+        view.apply(
+            json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a3",
+                          "data": {"decision": "d1", "ask": "ask:a1"}}),
+        );
+        view.apply(json!({"kind": "ask.cancelled", "writer": "mcp:agent", "subject": "ask:a2", "data": {}}));
+        view.apply(
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a1", "data": {}}),
+        );
+        let closed = |outcome: &str| ("closed".to_owned(), outcome.to_owned());
+        let open = ("shown".to_owned(), "unanswered".to_owned());
+        assert_eq!(row(&view, "ask:a1"), closed("decided_for_you"));
+        assert_eq!(row(&view, "ask:a2"), open);
+        assert_eq!(row(&view, "ask:a3"), open);
+
+        // The core undoes a2's default: open again. An agent's undo, or one of an answer, opens nothing.
+        let defaulted = |id: &str| json!({"kind": "ask.defaulted", "writer": "core", "subject": format!("ask:{id}"), "data": {}});
+        let undo = |id: &str, writer: &str| json!({"kind": "default.undone", "writer": writer, "subject": format!("ask:{id}"), "data": {"deadline": 9}});
+        view.apply(defaulted("a2"));
+        view.apply(defaulted("a3"));
+        view.apply(undo("a1", "core"));
+        view.apply(undo("a2", "core"));
+        view.apply(undo("a3", "mcp:agent"));
+        assert_eq!(row(&view, "ask:a1"), closed("decided_for_you"));
+        assert_eq!(row(&view, "ask:a2"), open);
+        assert_eq!(row(&view, "ask:a3"), closed("defaulted"));
+    }
 }

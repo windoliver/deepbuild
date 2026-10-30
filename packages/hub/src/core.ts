@@ -189,7 +189,7 @@ interface Routes {
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
 }
 /** An answered ask, as a route delivers it. */
-interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null }
+interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
 /** Your words sent from the app into a session (#340), by the delivery's request ID. */
 interface Note { session: string; text: string; request: string }
 /**
@@ -1560,9 +1560,18 @@ export class Core {
     await Promise.allSettled([...this.inflight]);
     const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
-    const rows = (await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
-      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Answer[];
-    return rows.filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
+    const rows = ((await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
+      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
+      .filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
+    if (!rows.length) return [];
+    // Your words and the screenshot sent from the card (#327) ride on the answer event, which the asks table doesn't
+    // carry: one read of those events for the rows still waiting, the latest per ask.
+    const events = (await this.record.raw(`SELECT subject, data FROM events WHERE kind = 'ask.answered' AND subject IN (${rows.map((row) => `'ask:${sql(row.id)}'`).join(', ')}) ORDER BY log_pos`)) as { subject: string; data: string }[];
+    const latest = new Map(events.map((e) => [e.subject, JSON.parse(e.data) as { words?: unknown; image?: unknown }]));
+    return rows.map((row) => {
+      const data = latest.get(`ask:${row.id}`) ?? {};
+      return { ...row, words: typeof data.words === 'string' ? data.words : null, image: typeof data.image === 'string' ? data.image : null };
+    });
   }
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
@@ -1570,7 +1579,10 @@ export class Core {
       const chosen = row.answer === null ? null : JSON.parse(row.answer) as unknown;
       const options = row.options === null ? [] : JSON.parse(row.options) as { id: string; label: string }[];
       const label = options.find((o) => o.id === chosen)?.label;
-      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}.`;
+      // An answer of words or a screenshot alone is already the answer: it isn't said twice.
+      const beside = [row.words === null || row.words === chosen ? [] : [`your words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
+      if (row.image !== null && row.image === chosen) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: a screenshot, sha256 ${row.image}${row.words === null ? '' : ` — with your words: "${row.words}"`}.`;
+      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? ` — with ${beside.join(' and ')}` : ''}.`;
     });
     return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
   }
@@ -2762,7 +2774,7 @@ export class Core {
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
-    const answer = chosen?.id ?? String(input.words);
+    const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
