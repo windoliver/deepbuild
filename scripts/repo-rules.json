@@ -422,6 +422,10 @@
           "spec": "0.0.0",
           "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
         },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The record's event data is the contracts' JsonValue."
+        },
         "@deepbuild/leases": {
           "spec": "0.0.0",
           "why": "Issue #237: given the kernel's lease table, the supervisor takes each run's keys through it and releases them citing the processes it proved gone."
@@ -1219,6 +1223,54 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
+        }
+      }
+    },
+    "packages/adapters/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The adapter registry validates each facts file and payload against the published contract schemas, and its types are the contracts' JsonValue."
+        }
+      }
+    },
+    "packages/cli/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "deep run reads a recorded run result through the one code table, the conformance package's judge and exit code (#313)."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "deep run holds a run result to run.finished@1 through the contracts' validate (#313)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "deep debug bundle scrubs the logs and doctor output it writes, by pattern and by value, through the evidence package's scrub."
+        },
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "Every hub command (deep hub, setup, status, inbox, env, doctor and the rest) is the hub package's."
+        },
+        "@deepbuild/otlp": {
+          "spec": "0.0.0",
+          "why": "deep doctor reads the telemetry receiver's own doctor items (#42)."
+        },
+        "@deepbuild/reading": {
+          "spec": "0.0.0",
+          "why": "deep find and deep read are the reading package's query API (#63)."
+        }
+      }
+    },
+    "packages/conformance/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "The adapter kit drives an adapter through its contract, and its fake agent maps hooks by a facts file."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The slot checks read the frozen API digests and error codes the contracts publish."
         }
       }
     }
