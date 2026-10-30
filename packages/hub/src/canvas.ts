@@ -1,6 +1,6 @@
 // The hub's canvas side (#806): deep_show from an agent's deep mcp and `deep show` from the CLI land here, stamped as
 // the session the binding or the peer check names, never as the payload says. The canvas core it runs them through is
-// `deep-show serve`, the checkout's build of the canvas crates (#393's stand-in, long-lived), one process per hub: it
+// `deep-show canvas`, the checkout's build of the canvas crates (#393's stand-in, long-lived), one process per hub: it
 // holds the documents, their revisions and writer layers, checks each revision, renders back settled snapshots
 // headless with Vello CPU, and keeps the issues and snapshots in the hub's evidence store by hash. This module gives it
 // the hub's world (the sessions bound, the documents minted, the record's asks and readings, claims), records each
@@ -52,7 +52,7 @@ export class Canvas {
 
   private start(): ChildProcessWithoutNullStreams {
     if (this.child) return this.child;
-    const child = spawn(canvasCore(), ['serve'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(canvasCore(), ['canvas'], { stdio: ['pipe', 'pipe', 'pipe'] });
     child.stderr.resume();
     createInterface({ input: child.stdout }).on('line', (line) => {
       let value: Obj;
@@ -98,7 +98,7 @@ export class Canvas {
   }
 }
 
-/** The world as `deep-show serve` reads it: #393's scenario fields, sessions keyed by session ID. */
+/** The world as `deep-show canvas` reads it: #393's scenario fields, sessions keyed by session ID. */
 function shape(world: CanvasWorld, evidence: string): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };

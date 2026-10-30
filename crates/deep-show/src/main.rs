@@ -1130,30 +1130,30 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     }
 }
 
-/// The virtual display clock `serve` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
+/// The virtual display clock `canvas` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
 /// half a millisecond a check, and each call ten frames after the one before, so a patch is current
 /// at a latch before the next call arrives, as on the stand-in's clock (#384, #96).
-const SERVE_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
-const SERVE_SPACING: i64 = 10 * (shared::FLICKS / 120);
+const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
+const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
 
-/// `deep-show serve` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
+/// `deep-show canvas` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
 /// `calls`, `clock` and `at`) is the hub's: the sessions it bound, the documents it minted, the
 /// record's objects, the claims, the window and card. Each call is played after every call before
-/// it, on the clock `serve` keeps, and answered with its reply, so the replies are the stand-in's for
+/// it, on the clock `canvas` keeps, and answered with its reply, so the replies are the stand-in's for
 /// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
 /// played again before it.
-struct Serve {
+struct CanvasSide {
     world: Map<String, Value>,
     calls: Vec<Value>,
 }
 
-impl Serve {
+impl CanvasSide {
     fn scenario(&self, fault: bool) -> Option<Scenario> {
         let mut input = self.world.clone();
         if !fault {
             input.remove("fault");
         }
-        let (refresh_hz, lead, check) = SERVE_CLOCK;
+        let (refresh_hz, lead, check) = CANVAS_CLOCK;
         input.insert(
             "clock".into(),
             json!({"refresh_hz": refresh_hz, "lead": lead, "check": check}),
@@ -1164,7 +1164,7 @@ impl Serve {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                c["at"] = json!((i as i64 + 1) * SERVE_SPACING);
+                c["at"] = json!((i as i64 + 1) * CANVAS_SPACING);
                 c
             })
             .collect();
@@ -1789,15 +1789,15 @@ fn main() {
         }
     };
     let stdin = io::stdin();
-    let mut serve = Serve {
+    let mut canvas = CanvasSide {
         world: Map::new(),
         calls: Vec::new(),
     };
-    serve.world.insert("evidence".into(), json!(""));
+    canvas.world.insert("evidence".into(), json!(""));
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         let reply = match command.as_str() {
-            "serve" => serve.line(&startup, &line),
+            "canvas" => canvas.line(&startup, &line),
             _ => answer(&command, &startup, &line),
         };
         let _ = writeln!(out, "{reply}");
