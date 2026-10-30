@@ -12,6 +12,7 @@ mod ask;
 mod costs;
 mod evidence;
 mod frames;
+mod host;
 mod hub;
 mod input;
 mod kit;
@@ -21,8 +22,10 @@ mod placement;
 mod planted;
 mod ring;
 mod scene3d;
+mod serve;
 mod shared;
 mod snapshot;
+mod terminal;
 mod time;
 mod verdict;
 
@@ -532,6 +535,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(r) = ring::parse_call(name, c) {
         return Some(Call::Ring(Box::new(r)));
     }
+    if let Some(t) = terminal::parse_call(name, c) {
+        return Some(Call::Term(Box::new(t)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -603,10 +609,24 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let sessions = entries(input, "sessions", |s| {
         let p = s.get("process")?.as_object()?;
+        // #402: a session's terminal, hosted by the hub or running elsewhere.
+        let (runs_in, capture) = match s.get("terminal") {
+            None => (None, None),
+            Some(t) if t.get("hosted")?.as_bool()? => (None, None),
+            Some(t) => (
+                Some(t.get("runs_in")?.as_str()?.to_string()),
+                match t.get("capture") {
+                    None => None,
+                    Some(c) => Some(strings(c.get("lines"))?),
+                },
+            ),
+        };
         Some(Session {
             thread: s.get("thread")?.as_str()?.to_string(),
             name: s.get("name")?.as_str()?.to_string(),
             process: (p.get("pid")?.as_u64()?, p.get("start")?.as_i64()?),
+            runs_in,
+            capture,
         })
     })?;
     let processes = match input.get("processes") {
@@ -936,6 +956,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "keymap_unchecked" => Planted::KeymapUnchecked,
             "conflicts_unreported" => Planted::ConflictsUnreported,
             "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
+            "terminal_30_per_second" => Planted::Terminal30PerSecond,
+            "cells_a_frame_late" => Planted::CellsAFrameLate,
+            "video_shows_late" => Planted::VideoShowsLate,
+            "video_drops_uncounted" => Planted::VideoDropsUncounted,
+            "tab_draws_text" => Planted::TabDrawsText,
+            "tab_redraws_at_30hz" => Planted::TabRedrawsAt30hz,
+            "tab_draws_capture" => Planted::TabDrawsCapture,
             _ => return None,
         }),
     };
@@ -1164,6 +1191,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         ]);
     }
     if set >= BuildSet::R2 {
+        // Issue #402: the cell grid, on the text module.
+        out.push(deep_canvas_cells::module::module());
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame.
         out.push(deep_canvas_effects::module::module());
@@ -1219,6 +1248,14 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     out
+}
+
+/// Every shipped canvas module's manifest, for the `module` call's dependencies (#402).
+pub fn shipped_manifests() -> Vec<deep_canvas::registry::Manifest> {
+    modules(BuildSet::Full)
+        .into_iter()
+        .map(|m| m.manifest)
+        .collect()
 }
 
 /// Registers the build's canvas modules in sorted name order and seals, timing both; the
@@ -1583,6 +1620,12 @@ fn planted_arg(args: &[String]) -> Result<Option<StartPlanted>, ()> {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().cloned().unwrap_or_default();
+    // #402: the terminal side on the wall clock, and a terminal's panel host; neither seals.
+    match command.as_str() {
+        "serve" => std::process::exit(serve::run()),
+        "host" => std::process::exit(host::run(&args)),
+        _ => {}
+    }
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let Ok(fault) = planted_arg(&args) else {

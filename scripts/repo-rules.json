@@ -718,8 +718,28 @@
         }
       }
     },
+    "crates/deep-canvas-cells/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #402: the registry and seal the cells module registers through, the scheduler's typed views it reads a grid's item through, and the OKLab conversion and ops module the palette rule's status distance goes through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #402: a grid's params as the document holds them, and the module's fixture. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-show/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cells canvas module in the r2 build set and up, and the terminal emulator its panel host feeds a program's output through."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #402: a terminal's PTY (openpty, login_tty and its window size) for deep-show serve, and stopping by PID the hosts and programs it started; already in the lockfile."
+        },
         "deep-canvas-graph": {
           "spec": "* path=../deep-canvas-graph",
           "why": "Issue #388: the graph canvas module, in the r1 build set and up."
@@ -1172,6 +1192,12 @@
     }
   },
   "allowedFindings": [
+    {
+      "path": "tests/acceptance/402/cellgrid.test.ts",
+      "kind": "home path",
+      "sha256": "73de225f29dce8dcabd664cb3c25892f80840f279de7a9135a504bdecf37ea2c",
+      "why": "Issue #402: a placeholder cwd (user me) the cell grid's SCOPE test feeds a terminal through OSC 7 and reads back; no real home."
+    },
     {
       "path": "tests/acceptance/79/checks.test.mjs",
       "kind": "home path",

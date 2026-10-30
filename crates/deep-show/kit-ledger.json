@@ -1,7 +1,23 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "0e5c05e60016233827951098f0f87785407dbdc5ff28985e89933157f9356d0a",
+    "digest": "a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c",
+    "verdict": "FAIL",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "FAIL"
+    }
+  },
+  "cells": {
+    "version": "1.0.0",
+    "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
