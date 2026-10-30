@@ -325,7 +325,14 @@ impl Replica {
         let events = Replica::events();
         let now = self.now;
         for device in 0..self.devices.len() {
-            self.with_card(device, |controller| controller.record_changed(&events, now));
+            let gone = self.with_card(device, |controller| {
+                controller.record_changed(&events, now);
+                controller.state_name() == "hidden"
+            });
+            // Its ask closed elsewhere: the card leaves the window.
+            if gone == Some(true) {
+                self.dismiss(device);
+            }
         }
         self.run_due();
     }

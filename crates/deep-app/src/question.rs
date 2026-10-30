@@ -181,6 +181,9 @@ impl Controller {
         slot: Slot,
         faults: Faults,
     ) -> Option<Controller> {
+        if !states::is_open(events, ask) {
+            return None;
+        }
         let model = Model::read(events, ask, now)?;
         let mut machine = Machine::numbered(CARD_SIZE, NEXT_SEQ.fetch_add(1, Ordering::SeqCst));
         machine.present(now, slot);
@@ -243,6 +246,13 @@ impl Controller {
     /// finishing, a batch member closing, the plan landing): the card shows it, each member still in the batch
     /// keeping its switch, and, as any change to what it shows, is presented again unarmed.
     pub fn record_changed(&mut self, events: &[Value], now: u64) {
+        // Answered on another device, decided for you or defaulted: the core refuses any answer now.
+        if !states::is_open(events, &self.model.ask) {
+            self.machine.withdrawn();
+            self.send_down = None;
+            self.send_waiting = None;
+            return;
+        }
         let Some(mut fresh) = Model::read(events, &self.model.ask, now) else {
             return;
         };
@@ -699,10 +709,18 @@ impl Controller {
         self.answers
             .push(Value::Object(answer.params(&self.model.ask)));
         self.record("answered", now);
-        self.receipt = Some(Receipt {
-            says: label,
-            also: self.model.also_answers(events),
-        });
+        // Every other ask it closed: those of its key in its scope, and the batch members the approval ran.
+        let mut also = self.model.also_answers(events);
+        if allow && self.model.batch.len() > 1 {
+            for member in self.model.runs() {
+                let handle = &self.model.batch[member].0;
+                if *handle != self.model.ask && !also.iter().any(|(ask, _)| ask == handle) {
+                    let question = Model::read(events, handle, now).map(|model| model.question);
+                    also.push((handle.clone(), question.unwrap_or_default()));
+                }
+            }
+        }
+        self.receipt = Some(Receipt { says: label, also });
     }
 
     /// The answer through Send with no option: your words and image alone, this ask's only, never a decision
@@ -1236,5 +1254,76 @@ mod tests {
         events.push(json!({"kind": "note.added", "writer": "core", "data": {}}));
         card.record_changed(&events, NOW + 86_400_000);
         assert_eq!((card.state_name(), card.seq()), ("armed", first));
+    }
+
+    #[test]
+    fn a_closed_ask_is_never_presented_and_one_closing_elsewhere_takes_its_card_down() {
+        let mut events = vec![taste("A"), taste("B")];
+        events.push(
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:B", "data": {}}),
+        );
+        assert!(Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).is_none());
+
+        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
+        card.tick(NOW + ARM_AFTER);
+        // Answered on another device: the core takes no answer now, so this card answers nothing.
+        events.push(
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:A", "data": {}}),
+        );
+        card.record_changed(&events, NOW + ARM_AFTER + 10);
+        assert_eq!(card.state_name(), "hidden");
+        assert_eq!(
+            click(&mut card, &events, NOW + ARM_AFTER + 20, Target::Option(1)),
+            Did::Nothing
+        );
+        assert!(card.take_answers().is_empty());
+    }
+
+    #[test]
+    fn a_batch_approvals_receipt_lists_the_other_members_it_ran() {
+        let authority = |id: &str| {
+            ask(
+                id,
+                "authority",
+                json!([{"id": "allow", "label": "Allow", "decision": "allow"}, {"id": "deny", "label": "Deny", "decision": "deny"}]),
+                json!({"key": format!("k{id}"), "subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}}),
+            )
+        };
+        let plan = |id: &str| {
+            json!({"kind": "plan.proposed", "id": format!("P{id}"), "writer": "core", "log_pos": 2, "data": {
+                "ask": format!("ask:{id}"), "diff": "d".repeat(64), "hash": id.repeat(64),
+                "steps": [{"does": format!("push {id}"), "changes": [], "undo": "force-push back", "public": false, "cost": 0}]}})
+        };
+        let events = vec![
+            authority("A"),
+            authority("B"),
+            authority("C"),
+            plan("A"),
+            plan("B"),
+            plan("C"),
+            json!({"kind": "ask.batched", "id": "K", "writer": "core", "log_pos": 4, "data": {"batch": "b", "asks": [
+                {"ask": "ask:A", "plan_hash": null}, {"ask": "ask:B", "plan_hash": null}, {"ask": "ask:C", "plan_hash": null}]}}),
+        ];
+        let mut card = Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
+        card.toggle_step(2);
+        card.tick(NOW + ARM_AFTER);
+        assert_eq!(
+            click(&mut card, &events, NOW + ARM_AFTER, Target::Option(0)),
+            Did::Answered
+        );
+        assert_eq!(card.take_answers()[0]["steps"], json!([0, 1]));
+        let lines = card.lines();
+        assert!(
+            lines.contains(&"Also answered: Question A?".to_owned()),
+            "{lines:?}"
+        );
+        assert!(
+            !lines.iter().any(|line| line.contains("Question C?")),
+            "C was switched off: {lines:?}"
+        );
+        assert!(
+            !lines.contains(&"Also answered: Question B?".to_owned()),
+            "the receipt is B's own: {lines:?}"
+        );
     }
 }

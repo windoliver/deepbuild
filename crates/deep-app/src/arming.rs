@@ -269,6 +269,15 @@ impl Machine {
     }
 
     /// The card answered through its Send, with words or an image and no option: answered, nothing held.
+    /// Its ask closed elsewhere while the card showed: the card is taken down, and nothing on it answers.
+    pub fn withdrawn(&mut self) {
+        if self.shown().is_some() {
+            self.state = State::Hidden;
+            self.down = None;
+            self.confirming = None;
+        }
+    }
+
     pub fn answered(&mut self) {
         if let Some(seq) = self.shown() {
             self.state = State::Answered { seq };
