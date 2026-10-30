@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "promise.set",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "subject": "session:5a2d3e4f111142228333444455556666",
+  "data": {
+    "promise": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "quote": "I'll look again in the morning.",
+    "due": 1760050800000,
+    "times_set": 1,
+    "end": 1760137200000
+  }
+}
