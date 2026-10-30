@@ -22,4 +22,6 @@ export interface Reading {
   by?: HeldBy;
   /** On a reading with a budget: whether it is inside it. Numbers lists those over it first. */
   band?: 'inside' | 'over';
+  /** On a count: what it counts, such as each stale run and what outdated it. */
+  detail?: Record<string, unknown>[];
 }

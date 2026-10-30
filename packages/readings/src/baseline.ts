@@ -29,11 +29,16 @@ function inWindow(text: string, window: { from: number; to: number }): string {
   }).join('\n');
 }
 /** A person's messages in a transcript, for the classifier: never a subagent's prompt, a summary or a harness note. */
-function typed(text: string): string[] {
+function typed(text: string, seen: Set<string>): string[] {
   return text.split('\n').flatMap((line) => {
     try {
-      const e = JSON.parse(line) as { type?: string; isSidechain?: unknown; message?: { content?: unknown } };
-      return e.type === 'user' && e.isSidechain !== true && e.message && typeof e.message.content === 'string' && beginsTurn(e as Record<string, unknown>, e.message as Record<string, unknown>) ? [e.message.content] : [];
+      const e = JSON.parse(line) as { type?: string; uuid?: unknown; isSidechain?: unknown; message?: { content?: unknown } };
+      if (e.type !== 'user' || e.isSidechain === true || !e.message || !beginsTurn(e as Record<string, unknown>, e.message as Record<string, unknown>)) return [];
+      // A resume replays its lines, in this file or another.
+      if (typeof e.uuid === 'string') { if (seen.has(e.uuid)) return []; seen.add(e.uuid); }
+      const { content } = e.message;
+      if (typeof content === 'string') return [content];
+      return Array.isArray(content) ? [content.flatMap((c: { type?: unknown; text?: unknown }) => (c.type === 'text' && typeof c.text === 'string' ? [c.text] : [])).join('\n')] : [];
     } catch { return []; }
   });
 }
@@ -48,7 +53,10 @@ function count(kind: string, whole: string[], window: { from: number; to: number
     const t = countTexts(texts).totals;
     return t.input + t.output + t.cache_write + t.cache_read;
   }
-  if (kind === 'is_it_done') return texts.flatMap(typed).filter(isItDone).length;
+  if (kind === 'is_it_done') {
+    const seen = new Set<string>();
+    return texts.flatMap((t) => typed(t, seen)).filter(isItDone).length;
+  }
   return null;
 }
 

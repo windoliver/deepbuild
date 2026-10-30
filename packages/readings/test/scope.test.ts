@@ -97,6 +97,42 @@ describe('spend from the record', () => {
     expect(find(status, 'tokens.session')?.complete).toBe(true);
   });
 
+  it('a task\'s spend keeps usage from a turn whose latest ask names no task', () => {
+    const paid = { basis: 'reported', usd: 0.5 };
+    const ask = (ts: number, tasks: string[]) => ev('user.ask', ts, 'A', { msg: ts, text: 'x', tasks, from: 'person' });
+    const events = [ask(0, ['task:T']), ask(1, []), usage(2, 't', 1, paid)];
+    expect(find(events, 'spend.usd', 'task:T')).toMatchObject({ value: 0.5, complete: true });
+  });
+
+  it('serves what a count counts, and each stop\'s own hold', () => {
+    const events = [ev('user.ask', 20_000, 'A', { msg: 1, text: 'go', tasks: [], from: 'person' }), ev('stop.held', 0, 'A', { stop: 's1', claim: 'claim:c', total: 5, budget_cost: [] }), ev('run.stale', 30_000, 'A', { run: 'run:r', check: 'j', claim: 'claim:c', newer_claim: 'claim:n' })];
+    expect(find(events, 'stale.count')?.detail).toEqual([{ run: 'run:r', check: 'j', outdated_by: 'person', after_ms: 20_000 }]);
+    expect(find(events, 'held.stop', 's1')?.value).toBe(5);
+  });
+
+  it('a running total that hasn\'t grown leaves its turn unknown; a compaction\'s start doesn\'t', () => {
+    const total = (ts: number, tokens: number, usd: number) => ev('turn.usage', ts, 'A', { turn: `t${ts}`, covers: 'session', tokens: { input: tokens, cached: 0, output: 0 }, cost: { basis: 'reported', usd } }, 'session:A');
+    const dead = [person(0, 1), total(1, 100, 1), person(2, 2), ev('agent.stop', 3, 'A', { cause: 'overloaded' }), total(4, 100, 1), person(5, 3), total(6, 200, 2)];
+    expect(find(dead, 'tokens.session')).toMatchObject({ value: 200, complete: false });
+    expect(readingsOf(recompute(dead)).filter((r) => r.id === 'cost.turn').map((r) => r.value)).toEqual([1, 1]);
+    const compacted = [person(0, 1), start(1, false), total(2, 100, 1)];
+    expect(find(compacted, 'tokens.session')?.complete).toBe(true);
+    const crashed = [person(0, 1), start(1, false), person(2, 2), total(3, 100, 1)];
+    expect(find(crashed, 'tokens.session')?.complete).toBe(false);
+  });
+
+  it('a claim still blocked leaves blocked time incomplete, never a finished sum', () => {
+    const verdict = (ts: number, claim: string, outcome: string) => ev('verdict.made', ts, null, { claim, outcome });
+    expect(find([verdict(1, 'a', 'BLOCKED')], 'blocked.time')).toMatchObject({ value: null, complete: false });
+    expect(find([verdict(1, 'a', 'BLOCKED'), verdict(5, 'a', 'PASS'), verdict(6, 'b', 'BLOCKED')], 'blocked.time')).toMatchObject({ value: 4, complete: false });
+    expect(find([verdict(1, 'a', 'BLOCKED'), verdict(5, 'a', 'PASS')], 'blocked.time')).toMatchObject({ value: 4, complete: true });
+  });
+
+  it('a replayed line keeps its turn\'s usage', () => {
+    const lines = [{ type: 'user', uuid: 'u', message: { content: 'go' } }, { type: 'assistant', message: { id: 'm', model: 'x', usage: { input_tokens: 3, output_tokens: 1 } } }].map((l) => JSON.stringify(l)).join('\n');
+    expect(countTexts([lines, lines]).turns).toEqual([{ turn: 'u', usage: { input: 3, output: 1, cache_write: 0, cache_read: 0 } }]);
+  });
+
   it('a stale run\'s delay counts from its claim\'s last stop', () => {
     const asked = ev('user.ask', 150_000, 'A', { msg: 1, text: 'go', tasks: [], from: 'person' });
     const held = (ts: number) => ev('stop.held', ts, 'A', { stop: `s${ts}`, claim: 'claim:c', total: 0 });
