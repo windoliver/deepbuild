@@ -256,6 +256,7 @@ impl Controller {
         {
             self.model.fields = fresh.fields;
             self.machine.present(now, self.slot);
+            self.send_down = None;
             self.send_waiting = None;
             self.holding = None;
             self.record("presented", now);
@@ -1110,5 +1111,22 @@ mod tests {
             .map(|row| row["row"].as_str().unwrap().to_owned())
             .collect();
         assert_eq!(rows, ["presented", "presented", "refused"]);
+
+        // Send held down on what it said before answers nothing on release, even once armed again.
+        card.tick(NOW + ARM_AFTER + 1_000);
+        card.type_words("Blue, but darker");
+        let at = NOW + ARM_AFTER + 1_100;
+        assert_eq!(
+            card.press(hardware(at, Target::Send, Phase::Down), &events, at),
+            Did::Nothing
+        );
+        events.push(json!({"kind": "run.started", "writer": "core", "data": {"run": "r2", "check": "unit", "claim": "c", "commit": "abc"}}));
+        card.record_changed(&events, at + 50);
+        let up = at + 50 + ARM_AFTER + 100;
+        assert_eq!(
+            card.press(hardware(up, Target::Send, Phase::Up), &events, up),
+            Did::Nothing
+        );
+        assert!(card.take_answers().is_empty());
     }
 }

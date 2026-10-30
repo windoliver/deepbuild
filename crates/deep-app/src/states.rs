@@ -183,8 +183,37 @@ pub fn open_asks<'a>(events: &'a [Value], session: Option<&str>) -> Vec<&'a Valu
         .iter()
         .filter(|event| event["kind"] == "ask.created")
         .filter(|ask| session.is_none_or(|session| ask["session"] == session))
-        .filter(|ask| !events.iter().any(|event| closes(event, &handle(ask))))
+        .filter(|ask| reading(events, &handle(ask)).0)
         .collect()
+}
+
+/// When the ask's default applies: the deadline the core's undo of its default gave it, else its own.
+pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
+    reading(events, &handle(ask))
+        .1
+        .or_else(|| ask["data"]["deadline"].as_u64())
+}
+
+/// Whether the ask `handle` is open and the deadline an undo gave it, as the core reads the record in order: the
+/// first close decides, and only the core's undo of a default opens it again.
+fn reading(events: &[Value], handle: &str) -> (bool, Option<u64>) {
+    let mut closed: Option<&str> = None;
+    let mut deadline = None;
+    for event in events {
+        if closed.is_none() && closes(event, handle) {
+            closed = event["kind"].as_str();
+        } else if closed == Some("ask.defaulted")
+            && event["kind"] == "default.undone"
+            && event["writer"] == "core"
+            && event["subject"] == handle
+        {
+            if let Some(again) = event["data"]["deadline"].as_u64() {
+                closed = None;
+                deadline = Some(again);
+            }
+        }
+    }
+    (closed.is_none(), deadline)
 }
 
 /// The sessions in the record, in the order they first appear.
@@ -366,6 +395,37 @@ mod tests {
             .map(|ask| ask["id"].as_str().unwrap())
             .collect();
         assert_eq!(open, ["a1"]);
+    }
+
+    #[test]
+    fn the_cores_undo_of_a_default_opens_the_ask_again_with_its_new_deadline() {
+        let undo = |id: &str, writer: &str| json!({"kind": "default.undone", "writer": writer, "subject": format!("ask:{id}"), "data": {"deadline": 9}});
+        let events = vec![
+            ask("a1"),
+            ask("a2"),
+            ask("a3"),
+            ask("a4"),
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a1", "data": {}}),
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a2", "data": {}}),
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a3", "data": {}}),
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a4", "data": {}}),
+            // A close after the first changes nothing: the core still undoes the default.
+            json!({"kind": "ask.cancelled", "writer": "core", "subject": "ask:a1", "data": {}}),
+            undo("a1", "core"),
+            undo("a2", "mcp:agent"),
+            undo("a3", "core"),
+            undo("a4", "core"),
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a4", "data": {}}),
+        ];
+        let open: Vec<&str> = open_asks(&events, None)
+            .iter()
+            .map(|ask| ask["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(open, ["a1"]);
+        assert_eq!(deadline(&events, &events[0]), Some(9));
+        let mut own = ask("a5");
+        own["data"]["deadline"] = json!(5);
+        assert_eq!(deadline(&[own.clone()], &own), Some(5));
     }
 
     #[test]

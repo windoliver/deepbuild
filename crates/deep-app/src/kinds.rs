@@ -225,7 +225,7 @@ impl Model {
                 || default_words(kind, &default_id),
                 |option| option.label.clone(),
             );
-        let deadline = data["deadline"].as_u64().unwrap_or(now);
+        let deadline = states::deadline(events, ask).unwrap_or(now);
         let applies = format!("in {}", states::span_until(deadline, now));
         let mut fields = Vec::new();
         let mut steps = Vec::new();
@@ -658,7 +658,7 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
             // A repo-scoped decision answers the asks of that repo's sessions only, as the core's resolver does.
             Some(repo) => project_of(events, &text(&open["session"]))
                 .is_some_and(|other| letters(other) == letters(repo)),
-            None => open["session"] == session.as_str(),
+            None => letters(&text(&open["session"])) == letters(&session),
         })
         .collect();
     Some((words, also))
@@ -1256,6 +1256,46 @@ mod tests {
         assert_eq!(
             (scope.words.as_str(), scope.also),
             ("Saved for this session", 0)
+        );
+
+        // The core knows a session by its letters: "s-4" is s4.
+        let mut spelled = events.clone();
+        spelled.push(in_session("H", "s-4"));
+        assert_eq!(
+            Model::read(&spelled, "ask:D", 0)
+                .unwrap()
+                .scope
+                .unwrap()
+                .also,
+            1
+        );
+
+        // B's default applied, then the core undid it: B is open again, and the answer closes it.
+        let mut undone = events.clone();
+        undone.push(
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:B", "data": {}}),
+        );
+        assert_eq!(
+            Model::read(&undone, "ask:A", 0)
+                .unwrap()
+                .scope
+                .unwrap()
+                .also,
+            0
+        );
+        undone.push(json!({"kind": "default.undone", "writer": "core", "subject": "ask:B", "data": {"deadline": 7_200_000}}));
+        assert_eq!(
+            Model::read(&undone, "ask:A", 0)
+                .unwrap()
+                .scope
+                .unwrap()
+                .also,
+            1
+        );
+        assert_eq!(
+            Model::read(&undone, "ask:B", 0).unwrap().applies,
+            "in 2 h",
+            "its default applies at the undo's deadline"
         );
     }
 
