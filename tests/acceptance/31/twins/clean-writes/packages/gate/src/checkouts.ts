@@ -5,7 +5,7 @@
 // here, so replacing the command check keeps base runs. The verdict is the verdict engine's; this module says only
 // what a base run proved. A checkout goes once no run on it is running or queued, and a crash's goes at the next open.
 import { execFile, spawn } from 'node:child_process';
-import { constants, existsSync, readFileSync } from 'node:fs';
+import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
 import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { connect } from 'node:net';
@@ -52,11 +52,13 @@ const SNAPSHOTS = 'refs/deep/snapshots/';
 const BIG = 1 << 20;
 const FIXED = { GIT_AUTHOR_NAME: 'DeepBuild', GIT_AUTHOR_EMAIL: 'snapshot@deepbuild.invalid', GIT_COMMITTER_NAME: 'DeepBuild', GIT_COMMITTER_EMAIL: 'snapshot@deepbuild.invalid' };
 const FIXED_DATE = '2000-01-01T00:00:00Z';
+/** A link of these names is a shared install, not part of a claim: `node_modules/` as a pattern doesn't ignore a link. */
+const INSTALLS = ['node_modules', '.venv'];
 
 function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> {
   const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
   return new Promise((resolve, reject) => {
-    const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: { ...clean, GIT_NO_LAZY_FETCH: '1', ...env } }, (error, stdout, stderr) => {
+    const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: { ...clean, GIT_NO_LAZY_FETCH: '1', GIT_LFS_SKIP_SMUDGE: '1', ...env } }, (error, stdout, stderr) => {
       if (error) reject(Error(`git ${args[0]}: ${stderr.trim() || error.message}`));
       else resolve(stdout.trim());
     });
@@ -184,6 +186,9 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         if (assumed) await git(worktree, ['update-index', '--no-assume-unchanged', '-z', '--stdin'], env, assumed);
       }
       await git(worktree, ['add', '-A'], env);
+      const untracked = (await git(worktree, ['ls-files', '-o', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
+      const links = untracked.filter((p) => INSTALLS.includes(basename(p)) && lstatSync(join(worktree, p)).isSymbolicLink());
+      if (links.length) await git(worktree, ['update-index', '--force-remove', '-z', '--stdin'], env, links.join('\0'));
       const tree = await git(worktree, ['write-tree'], env);
       if (tree === '') return { commit: head, wrote: false };
       const date = o.plant === 'stamps-time' ? new Date().toISOString() : FIXED_DATE;
@@ -202,11 +207,16 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
 
   /** Clones the ignored folders named, and any of those names deeper down, into a checkout from the worktree: copy-on-write where the file system can, never linked. */
   const cloneIn = async (worktree: string, dir: string, folders: string[]): Promise<void> => {
-    const deeper = folders.length ? (await git(worktree, ['ls-files', '-oi', '--exclude-standard', '--directory', '-z'])).split('\0').map((p) => p.replace(/\/$/, '')).filter((p) => p && folders.includes(basename(p)) && !folders.some((f) => p.startsWith(`${f}/`))) : [];
+    const deeper = folders.length ? (await git(worktree, ['ls-files', '-oi', '--exclude-standard', '--directory', '-z'])).split('\0').flatMap((p) => {
+      const parts = p.split('/');
+      const at = parts.findIndex((part) => folders.includes(part));
+      return at < 0 ? [] : [parts.slice(0, at + 1).join('/')];
+    }) : [];
     for (const folder of new Set([...folders, ...deeper])) {
       if (!inside(folder) || !existsSync(join(worktree, folder))) continue;
       // Git doesn't call a folder ignored once it tracks a file in it, though the rest of it still is.
-      const ignored = await git(worktree, ['check-ignore', '-q', folder]).then(() => true, () => false) || !!await git(worktree, ['ls-files', '-oi', '--exclude-standard', '--directory', '--', folder]);
+      const linked = lstatSync(join(worktree, folder)).isSymbolicLink();
+      const ignored = linked || await git(worktree, ['check-ignore', '-q', folder]).then(() => true, () => false) || !!await git(worktree, ['ls-files', '-oi', '--exclude-standard', '--directory', '--', folder]);
       if (!ignored) continue;
       await mkdir(dirname(join(dir, folder)), { recursive: true });
       if (o.plant === 'links-dependencies') { await symlink(join(worktree, folder), join(dir, folder)); continue; }
@@ -223,7 +233,8 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         if (await copy(['-R']) !== 0) throw Error(`can't copy ${folder} into the checkout`);
       }
       // What isn't ignored in it comes from the tree alone, so a file only the worktree has isn't left behind.
-      for (const path of (await git(worktree, ['ls-files', '-co', '--exclude-standard', '-z', '--', folder])).split('\0').filter(Boolean)) await rm(join(dir, path), { force: true });
+      const isLink = linked && !await git(worktree, ['ls-files', '--', folder]);
+      if (!isLink) for (const path of (await git(worktree, ['ls-files', '-co', '--exclude-standard', '-z', '--', folder])).split('\0').filter(Boolean)) await rm(join(dir, path), { recursive: true, force: true });
     }
   };
   /**
