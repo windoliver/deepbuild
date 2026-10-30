@@ -129,7 +129,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'overrun' | 'later' | 'line' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -182,6 +182,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
     post: (message) => {
       if (message.op === 'hook') void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
       else if (message.op === 'waiter-gone') core.waiterGone(message.key);
+      else if (message.op === 'hook-gone') core.hookGone(message.id, message.session);
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
@@ -712,11 +713,15 @@ class Hub {
   }
   /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
   private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
+    // A deep-hook that gave up on the hub before reading its reply has let the hook through: nothing is held for it (#27).
+    let replied = false;
+    conn.sock.once('close', () => { if (!replied) this.core.post({ op: 'hook-gone', id: meta.id, session: meta.session }); });
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string; message?: string } | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
+    replied = true;
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
