@@ -10,6 +10,8 @@ const BUDGET_MS = 10_000;
 /** Kinds whose meaning isn't a session's: a reading, an ask and a verdict are read across the record. */
 const ACROSS = new Set(['reading.recorded', 'ask.created', 'ask.answered', 'verdict.made']);
 
+/** How a recorded reading's id ends when a classifier counted it. */
+export const CLASSIFIED = 'classified';
 const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 /** Handles drop what a session's id may hold besides letters and digits, so an event from either side joins. */
@@ -97,7 +99,10 @@ export function staleRuns(events: RecordEvent[]) {
     if (!stale.length) continue;
     const runs = stale.map((e) => {
       const reply = list.find((x) => x.kind === 'stop.held' && x.data.claim === e.data.claim);
-      const ask = reply && list.find((x) => x.kind === 'user.ask' && x.ts > reply.ts);
+      // The turn that made the newer claim outdated it; a claim the record doesn't hold falls to the first ask after the reply.
+      const newer = list.find((x) => x.kind === 'claim.made' && `claim:${x.id}` === e.data.newer_claim);
+      const after = reply ? list.filter((x) => x.kind === 'user.ask' && x.ts > reply.ts) : [];
+      const ask = newer ? after.filter((x) => x.ts <= newer.ts).at(-1) ?? after[0] : after[0];
       return { run: String(e.data.run), check: String(e.data.check), outdated_by: ask ? String(ask.data.from) : 'unknown', after_ms: ask && reply ? ask.ts - reply.ts : null };
     });
     sessions.push({ session, count: runs.length, within_30s: runs.filter((r) => r.after_ms !== null && r.after_ms <= WINDOW_30S).length, runs });
@@ -215,30 +220,39 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     const usd = 'usd' in u.cost ? u.cost.usd : null;
     // Two stops of one turn are one row: what the turn spent.
     const turn = byTurn.get(u.turn);
-    if (turn && turn.usd !== null && usd !== null && 'usd' in turn.cost) byTurn.set(u.turn, { usd: turn.usd + usd, cost: { ...turn.cost, usd: turn.usd + usd }, as_of: u.ts });
-    else byTurn.set(u.turn, { usd: turn && usd === null ? null : usd, cost: u.cost, as_of: u.ts });
+    if (!turn) byTurn.set(u.turn, { usd, cost: u.cost, as_of: u.ts });
+    // An unpriced part leaves the turn unpriced, and any estimated part makes it an estimate.
+    else if (turn.usd === null || usd === null) byTurn.set(u.turn, { usd: null, cost: { basis: 'unpriced' }, as_of: u.ts });
+    else {
+      const sum = turn.usd + usd;
+      const card = turn.cost.basis === 'estimated' ? turn.cost.rate_card : u.cost.basis === 'estimated' ? u.cost.rate_card : null;
+      byTurn.set(u.turn, { usd: sum, cost: card ? { basis: 'estimated', usd: sum, rate_card: card } : { basis: 'reported', usd: sum }, as_of: u.ts });
+    }
     const s: Spend = { usd: usd ?? 0, priced: usd !== null, card: u.cost.basis === 'estimated' ? u.cost.rate_card : null, complete: usd !== null, as_of: u.ts };
     addSpend(own, subject, s);
     for (const task of u.tasks) addSpend(tasks, task, s);
   }
   for (const [turn, t] of byTurn) readings.push({ id: 'cost.turn', subject: turn, value: t.usd, unit: 'usd', source: RECORD, as_of: t.as_of, basis: t.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: t.cost });
-  // A turn with no usage, such as one that crashed, leaves what the session sums short. A turn runs from its first ask to
-  // the next ask after a stop, so a message typed mid-turn is the same turn, and its usage lands just behind its stop.
+  // A turn with no usage, such as one that crashed, leaves what it sums short: the session's, and its tasks'. A turn runs
+  // from its first ask to the next ask after a stop, or a new start: a message typed mid-turn is the same turn, and its
+  // usage lands just behind its stop.
   const asks = list.filter((e) => e.kind === 'user.ask');
-  let inTurn = false;
-  let stopped = false;
-  let spent = false;
+  let turn: { at: number; tasks: string[]; stopped: boolean; spent: boolean } | undefined;
   let unknownTurns = 0;
+  const close = (): void => {
+    if (!turn || turn.spent) return;
+    unknownTurns++;
+    for (const task of turn.tasks) addSpend(tasks, task, { usd: 0, priced: false, card: null, complete: false, as_of: turn.at });
+  };
   for (const e of list) {
-    if (e.kind === 'user.ask' && (!inTurn || stopped)) {
-      if (inTurn && !spent) unknownTurns++;
-      inTurn = true;
-      stopped = false;
-      spent = false;
-    } else if (e.kind === 'agent.stop' || e.kind === 'stop.held') stopped = true;
-    else if (e.kind === 'turn.usage') spent = true;
+    if (e.kind === 'session.start') { close(); turn = undefined; }
+    else if (e.kind === 'user.ask' && (!turn || turn.stopped)) {
+      close();
+      turn = { at: e.ts, tasks: Array.isArray(e.data.tasks) ? (e.data.tasks as string[]) : [], stopped: false, spent: false };
+    } else if (turn && (e.kind === 'agent.stop' || e.kind === 'stop.held')) turn.stopped = true;
+    else if (turn && e.kind === 'turn.usage') turn.spent = true;
   }
-  if (inTurn && !spent) unknownTurns++;
+  close();
   if (used.length) {
     if (unknownTurns) addSpend(own, subject, { usd: 0, priced: false, card: null, complete: false, as_of: 0 });
     readings.push(spendReading(subject, own.get(subject)!));
@@ -282,7 +296,9 @@ function foldAcross(list: RecordEvent[]): Reading[] {
   for (const e of list) {
     if (e.kind === 'reading.recorded') {
       const id = String(e.data.reading);
-      readings.set(id, { id, subject: null, value: e.data.value as number, unit: String(e.data.unit), source: String(e.data.source), as_of: num(e.data.as_of), basis: 'observed' });
+      // A recorded count of a classifier's is its pattern's reading of your words, modeled like the live one.
+      const classified = id.endsWith(CLASSIFIED);
+      readings.set(id, { id, subject: null, value: e.data.value as number, unit: String(e.data.unit), source: String(e.data.source), as_of: num(e.data.as_of), basis: classified ? 'modeled' : 'observed', ...(classified ? { classifier: null } : {}) });
     } else if (e.kind === 'ask.created' && e.subject) {
       asked.set(e.subject, { kind: String(e.data.kind), ts: e.ts });
     } else if (e.kind === 'ask.answered' && e.subject) {

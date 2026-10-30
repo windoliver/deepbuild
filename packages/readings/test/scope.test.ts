@@ -2,7 +2,7 @@
 // approval wait, and pricing by exact model.
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, type RecordEvent } from '../src/index.js';
+import { countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, staleRuns, type RecordEvent } from '../src/index.js';
 
 const MIN = 60_000;
 let n = 0;
@@ -80,6 +80,31 @@ describe('spend from the record', () => {
     expect(find(crashed, 'spend.usd')?.complete).toBe(false);
     expect(find(crashed, 'tokens.session')?.complete).toBe(false);
   });
+
+  it('a crash then a resume is its own unknown turn, and marks the task it was for', () => {
+    const asked = (ts: number, tasks: string[]) => ev('user.ask', ts, 'A', { msg: ts, text: 'go', tasks, from: 'person' });
+    const events = [asked(0, ['task:x']), start(1, false), asked(2, ['task:x']), ev('agent.stop', 3, 'A', {}), usage(4, 't', 1, { basis: 'reported', usd: 0.5 })];
+    expect(find(events, 'tokens.session')?.complete).toBe(false);
+    expect(find(events, 'spend.usd', 'task:x')?.complete).toBe(false);
+  });
+
+  it('an unpriced part leaves its turn unpriced, whichever came first', () => {
+    const events = [usage(1, 't1', 1, { basis: 'unpriced' }), usage(2, 't1', 1, { basis: 'reported', usd: 0.5 })];
+    expect(find(events, 'cost.turn')?.value).toBeNull();
+    expect(find(events, 'cost.turn')?.cost).toEqual({ basis: 'unpriced' });
+  });
+
+  it('a stale run is outdated by the turn that made the newer claim, not the first ask after the reply', () => {
+    const asked = (ts: number, from: string) => ev('user.ask', ts, 'A', { msg: ts, text: 'go', tasks: [], from });
+    const events = [
+      ev('stop.held', 1000, 'A', { stop: 's', claim: 'claim:c0', total: 0 }),
+      asked(6000, 'person'),
+      asked(41_000, 'continuation'),
+      { ...ev('claim.made', 42_000, 'A', {}), id: 'c1' },
+      ev('run.stale', 50_000, 'A', { run: 'run:r', check: 'j', claim: 'claim:c0', newer_claim: 'claim:c1' }),
+    ];
+    expect(staleRuns(events).sessions[0]?.runs[0]).toMatchObject({ outdated_by: 'continuation', after_ms: 40_000 });
+  });
 });
 
 describe('the baseline', () => {
@@ -89,6 +114,8 @@ describe('the baseline', () => {
 
   it('a window that catches nothing is missing, never a measured zero', () => {
     expect(read({ from: 0, to: 1 })).toMatchObject({ value: null, status: 'missing' });
+    const summary = `{"type":"summary"}\n${line}`;
+    expect(recomputeBaseline({ baseline_sha256: 'b', measures: [{ id: 'x', kind: 'tokens.total', window: { from: 0, to: 1 }, transcripts: [{ sha256: sha(summary) }] }], archive: () => Buffer.from(summary) }).measures[0], 'a line with no time doesn\'t rescue it').toMatchObject({ status: 'missing' });
     expect(read({ from: 0, to: Date.UTC(2027, 0) })).toMatchObject({ value: 6, status: 'recomputed' });
   });
 });

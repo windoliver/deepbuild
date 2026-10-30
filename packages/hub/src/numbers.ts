@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkClassifier, decisionOneInputs, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
+import { CLASSIFIED, checkClassifier, decisionOneInputs, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
 
@@ -118,7 +118,7 @@ export class Numbers {
     for (const m of result.measures) {
       if (m.value === null) continue;
       const ts = this.o.now();
-      await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence, data: { reading: `reading:baseline${manifest.baseline_sha256.slice(0, 8)}${letters(m.id)}`, value: m.value, unit: 'count', as_of: ts, source: `baseline:${manifest.baseline_sha256.slice(0, 8)}`, n: m.transcripts.length, outside: false } });
+      await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence, data: { reading: `reading:baseline${manifest.baseline_sha256.slice(0, 8)}${letters(m.id)}${manifest.measures.find((x) => x.id === m.id)?.kind === 'is_it_done' ? CLASSIFIED : ''}`, value: m.value, unit: 'count', as_of: ts, source: `baseline:${manifest.baseline_sha256.slice(0, 8)}`, n: m.transcripts.length, outside: false } });
     }
     return { baseline_sha256: result.baseline_sha256, script: result.script.sha256, output: result.output.sha256, measures: result.measures };
   }
@@ -164,7 +164,7 @@ export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows'])
   return rows.map((r) => {
     const value = r.value === null ? 'unknown' : String(r.value);
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
-    const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n} ${r.agreement.status}` : r.id in CLASSIFIERS ? ' not checked against your labels' : '';
+    const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
     return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}`;
   });
 }

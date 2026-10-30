@@ -136,7 +136,9 @@ describe('the gate runner at a real stop', () => {
       await s.stop('Done with `src/auth.ts`, as I said.');
       const events = await settle(hub, (e) => e.filter((x) => x.kind === 'stop.held').length === 2, HELD_WAIT);
       expect(claimsOf(events, ref).length, 'the same claim').toBe(1);
-      const [first, again] = events.filter((e) => e.kind === 'stop.held') as (Ev & { data: { total: number; slow: number; fast: number; code_changing: boolean; budget_cost: string[] } })[];
+      const [first, again] = events.filter((e) => e.kind === 'stop.held') as (Ev & { data: { total: number; question: number; snapshot_start: number; queue_wait: number; slow: number; fast: number; code_changing: boolean; budget_cost: string[] } })[];
+      const d = again!.data;
+      expect(d.question + d.slow + d.fast + d.snapshot_start + d.queue_wait, 'the parts sum to the hold').toBe(d.total);
       expect(first!.data.code_changing, 'a new snapshot with a check').toBe(true);
       expect(again!.data.code_changing).toBe(false);
       expect(again!.data.budget_cost).toEqual([]);

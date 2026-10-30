@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isItDone } from './classify.js';
-import { countTexts } from './usage.js';
+import { beginsTurn, countTexts } from './usage.js';
 
 export interface BaselineMeasure { id: string; kind: string; window: { from: number; to: number }; transcripts: { sha256: string }[]; copied_from_doc?: number }
 export interface BaselineMeasureResult { id: string; window: { from: number; to: number }; transcripts: string[]; value: number | null; status: 'recomputed' | 'missing' }
@@ -17,26 +17,33 @@ export interface BaselineResult {
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const kept = (text: string) => ({ sha256: sha256(text), text });
 
+const timeOf = (line: string): number => {
+  const at = /"timestamp":"([^"]+)"/.exec(line)?.[1];
+  return at ? Date.parse(at) : NaN;
+};
 /** The lines inside a window: a line with no time of its own stays with the file. */
 function inWindow(text: string, window: { from: number; to: number }): string {
   return text.split('\n').filter((line) => {
-    const at = /"timestamp":"([^"]+)"/.exec(line)?.[1];
-    const ms = at ? Date.parse(at) : NaN;
+    const ms = timeOf(line);
     return Number.isNaN(ms) || (ms >= window.from && ms < window.to);
   }).join('\n');
 }
-/** A person's messages in a transcript, for the classifier. */
+/** A person's messages in a transcript, for the classifier: never a subagent's prompt, a summary or a harness note. */
 function typed(text: string): string[] {
   return text.split('\n').flatMap((line) => {
     try {
-      const e = JSON.parse(line) as { type?: string; toolUseResult?: unknown; message?: { content?: unknown } };
-      return e.type === 'user' && e.toolUseResult === undefined && typeof e.message?.content === 'string' ? [e.message.content] : [];
+      const e = JSON.parse(line) as { type?: string; isSidechain?: unknown; message?: { content?: unknown } };
+      return e.type === 'user' && e.isSidechain !== true && e.message && typeof e.message.content === 'string' && beginsTurn(e as Record<string, unknown>, e.message as Record<string, unknown>) ? [e.message.content] : [];
     } catch { return []; }
   });
 }
-function count(kind: string, texts: string[]): number | null {
-  // A window that catches nothing was named wrong or never archived: that's missing, never a measured zero.
-  if (!texts.some((t) => t.trim())) return null;
+function count(kind: string, whole: string[], window: { from: number; to: number }): number | null {
+  // A window that catches nothing was named wrong or never archived: that's missing, never a measured zero. A transcript
+  // with no times at all can only be counted whole.
+  const lines = whole.flatMap((t) => t.split('\n').filter((l) => l.trim()));
+  const times = lines.map(timeOf).filter((ms) => !Number.isNaN(ms));
+  if (!lines.length || (times.length && !times.some((ms) => ms >= window.from && ms < window.to))) return null;
+  const texts = whole.map((t) => inWindow(t, window));
   if (kind === 'tokens.total') {
     const t = countTexts(texts).totals;
     return t.input + t.output + t.cache_write + t.cache_read;
@@ -49,7 +56,7 @@ export function recomputeBaseline(input: { baseline_sha256: string; measures: Ba
   const measures = input.measures.map((m): BaselineMeasureResult => {
     const hashes = m.transcripts.map((t) => t.sha256);
     const bytes = hashes.map((h) => { const b = input.archive(h); return b && sha256(b) === h ? b : null; });
-    const value = !hashes.length || bytes.includes(null) ? null : count(m.kind, bytes.map((b) => inWindow(Buffer.from(b!).toString('utf8'), m.window)));
+    const value = !hashes.length || bytes.includes(null) ? null : count(m.kind, bytes.map((b) => Buffer.from(b!).toString('utf8')), m.window);
     return { id: m.id, window: m.window, transcripts: hashes, value, status: value === null ? 'missing' : 'recomputed' };
   });
   const output = measures.map((m) => JSON.stringify({ baseline: input.baseline_sha256, id: m.id, value: m.value ?? 'missing', window: m.window, transcripts: m.transcripts })).join('\n');
