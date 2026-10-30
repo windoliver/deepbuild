@@ -56,6 +56,7 @@ const startOf = (pid: number): Promise<string> => new Promise((done) => {
  * next one, sent only after this acknowledgement, lands after it.
  */
 const HELD_MS = 70_000;
+const ANNOUNCE_MS = 30_000;
 function sendHook(socket: string, event: string, payload: Obj, acked: () => void): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
   return new Promise((resolve) => {
     const sock = net.connect(socket);
@@ -250,7 +251,7 @@ export default function deepbuild(pi: Pi): void {
   }
   /** The hub's long wait for this session's answers: one at a time, asked again after each, until the session goes. */
   async function listen(mine: Tools): Promise<void> {
-    let announced = false;
+    let announced = 0;
     while (!mine.closed) {
       const reply = await mine.call('session.wait', { session, cwd: ctx?.cwd ?? '', push: true }, 0);
       if (mine.closed) return;
@@ -261,14 +262,17 @@ export default function deepbuild(pi: Pi): void {
         place(toolCalls > 0);
       } else if (result?.exit === 'session ended') return;
       else if ((reply.error as { code?: string } | undefined)?.code === 'role' && ctx?.sessionManager.getSessionFile()) {
-        // A restarted hub knows this session from its next hook, and an idle session sends none: say it's here, once,
-        // since a hub that still refuses it, as with a second process on one session file, records every saying.
-        if (!announced) await hook('session_start', { source: 'resume' });
-        announced = true;
+        // A restarted hub knows this session from its next hook, and an idle session sends none: say it's here. Seldom,
+        // since a hub that still refuses it, as with a second process on one session file, records every saying; and
+        // never in a run, whose next hook says so and whose work a new start would count from nothing.
+        if (ctx?.isIdle() === true && running === 0 && Date.now() - announced > ANNOUNCE_MS) {
+          announced = Date.now();
+          await hook('session_start', { source: 'resume' });
+        }
         mine.rebind();
         await new Promise((done) => setTimeout(done, 1000).unref());
       } else {
-        announced = false;
+        announced = 0;
         await new Promise((done) => setTimeout(done, reply.error ? 1000 : 50).unref());
       }
     }

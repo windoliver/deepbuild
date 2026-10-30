@@ -1614,6 +1614,8 @@ export class Core {
     if (meta.event === 'SessionEnd') {
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
+      // A call running as its session quit returns to nobody: its answer waits for the session's resume.
+      for (const [ask, waiting] of this.askWaits) if (waiting === meta.session) this.askWaits.delete(ask);
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
@@ -2241,7 +2243,8 @@ export class Core {
   private async placeOrRefuse(session: string): Promise<void> {
     // A refusal is final: a session resumed later doesn't take what was refused for it.
     const refused = (await this.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
-    const rows = (await this.waitingFor(session)).filter((row) => !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
+    // Its own: a fork shares its thread, and only the session that asked takes an answer or reports on it.
+    const rows = (await this.waitingFor(session)).filter((row) => row.session === session && !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
     if (!rows.length) return;
     const successor = await this.replacedBy(session);
     const r = this.routes.get(successor && piAcceptsReplaced() ? successor : session);
@@ -2755,7 +2758,12 @@ export class Core {
       return true;
     }
     // pi resumes a session from a new process, by its file: its start takes the session over once the old process is gone.
-    if (meta.agent === 'pi' && meta.event === 'SessionStart' && transcript === session.transcript && (await this.startOf(session.pid, true)) !== session.start) {
+    const gone = async () => {
+      if (!session.pid) return true;
+      const was = await this.startOf(session.pid, true);
+      return was === undefined ? !running(session.pid) : was !== session.start;
+    };
+    if (meta.agent === 'pi' && session.agent === 'pi' && meta.event === 'SessionStart' && transcript === session.transcript && await gone()) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd });
       return true;
     }
