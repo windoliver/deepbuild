@@ -68,6 +68,12 @@ Never: In force before you approve it.
 
 Never: Drafted from the working session's work, or changed by it.
 
+## Environment and lease
+
+- deep_env. Bring your worktree's own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.
+
+Never: A process stopped that DeepBuild can't prove it started.
+
 ## Screen and panel
 
 - deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.

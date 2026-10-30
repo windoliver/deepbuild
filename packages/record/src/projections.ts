@@ -262,7 +262,8 @@ export class Projector {
       }
       case 'transcript.archived': {
         const session = bare(d.session);
-        if (session) this.up('sessions', { id: session, transcript: str(d.evidence) });
+        // Its copy is recorded under the repo its folder is in (#356): the session's first project stands.
+        if (session) { this.up('sessions', { id: session, transcript: str(d.evidence) }); if (e.project) this.fill('sessions', { id: session, project_id: e.project }); }
         break;
       }
       case 'agent.stop':
@@ -386,7 +387,8 @@ export class Projector {
       case 'run.started':
       {
         // A run's claim, check and commit are the core's start, whenever it lands; until then the first start's.
-        const start = { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts };
+        // run.started@2 also says where it ran and what it needed (#29).
+        const start = { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts, ...(d.host !== undefined ? { host: str(d.host), needs: json(d.needs) } : {}) };
         if (e.writer === 'core') this.up('runs', start);
         else this.once('runs', start, 'started');
       }

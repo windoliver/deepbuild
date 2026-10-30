@@ -294,6 +294,10 @@
           "spec": "0.0.0",
           "why": "Issue #30: the scrub of a run's output by the values its environment and secrets held, before it is digested or shown."
         },
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the one masked-exit rule the core holds, which the validity gate, this check kind and spec drafting all read."
+        },
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
@@ -338,6 +342,10 @@
           "spec": "0.0.0",
           "why": "Issue #350: the hub opens project trust and the extension host on its record and supervisor at startup, and asks its extensions at run time."
         },
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the core's gate runner: every check run takes its cpu.slot lease through it, held for the claim's session."
+        },
         "@deepbuild/leases": {
           "spec": "0.0.0",
           "why": "Issue #237: the hub holds the kernel's one lease table, opened on its record, with env-local's kinds declared in it, and the supervisor leases every run's keys through it."
@@ -345,6 +353,10 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "@deepbuild/reading": {
+          "spec": "0.0.0",
+          "why": "Issue #356: setup's wiki build hands the free text pattern matching left to your own agent, a slice at a time through handles, as the one reading the design names."
         },
         "@deepbuild/resolver-decisions": {
           "spec": "0.0.0",
@@ -361,6 +373,10 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #26: deep_status reports a run that disagrees with deep_claim's prediction by the verdict engine's own contradiction rule."
+        },
+        "@deepbuild/wiki": {
+          "spec": "0.0.0",
+          "why": "Issue #356: setup writes what it learned as the wiki's claims and pages, and keeps your edits to them through the wiki's own entry."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -1191,6 +1207,22 @@
         "@deepbuild/wiki": {
           "spec": "0.0.0",
           "why": "Issue #63: an install writes its findings as wiki claims, and a cite's known-from is the wiki's knownOf."
+        }
+      }
+    },
+    "packages/gate/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the definition is hashed part by part through the canonical form and SHA-256 every record hash uses."
+        },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #29: every check run and heavy command takes its cpu.slot lease from the kernel's one lease table, never a queue of its own."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
         }
       }
     }

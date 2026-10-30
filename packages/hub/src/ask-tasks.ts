@@ -74,8 +74,13 @@ export interface AskTaskOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** Keeps bytes in the evidence store, answering their SHA-256. */
   keep(bytes: Uint8Array, source: string): Promise<string>;
-  /** Runs a claim's check from the bytes the store keeps under its approved digest. */
-  run(r: { claim: string; check: string; approved: string; commit: string; cwd: string }): Promise<void>;
+  /**
+   * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
+   * it takes the claim's snapshot and checkout, and starts the fast lane's checks.
+   */
+  run(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void>;
+  /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
+  invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
 
 export class AskTasks {
@@ -275,10 +280,17 @@ export class AskTasks {
       const id = ulid(ts);
       const connection = this.o.connection(session, agent);
       const commit = head?.sha ?? definition.base_commit;
+      const hash = this.hashOf(definition);
       await this.o.append(connection, {
         v: 3, id, kind: 'claim.made', ts,
-        data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash: this.hashOf(definition) },
+        data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash },
       });
+      // The core's floor (#29): a recomputed hash that differs from the locked one makes the claim INVALID, naming what
+      // changed, whatever done gate is installed and in safe mode.
+      if (hash !== String(row.hash)) {
+        const what = changed.length ? changed.map((c) => c.check) : ['the definition'];
+        await this.o.invalid(`claim:${id}`, commit, `the definition's hash differs from the one locked for ${task_ref}; changed: ${what.join(', ')}`);
+      }
       made.push(`claim:${id}`);
       for (const c of changed) {
         const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
@@ -291,7 +303,8 @@ export class AskTasks {
         });
       }
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
-      for (const r of stored) if (r.check && r.check_sha256) await this.o.run({ claim: `claim:${id}`, check: r.check, approved: r.check_sha256, commit, cwd });
+      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' as const : 'fails' as const }] : []));
+      await this.o.run({ claim: `claim:${id}`, session, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, checks });
       } catch (error) {
         process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
       }

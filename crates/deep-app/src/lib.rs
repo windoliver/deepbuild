@@ -8,13 +8,18 @@
 //! record and inbox projection they draw ([`events`]), the canvas as a registered component
 //! ([`canvas`]), and `needs_you` in the `deepbuild` module for the fixture panels.
 
+pub mod answer;
+pub mod arming;
 pub mod canvas;
 pub mod card;
 pub mod cells;
+pub mod confirm;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+pub mod kinds;
 pub mod notify;
+pub mod question;
 pub mod record;
 pub mod setup;
 pub mod states;
