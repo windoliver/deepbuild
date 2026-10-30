@@ -1,0 +1,8 @@
+{
+  "id": "test/relay",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["run_as_you"] },
+  "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] },
+  "actions": ["ext.relay.open", "ext.relay.type"]
+}
