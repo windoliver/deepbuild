@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H1",
+  "kind": "seed.cloned",
+  "subject": "run:01K74FMXR4T6V8X0Z2B4D6F8H2",
+  "data": {
+    "run": "run:01K74FMXR4T6V8X0Z2B4D6F8H2",
+    "stack": "run:01K74FMXR4T6V8X0Z2B4D6F8H3",
+    "source": "snapshots://shop/2026-10-01.sql",
+    "copied_at": "2026-10-01T04:00:00.000Z",
+    "migration": "20261015120000_add_orders",
+    "template": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "cloned_at": 1760017051123
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}
