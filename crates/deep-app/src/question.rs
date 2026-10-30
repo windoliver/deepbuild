@@ -23,9 +23,9 @@ use crate::{
     states,
 };
 
-/// The card's measured size, in window points, tall enough for a batch of four with its switches: a slot smaller
-/// than this never arms.
-pub const CARD_SIZE: [i64; 2] = [480, 480];
+/// The card's least size, in window points, tall enough for a batch of four with its switches (it draws about 525
+/// tall): a slot smaller than this, or than the card as drawn, never arms.
+pub const CARD_SIZE: [i64; 2] = [480, 560];
 /// What a card says before it arms when words or an image are set and no option is chosen: the answer is this
 /// ask's alone, never a decision for the key.
 pub const ANSWERS_THIS_ASK_ONLY: &str = "Answers this ask only";
@@ -239,28 +239,51 @@ impl Controller {
     }
 
     /// The record changed while the card shows. Its scope and count stay as presented (the planted twin re-reads
-    /// them). What DeepBuild saw can change (a check finishing): the card shows it and, as any change to what it
-    /// shows, is presented again unarmed.
+    /// them), and so does when its default applies, which reads the clock. Anything else can change (a check
+    /// finishing, a batch member closing, the plan landing): the card shows it, each member still in the batch
+    /// keeping its switch, and, as any change to what it shows, is presented again unarmed.
     pub fn record_changed(&mut self, events: &[Value], now: u64) {
-        let Some(fresh) = Model::read(events, &self.model.ask, now) else {
+        let Some(mut fresh) = Model::read(events, &self.model.ask, now) else {
             return;
         };
         if self.faults.count_follows_record {
             self.model.scope = fresh.scope.clone();
         }
-        if fresh.fields != self.model.fields
+        fresh.scope = self.model.scope.clone();
+        fresh.applies = self.model.applies.clone();
+        let was = |member: usize| {
+            let handle = &fresh.batch.get(member)?.0;
+            let before = self.model.batch.iter().position(|(ask, _)| ask == handle)?;
+            self.model
+                .steps
+                .iter()
+                .find(|step| step.member == before)
+                .map(|step| step.on)
+        };
+        let switches: Vec<Option<bool>> = fresh.steps.iter().map(|step| was(step.member)).collect();
+        for (step, on) in fresh.steps.iter_mut().zip(switches) {
+            step.on = on.unwrap_or(step.on);
+        }
+        if fresh != self.model
             && matches!(
                 self.machine.state(),
                 State::Presented { .. } | State::Armed { .. }
             )
         {
-            self.model.fields = fresh.fields;
+            self.model = fresh;
+            self.switch_first = false;
             self.machine.present(now, self.slot);
             self.send_down = None;
             self.send_waiting = None;
             self.holding = None;
             self.record("presented", now);
         }
+    }
+
+    /// The card as drawn measured `size` points: what its slot must hold to arm, never less than [`CARD_SIZE`].
+    pub fn measured(&mut self, size: [i64; 2], now: u64) {
+        let size = [size[0].max(CARD_SIZE[0]), size[1].max(CARD_SIZE[1])];
+        self.machine.measured(size, now);
     }
 
     /// The `ask.answer` params written since last taken, in order, for the shell to sign and send.
@@ -770,7 +793,7 @@ mod tests {
     use crate::arming::ARM_AFTER;
 
     const SLOT: Slot = Slot {
-        rect: [100, 100, 480, 480],
+        rect: [100, 100, CARD_SIZE[0], CARD_SIZE[1]],
         visible: [0, 0, 1512, 982],
     };
     const NOW: u64 = 1_800_000_000_000;
@@ -1128,5 +1151,90 @@ mod tests {
             Did::Nothing
         );
         assert!(card.take_answers().is_empty());
+    }
+
+    #[test]
+    fn a_batch_card_follows_a_member_closing_and_a_plan_landing_and_keeps_your_switches() {
+        let authority = |id: &str| {
+            ask(
+                id,
+                "authority",
+                json!([{"id": "allow", "label": "Allow", "decision": "allow"}, {"id": "deny", "label": "Deny", "decision": "deny"}]),
+                json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}}),
+            )
+        };
+        let plan = |id: &str, undo: &str| {
+            json!({"kind": "plan.proposed", "id": format!("P{id}"), "writer": "core", "log_pos": 2, "data": {
+                "ask": format!("ask:{id}"), "diff": "d".repeat(64), "hash": id.repeat(64),
+                "steps": [{"does": format!("push {id}"), "changes": [], "undo": undo, "public": false, "cost": 0}]}})
+        };
+        let mut events = vec![
+            authority("A"),
+            authority("B"),
+            authority("C"),
+            plan("A", "force-push back"),
+            plan("B", "none"),
+            json!({"kind": "ask.batched", "id": "K", "writer": "core", "log_pos": 4, "data": {"batch": "b", "asks": [
+                {"ask": "ask:A", "plan_hash": null}, {"ask": "ask:B", "plan_hash": null}, {"ask": "ask:C", "plan_hash": null}]}}),
+        ];
+        let mut card = Controller::present(&events, "ask:C", NOW, SLOT, Faults::default()).unwrap();
+        let doing = |card: &Controller| -> Vec<(String, bool)> {
+            card.model()
+                .steps
+                .iter()
+                .map(|step| (step.does.clone(), step.on))
+                .collect()
+        };
+        assert_eq!(
+            doing(&card),
+            [("push A".to_owned(), true), ("push B".to_owned(), false)]
+        );
+        assert_eq!(card.model().plan_hash, None);
+        card.toggle_step(1);
+        card.toggle_step(0);
+        assert_eq!(
+            doing(&card),
+            [("push A".to_owned(), false), ("push B".to_owned(), true)]
+        );
+        card.tick(NOW + ARM_AFTER);
+        let first = card.seq();
+
+        // C's own plan lands after the card showed: its step draws, its hash binds, and your switches stand.
+        events.push(plan("C", "none"));
+        card.record_changed(&events, NOW + ARM_AFTER + 10);
+        assert_eq!(
+            doing(&card),
+            [
+                ("push A".to_owned(), false),
+                ("push B".to_owned(), true),
+                ("push C".to_owned(), false)
+            ]
+        );
+        assert_eq!(card.model().plan_hash, Some("C".repeat(64)));
+        assert_eq!(card.state_name(), "presented");
+        assert_ne!(card.seq(), first);
+
+        // A is answered on its own card: the core won't run it, so the card neither draws nor counts it.
+        events.push(
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:A", "data": {}}),
+        );
+        card.record_changed(&events, NOW + ARM_AFTER + 20);
+        assert_eq!(
+            doing(&card),
+            [("push B".to_owned(), true), ("push C".to_owned(), false)]
+        );
+        assert_eq!(card.model().runs(), [1, 2]);
+    }
+
+    #[test]
+    fn a_record_change_the_card_doesnt_show_leaves_it_armed_however_late_it_comes() {
+        let mut events = vec![taste("A")];
+        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
+        card.tick(NOW + ARM_AFTER);
+        let first = card.seq();
+        // A day on, when its default applies reads differently: that's the clock, not the record.
+        events.push(json!({"kind": "note.added", "writer": "core", "data": {}}));
+        card.record_changed(&events, NOW + 86_400_000);
+        assert_eq!((card.state_name(), card.seq()), ("armed", first));
     }
 }

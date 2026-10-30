@@ -235,29 +235,53 @@ impl Render for Card {
                     .into_any_element(),
             ],
         };
+        // The card as laid out, which grows past its slot with more rows than fit: what arming judges.
+        let card = cx.entity().downgrade();
+        let measure = canvas(
+            move |bounds, _, cx| {
+                let size = [
+                    f32::from(bounds.size.width).ceil() as i64,
+                    f32::from(bounds.size.height).ceil() as i64,
+                ];
+                card.update(cx, |card, _| {
+                    if let Some(controller) = card.controller.as_mut() {
+                        controller.measured(size, crate::views::now());
+                    }
+                })
+                .ok();
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full();
         // The prompt fills the window; only the card itself takes a hitbox, so the rest of the window still
-        // takes your input.
+        // takes your input. The card's outer edge is what's measured, its border included.
         div().size_full().child(
             div()
-                .id("question-card")
-                .track_focus(&self.focus)
-                .occlude()
                 .absolute()
                 .left(self.bounds.origin.x)
                 .top(self.bounds.origin.y)
                 .w(self.bounds.size.width)
-                // The slot's height at least: a card with more rows than its slot grows, never clips, so every row
-                // stays readable (the slot's size is what decides whether it arms).
-                .min_h(self.bounds.size.height)
-                .flex()
-                .flex_col()
-                .gap_1()
-                .p_4()
-                .bg(rgb(crate::brand::PAPER))
-                .border_1()
-                .border_color(rgb(crate::brand::INK))
-                .text_color(rgb(crate::brand::INK))
-                .children(rows),
+                .child(
+                    div()
+                        .id("question-card")
+                        .track_focus(&self.focus)
+                        .occlude()
+                        .w_full()
+                        // The slot's height at least: a card with more rows than its slot grows, never clips, so
+                        // every row stays readable, and doesn't arm while it is taller than its slot.
+                        .min_h(self.bounds.size.height)
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .p_4()
+                        .bg(rgb(crate::brand::PAPER))
+                        .border_1()
+                        .border_color(rgb(crate::brand::INK))
+                        .text_color(rgb(crate::brand::INK))
+                        .children(rows),
+                )
+                .child(measure),
         )
     }
 }
