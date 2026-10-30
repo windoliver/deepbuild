@@ -54,6 +54,7 @@ const startOf = (pid: number): Promise<string> => new Promise((done) => {
  * when the hub can't be reached or doesn't answer in time. The hub posts a hook in the step it acknowledges it, so the
  * next one, sent only after this acknowledgement, lands after it.
  */
+const HELD_MS = 70_000;
 function sendHook(socket: string, event: string, payload: Obj, acked: () => void): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
   return new Promise((resolve) => {
     const sock = net.connect(socket);
@@ -61,7 +62,7 @@ function sendHook(socket: string, event: string, payload: Obj, acked: () => void
     let greeted = false;
     let ack = false;
     const end = (value?: { exit: number; stdout: string; stderr: string }) => { clearTimeout(timer); if (!ack) acked(); sock.destroy(); resolve(value); };
-    const timer = setTimeout(() => end(), 15_000);
+    let timer = setTimeout(() => end(), 15_000);
     sock.on('error', () => end());
     sock.on('close', () => end());
     sock.setEncoding('utf8').on('data', (chunk: string) => {
@@ -76,6 +77,9 @@ function sendHook(socket: string, event: string, payload: Obj, acked: () => void
         } else if ('ack' in message) {
           ack = true;
           acked();
+          // Acknowledged, it may be held: the hub keeps a stop for its checks up to a minute.
+          clearTimeout(timer);
+          timer = setTimeout(() => end(), HELD_MS);
         } else if ('exit' in message) end(message as { exit: number; stdout: string; stderr: string });
       }
     });
@@ -232,9 +236,15 @@ export default function deepbuild(pi: Pi): void {
    * for a tool call or the run's settling, and starts no competing continuation.
    */
   function place(toolsRunning: boolean): void {
-    const idle = ctx?.isIdle() === true && running === 0;
-    if (!idle && !toolsRunning) return;
-    for (const answer of held.splice(0)) send(answer, idle ? undefined : 'steer');
+    if (!held.length) return;
+    // pi reads idle until a prompt's input handlers return, and refuses a second prompt then: one at a time.
+    const idle = ctx?.isIdle() === true && running === 0 && !pendingInput && !sent.some((entry) => !entry.how);
+    if (idle) {
+      const all = held.splice(0);
+      send({ asks: all.flatMap((answer) => answer.asks), text: all.map((answer) => answer.text).join('\n\n') });
+    } else if (toolsRunning) for (const answer of held.splice(0)) send(answer, 'steer');
+    // No event says a compaction or a prompt's start has passed; a run says so itself when it settles.
+    else if (running === 0) setTimeout(() => place(toolCalls > 0), 100).unref();
   }
   /** The hub's long wait for this session's answers: one at a time, asked again after each, until the session goes. */
   async function listen(mine: Tools): Promise<void> {
@@ -314,7 +324,7 @@ export default function deepbuild(pi: Pi): void {
   on('input', (event) => {
     flushInput();
     // Whether a run follows shows only afterwards: an extension after this one may take the input without one.
-    const payload = { text: String(event.text), source: String(event.source) };
+    const payload = { prompt: String(event.text), source: String(event.source) };
     pendingInput = { payload, timer: setTimeout(() => flushInput(ctx?.isIdle() === true ? { disposition: 'handled' } : {}), HANDLED_MS) };
     return undefined;
   });
@@ -406,7 +416,6 @@ export default function deepbuild(pi: Pi): void {
     running = 0;
     // What pi cleared unread, as an abort clears its queue, goes again as a turn of its own.
     for (const entry of sent.splice(0)) {
-      if (!entry.how) { sent.push(entry); reached(entry); continue; }
       for (const ask of entry.asks) delivered.delete(ask);
       held.push({ asks: entry.asks, text: entry.text });
     }

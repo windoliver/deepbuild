@@ -1661,7 +1661,9 @@ export class Core {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
-    if (this.sessions.get(delivery.session)?.agent === 'pi') return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    // One the hub no longer knows has no route to wait on, but may have been replaced before a restart.
+    const asker = this.sessions.get(delivery.session);
+    if (!asker || asker.agent === 'pi') return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
     else this.offer(delivery.session);
   }
@@ -2145,7 +2147,7 @@ export class Core {
     if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping; ask again once it is back.', session, true);
     if (this.options.plant === 'waiter-gives-up-at-600s' && this.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
-    if (params.push === true) {
+    if (params.push === true || context.role === 'mcp') {
       if (context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Wait only on the pi session this connection is bound to.', session);
       r.places = true;
     }
@@ -2174,7 +2176,8 @@ export class Core {
       AND log_pos > (SELECT COALESCE(MAX(log_pos), 0) FROM events WHERE kind = 'session.start' AND session_id = '${sql(session)}') ORDER BY log_pos DESC LIMIT 1`)) as { session_id: string }[];
     // Replaced in its own process: a start naming it as parent from anywhere else replaces nothing.
     const [was, now] = [this.sessions.get(session), row && this.sessions.get(row.session_id)];
-    return was && now && was.pid === now.pid && was.start === now.start ? row!.session_id : undefined;
+    // A hub restarted since knows the old one by no process: the start that named it is what's left.
+    return now && (!was || was.pid === 0 || (was.pid === now.pid && was.start === now.start)) ? row!.session_id : undefined;
   }
   /**
    * An answer of a session whose package places them (#40): refused when another session has replaced it, so it never
@@ -2216,7 +2219,7 @@ export class Core {
         if (outcome === 'delivered' && !this.routes.get(session)?.placing?.has(ask) && !this.askWaits.has(ask)) throw refuse('not_found', '/params/asks', 'Report only on an answer handed to this session.', ask);
       }
       this.askWaits.delete(ask);
-      const [done] = (await this.record.raw(`SELECT 1 AS yes FROM deliveries WHERE delivery = '${sql(ask)}' AND outcome = 'delivered'`)) as unknown[];
+      const [done] = (await this.record.raw(`SELECT 1 AS yes FROM deliveries WHERE delivery = '${sql(ask)}' AND outcome IN ('delivered', 'replaced')`)) as unknown[];
       if (done) continue;
       await this.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
     }
@@ -3364,7 +3367,10 @@ export class Core {
   private async waitFor(session: string, handle: string): Promise<Obj> {
     const until = Date.now() + this.askWait();
     const places = this.routes.get(session)?.places === true;
-    if (places) this.askWaits.set(handle.slice(4), session);
+    if (places) {
+      const [own] = (await this.record.raw(`SELECT session_id FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null }[];
+      if (own?.session_id === session) this.askWaits.set(handle.slice(4), session);
+    }
     for (;;) {
       const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
       if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);

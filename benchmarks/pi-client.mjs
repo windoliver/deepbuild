@@ -76,5 +76,5 @@ try {
 } finally {
   hub.removeAllListeners('exit');
   hub.kill();
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
 }

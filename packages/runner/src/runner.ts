@@ -857,6 +857,8 @@ class LocalRunner implements Runner {
         u.cached += num(msg.usage.cacheRead);
         u.output += num(msg.usage.output);
         job.rec.usage = u;
+        const cost = isObj(msg.usage.cost) ? msg.usage.cost.total : undefined;
+        if (typeof cost === 'number') job.rec.cost_usd = (job.rec.cost_usd ?? 0) + cost;
       }
       // pi retries some errors itself: only the last message says how the run ended.
       const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted';
