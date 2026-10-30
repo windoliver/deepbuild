@@ -4735,6 +4735,26 @@ export type Verdict = {
   checkout: string;
 };
 
+/** wiki.read@1 */
+export interface WikiRead {
+  v: 1;
+  id: string;
+  kind: "wiki.read";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    count: number;
+    last: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** work.broke@1 */
 export interface WorkBroke {
   v: 1;
