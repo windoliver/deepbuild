@@ -881,6 +881,42 @@ export interface AskAnsweredV2 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV3PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@3 */
+export interface AskAnsweredV3 {
+  v: 3;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session";
+    verified: boolean;
+    on: AskAnsweredV3PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -1627,6 +1663,26 @@ export interface CapabilityRefused {
     broke: "grant" | "quota" | "schema";
     clause: string;
     digest: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** card_rule.set@1 */
+export interface CardRuleSet {
+  v: 1;
+  id: string;
+  kind: "card_rule.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    seller: string;
+    max_usd: number;
+    card: string;
+    via: "card" | "inbox";
   };
   evidence?: Array<string>;
 }
@@ -4684,6 +4740,26 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** wiki.read@1 */
+export interface WikiRead {
+  v: 1;
+  id: string;
+  kind: "wiki.read";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    count: number;
+    last: string | null;
+  };
+  evidence?: Array<string>;
+}
 
 /** work.broke@1 */
 export interface WorkBroke {

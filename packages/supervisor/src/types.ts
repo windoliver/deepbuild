@@ -47,6 +47,8 @@ export interface StartSpec {
   grant?: Grant;
   /** No key: any free key of that kind's pool. `env`: the variable its key is passed to the process in. */
   leases?: { kind: string; key?: string; env?: string }[];
+  /** Who holds the run's leases, as their events name the holder: a writer such as the session's deep mcp (`mcp:<session>`) whose call started the run; the core unless given. */
+  holder?: string;
   /** Where the caller takes the run's output as it comes, beside the digests in its exit. */
   output?: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void };
 }

@@ -1,0 +1,34 @@
+# Base run, commit c733840f, Node 24.22, macOS
+# vitest run --root tests/acceptance/356 --no-file-parallelism: 12 failed | 4 passed (16)
+# The 4 passing tests run the checks on hand-built input (changedFiles, leaks property seed 356, asksNaming, token count). They prove the checks, not the program.
+
+ FAIL  budgets.test.ts > #356.c8728339 budgets > #356.c8728339 the perf lane has a #356 task running benchmarks/wiki.mjs, valid against the merge base's budgets, and it runs
+AssertionError: budgets.json has a #356 task for building the wiki: expected 0 to be greater than 0
+ FAIL  budgets.test.ts > #356.c8728339 budgets > #356.c8728339 building the wiki from 30 days of history (212 sessions) takes under 5% of a 5-hour plan window; the start slice stays under 4,000 tokens
+AssertionError: the reading jobs ran and spent tokens through the runner (the build read the history): expected 0 to be greater than 0
+ FAIL  click.test.ts > #356.abc13a7b / #356.2339938d the Set up click reads your history > #356.abc13a7b after the click the wiki exists: index.md, log.md, you.md, setup.md, rules.md and a page per repo
+AssertionError: index.md exists after the click: expected false to be true // Object.is equality
+ FAIL  click.test.ts > #356.abc13a7b / #356.2339938d the Set up click reads your history > #356.2339938d a first finding, a claim citing one of your own sessions' messages, shows within 60 s of the click (judged on a reference Mac; elsewhere INCONCLUSIVE past 60 s, FAIL past 300 s)
+Error: timed out after 300000 ms waiting for a wiki claim citing one of your sessions' messages
+ FAIL  credentials.test.ts > #356.65dd8324 no credential value anywhere > #356.65dd8324 after setup, no canary (raw, base64, URL-encoded) is in a page, log.md, index.md, the ledger or its WAL; names and sources are
+AssertionError: the wiki has pages: expected 0 to be greater than 3
+ FAIL  credentials.test.ts > #356.65dd8324 no credential value anywhere > #356.65dd8324 (wrong program) a setup that copies values is caught by the sweep
+Error: can't reach the hub at /private/tmp/dh356-qOzTpM/h/.deepbuild/hub.sock
+ FAIL  merge.test.ts > #356.482272ce merge on exact keys > #356.482272ce the same path and command merge across agents; different keys stay separate; the unclear shop merge is one ask, asked once
+AssertionError: api's `npm run dev` is 0 claims, not one; `npm run dev:api` is not a claim of its own; the second api repo (another path) has no start claim; GITHUB_TOKEN and GH_TOKEN are not two claims on two pages; a shop claim is missing; 0 open asks name both shop paths (want exactly one): expected [ …(6) ] to deeply equal [
+ FAIL  merge.test.ts > #356.482272ce merge on exact keys > #356.482272ce (wrong program) merging by name, or never merging, is caught
+Error: can't reach the hub at /private/tmp/dh356-Iz18br/h/.deepbuild/hub.sock
+ FAIL  reread.test.ts > #356.e1fe5789 read positions and superseded claims > #356.e1fe5789 ten new sessions (7 Claude Code, 3 Codex) are read, no older message again; the contradicted claim reads superseded with both quotes
+AssertionError: the first setup never read [q1] (the check would be vacuous); the first setup never read [q4] (the check would be vacuous); the first setup never read [q7] (the check would be vacuous); the first setup never read [q10] (the check would be vacuous); the first setup never read [q13] (the check would be vacuous); ne
+ FAIL  reread.test.ts > #356.e1fe5789 read positions and superseded claims > #356.e1fe5789 (wrong program) re-reading everything, or deleting the contradicted claim, is caught
+Error: can't reach the hub at /private/tmp/dh356-xiRdl2/h/.deepbuild/hub.sock
+ FAIL  rerun.test.ts > #356.8e6a9c42 changed pages and deleted lines > #356.8e6a9c42 Proof: setup writes the pages from the fixture corpus; a rerun on unchanged history changes no page; a deleted line stays deleted
+AssertionError: a page per repo under repos/: expected false to be true // Object.is equality
+ FAIL  rerun.test.ts > #356.8e6a9c42 changed pages and deleted lines > #356.8e6a9c42 (wrong program) a setup that rewrites pages, or relearns a deleted line, fails
+Error: can't reach the hub at /private/tmp/dh356-Yz1b3C/h/.deepbuild/hub.sock
+
+# The (wrong program) cases fail at the base on "can't reach the hub": the plant names (DEEP_HUB_PLANT=rewrites, resurrects, copies-values, merge-by-name, never-merge, rereads-all, deletes-contradicted) are the implementer's to add; none exists at the base.
+
+# Sample fix: not attempted. No test here has passed on any program; see README, Not done.
+
+# Its merge.test.ts lines are the removed first draft's; the redraft's base run is redraft/BASE-FAILURE.txt (README, Blind redrafts).

@@ -51,6 +51,7 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     origin: maybe(str('Leave null: the file is stored with origin agent whatever this says, since origin comes from your connection.')),
   }),
   deep_run: object({ check: str('A check the repo\'s spec names.'), claim: maybe(str('The claim the run is for; null for your newest.', HANDLE('claim'))) }),
+  deep_env: object({ action: { type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
     change: str('The change, in your own words.'),
