@@ -540,8 +540,8 @@ fn moved(events: &[Value], ask: &Value) -> Option<(String, String, String)> {
 }
 
 /// The checks run on the commit an ask is pinned to, each by its latest run: how many passed, how many ran, and the
-/// one thing to look at, the first that didn't pass (where it points, else its name; a run not finished hasn't
-/// passed); `None` when none ran.
+/// one thing to look at, the first that failed (where it points, else its name), else the first still running, which
+/// hasn't passed; `None` when none ran.
 fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<String>)> {
     let pin = &ask["data"]["pinned_to"];
     if pin["kind"] != "commit" {
@@ -566,15 +566,24 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
         .iter()
         .filter(|(_, finished)| finished.is_some_and(|f| f["data"]["outcome"] == "passed"))
         .count();
+    // A check that failed comes before one still running.
     let look = latest
         .iter()
-        .find(|(_, finished)| !finished.is_some_and(|f| f["data"]["outcome"] == "passed"))
-        .map(|(check, finished)| match finished {
-            Some(finished) => finished["data"]["points_to"]
-                .as_str()
-                .map(str::to_owned)
-                .unwrap_or_else(|| check.clone()),
-            None => format!("{check}, still running"),
+        .find_map(|(check, finished)| {
+            finished
+                .filter(|f| f["data"]["outcome"] != "passed")
+                .map(|f| {
+                    f["data"]["points_to"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| check.clone())
+                })
+        })
+        .or_else(|| {
+            latest
+                .iter()
+                .find(|(_, finished)| finished.is_none())
+                .map(|(check, _)| format!("{check}, still running"))
         });
     Some((passed, latest.len(), look))
 }
@@ -598,6 +607,10 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
     }
     let key = data["key"].as_str()?;
     let session = text(&ask["session"]);
+    // As the core: an ask raised in no session, or another's unblock, saves no decision.
+    if session.is_empty() || theirs(ask) {
+        return None;
+    }
     let repo = project_of(events, &session);
     let words = match repo {
         Some(repo) => format!("Saved for this repo ({repo})"),
@@ -607,6 +620,8 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
         .into_iter()
         .filter(|open| states::handle(open) != states::handle(ask))
         .filter(|open| open["data"]["key"] == key)
+        // Nor does a decision answer another's unblock or an exception that holds asks.
+        .filter(|open| !theirs(open) && !open["data"]["folded"].is_array())
         .filter(|open| match repo {
             // A repo-scoped decision answers the asks of that repo's sessions only, as the core's resolver does.
             Some(repo) => project_of(events, &text(&open["session"]))
@@ -617,11 +632,17 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
     Some((words, also))
 }
 
-/// The project a session started in, as its `session.start` carries it: the repo the core saves a decision for.
+/// An unblock someone else owns: theirs to take, never answered for you.
+fn theirs(ask: &Value) -> bool {
+    ask["data"]["kind"] == "unblock" && ask["data"]["owner"] != ask["actor"]
+}
+
+/// The project a session started in, as its latest `session.start` carries it: the repo the core saves a decision for.
 /// A session with none saves for itself alone, whatever its worktree is called.
 fn project_of<'a>(events: &'a [Value], session: &str) -> Option<&'a str> {
     events
         .iter()
+        .rev()
         .find(|event| event["session"] == session && event["kind"] == "session.start")
         .and_then(|start| start["project"].as_str())
         .filter(|project| !letters(project).is_empty())
@@ -940,6 +961,36 @@ mod tests {
         assert_eq!(get("checks"), Some("1 of 3 passed"));
         assert_eq!(get("look at"), Some("checkout.tsx:42"));
 
+        // A rerun started before a check failed: the failure, named by its check when it points nowhere, comes first.
+        let mut later = vec![events[0].clone()];
+        later.push(json!({"kind": "run.started", "data": {"run": "r7", "check": "unit", "claim": "c", "commit": pinned}}));
+        later.extend(run("r8", "layout", &pinned, "failed", Value::Null));
+        let model = Model::read(&later, "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(
+            (get("checks"), get("look at")),
+            (Some("0 of 2 passed"), Some("layout"))
+        );
+        // Only a run still going: that is the thing to look at.
+        let model = Model::read(&later[..2], "ask:T", 0).unwrap();
+        let get = |name: &str| {
+            model
+                .fields
+                .iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(
+            (get("checks"), get("look at")),
+            (Some("0 of 1 passed"), Some("unit, still running"))
+        );
+
         let model = Model::read(&quiet, "ask:T", 0).unwrap();
         assert!(
             model.fields.iter().all(|(field, _)| field != "checks"),
@@ -984,6 +1035,38 @@ mod tests {
             ["ask:B"],
             "the same project by its letters, never another project or none"
         );
+
+        // Another's unblock with the key, in the same project: the decision never answers it.
+        let mut with_theirs = events.clone();
+        let mut unblock = ask("U", "unblock", json!({"key": "same", "owner": "someone"}));
+        unblock["session"] = json!("s2");
+        unblock["actor"] = json!("you");
+        with_theirs.push(unblock);
+        let model = Model::read(&with_theirs, "ask:A", 0).unwrap();
+        assert_eq!(
+            model.scope.clone().unwrap().also,
+            1,
+            "another's unblock isn't counted"
+        );
+
+        // A session that starts again in another project is scoped by its latest start, as the core keeps it.
+        let mut moved = events.clone();
+        moved.insert(5, start("s1", "~/src/docs", json!("docs")));
+        let model = Model::read(&moved, "ask:A", 0).unwrap();
+        let scope = model.scope.clone().unwrap();
+        assert_eq!(
+            (scope.words.as_str(), scope.also),
+            ("Saved for this repo (docs)", 1)
+        );
+
+        // A project with no letters is none; an ask in no session saves nothing.
+        let mut odd = events.clone();
+        odd.push(start("s6", "~/src/x", json!("--")));
+        odd.push(in_session("F", "s6"));
+        odd.push(in_session("G", ""));
+        let model = Model::read(&odd, "ask:F", 0).unwrap();
+        assert_eq!(model.scope.clone().unwrap().words, "Saved for this session");
+        assert!(Model::read(&odd, "ask:G", 0).unwrap().scope.is_none());
 
         // No project: the core saves for the session alone, though the worktree has a name.
         let model = Model::read(&events, "ask:D", 0).unwrap();
