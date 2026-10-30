@@ -857,6 +857,42 @@
     }
   },
   {
+    "source": "wiki.merge",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Setup found two folders named shop, /work/old/shop (no longer on disk) and /work/new/shop. Are they one repo? Until you say, their pages stay apart.",
+        "options": [
+          {
+            "id": "apart",
+            "label": "Keep them apart",
+            "decision": "none"
+          },
+          {
+            "id": "later",
+            "label": "Not now",
+            "decision": "none"
+          }
+        ],
+        "recommended": "apart",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "later",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a1e5c3b9d2f4a6c8e0b1d3f5a7c9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "effect.dependency",
     "kind": "authority",
     "fixture": {

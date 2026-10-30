@@ -77,13 +77,62 @@ const textOf = (stored: string | null): string => {
  * One Claude Code transcript entry: its text, and whether it is no first-hand source: the result of a tool that
  * brings outside content, or the agent's own words, which may repeat it (an agent's word is never evidence).
  */
-export interface Entry { text: string; outside: boolean; role?: string; tool?: string }
+export interface Entry {
+  text: string; outside: boolean; role?: string; tool?: string;
+  /** A tool's result: the message that holds its call, and whether the tool reported an error (#356). */
+  of?: string; error?: boolean;
+}
+/** The shell command a Codex call holds, as text: `cmd` or `command` of a function call's arguments, or the `cmd` an exec script passes. */
+function codexCommand(p: Obj): string | undefined {
+  let args: unknown = p.arguments;
+  if (typeof args === 'string') { try { args = JSON.parse(args); } catch { return undefined; } }
+  if (isObj(args)) {
+    const c = args.cmd ?? args.command;
+    return typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => typeof x === 'string').join(' ').replace(/^\S*sh -lc /, '') : undefined;
+  }
+  const quoted = typeof p.input === 'string' ? /\bcmd:\s*("(?:[^"\\]|\\.)*")/.exec(p.input)?.[1] : undefined;
+  if (quoted === undefined) return undefined;
+  try { return JSON.parse(quoted) as string; } catch { return undefined; }
+}
+/** Whether a Codex call's output says the command failed: a non-zero exit, or its metadata's. */
+function codexFailed(output: string): boolean {
+  const code = /Process exited with code (\d+)/.exec(output)?.[1] ?? /"exit_code"\s*:\s*(\d+)/.exec(output)?.[1];
+  return code !== undefined ? code !== '0' : /^Script failed/.test(output);
+}
 function readTranscript(bytes: Uint8Array): Map<string, Entry> {
   const entries = new Map<string, Entry>();
   const tools = new Map<string, string>();
-  for (const line of Buffer.from(bytes).toString('utf8').split('\n')) {
+  /** The message each Claude Code call is in, by the call's ID; a Codex call's name, by its call ID. */
+  const calls = new Map<string, string>();
+  for (const [n, line] of Buffer.from(bytes).toString('utf8').split('\n').entries()) {
     let entry: unknown;
     try { entry = JSON.parse(line); } catch { continue; }
+    // A Codex rollout's message (#356): its ID without the `msg_` its type adds, or its line when it has none (a
+    // user message has none); anyone's words but yours are no first-hand source.
+    if (isObj(entry) && entry.type === 'response_item' && isObj(entry.payload) && entry.payload.type === 'message') {
+      const p = entry.payload;
+      const text = (Array.isArray(p.content) ? p.content : []).flatMap((c) => (isObj(c) && typeof c.text === 'string' ? [c.text] : [])).join('\n');
+      const id = typeof p.id === 'string' && /^[A-Za-z0-9._-]+$/.test(p.id.replace(/^msg_/, '')) ? p.id.replace(/^msg_/, '') : `l${n}`;
+      entries.set(id, { text, outside: p.role !== 'user', ...(typeof p.role === 'string' ? { role: p.role } : {}) });
+      continue;
+    }
+    // A Codex tool call (#356): the agent's own turn, its command as text; and its output, a tool's result.
+    if (isObj(entry) && entry.type === 'response_item' && isObj(entry.payload) && typeof entry.payload.call_id === 'string' && /^[A-Za-z0-9._-]+$/.test(entry.payload.call_id)) {
+      const p = entry.payload;
+      const call = String(p.call_id);
+      if (p.type === 'function_call' || p.type === 'custom_tool_call') {
+        const command = codexCommand(p);
+        if (command !== undefined) entries.set(call, { text: command, outside: true, role: 'assistant' });
+        calls.set(call, typeof p.name === 'string' ? p.name : '');
+        continue;
+      }
+      if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
+        const out = typeof p.output === 'string' ? p.output : Array.isArray(p.output) ? p.output.flatMap((c) => (isObj(c) && typeof c.text === 'string' ? [c.text] : [])).join('\n') : '';
+        const tool = calls.get(call) ?? '';
+        entries.set(`${call}.out`, { text: out, outside: tool === '' || OUTSIDE.test(tool), role: 'user', tool, error: codexFailed(out), ...(entries.has(call) ? { of: call } : {}) });
+        continue;
+      }
+    }
     if (!isObj(entry) || typeof entry.uuid !== 'string' || !isObj(entry.message)) continue;
     const content = entry.message.content;
     const parts: string[] = [];
@@ -92,23 +141,31 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
     let outside = entry.message.role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true;
     // The tool whose result the entry holds ('' for one whose call the transcript doesn't hold).
     let called: string | undefined;
+    let answers: string | undefined;
+    let failed: boolean | undefined;
     if (typeof content === 'string') parts.push(content);
     else if (Array.isArray(content)) {
       for (const block of content) {
         if (!isObj(block)) continue;
         if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text);
-        if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') tools.set(block.id, block.name);
+        if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
+          tools.set(block.id, block.name);
+          // A shell command is quotable: the agent's own turn, which no first-hand source rests on alone (#356).
+          if (block.name === 'Bash' && isObj(block.input) && typeof block.input.command === 'string') { parts.push(block.input.command); calls.set(block.id, entry.uuid); }
+        }
         if (block.type === 'tool_result') {
           // A result whose call the transcript doesn't hold is nobody's: no first-hand source either.
           const tool = tools.get(String(block.tool_use_id));
           if (tool === undefined || OUTSIDE.test(tool)) outside = true;
           called = tool ?? '';
+          answers = calls.get(String(block.tool_use_id));
+          failed = block.is_error === true;
           if (typeof block.content === 'string') parts.push(block.content);
           else if (Array.isArray(block.content)) for (const c of block.content) if (isObj(c) && typeof c.text === 'string') parts.push(c.text);
         }
       }
     }
-    entries.set(entry.uuid, { text: parts.join('\n'), outside, ...(typeof entry.message.role === 'string' ? { role: entry.message.role } : {}), ...(called === undefined ? {} : { tool: called }) });
+    entries.set(entry.uuid, { text: parts.join('\n'), outside, ...(typeof entry.message.role === 'string' ? { role: entry.message.role } : {}), ...(called === undefined ? {} : { tool: called }), ...(answers === undefined ? {} : { of: answers }), ...(failed === undefined ? {} : { error: failed }) });
   }
   return entries;
 }

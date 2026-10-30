@@ -22,6 +22,8 @@ export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, in
 export { statusCommand } from './status.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
+export { rootOf } from './paths.js';
+export { openWikiBuild } from './wiki-build.js';
 
 const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
        deep hub start [--root <folder>]
