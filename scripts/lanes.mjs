@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inputs as configInputs } from './config-eval.mjs';
+import { inputs as verdictInputs } from './verdict-proofs.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // The repo's declared test paths. The unit lane's runners take their file patterns from them, and perf
@@ -77,9 +79,9 @@ export const checks = [
   { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs', ...(process.env.DEEP_PREFLIGHT === 'release' ? ['--release'] : [])]], fix: 'Follow the Fix line under each proof lane finding above.' },
   // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's
   // seeded claims and the rank-swap twins. Lean builds take a while, so the local preflight runs it only for a
-  // change to the engine or the model; the release preflight always does.
+  // change to what its script says it checks (#821); the release preflight always does.
   {
-    name: 'verdict proofs', paths: ['packages/verdicts/src/**', 'packages/verdicts/model/**'],
+    name: 'verdict proofs', paths: verdictInputs,
     commands: [[process.execPath, 'scripts/verdict-proofs.mjs'], [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/684', 'lean.test.ts', '-t', 'AC3|AC4', '--silent=false']],
     fix: 'Repair the proof or build error each FAIL line names, keeping every theorem on Lean\'s standard axioms, or make the engine and packages/verdicts/model agree on the vector named; under BLOCKED, install the toolchain as its Fix line says.',
   },
@@ -87,7 +89,7 @@ export const checks = [
   // replay of it on real past tasks that didn't regress. The replay spends plan usage, so you start it; this gate only
   // reads the report it left.
   {
-    name: 'config eval', paths: ['AGENTS.md', 'CLAUDE.md', 'skills/**', '.claude/**', '.codex/**'],
+    name: 'config eval', paths: configInputs,
     commands: [[process.execPath, 'scripts/config-eval.mjs', 'gate']],
     fix: 'Under BLOCKED, run the two commands its Fix line names; under FAIL, the change broke the tasks named, so rework it and replay it again.',
   },
@@ -138,8 +140,32 @@ function changedPaths(cwd) {
   if (diff.status !== 0 || untracked.status !== 0) return null;
   return [...diff.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean);
 }
-/** A lane's path: a folder ending in `/**` matches everything under it, anything else matches itself. */
-const covers = (path, file) => (path.endsWith('/**') ? file.startsWith(path.slice(0, -2)) : file === path);
+/**
+ * Whether a lane's paths cover a file: a predicate, such as the `inputs` its script exports, or a list in which a
+ * folder ending in `/**` matches everything under it and anything else matches itself.
+ */
+const covers = (paths, file) => (typeof paths === 'function' ? paths(file)
+  : paths.some((path) => (path.endsWith('/**') ? file.startsWith(path.slice(0, -2)) : file === path)));
+/**
+ * The changed files a lane's script says it reads (its `inputs` export) that the lane's paths miss (#821); null when
+ * the script can't be loaded, so what it reads is unknown. A child loads it, so runLanes stays synchronous.
+ */
+function missed(lane, changed, cwd) {
+  const script = lane.commands.flat().find((arg) => /^scripts\/[^/]+\.mjs$/.test(arg));
+  if (!script) return { files: [] };
+  const code = `import { readFileSync } from 'node:fs';
+    const { inputs } = await import(${JSON.stringify(pathToFileURL(join(cwd, script)).href)});
+    const files = JSON.parse(readFileSync(0, 'utf8'));
+    console.log(JSON.stringify(typeof inputs === 'function' ? files.filter((file) => inputs(file)) : []));`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd, input: JSON.stringify(changed), encoding: 'utf8', maxBuffer: 2 ** 28 });
+  try {
+    if (result.status !== 0) return null;
+    const reads = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    return { script, files: reads.filter((file) => !covers(lane.paths, file)) };
+  } catch {
+    return null;
+  }
+}
 
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
@@ -149,9 +175,17 @@ export function runLanes(lanes, { cwd = root } = {}) {
   for (const lane of lanes) {
     if (lane.paths && !release) {
       changed ??= changedPaths(cwd);
-      if (changed && !changed.some((file) => lane.paths.some((path) => covers(path, file)))) {
-        console.log(`SKIP ${lane.name}: the change touches none of ${lane.paths.join(', ')}`);
-        continue;
+      // A lane skips only when its script reads none of the change either.
+      if (changed && !changed.some((file) => covers(lane.paths, file))) {
+        const misses = missed(lane, changed, cwd);
+        if (misses?.files.length) {
+          failures.push(`FAIL ${lane.name}: its paths miss ${misses.files.join(', ')}, which ${misses.script} reads\n  Fix: Take the lane's paths from the inputs ${misses.script} exports.`);
+          continue;
+        }
+        if (misses) {
+          console.log(`SKIP ${lane.name}: the change touches no file it reads`);
+          continue;
+        }
       }
     }
     const started = performance.now();
