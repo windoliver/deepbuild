@@ -113,7 +113,7 @@ impl Call {
         home: &Path,
         hub: &Path,
     ) -> Call {
-        let shell_tool = tool == "Bash";
+        let shell_tool = tool == "Bash" || tool == "bash";
         let runs = match command.filter(|_| shell_tool) {
             Some(line) => shell::runs(line, cwd, home),
             None => Vec::new(),

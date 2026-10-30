@@ -349,6 +349,18 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
             field("path").map(str::to_string).into_iter().collect(),
             true,
         ),
+        // pi's tools, whose calls name a `path` that may be relative.
+        "bash" => (field("command"), Vec::new(), false),
+        "edit" | "write" => (
+            None,
+            field("path").map(str::to_string).into_iter().collect(),
+            false,
+        ),
+        "read" | "grep" | "find" | "ls" => (
+            None,
+            field("path").map(str::to_string).into_iter().collect(),
+            true,
+        ),
         _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
@@ -410,6 +422,131 @@ fn check() -> ExitCode {
         "{{\"matched\":{}}}",
         called.matches(&entry.pattern).is_some()
     );
+    ExitCode::SUCCESS
+}
+
+/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23).
+fn covered(parsed: Option<&Value>, rules: &Rules) -> bool {
+    match parsed
+        .and_then(|p| member(p, "tool_input"))
+        .and_then(|i| member(i, "command"))
+    {
+        Some(Value::String(c)) => {
+            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
+        }
+        _ => false,
+    }
+}
+
+/// What each fail_closed entry a call matched says, denying it with the hub away.
+fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
+    matched
+        .iter()
+        .filter(|(g, _)| g.fail_closed && !(covered && g.pattern == "effect:cloud-resource"))
+        .map(|(guard, hit)| {
+            let detail = hit
+                .detail
+                .as_deref()
+                .map(|d| format!(" {d}"))
+                .unwrap_or_default();
+            format!(
+                "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
+                guard.reason, guard.next_step, guard.name
+            )
+        })
+        .collect()
+}
+
+/// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
+/// denial says them too, and `,"stage":{...}` for the folders a delete whose reach can't be worked out names (#347).
+fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
+    let notes = matched
+        .iter()
+        .filter_map(|(g, hit)| {
+            hit.detail
+                .as_ref()
+                .map(|d| format!("{}:{}", quoted(&g.name), quoted(d)))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let notes = if notes.is_empty() {
+        notes
+    } else {
+        format!(",\"notes\":{{{notes}}}")
+    };
+    // None when one can't be named, or written exactly.
+    let folders = called.and_then(|c| c.stage()).and_then(|f| {
+        f.iter()
+            .map(|p| p.to_str().map(quoted))
+            .collect::<Option<Vec<_>>>()
+    });
+    let stage = matched
+        .iter()
+        .filter(|(g, _)| g.pattern == "effect:unknown-reach-delete")
+        .filter_map(|(g, _)| {
+            folders
+                .as_ref()
+                .map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let stage = if stage.is_empty() {
+        stage
+    } else {
+        format!(",\"stage\":{{{stage}}}")
+    };
+    format!("{notes}{stage}")
+}
+
+/// `deep-hook match`: for an agent that runs its hooks in its own process, where a process per call would cost too
+/// much. Each line on stdin is a tool hook's JSON; each line out is what `forward` would have sent the hub of it,
+/// `{"matched":[...],"notes"?,"stage"?}`, and its `"denials"` for the hub away. rules.json is read for every call, so
+/// an entry added mid-session holds the next one. It ends when stdin closes.
+fn matching() -> ExitCode {
+    let mut out = io::stdout().lock();
+    for input in io::stdin().lock().lines() {
+        let Ok(input) = input else { break };
+        let parsed = parse(&input).ok();
+        if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
+            let _ = CWD.set(PathBuf::from(cwd));
+        }
+        let reply = match rules() {
+            Err(why) => format!(
+                "{{\"matched\":[],\"denials\":[{}]}}",
+                quoted(&format!(
+                    "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so its guards can't be checked while the hub doesn't answer. Fix that file, then retry."
+                ))
+            ),
+            Ok(rules) => {
+                let called = parsed.as_ref().and_then(|p| call(p, &rules.classes));
+                let matched: Vec<(&Guard, matcher::Hit)> = match &called {
+                    Some(call) => rules
+                        .guards
+                        .iter()
+                        .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
+                        .collect(),
+                    None => Vec::new(),
+                };
+                let names = matched
+                    .iter()
+                    .map(|(g, _)| quoted(&g.name))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let denied = denials(&matched, covered(parsed.as_ref(), &rules))
+                    .iter()
+                    .map(|d| quoted(d))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"matched\":[{names}]{},\"denials\":[{denied}]}}",
+                    read_fields(called.as_ref(), &matched)
+                )
+            }
+        };
+        if writeln!(out, "{reply}").and_then(|()| out.flush()).is_err() {
+            break;
+        }
+    }
     ExitCode::SUCCESS
 }
 
@@ -909,34 +1046,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         None => Vec::new(),
     };
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
-    let command = parsed
-        .as_ref()
-        .and_then(|p| member(p, "tool_input"))
-        .and_then(|i| member(i, "command"));
-    let covered = match command {
-        Some(Value::String(c)) => {
-            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
-        }
-        _ => false,
-    };
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
-    let denials: Vec<String> = matched
-        .iter()
-        .filter(|(g, _)| g.fail_closed && !(covered && g.pattern == "effect:cloud-resource"))
-        .map(|(guard, hit)| {
-            let detail = hit
-                .detail
-                .as_deref()
-                .map(|d| format!(" {d}"))
-                .unwrap_or_default();
-            format!(
-                "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
-                guard.reason, guard.next_step, guard.name
-            )
-        })
-        .collect();
-    if !denials.is_empty() {
-        let _ = DENIAL.set(denials.join("\n"));
+    let denied = denials(&matched, covered(parsed.as_ref(), &rules));
+    if !denied.is_empty() {
+        let _ = DENIAL.set(denied.join("\n"));
     }
     // The planted wrong program for #304's AC1: a rule compiled in, with words of its own.
     if cfg!(feature = "plant-compiled-rule")
@@ -955,43 +1068,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         .map(|(g, _)| quoted(&g.name))
         .collect::<Vec<_>>()
         .join(",");
-    // What the matcher read of the call for an entry, so the hub's denial says it too.
-    let notes = matched
-        .iter()
-        .filter_map(|(g, hit)| {
-            hit.detail
-                .as_ref()
-                .map(|d| format!("{}:{}", quoted(&g.name), quoted(d)))
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    let notes = if notes.is_empty() {
-        notes
-    } else {
-        format!(",\"notes\":{{{notes}}}")
-    };
-    // The folders a delete whose reach can't be worked out names, for the hub to stage before it runs (#347); none
-    // when one can't be named, or written exactly.
-    let folders = called.as_ref().and_then(|c| c.stage()).and_then(|f| {
-        f.iter()
-            .map(|p| p.to_str().map(quoted))
-            .collect::<Option<Vec<_>>>()
-    });
-    let stage = matched
-        .iter()
-        .filter(|(g, _)| g.pattern == "effect:unknown-reach-delete")
-        .filter_map(|(g, _)| {
-            folders
-                .as_ref()
-                .map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    let stage = if stage.is_empty() {
-        stage
-    } else {
-        format!(",\"stage\":{{{stage}}}")
-    };
+    let read = read_fields(called.as_ref(), &matched);
     // At SessionStart, whether each billing key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
         let keys = BILLING_KEYS
@@ -1021,7 +1098,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             ""
         };
         format!(
-            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{notes}{stage},\"payload\":{payload}{billing}{f_test}}}\n",
+            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{read},\"payload\":{payload}{billing}{f_test}}}\n",
             quoted(agent),
             quoted(event),
             std::process::id(),
@@ -1497,10 +1574,11 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
+        [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {
             send(line);
