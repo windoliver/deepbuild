@@ -563,7 +563,7 @@ class Hub {
     }
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
     // the core's gate first (#321, #23); a warn entry's words go out with the gate's reply.
-    const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+    const blocked = meta.denied !== undefined || (ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0);
     // A call blocked before it ran gets no PostToolUse: it is no wait.
     if (blocked) this.waits.drop(meta.session, meta.toolUse);
     const gated = blocked ? undefined : this.gated(meta, parsed.drafts);
@@ -751,6 +751,8 @@ class Hub {
     if (this.plant === 'adapter-decides' && meta.event === 'PermissionRequest') {
       return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }), stderr: '' });
     }
+    // A patch the adapter can't read is Codex's deny, with its reason and nothing else.
+    if (meta.denied && !this.off) return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: meta.denied } }), stderr: '' });
     // A session past its facts is watch-only: a matched entry is recorded, never a block.
     if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
     const entries = this.rules();

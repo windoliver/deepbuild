@@ -53,7 +53,14 @@ function load(fill: Fill): void {
 
 /** Ends a case: a finding (FAIL) or a probe the harness can't make (BLOCKED). */
 class Stop extends Error {
-  constructor(readonly outcome: 'FAIL' | 'BLOCKED', readonly finding: string, readonly codes: string[]) { super(finding); }
+  constructor(readonly outcome: 'FAIL' | 'BLOCKED' | 'INVALID', readonly finding: string, readonly codes: string[]) { super(finding); }
+}
+/** Whether a fill's PermissionRequest fixture carries each ID its version's facts require; one lacking any never reaches the answer. */
+function fixtureReaches(fill: Fill): boolean {
+  if (!fill.permissionFixture) return true;
+  const facts = fill.adapter.facts as { events?: { versions?: { [v: string]: { PermissionRequest?: { required?: { [k: string]: string } } } } } };
+  const required = Object.keys(facts.events?.versions?.[fill.version]?.PermissionRequest?.required ?? {}).filter((field) => field.endsWith('_id'));
+  return required.every((field) => typeof fill.permissionFixture![field] === 'string');
 }
 
 /** A refusal of a reply as the case's finding: the pointer into the reply and the error@1 codes. */
@@ -111,8 +118,13 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
   const unsupported: Operation[] = [];
   const reach = <T>(list: T[], item: T): void => { if (!list.includes(item)) list.push(item); };
   const kinds = (events: AdapterEvent[]): void => { for (const event of events) reach(reached.kinds, event.kind); };
+  const answering = (): void => {
+    if (!fixtureReaches(fill)) throw new Stop('INVALID', 'declared answerPermission, never reached: the fixture payload lacks the request\'s ID', []);
+    reach(reached.flags, 'answerPermission');
+  };
   const h: Harness = {
     facts: fill.adapter.facts,
+    ...(fill.session === undefined ? {} : { session: fill.session }),
     hook(line: HookRequestLine) {
       let mapped: unknown;
       try { mapped = fill.adapter.mapHook(line, fill.version); } catch (error) { throw new Stop('FAIL', `mapHook threw: ${String(error)}`, ['type']); }
@@ -132,7 +144,7 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
       return held;
     },
     permission(request, session) {
-      reach(reached.flags, 'answerPermission');
+      answering();
       if (fill.adapter.caps.answerPermission !== true) throw new Stop('BLOCKED', `answerPermission is not declared, so the harness can't deliver an answer on ${fill.surface}`, []);
       const decision = isObject(request) && typeof request.decision === 'string' ? request.decision : 'allow';
       let delivery: unknown;
@@ -149,6 +161,7 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
         probes.push('reply');
         throw new Stop('BLOCKED', `the adapter has no permissionReply, so the harness can't read its reply on ${fill.surface}`, []);
       }
+      answering();
       try { return reply.call(fill.adapter, answer, request); } catch (error) { throw new Stop('FAIL', `permissionReply threw: ${String(error)}`, ['type']); }
     },
     bounds(panel): Rect {
