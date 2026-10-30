@@ -54,7 +54,7 @@ export const installed = (root: string): Installed | undefined => {
 };
 export const commands = (record: Installed): Set<string> => new Set(Object.values(record.hooks).flatMap((groups) => groups.flatMap((g) => (g.hooks as Obj[]).map((h) => String(h.command)))));
 
-/** Our groups: one entry per hook, plus the stop's waiter. Each runs deep-hook, or the deep CLI's waiter. */
+/** Our groups: one entry per hook, plus the waiter under Stop and under StopFailure. Each runs deep-hook, or the deep CLI's waiter. */
 export function ourGroups(deepHook: string, waiter: string, waiterTimeoutS: number): Record<string, Obj[]> {
   const q = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
   const groups: Record<string, Obj[]> = {};
@@ -62,8 +62,10 @@ export function ourGroups(deepHook: string, waiter: string, waiterTimeoutS: numb
     const entry = { type: 'command', command: `${q(deepHook)} claude-code ${hook}` };
     groups[hook] = [TOOL_HOOKS.has(hook) ? { matcher: '*', hooks: [entry] } : { hooks: [entry] }];
   }
-  // A background waiter wakes an idle session with an answer; its timeout covers your longest ask deadline.
-  groups.Stop!.push({ hooks: [{ type: 'command', command: waiter, asyncRewake: true, timeout: waiterTimeoutS }] });
+  // A background waiter wakes an idle session with an answer; its timeout covers your longest ask deadline. A turn
+  // that ends on an API error fires StopFailure instead of Stop, so it starts one too (#85): the hub keeps the newest.
+  // The planted wrong program writes it under Stop only, as before #85.
+  for (const event of activePlant() === 'waiter-under-stop-only' ? ['Stop'] : ['Stop', 'StopFailure']) groups[event]!.push({ hooks: [{ type: 'command', command: waiter, asyncRewake: true, timeout: waiterTimeoutS }] });
   return groups;
 }
 
@@ -185,13 +187,15 @@ export function relations(root: string, settings: Obj | undefined = readJson(cla
       ? { name: 'stop hold', holds: true, timeoutS, text: `stop hold holds: the ${hold} hold ends at least 5 s before the Stop hook entry's ${timeoutS} s timeout` }
       : { name: 'stop hold', holds: false, timeoutS, text: `stop hold broken: the ${hold} hold must end at least 5 s before the Stop hook entry's timeout, ${timeoutS} s, so Claude Code's stop holds are watch-only; raise that entry's timeout above ${(STOP_HOLD_MS + HOLD_MARGIN_MS) / 1000} s, or run deep setup` });
   }
-  const waiter = entriesOf(settings, 'Stop', ours).find((h) => h.asyncRewake === true);
+  // Each of the waiter's entries, under Stop and under StopFailure (#85): the shortest decides.
+  const waiter = ['Stop', 'StopFailure'].flatMap((event) => entriesOf(settings, event, ours).filter((h) => h.asyncRewake === true).map((h) => ({ event, timeoutS: seconds(h, event) })))
+    .reduce<{ event: string; timeoutS: number } | undefined>((short, w) => (short && short.timeoutS <= w.timeoutS ? short : w), undefined);
   const longest = longestDeadline(root);
   if (waiter && longest !== undefined) {
-    const timeoutS = seconds(waiter, 'Stop');
+    const { event, timeoutS } = waiter;
     out.push(timeoutS * 1000 >= longest
       ? { name: 'waiter', holds: true, timeoutS, text: `waiter holds: the waiter entry's ${timeoutS} s timeout covers the longest ask deadline in your settings, ${words(longest)}` }
-      : { name: 'waiter', holds: false, timeoutS, text: `waiter broken: the waiter entry's timeout, ${timeoutS} s, is shorter than the longest ask deadline in your settings, ${words(longest)}, so an answer given after the waiter stops arrives at the session's next prompt; run deep setup to restore it` });
+      : { name: 'waiter', holds: false, timeoutS, text: `waiter broken: the ${event} waiter entry's timeout, ${timeoutS} s, is shorter than the longest ask deadline in your settings, ${words(longest)}, so an answer given after the waiter stops arrives at the session's next prompt; run deep setup to restore it` });
   }
   // deep_ask says "still waiting" at least 5 s before Claude Code cuts the tool call off; past that it returns at once.
   const set = (isObj(settings?.env) ? settings.env.MCP_TOOL_TIMEOUT : undefined) ?? env.MCP_TOOL_TIMEOUT;
