@@ -36,7 +36,7 @@ npm ci                                   # once, if node_modules is missing
 npm run build --workspaces               # the tests run the built CLI, packages/cli/dist/main.js: deep hub run, deep mcp, deep show
 npx vitest run --root tests/acceptance/806 --no-file-parallelism
 npx tsc -p tests/acceptance/806/tsconfig.json     # type-check: the root's strict options, allowImportingTsExtensions, noEmit
-DEEP_SHOW_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=... CODEX_API_KEY=... npx vitest run --root tests/acceptance/806 live.test.ts   # by hand only
+DEEP_SHOW_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=... [CODEX_API_KEY=...] npx vitest run --root tests/acceptance/806 live.test.ts   # by hand only
 ```
 
 Node 24.22 first on `PATH`; `git` on the `PATH`; cargo for the `deep-show` stand-in and the app's replica, which every file builds once
@@ -56,12 +56,15 @@ refusal, criterion 1's replays of the scenarios that have no user calls) run eve
 **The live tests** (criterion 2) run a real `claude -p` and a real `codex exec`. They spend plan usage, so they never run in CI or by
 default: without `DEEP_SHOW_LIVE=1` each fails with a message starting `INCONCLUSIVE:`; with it, a missing credential fails `BLOCKED:`.
 The agents run under the temporary `HOME` (the account is `CLAUDE_CODE_OAUTH_TOKEN` for Claude Code, as #25's live suite does, and
-`CODEX_API_KEY` for `codex exec`), and reach the test hub as every client does: through the hub's default address under that `HOME`
+`CODEX_API_KEY` for `codex exec`, or else the user's own `~/.codex/auth.json`), and reach the test hub as every client does: through the hub's default address under that `HOME`
 (`<home>/.deepbuild/hub.sock`; the setting `hub.address` in `<home>/.deepbuild/config.json` is the other way, and is unset here). Claude
 Code gets `--settings` hooks that run `deep-hook claude-code <event>` with `HOME` set, and `--mcp-config` registering `deep mcp` with `HOME`
-in its `env`; Codex gets the same two in a temporary `CODEX_HOME/config.toml`. **Unverified:** this job could not run either agent (no
-plan usage was spent) and wrote Codex's hook configuration from `adapters/codex.facts.json` alone, so the TOML tables in
-`live.test.ts` may need the implementer's correction; a live run that fails at "the hub saw the session start" is that, not the issue.
+in its `env`; Codex gets `deep mcp` in a temporary `CODEX_HOME/config.toml` (with `approval_mode = "approve"` for `deep_show` alone, since
+under `-s read-only` an unapproved MCP call is cancelled) and the hooks in `CODEX_HOME/hooks.json`, the shape of Claude Code's settings,
+run with `--dangerously-bypass-hook-trust` because a fresh home trusts none. Codex's sign-in is `CODEX_API_KEY` when set; otherwise the
+test copies the user's `~/.codex/auth.json` (a ChatGPT sign-in) into the temporary `CODEX_HOME`, mode 0600, the only file it takes from the
+real `~/.codex`; with neither it fails `BLOCKED:`. The Codex test's `INCONCLUSIVE:` gate is still `DEEP_SHOW_LIVE`. The Codex wiring was
+corrected from a run against codex-cli 0.144.0; this job didn't run it again (no plan usage was spent).
 The facts say scripted Claude Code sessions run interactively, never with `-p`, because `-p` ends async hooks at teardown; this issue's
 text asks for `claude -p`, and the hooks used here are synchronous, so it is used.
 

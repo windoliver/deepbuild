@@ -60,3 +60,23 @@ All three fail on the missing surface (`deep-replica-canvas`), in `BASE-FAILURE.
 exists, in a scratch test (removed): the stand-in's own replies, as a correct hub would give them (no clock readings, or real ones; `t`
 absent or as text; lower-case doc IDs), gave no difference and no unreported mutant for the six scenarios; the no-clock replies and a wrong
 `t` were reported. `npx tsc -p tests/acceptance/806/tsconfig.json` passes.
+
+
+# Blind redraft: the live Codex test (`live.test.ts`, "AC2 live: a real `codex exec` session ...")
+
+From criterion 2 ("... a scripted Codex session ... calls `deep_show` through `deep mcp` ..."). Every assertion is as it was; only how the
+real Codex is configured and signed in changed. The Claude Code live test and every other file are untouched. A run against codex-cli
+0.144.0 showed three faults in the first draft:
+
+1. **Hooks were TOML tables in `config.toml`.** Codex reads them from `$CODEX_HOME/hooks.json`, in the shape Claude Code's settings use
+   (`{"hooks": {Event: [{"hooks": [{"type": "command", "command": ...}]}]}}`, as `tests/acceptance/80/helpers.mjs` reads it), and runs hooks
+   a home hasn't trusted only with `--dangerously-bypass-hook-trust`. With the tables no hook ran and the hub never saw the session. Now
+   `hooks.json` holds the four events and the run passes the flag (the temporary home is fresh, so nothing there is trusted).
+2. **The MCP call was cancelled.** Under `-s read-only` with no approval, `codex exec` answers "user cancelled MCP tool call".
+   `config.toml` now has `[mcp_servers.deep.tools.deep_show]` with `approval_mode = "approve"`: that tool only, nothing else is approved.
+3. **It required `CODEX_API_KEY`.** A ChatGPT sign-in has none; its sign-in is `$CODEX_HOME/auth.json`. Now `CODEX_API_KEY` is used when
+   set; otherwise the user's `~/.codex/auth.json` is copied into the temporary `CODEX_HOME`, mode 0600, the only file taken from the real
+   home; with neither the test fails `BLOCKED:`, never passes. The `INCONCLUSIVE:` gate on `DEEP_SHOW_LIVE` is unchanged and still comes first.
+
+Checked: `npx tsc -p tests/acceptance/806/tsconfig.json`. Not run: the live test itself (it spends plan usage), so the three fixes are
+as reported from the 0.144.0 run, not re-proven here.

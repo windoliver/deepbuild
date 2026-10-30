@@ -1,9 +1,11 @@
 // AC2, the live form: a real `claude -p` session and a real `codex exec` session, scripted by their prompts, each call deep_show through
 // `deep mcp` with the six-item figure, against a test hub. They spend plan usage, so they never run in CI and never pass unopted:
-//   DEEP_SHOW_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=... CODEX_API_KEY=... npx vitest run --root tests/acceptance/806 live
+//   DEEP_SHOW_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=... [CODEX_API_KEY=...] npx vitest run --root tests/acceptance/806 live
 // Without DEEP_SHOW_LIVE=1 each test fails with a message starting `INCONCLUSIVE:`; with it, a missing binary or credential fails BLOCKED.
+// Codex signs in with CODEX_API_KEY, or else with the user's own ~/.codex/auth.json (a ChatGPT sign-in), the only file taken from the real home.
 // README: Live tests says how the agents reach the test hub.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,6 +23,17 @@ const NAMES = { 'claude-code': 'Live Claude Code', codex: 'Live Codex' };
 function optedIn(...needs: string[]): void {
   if (!LIVE) expect.fail(`INCONCLUSIVE: a live session spends plan usage; set ${LIVE_VARIABLE}=1 to run it (this is not a pass)`);
   for (const name of needs) if (!process.env[name]) expect.fail(`BLOCKED: the live session runs under a temporary HOME and signs in with ${name}; it is not set`);
+}
+
+/** Codex's sign-in for the temporary CODEX_HOME: CODEX_API_KEY when set, else a copy of the user's own auth.json (0600); neither is BLOCKED. */
+function codexSignIn(codexHome: string): { CODEX_API_KEY?: string } {
+  if (process.env.CODEX_API_KEY) return { CODEX_API_KEY: process.env.CODEX_API_KEY };
+  const real = join(homedir(), '.codex', 'auth.json');
+  if (!existsSync(real)) expect.fail('BLOCKED: the live Codex session needs a sign-in: CODEX_API_KEY is not set and ~/.codex/auth.json does not exist');
+  const copy = join(codexHome, 'auth.json');
+  copyFileSync(real, copy);
+  chmodSync(copy, 0o600);
+  return {};
 }
 
 const SCRIPT = (doc: string): string => [
@@ -75,7 +88,7 @@ describe('AC2 (live) a real Claude Code session and a real Codex session each ca
   }, 900_000);
 
   it('AC2 live: a real `codex exec` session, with deep mcp registered, shows the figure: presented at revision 1, drawn in its layer outlined with the session\'s name, held by the record by hash', async () => {
-    optedIn('CODEX_API_KEY');
+    optedIn();
     requireMacos();
     appReady();
     const { tmp, home } = makeHome();
@@ -83,16 +96,19 @@ describe('AC2 (live) a real Claude Code session and a real Codex session each ca
     const hub = await startHub(home, { world: world.path });
     const app = await App.start(home, join(tmp, 'app'));
     const work = t26.makeWorktree(join(tmp, 'work'));
-    // Codex reads its MCP servers and hooks from $CODEX_HOME/config.toml: deep mcp and deep-hook, each run with HOME set to the temporary one.
+    // Codex reads its MCP servers from $CODEX_HOME/config.toml and its hooks from $CODEX_HOME/hooks.json (Claude Code's settings shape);
+    // deep mcp and deep-hook each run with HOME set to the temporary one. A home hasn't trusted its hooks, so the run bypasses hook trust,
+    // and under `-s read-only` the one tool is approved in config.toml, or `codex exec` cancels the MCP call.
     const codexHome = join(home, '.codex');
     mkdirSync(codexHome, { recursive: true });
     const hook = (event: string) => `HOME='${home}' '${join(REPO, 'target/debug/deep-hook')}' codex ${event}`;
     writeFileSync(join(codexHome, 'config.toml'), [
       '[mcp_servers.deep]', `command = "${NODE}"`, `args = ["${CLI}", "mcp"]`, `env = { HOME = "${home}" }`, '',
-      ...['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop'].flatMap((e) => [`[[hooks.${e}]]`, `command = "${hook(e)}"`, '']),
+      '[mcp_servers.deep.tools.deep_show]', 'approval_mode = "approve"', '',
     ].join('\n'));
-    const env = { ...childEnv(home), CODEX_HOME: codexHome, CODEX_API_KEY: process.env.CODEX_API_KEY! };
-    const ran = await runAgent(['codex', 'exec', '--skip-git-repo-check', '--json', '-s', 'read-only', '-'], env, work.path, SCRIPT(t393.DOC.b));
+    writeFileSync(join(codexHome, 'hooks.json'), JSON.stringify({ hooks: Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop'].map((e) => [e, [{ hooks: [{ type: 'command', command: hook(e) }] }]])) }));
+    const env = { ...childEnv(home), CODEX_HOME: codexHome, ...codexSignIn(codexHome) };
+    const ran = await runAgent(['codex', 'exec', '--dangerously-bypass-hook-trust', '--skip-git-repo-check', '--json', '-s', 'read-only', '-'], env, work.path, SCRIPT(t393.DOC.b));
     expect(ran.code, `codex exec exited 0: ${ran.out.slice(0, 800)}`).toBe(0);
     await app.sync();
     const start = (await events(hub)).find((e) => e.kind === 'session.start' && e.data?.agent === 'codex');
