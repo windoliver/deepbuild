@@ -912,6 +912,43 @@ export interface AskAnsweredV3 {
     verified: boolean;
     on: AskAnsweredV3PinnedTo;
     token: string | null;
+    steps?: Array<number>;
+  };
+  evidence?: Array<string>;
+}
+
+export type AskAnsweredV4PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@4 */
+export interface AskAnsweredV4 {
+  v: 4;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session";
+    verified: boolean;
+    on: AskAnsweredV4PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
     words: string | null;
     image: string | null;
   };
@@ -1664,6 +1701,26 @@ export interface CapabilityRefused {
     broke: "grant" | "quota" | "schema";
     clause: string;
     digest: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** card_rule.set@1 */
+export interface CardRuleSet {
+  v: 1;
+  id: string;
+  kind: "card_rule.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    seller: string;
+    max_usd: number;
+    card: string;
+    via: "card" | "inbox";
   };
   evidence?: Array<string>;
 }

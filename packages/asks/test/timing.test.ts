@@ -33,6 +33,12 @@ const ask = (kind: AskKind, subject: string, over: Obj = {}): Obj => ({
   ...over,
 });
 const sourceOf = (kind: AskKind): string => askSources().find((r) => r.kind === kind)!.source;
+/** An authority ask shows its plan (#69): every authority raise here carries a one-step plan. */
+const planned = (opened: Asks): Asks => ({
+  ...opened,
+  raise: (connection, source, data, plan) => opened.raise(connection, source, data, plan ?? (askSources().find((r) => r.source === source)?.kind === 'authority'
+    ? { steps: [{ does: `Do what ${source} asks`, changes: ['main'], undo: 'git revert', public: true, cost: 0 }], diff: sha(source) } : undefined)),
+});
 
 let n = 0;
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -52,7 +58,7 @@ let asks: Asks;
 let deliveries: Delivery[];
 const open = async (): Promise<void> => {
   record = await openRecord({ path: join(dir, 'record.db'), now: () => now });
-  asks = await openAsks({ record, now: () => now, deliver: (d) => { deliveries.push(d); }, home });
+  asks = planned(await openAsks({ record, now: () => now, deliver: (d) => { deliveries.push(d); }, home }));
 };
 /** Your settings: drafted at setup, with batches every 8 hours unless a test says otherwise. */
 const settings = (batch: Obj = { every: '8h', cap: 10 }): void => {
@@ -281,7 +287,7 @@ describe('the hub stopped and started', () => {
     now = T0 + DAY;
     const clock = { t: now };
     record = await openRecord({ path: join(dir, 'record.db'), now: () => clock.t++ });
-    asks = await openAsks({ record, now: () => clock.t++, deliver: (d) => { deliveries.push(d); }, home });
+    asks = planned(await openAsks({ record, now: () => clock.t++, deliver: (d) => { deliveries.push(d); }, home }));
     expect(await about(h, 'ask.defaulted')).toEqual([]);
     expect(await shown()).toContain(h);
     await asks.tick();
