@@ -34,6 +34,8 @@ export interface WikiBuildOptions {
   core: Connection;
   cli: Connection;
   plant?: string | undefined;
+  /** The secret values the hub holds: a memory file holding one never reaches a page. */
+  held?: readonly string[] | undefined;
 }
 export interface WikiBuilt {
   /** The pages whose bytes changed, relative to the wiki, `index.md` and `log.md` never among them. */
@@ -275,7 +277,7 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
   }
 
   /** A memory file's text scrubbed, and of a URL's password too: the scrub reads one only under a secret-looking user name. */
-  const scrubMemory = (text: string): string => scrubText(text).replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s/@]+@/gi, '$1[REDACTED]@');
+  const scrubMemory = (text: string): string => scrubText(text, { held: [...(o.held ?? [])] }).replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s/@]+@/gi, '$1[REDACTED]@');
   /** A memory file's lines as claims on a page: the ones the page doesn't hold yet, each cited at the file's kept bytes. */
   async function remember(wiki: Wiki, path: string, page: string, scope: string, linesOf: (text: string) => string[], project?: string): Promise<void> {
     const raw = readFileSync(path, 'utf8');
@@ -480,7 +482,9 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
         if (from < messages.length && !reading.has(s.id)) unread.push({ session: s.id, project: s.project, messages, from });
       }
       await rules(wiki, projects);
-      await captureRejected(record, o.cli, now, unread);
+      // Not pi's or Cursor's: their files come with no adapter's facts, so what they say you said no hook ever saw.
+      const adapted = new Set(rows.filter((r) => r.agent !== 'pi' && r.agent !== 'cursor').map((r) => r.id));
+      await captureRejected(record, o.cli, now, unread.filter((u) => adapted.has(u.session)));
       // Pattern matching, claims that contradict an earlier one after the rest, so the older is on its page to be replaced.
       const found = [...patterns(unread), ...setup(unread)];
       citeRepoFiles(found, new Map([...projects].map(([project, cwd]) => [`repos/${project.toLowerCase()}`, cwd])), new Map());
