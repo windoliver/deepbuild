@@ -216,6 +216,28 @@ describe('a continue parked for the next prompt', () => {
       expect(after.stdout, 'a carried continue is not rebuilt').not.toContain('one automatic continue');
     });
   }, 60_000);
+  it('is not repeated to the prompt that already shows it: a wake the waiter took before the hub restarted', async () => {
+    await withHub(async (root, home, { restart }) => {
+      const id = '7f3d5a6c-5555-4666-8777-88889999aaab';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
+      expect(await send(join(root, 'hub.sock'), line('SessionStart', { source: 'startup' }))).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await send(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' }))).toContain('"ack"');
+      expect(await send(join(root, 'hub.sock'), line('StopFailure', { error: 'overloaded', prompt_id: 'p1' }))).toContain('"ack"');
+      expect(await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'session.continued' AND session_id = ?", id), 10_000)).toHaveLength(1);
+      await restart({}, async () => undefined);
+      const wake = '<task-notification> Stop hook blocking error: DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.</task-notification>';
+      typed(wake, 'p2');
+      const said = await reply(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: wake, prompt_id: 'p2' }));
+      expect(said.stdout, 'the prompt shows it already').not.toContain('one automatic continue');
+    });
+  }, 60_000);
 });
 
 describe('a first turn that ends in StopFailure', () => {
