@@ -210,3 +210,10 @@ No test asserts with `toThrow`; each compares values, so a wrong program fails a
 6. **A waiter's wake.** The scope says a failure's turn is "a waiter's wake or the next prompt". AC14 names only "the turn its FAIL started", and the test uses the next prompt; a wake's record fact isn't defined here.
 7. **Scope without a criterion.** Failed calls by signature, review wait, blocked time, git and GitHub lifecycle numbers, and Codex's counting rules (cached input taken out, a running total as a baseline) are in the issue's Scope and have no acceptance criterion, so no test here. A reading's `basis` for a recorded reading isn't asserted beyond being one of the two.
 8. **An estimate as "modeled".** The issue doesn't say which costs are modeled; these tests read an estimate from a rate card as modeled and a reported cost as observed.
+
+## Retired first drafts
+
+Two tests in `hub.test.ts` were disputed and went to one blind redraft, `../45-redraft/`. The owner chose the redraft on PR #844.
+
+- AC6 `#45.4768ed8f`, real deep-hook: `Agent` from `../26/helpers.ts` is a Node stand-in that never sends billing keys, so `the hook reports the key as true` could not pass. Now `#45.7c1e4a90`. `billing.test.ts` keeps the tag.
+- AC11 `#45.eb25cf40`, deep_search over MCP: its seed leaves out `subject`, which `turn.usage@1` requires (`RecordError: required at /subject`). Now `#45.d2b85f36`. `search.test.ts` keeps the tag.
