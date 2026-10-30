@@ -176,9 +176,10 @@ export class GateRunner {
     const total = Math.max(0, r.replyAt - r.stopAt);
     const question = Math.min(r.questionMs, total);
     const split = { question, slow: Math.max(0, r.replyAt - r.fastEndedAt - question), fast: Math.max(0, Math.min(r.replyAt, r.fastEndedAt) - Math.min(r.replyAt, r.readyAt)), snapshot_start: Math.max(0, Math.min(r.replyAt, r.readyAt) - r.stopAt), queue_wait: 0 };
-    const ts = this.o.now();
+    // Stamped at the reply: a lane that outran its hold records this later, past whatever came after the reply.
+    const ts = r.replyAt;
     await this.o.append(this.o.core, {
-      v: 1, id: ulid(ts), kind: 'stop.held', ts,
+      v: 1, id: ulid(this.o.now()), kind: 'stop.held', ts,
       data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: r.budgetCost },
     });
   }

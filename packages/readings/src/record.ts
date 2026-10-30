@@ -85,7 +85,7 @@ export function budgetCost(events: RecordEvent[]) {
         const failed = list.find((e) => e.kind === 'run.finished' && e.data.outcome === 'failed' && e.ts >= stop.ts && e.data.check === check && started.get(String(e.data.run))?.data.claim === claim);
         if (!failed) continue;
         failed_after_reply++;
-        items.push({ check, claim, turn_started: list.find((e) => e.kind === 'user.ask' && e.ts > failed.ts)?.id ?? null });
+        items.push({ check, claim, turn_started: list.find((e) => e.kind === 'user.ask' && e.data.no_model !== true && e.ts > failed.ts)?.id ?? null });
       }
     }
   }
@@ -102,8 +102,11 @@ export function staleRuns(events: RecordEvent[]) {
       const reply = list.filter((x) => x.kind === 'stop.held' && x.data.claim === e.data.claim).at(-1);
       // The turn that made the newer claim outdated it; a claim the record doesn't hold falls to the first ask after the reply.
       const newer = list.find((x) => x.kind === 'claim.made' && `claim:${x.id}` === e.data.newer_claim);
-      const after = reply ? list.filter((x) => x.kind === 'user.ask' && x.ts > reply.ts) : [];
-      const ask = newer ? after.filter((x) => x.ts <= newer.ts).at(-1) ?? after[0] : after[0];
+      const after = reply ? list.filter((x) => x.kind === 'user.ask' && x.data.no_model !== true && x.ts > reply.ts) : [];
+      const last = newer ? after.filter((x) => x.ts <= newer.ts).at(-1) : undefined;
+      // A message typed mid-turn didn't start it: its turn began at the first ask since the last turn ended.
+      const ended = last ? list.filter((x) => (x.kind === 'turn.usage' || x.kind === 'agent.stop' || x.kind === 'stop.held') && x.ts < last.ts).at(-1)?.ts ?? 0 : 0;
+      const ask = last ? after.find((x) => x.ts > ended) ?? last : after[0];
       return { run: String(e.data.run), check: String(e.data.check), outdated_by: ask ? String(ask.data.from) : 'unknown', after_ms: ask && reply ? ask.ts - reply.ts : null };
     });
     sessions.push({ session, count: runs.length, within_30s: runs.filter((r) => r.after_ms !== null && r.after_ms <= WINDOW_30S).length, runs });
@@ -186,7 +189,7 @@ const spendCost = (s: Spend): Cost => (!s.priced ? { basis: 'unpriced' } : s.car
 const spendReading = (subject: string, s: Spend): Reading => ({ id: 'spend.usd', subject, value: s.priced ? s.usd : null, unit: 'usd', source: RECORD, as_of: s.as_of, basis: s.priced && !s.card ? 'observed' : 'modeled', complete: s.complete, cost: spendCost(s) });
 
 /** What one session gives: its own readings, and what is summed across sessions. */
-interface Part { readings: Reading[]; tasks: Map<string, Spend>; plan: number; failed: Map<string, { n: number; as_of: number }> }
+interface Part { readings: Reading[]; tasks: Map<string, Spend>; plan: number; planKnown: boolean; failed: Map<string, { n: number; as_of: number }> }
 function foldSession(session: string, list: RecordEvent[]): Part {
   const subject = `session:${session}`;
   const readings: Reading[] = [];
@@ -294,7 +297,9 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     const sig = e.kind === 'tool.after' && e.data.outcome === 'failed' ? str(e.data.signature) : null;
     if (sig) failed.set(sig, { n: (failed.get(sig)?.n ?? 0) + 1, as_of: e.ts });
   }
-  return { readings, tasks, plan, failed };
+  // Short of a plan session's unknown turn, or of tokens no one knows the billing of.
+  const planKnown = !(unknownTurns && mode === 'plan') && !used.some((u) => u.mode === 'unknown');
+  return { readings, tasks, plan, planKnown, failed };
 }
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)]!;
@@ -365,14 +370,16 @@ export function readingsOf(state: ReadingsState): Reading[] {
   const failed = new Map<string, { n: number; as_of: number }>();
   let plan = 0;
   let planAt = 0;
+  let planKnown = true;
   for (const { part, events } of state.sessions.values()) {
     out.push(...part.readings);
+    planKnown &&= part.planKnown;
     for (const [task, s] of part.tasks) addSpend(tasks, task, s);
     for (const [sig, f] of part.failed) { const o = failed.get(sig); failed.set(sig, { n: (o?.n ?? 0) + f.n, as_of: Math.max(o?.as_of ?? 0, f.as_of) }); }
     if (part.plan) { plan += part.plan; planAt = Math.max(planAt, events.at(-1)!.ts); }
   }
   for (const [task, s] of tasks) out.push(spendReading(task, s));
   for (const [sig, f] of failed) out.push({ id: 'failed_calls', subject: sig, value: f.n, unit: 'count', source: RECORD, as_of: f.as_of, basis: 'observed' });
-  if (planAt) out.push({ id: 'plan.tokens', subject: null, value: plan, unit: 'tokens', source: RECORD, as_of: planAt, basis: 'observed' });
+  if (planAt) out.push({ id: 'plan.tokens', subject: null, value: plan, unit: 'tokens', source: RECORD, as_of: planAt, basis: 'observed', complete: planKnown });
   return out;
 }

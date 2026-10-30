@@ -133,6 +133,24 @@ describe('spend from the record', () => {
     expect(countTexts([lines, lines]).turns).toEqual([{ turn: 'u', usage: { input: 3, output: 1, cache_write: 0, cache_read: 0 } }]);
   });
 
+  it('a stale run is outdated by what began the newer claim\'s turn, not a message typed in it or a status question', () => {
+    const ask = (ts: number, from: string, extra: object = {}) => ev('user.ask', ts, 'A', { msg: ts, text: 'x', tasks: [], from, ...extra });
+    const events = [
+      ev('stop.held', 0, 'A', { stop: 's', claim: 'claim:c', total: 0 }),
+      ask(5_000, 'person', { no_model: true }),
+      ask(90_000, 'continuation'), ask(120_000, 'person'),
+      { ...ev('claim.made', 150_000, 'A', {}), id: 'N' },
+      ev('run.stale', 200_000, 'A', { run: 'run:r', check: 'j', claim: 'claim:c', newer_claim: 'claim:N' }),
+    ];
+    expect(staleRuns(events).sessions[0]).toMatchObject({ within_30s: 0, runs: [{ outdated_by: 'continuation', after_ms: 90_000 }] });
+  });
+
+  it('plan tokens read incomplete when an unknown turn or an unknown mode leaves them short', () => {
+    const paid = { basis: 'reported', usd: 0.5 };
+    expect(find([start(0, false), person(1, 1), usage(2, 't', 5, paid)], 'plan.tokens')?.complete).toBe(true);
+    expect(find([start(0, false), person(1, 1), usage(2, 't', 5, paid), person(3, 2)], 'plan.tokens')?.complete).toBe(false);
+  });
+
   it('a stale run\'s delay counts from its claim\'s last stop', () => {
     const asked = ev('user.ask', 150_000, 'A', { msg: 1, text: 'go', tasks: [], from: 'person' });
     const held = (ts: number) => ev('stop.held', ts, 'A', { stop: `s${ts}`, claim: 'claim:c', total: 0 });
@@ -151,6 +169,7 @@ describe('spend from the record', () => {
     const events = [
       ev('stop.held', 1000, 'A', { stop: 's', claim: 'claim:c0', total: 0 }),
       asked(6000, 'person'),
+      ev('agent.stop', 40_000, 'A', {}),
       asked(41_000, 'continuation'),
       { ...ev('claim.made', 42_000, 'A', {}), id: 'c1' },
       ev('run.stale', 50_000, 'A', { run: 'run:r', check: 'j', claim: 'claim:c0', newer_claim: 'claim:c1' }),

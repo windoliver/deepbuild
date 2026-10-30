@@ -5,6 +5,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
+import { search } from '../src/search.js';
 import { ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
 
@@ -40,6 +41,14 @@ describe('turn.usage at a stop', () => {
       expect(usages(), 'a subagent\'s stop adds no row').toHaveLength(1);
     });
   }, 60_000);
+});
+
+describe('deep_search', () => {
+  it('marks a reading from a stale source STALE, never current', async () => {
+    const reading = { id: 'reading:firstpass', subject: null, value: 3, unit: 'count' };
+    const { hits } = await search({ query: 'firstpass', index: { search: async () => [] } as never, raw: async () => [], worktree: undefined, session: undefined, covers: () => true, readings: async () => [{ reading, source: 'github', as_of: 1, status: 'STALE' }] });
+    expect(hits).toMatchObject([{ status: 'STALE', quote: 'STALE reading:firstpass: 3 count' }]);
+  });
 });
 
 describe('Codex\'s usage', () => {
