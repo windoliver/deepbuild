@@ -1,0 +1,94 @@
+The #27 suite at base commit 38b7a1a5 (origin/main), October 29, 2026, on a reference Mac (the machine check passed
+the model, chip and memory and failed only on load) shared with other worktrees: load averages 16 to 30 on 12 cores
+through the runs (`uptime` 13:33 "18.99 21.14 29.73", 13:49 "16.31 21.97 28.58"). Node 24.22.0. Built with `npm ci`,
+`npm run build --workspaces` and `cargo build --locked -q -p deep-hook`. Commands as README "How to run"; the kept
+runs used `--silent=false` for the budget file.
+
+Summary: 16 tests. 10 fail at their assertions on the base; 3 pass on the base (AC1's wake and AC4's ask, each failed
+by its twin, and AC5's instrument test, whose plant reads over the limit); 1 budget test is INCONCLUSIVE (load); 2
+live tests fail BLOCKED without the opt-in. `tsc -p tests/acceptance/27/tsconfig.json`:
+clean, no output.
+
+wake.test.ts (AC1 #27.778c531d), 1 test: PASSED on the base. The merged #25 routes already wake an idle session
+  with your CLI answer, and the record says delivered once.
+  Wrong program: DEEP_HUB_PLANT=waiter-never-wakes (the twin) fails it at its assertion:
+    AssertionError: AC1 #27.778c531d idle session 1fb93c11-… never woke within 30 s of your answer to
+    ask:01M64DTBGY9BD031JWKJ22ZSBD (Green header 70d4188e); waiter runs: [{"code":0,"stderr":""}]
+
+repeat.test.ts (AC2 #27.6e863673), 1 test: FAILS at its assertion. Two runs at the base:
+  - first run: B's ask was decided by the resolver (closed decided_for_you, decision.applied by the core naming the
+    decision your answer saved), but deep_ask came back {"status":"decided","answer":null}: the agent never learns
+    the answer.
+  - kept run (more load): B's deep_ask came back {"status":"waiting","answer":null,...,"default":"blue"} after its
+    40 s wait: the repeat wasn't answered in time.
+      AssertionError: AC2 #27.6e863673 the repeated question must be answered from your saved decision: B's deep_ask
+      must come back with green (Green header 147ff142); it replied …"status":"waiting","answer":null…:
+      expected null to be 'green'
+  A scratch run with that check removed (not kept) went on to fail at the next missing piece:
+      AssertionError: AC2 #27.6e863673 deep inbox must show ask:01M64DZRP110HCY94NDCK9S9ZA under "decided for you"
+  (`deep inbox` lists only open asks at the base). Twin for after the change: repeat-reaches-you (an addition).
+
+desktop.test.ts (AC3 #27.f8331d25), 1 test: FAILS at its assertion, in step 3. Steps 1 and 2 pass on the base
+  (stalled within 60 s, a reading saying not woken and next prompt, the next prompt carries the answer once). Then
+  the same session, idle again, gets its second answer handed to the waiter it already showed doesn't wake:
+      AssertionError: AC3 #27.f8331d25 session 38ce30d8-… showed its app doesn't wake, a known limit: your answer to
+      ask:01M64NZ2E57E0V6PP64F04BV8V must not be handed to its waiter again (it exited 2 with it):
+      expected { pid: 49474, …(5) } to be undefined
+  Wrong program: DEEP_HUB_PLANT=wake-assumed (the twin) fails step 1:
+      AssertionError: AC3 #27.f8331d25 the app didn't wake, so ask:01M64MB8SQCSPH9N5SGNVY8Q3N's delivery must read
+      stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: expected undefined to be defined
+
+waits.test.ts (AC4 #27.e6116d56), 4 tests, 641 s: 3 fail at their assertions, 1 passes.
+  - ask: PASSED on the base (ask.defaulted by its 1-minute deadline, row outcome defaulted). Wrong program:
+    DEEP_HUB_PLANT=skip-default-at-deadline (the twin):
+      AssertionError: AC4 #27.e6116d56 ask:01M64MGZAKBWZPJ5CEENADE3C2, unanswered, must reach its default by its
+      deadline 2026-10-29T20:10:51.699Z (+5000 ms): the record has no ask.defaulted for it
+  - hold: FAILS. The stop went through by its hold, but nothing records how the hold ended:
+      AssertionError: AC4 #27.e6116d56 by the end of 64e39c00-…'s hold the record must say how it ended (held,
+      nothing answered), naming ask:01M64K9RST6ENSJRTR6T6HXSV8; it recorded since the stop: [tool.before …]
+    (the base also writes session.attention finished at that stop, which the next check would catch).
+  - check run: FAILS. The base's deep_run has no deadline; the run never ends:
+      AssertionError: AC4 #27.e6116d56 check run run:01M64KE7QP3ED0YVZ9HDJ8PMK0 never ends on its own; it must reach
+      a recorded outcome by its deadline, 2026-10-29T19:51:53.431Z (+10000 ms): no run.finished for it
+  - agent command: FAILS after 300 s. The base records no overrun:
+      AssertionError: AC4 #27.e6116d56 call toolu_8c29475a2475656ecf2c41cc (`node -e "setTimeout(() => {}, 1500)"`,
+      which took 1.5 s last time) still runs 300 s on; the record must hold its overrun, naming the call, while it runs
+
+outcomes.test.ts (AC4 #27.e6116d56, the Oct 9 cases), 4 tests, 462 s: all 4 fail at their assertions.
+  - timed out: AssertionError: … the waiter took ask:01M64KVQRHB56YTHVKGCY01ZAZ and fc0e0fb6-…'s transcript couldn't
+    be read …: its delivery must read timed_out within 60 s; outcomes: stalled via next_prompt
+  - replaced: AssertionError: … 5a4a9664-… was cleared before any turn showed ask:01M64M0QFW11M9YXZ010X9P9MX: its
+    delivery must read replaced; outcomes: stalled via next_prompt
+  - waiter outlives its session: the waiter is gone within 10 s and nothing reads delivered (both pass on the base);
+    then: AssertionError: … a session whose process vanished with no SessionEnd, its ask open, is unknown or waiting,
+    never finished: expected 'finished' not to be 'finished'
+    Wrong program for the earlier check: DEEP_HUB_PLANT=waiter-outlives-session (the twin, with its setup.ts):
+      AssertionError: … 0561c6bb-…'s Claude Code was killed; its waiter (pid 65744) must not outlive it: still running
+      10 s on: [{"pid":65744,"ppid":1,…,"command":"…/target/debug/deep-hook claude-code waiter"}]
+  - subagent: AssertionError: … a session whose stop is held while its subagent runs never reads as finished:
+    expected 'finished' not to be 'finished' (the base writes finished at the Stop, during the hold). Its later
+    checks (the held stop continues with the answer; no subagent hook takes it; delivered via stop_hold once) aren't
+    reached at the base, so the twin answer-skips-held-stop can't be shown failing them until `finished` is fixed;
+    with it the test fails at the same `finished` check. A first draft waited for the Stop in the record and timed
+    out under that plant (a plain Error, not an assertion); the kept test waits 3 s and checks the stop is still held.
+
+budgets.test.ts (AC5 #27.ffbe7d6f), 3 tests, 516 s:
+  - the lane: FAILS: AssertionError: AC5 #27.ffbe7d6f some lane must run tests/acceptance/27/budgets.test.ts with
+    --no-file-parallelism … (no lane names the file).
+  - the budget: INCONCLUSIVE (skipped with its readings): heavy contention, 1-minute load 26.7 on 12 cores.
+      warm-up: 2 runs, 647 / 272 ms
+      merge base 38b7a1a58d3a (this checkout's own code): 20 runs, p95 265 ms, p50 225 ms
+      this checkout: 20 runs, p95 337 ms, p50 237 ms; 0 not woken
+    The base meets 2 s at p95 by a wide margin; the budget is the twin's to fail.
+  - the instrument: PASSED: waiter-checks-every-5s reads over 2 s at p95 (6 sessions), the twin for this criterion.
+
+session.live.test.ts (AC1, AC2 live), 2 tests: NOT RUN with the opt-in (no token on this machine; they spend plan
+  usage). Without it both fail BLOCKED, nothing started:
+      Error: AC1 #27.778c531d BLOCKED: live tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+      Error: AC2 #27.6e863673 BLOCKED: live tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+  With the opt-in at this base the AC2 run would be BLOCKED at the harness: it has no `repeat` route (README,
+  Additions 1).
+
+Not verified here: the twin folders laid over a checkout by scripts/proof-runs.mjs (the plants were checked by
+setting DEEP_HUB_PLANT by hand, which reaches the same code paths); repeat-reaches-you, which the base doesn't have;
+MANUAL.md, which a person runs.
