@@ -31,6 +31,10 @@ export interface Fill {
   surface: string;
   drive(operation: Operation, input: JsonValue, session: string): Driven;
   deliver(answer: JsonValue, session: string): Delivery;
+  /** The session ID its agent's answers go to, in that agent's own form; the kit's own otherwise. */
+  session?: string;
+  /** A recorded PermissionRequest payload that must carry the IDs its facts require, or answerPermission is never reached. */
+  permissionFixture?: JsonObject;
 }
 
 export interface Declared { flags: Flag[]; operations: Operation[]; kinds: string[] }
@@ -38,6 +42,8 @@ export interface Rect { x: number; y: number; w: number; h: number }
 
 /** What a case may do; every probe records what the case reached. */
 export interface Harness {
+  /** The session ID the fill's agent answers under, when it names its own. */
+  session?: string;
   /** Through the fill's adapter; reaches the kinds it maps. */
   hook(line: HookRequestLine): Mapped;
   /** Reaches the operation and the flag behind it. */

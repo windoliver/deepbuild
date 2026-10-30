@@ -1,6 +1,7 @@
 // The parts of the shipped adapters that aren't data: what each can do, what it can't on each surface,
 // its doctor items, and how it reads usage from its agent's transcript. The mapping itself is the
 // facts file's (adapters/<agent>.facts.json).
+import type { PermissionRequestOutput } from './codex-hooks.generated.js';
 import type { AdapterParts, DoctorItem, JsonObject, TurnUsage } from './types.js';
 import type { JsonValue } from '@deepbuild/contracts';
 
@@ -128,4 +129,16 @@ export const codexParts: AdapterParts = {
   unsupported: TERMINAL_ONLY,
   doctor: () => notChecked('codex'),
   readUsage: readCodexUsage,
+  // The PermissionRequest hook's output, by Codex's rules: only allow or deny for this one call, a deny with its
+  // message and an allow with nothing else. Allow comes from the answer's decision alone; deny or none denies, with
+  // your words as its message; cancel gives no decision, so Codex's own prompt asks. No edited input and no rule for
+  // later ever goes, even for the session.
+  permissionReply: (answer): JsonValue => {
+    if (answer.decision === 'cancel') return {};
+    const decision: NonNullable<NonNullable<PermissionRequestOutput['hookSpecificOutput']>['decision']> = answer.decision === 'allow'
+      ? { behavior: 'allow' }
+      : { behavior: 'deny', message: answer.words ?? 'You denied this call through DeepBuild.' };
+    const reply: PermissionRequestOutput = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
+    return reply as unknown as JsonValue;
+  },
 };
