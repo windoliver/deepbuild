@@ -17,7 +17,7 @@ import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
-import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { headTrust, slot, validityGate, type SessionLog } from '@deepbuild/gate';
@@ -31,7 +31,7 @@ import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
-import { guardOf, keepLesson, lessonsOf, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
+import { captureRejected, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
@@ -548,7 +548,7 @@ export class Core {
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
-      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant,
+      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
@@ -1960,7 +1960,9 @@ export class Core {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A lesson is kept or removed from the CLI, once the OS confirms you.', 'memory.act'));
     const lesson = (await this.lessons()).find((l) => l.id === params.lesson);
     if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
-    const why = await confirmYou(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text.slice(0, 120)}”`, this.options.confirm);
+    // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
+    const agent = await this.agentAbove(context.peer);
+    const why = await confirmYou(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, this.options.confirm);
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
     if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
     const guard = guardOf(lesson);
@@ -2042,6 +2044,12 @@ export class Core {
         this.carried.delete(meta.session);
         const ack = this.acknowledge(meta.session);
         const promised = await this.promiseCarried(meta.session, 'next_prompt', prompt);
+        // What you reject while a session runs stops it now, not at the next wiki build (#111).
+        if (prompt.includes('rejected:')) {
+          const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
+          await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }]);
+          await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+        }
         // A branch's name may not say which screen a session works on, so its first prompt is read too.
         const first = !this.firstPrompted.has(meta.session);
         this.firstPrompted.add(meta.session);
@@ -2704,7 +2712,7 @@ export class Core {
         await syncRejected((q) => this.record.raw(q), this.root.dir);
         return built;
       }
-      case 'memory.list': return { lessons: await this.lessons() };
+      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections((q) => this.record.raw(q)) };
       case 'memory.act': return this.memoryAct(params, context);
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));

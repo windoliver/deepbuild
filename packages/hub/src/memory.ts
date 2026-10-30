@@ -27,8 +27,11 @@ const parsed = (text: string | null): unknown => { try { return JSON.parse(text 
 /** A repo path a line names: relative, with a folder in it, and no scheme. */
 const REPO_PATH = /^[\w.-]+(?:\/[\w.-]+)+$/;
 const NEVER = /^never run `([^`]+)`/i;
-const REJECTED = /(?:^|\s)rejected:[ \t]*`([^`\n]{1,200})`/g;
+const REJECTED = /(?:^|[.!?]\s+|\n\s*)rejected:[ \t]*`([^`\n]{1,200})`/g;
+/** What an agent's host writes under the user's role: a repo's AGENTS.md, as a Codex rollout carries it, or its environment. */
+const INJECTED = /^\s*(?:<|# AGENTS\.md)/;
 const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`);
+const rejectedKey = (scope: string, direction: string): string => sha256(`rejected ${scope} ${direction}`);
 
 /** The folder each repo's sessions worked in, read from the first of its transcripts that names one. */
 export async function repoFolders(record: RecordStore, store: EvidenceStore): Promise<Map<string, string>> {
@@ -90,7 +93,7 @@ export function guardOf(lesson: Lesson): { v: 1; entries: Record<string, unknown
   const bash = (c: string) => ({ tool_name: 'Bash', tool_input: { command: c } });
   return {
     v: 1,
-    entries: { [name]: { match: /[|&;<>()$`"'\\*]/.test(command) ? `shell:${command}` : `run:${command}`, scope: lesson.scope === 'all' ? 'all_repos' : lesson.scope, mode: 'block', reason: `You kept this rule: ${lesson.text}.`, next_step: 'Ask the person, or do the work another way.', fail_closed: true } },
+    entries: { [name]: { match: /[|&;<>()$`"'\\*]/.test(command) ? `shell:${command}` : `run:${command}`, scope: lesson.scope === 'all' ? 'all_repos' : lesson.scope, mode: 'block', reason: `You kept this rule: ${lesson.text}.`, next_step: 'Ask the person, or do the work another way.', fail_closed: lesson.scope === 'all' } },
     proofs: { [name]: { planted: bash(command), twin: bash(`${command}x`) } },
   };
 }
@@ -105,14 +108,15 @@ export interface Rejected { direction: string; decision: string; scope: string; 
  * label is an agent's words, so only what you said yourself reaches a tool call.
  */
 export async function rejectedDirections(raw: Raw): Promise<Rejected[]> {
-  const rows = (await raw("SELECT d.id AS id, d.answer AS answer, d.scope AS scope, (SELECT e.data FROM events e WHERE e.id = d.ask_id AND e.kind = 'ask.created') AS ask FROM decisions d WHERE d.state = 'active' ORDER BY d.id")) as { id: string; answer: string | null; scope: string | null; ask: string | null }[];
+  const rows = (await raw("SELECT d.id AS id, d.key AS key, d.answer AS answer, d.scope AS scope, (SELECT e.data FROM events e WHERE e.id = d.ask_id AND e.kind = 'ask.created') AS ask FROM decisions d WHERE d.state = 'active' ORDER BY d.id")) as { id: string; key: string; answer: string | null; scope: string | null; ask: string | null }[];
   const out: Rejected[] = [];
   for (const r of rows) {
     const answer = parsed(r.answer);
     const scope = String(parsed(r.scope));
     const decision = `decision:${r.id}`;
+    // Only captureRejected's key: an option an agent named `rejected: ...`, or a page line you edited, says the same words.
     const spoken = typeof answer === 'string' ? /^rejected: `(.+)`$/.exec(answer)?.[1] : undefined;
-    if (spoken) { out.push({ direction: spoken, decision, scope, said: true }); continue; }
+    if (spoken && r.ask === null && r.key === rejectedKey(scope, spoken)) { out.push({ direction: spoken, decision, scope, said: true }); continue; }
     const ask = parsed(r.ask) as { kind?: string; options?: { id: string; label: string }[] } | null;
     if (ask?.kind !== 'choice' || !Array.isArray(ask.options)) continue;
     const keys = (label: string): string[] => [...label.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
@@ -122,20 +126,31 @@ export async function rejectedDirections(raw: Raw): Promise<Rejected[]> {
   }
   return out;
 }
-/** The rejected direction a proposal's change names in backticks, in the session's repo; nothing when it names none. */
+/** Whether `text` holds `key` as a whole word, in any case: as deep-hook's `word:` reads a command, with case folded. */
+function namesWord(text: string, key: string): boolean {
+  const [hay, needle] = [text.toLowerCase(), key.toLowerCase()];
+  const word = (c: string | undefined): boolean => c !== undefined && /[\p{L}\p{N}_./-]/u.test(c);
+  for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) {
+    if (!word(hay[at - 1]) && !word(hay[at + needle.length])) return true;
+  }
+  return false;
+}
+/**
+ * The rejected direction a proposal's change revives, in the session's repo: what you said, named anywhere in it; an option
+ * you passed over, an agent's label, only as the exact key in backticks.
+ */
 export async function revives(raw: Raw, change: string, project: string | undefined, session: string): Promise<Rejected | undefined> {
   const named = new Set([...change.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
-  if (!named.size) return undefined;
-  return (await rejectedDirections(raw)).find((r) => named.has(r.direction) && covers(r.scope, project, session));
+  return (await rejectedDirections(raw)).find((r) => (r.said ? namesWord(change, r.direction) : named.has(r.direction)) && covers(r.scope, project, session));
 }
 /** Your `rejected: \`x\`.` in the messages not yet read, each saved once as a decision for the repo you said it in. */
 export async function captureRejected(record: RecordStore, you: Connection, now: () => number, unread: readonly { session: string; project: string | null; messages: Message[]; from: number }[]): Promise<void> {
   for (const u of unread) {
     for (const m of u.messages.slice(u.from)) {
-      if (m.role !== 'user' || m.outside || m.tool !== undefined || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(m.id)) continue;
+      if (m.role !== 'user' || m.outside || m.tool !== undefined || INJECTED.test(m.text) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(m.id)) continue;
       for (const hit of m.text.matchAll(REJECTED)) {
         const scope = u.project ? `repo:${u.project}` : `session:${u.session}`;
-        const key = sha256(`rejected ${scope} ${hit[1]!}`);
+        const key = rejectedKey(scope, hit[1]!);
         if (((await record.raw(`SELECT 1 FROM decisions WHERE key = ${sqlText(key)}`)) as unknown[]).length) continue;
         await saveDecision(record, you, now, { key, scope, answer: `rejected: \`${hit[1]!}\``, subject: `session:${u.session}#${m.id}` });
       }
@@ -150,9 +165,9 @@ export async function syncRejected(raw: Raw, dir: string): Promise<void> {
   }]));
   writeRejected(dir, entries);
 }
-/** Whether a guard entry's scope reaches a session: an entry for one repo reads nothing elsewhere. */
-export const reaches = (scope: unknown, project: string | undefined, session: string): boolean =>
-  typeof scope !== 'string' || !/^(repo|session):/.test(scope) || covers(scope, project, session);
+/** Whether a guard entry reaches a session: one this file wrote for a repo reads nothing elsewhere; any other's scope is free text. */
+export const reaches = (name: string, scope: unknown, project: string | undefined, session: string): boolean =>
+  !/^(?:memory|rejected)-/.test(name) || typeof scope !== 'string' || !/^(repo|session):/.test(scope) || covers(scope, project, session);
 
 const words = (text: string): string => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
 export interface Taste { ask: string; text: string }
@@ -180,10 +195,11 @@ export async function tastesFor(raw: Raw, project: string | undefined, said: str
 export const tasteBlock = (tastes: readonly Taste[]): string | undefined =>
   tastes.length ? `Your person's past taste decisions for the screen this session works on:\n${tastes.map((t) => t.text).join('\n')}` : undefined;
 
-const USAGE = 'Usage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>';
-/** `deep memory`: the ranked list; keep or remove one once the OS confirms you. Exit 0 done, 1 refused, 2 usage, 3 not decided. */
+const USAGE = 'Usage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>\n       deep memory overrule <decision>';
+/** `deep memory`: the ranked list and your rejections; keep, remove or overrule one once the OS confirms you. Exit 0 done, 1 refused, 2 usage, 3 not decided. */
 export async function memoryCommand(args: readonly string[]): Promise<number> {
-  const acting = args[0] === 'keep' || args[0] === 'remove';
+  const overruling = args[0] === 'overrule';
+  const acting = args[0] === 'keep' || args[0] === 'remove' || overruling;
   if (acting ? args.length !== 2 : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
@@ -191,8 +207,11 @@ export async function memoryCommand(args: readonly string[]): Promise<number> {
   let reply: Reply;
   try {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = acting
-      ? await call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' })
+    const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+    reply = overruling
+      ? await call(hubAddress().path, token, 'decision.overrule', { decision: args[1] }, peer)
+      : acting
+      ? await call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer)
       : await call(hubAddress().path, token, 'memory.list', {});
   } catch (error) {
     process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -204,12 +223,14 @@ export async function memoryCommand(args: readonly string[]): Promise<number> {
   }
   if (acting) {
     if (reply.result.status === 'refused') { process.stderr.write(`REFUSED: ${String(reply.result.reason)}\n`); return 1; }
-    process.stdout.write(`${args[0] === 'keep' ? 'Kept' : 'Removed'} ${args[1]!}: ${String(reply.result.decision)}\n`);
+    process.stdout.write(overruling ? `Overruled ${args[1]!}.\n` : `${args[0] === 'keep' ? 'Kept' : 'Removed'} ${args[1]!}: ${String(reply.result.decision)}\n`);
     return 0;
   }
   const lessons = reply.result.lessons as Lesson[];
-  if (args[0] === '--json') process.stdout.write(`${JSON.stringify({ lessons }, null, 2)}\n`);
-  else if (!lessons.length) process.stdout.write('No lessons to keep or remove.\n');
-  else for (const l of lessons) process.stdout.write(`${l.rank}. [${l.kind}] ${l.text} (${l.sources.length} source${l.sources.length === 1 ? '' : 's'}) ${l.id}\n`);
+  const rejected = reply.result.rejected as Rejected[];
+  if (args[0] === '--json') { process.stdout.write(`${JSON.stringify({ lessons, rejected }, null, 2)}\n`); return 0; }
+  if (!lessons.length) process.stdout.write('No lessons to keep or remove.\n');
+  for (const l of lessons) process.stdout.write(`${l.rank}. [${l.kind}] ${l.text} (${l.sources.length} source${l.sources.length === 1 ? '' : 's'}) ${l.id}\n`);
+  for (const r of rejected) process.stdout.write(`Rejected \`${r.direction}\` in ${r.scope}: ${r.decision}\n`);
   return 0;
 }

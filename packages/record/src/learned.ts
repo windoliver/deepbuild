@@ -143,7 +143,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
     const parts: string[] = [];
     // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
     // and a subagent's run, whose prompt the agent composed.
-    let outside = role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true;
+    let outside = role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true || entry.isMeta === true;
     // The tool whose result the entry holds ('' for one whose call the transcript doesn't hold).
     let called: string | undefined;
     let answers: string | undefined;
