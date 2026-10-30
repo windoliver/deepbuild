@@ -1,0 +1,15 @@
+{
+  "spike": 358,
+  "build": ["cargo", "build", "--release", "--locked", "-p", "deep-panel-host", "-p", "deep-app", "--features", "deep-app/panel-check"],
+  "host": { "bin": "deep-panel-host" },
+  "app": { "bin": "deep-app" },
+  "check": ["{app}", "panel-check"],
+  "run": ["{host}", "run"],
+  "bench": ["{app}", "panel-bench"],
+  "sign": { "command": ["codesign", "-f", "-s", "-", "--options", "runtime", "{binary}"] },
+  "jit": {
+    "switch": "rquickjs_jit::deny_native_code in vendor/quickjs-jit-runtime, called first thing by deep-panel-host and deep-app",
+    "control": ["cargo", "run", "--release", "--locked", "-p", "deep-panel-host", "--bin", "deep-panel-host-jit-control", "--features", "deep-app/panel-check"]
+  },
+  "out": "docs/spikes/358/out"
+}
