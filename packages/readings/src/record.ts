@@ -131,10 +131,13 @@ export function loopHolds(events: RecordEvent[]) {
   return { sessions };
 }
 
+/** The keys deep-hook reports that only another agent bills by: it reports one list for every agent. */
+const NOT_ITS: Record<string, RegExp> = { 'claude-code': /^OPENAI_/, codex: /^(ANTHROPIC_|CLAUDE_CODE_)/ };
 export function billingMode(sessionStart: RecordEvent): 'api_key' | 'plan' | 'unknown' {
-  const { billing } = sessionStart.data;
+  const { billing, agent } = sessionStart.data;
   if (typeof billing !== 'object' || billing === null) return 'unknown';
-  const set = Object.values(billing);
+  const others = NOT_ITS[String(agent)];
+  const set = Object.entries(billing).filter(([key]) => !others?.test(key)).map(([, value]) => value as unknown);
   return set.includes(true) ? 'api_key' : set.length ? 'plan' : 'unknown';
 }
 /** A session's spend as turn.usage records it: per turn as it stands, a running total as the difference from the one before. */
