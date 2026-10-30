@@ -32,6 +32,14 @@ function patchPaths(text, cwd) {
   const paths = [...text.matchAll(/^[ \t]*\*\*\*[ \t]*(?:Add File|Update File|Delete File|Move to)[ \t]*:[ \t]*(.+?)[ \t]*$/gm)].map((match) => resolvePosix(base, match[1]));
   return [...new Set(paths)].sort();
 }
+// Why a patch can't be read for its paths, so it is denied before it runs: it names another environment, whose paths
+// can't be resolved here, or a marker line with no path.
+function patchDenied(text) {
+  const environment = text.match(/^[ \t]*\*\*\*[ \t]*Environment ID[ \t]*:[ \t]*(.*?)[ \t]*$/m);
+  if (environment) return `This patch names another environment (${environment[1] || 'unnamed'}), so DeepBuild can't tell which files it changes. Apply it in this environment.`;
+  if (/^[ \t]*\*\*\*[ \t]*(?:Add File|Update File|Delete File|Move to)[ \t]*:[ \t]*$/m.test(text)) return "This patch has a path line with no path, so DeepBuild can't tell which files it changes.";
+  return undefined;
+}
 // An absolute path with . and .. folded; a relative one is taken from `base`, or kept as written when the
 // payload names no folder. Symlinks are left alone.
 function resolvePosix(base, path) {
@@ -63,7 +71,8 @@ function call(facts, payload) {
   // A patch is a command that carries marker lines; a shell command that merely mentions apply_patch keeps its own kind.
   if (patch && typeof command === 'string' && (patch.tools.includes(tool) || new RegExp(patch.shell).test(command))) {
     const paths = patchPaths(command, payload.cwd);
-    if (paths.length > 0 || patch.tools.includes(tool)) return { kind: 'edit', detail: { paths }, rule: pointer('patch') };
+    const denied = patchDenied(command);
+    if (paths.length > 0 || denied || patch.tools.includes(tool)) return { kind: 'edit', detail: { paths, ...(denied ? { denied } : {}) }, rule: pointer('patch') };
   }
   const prefix = Object.keys(kinds.prefixes ?? {}).find((start) => typeof tool === 'string' && tool.startsWith(start));
   if (prefix) {

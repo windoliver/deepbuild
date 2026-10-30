@@ -8,7 +8,7 @@ import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@d
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
-import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
+import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
 /**
  * The agent names a hook request may carry, to the adapter that maps them. Cursor's CLI and Grok run the hooks in
@@ -240,6 +240,12 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       }
       const loop = loopFact(name, tool, request.event, payload);
       if (loop) meta.loop = loop;
+      // A patch the adapter can't read is denied before it runs (#39), unless the session's version is past its facts.
+      if (kind === 'tool.before' && typeof mapped.denied === 'string') {
+        const past = versionOf(meta.transcript);
+        if (past && !coveredBy(agent, past)) meta.watchOnly = true;
+        else meta.denied = mapped.denied;
+      }
       break;
     }
     case 'agent.stop':
@@ -269,6 +275,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   // A stop, a permission request or a finished task is about its session: the session: handle takes the agent's session ID's letters and digits.
   const handle = meta.session.replace(/[^0-9A-Za-z]/g, '');
   if (handle && needsSubject(kind)) draft.subject = `session:${handle}`;
+  // A Codex question card fires PreToolUse and no permission hook, so it is caught here: the call, and its request (#39).
+  const questions = ((facts.questionTools as JsonObject).tools ?? []) as JsonValue[];
+  if (name === 'codex' && kind === 'tool.before' && questions.includes(tool)) {
+    const asked: Draft = { kind: 'permission.request', v: 1, id: derivedId(draft.ts, `${request.id}.question`), ts: draft.ts, seq: request.seq, data: { kind: 'question', tool } };
+    if (handle) asked.subject = `session:${handle}`;
+    return { kind: 'hook', drafts: [draft, asked], meta };
+  }
   return { kind: 'hook', drafts: [draft], meta };
 }
 

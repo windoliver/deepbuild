@@ -71,7 +71,7 @@ function steer(h: Harness, turn: string): AdapterEvent[] | undefined {
 }
 /** Answers a permission request through the fill and holds the answer to its flag: a sign that isn't a delivery is an answer not applied. */
 function answer(h: Harness, request: JsonValue): Delivery {
-  const delivery = h.permission(request, SESSION);
+  const delivery = h.permission(request, h.session ?? SESSION);
   if (delivery.sign !== null && !/^delivered:[^:]+:./.test(delivery.sign)) h.fail(ITEM_MESSAGES.answerPermission, [CODES.flag('answerPermission')]);
   return delivery;
 }
@@ -213,7 +213,9 @@ const cases: Case[] = [
     // The transcript sign names where the answer landed; the adapter's own session field is only its word.
     const delivery = answer(h, request());
     const signed = delivery.sign === null ? undefined : /^delivered:[^:]+:(.+)$/.exec(delivery.sign)?.[1];
-    if (delivery.session !== SESSION || (signed !== undefined && signed !== SESSION)) h.fail(RULE_MESSAGES.owner, [R.owner.code]);
+    const own = h.session ?? SESSION;
+    const landed = signed !== undefined && signed !== own ? signed : delivery.session;
+    if (landed !== own) h.fail(`${RULE_MESSAGES.owner}: session ${own}'s answer landed in session ${landed}`, [R.owner.code]);
   }),
   kase('deliver/allow-only-from-decision', { flags: ['answerPermission'] }, (h) => {
     const delivery = answer(h, request({ command: 'rm -rf build', decision: 'deny', suggestion: 'allow' }));
