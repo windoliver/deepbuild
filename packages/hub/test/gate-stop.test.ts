@@ -77,7 +77,7 @@ describe('the gate runner at a real stop', () => {
       expect(started!.data.commit, 'on a snapshot of the uncommitted edit, not HEAD').not.toBe(readFileSync(join(repo, '.git/refs/heads/main'), 'utf8').trim());
       const held = events.find((e) => e.kind === 'stop.held')!;
       expect(held.data.claim).toBe(`claim:${claim!.id}`);
-      const d = held.data as Record<string, number>;
+      const d = held.data as { question: number; slow: number; fast: number; snapshot_start: number; queue_wait: number; total: number };
       expect(d.question + d.slow + d.fast + d.snapshot_start + d.queue_wait, 'the parts sum to the hold').toBe(d.total);
       expect(d.fast, 'the check ran while the stop was held').toBeGreaterThan(0);
       expect(JSON.parse(r.stdout || '{}').decision, 'a green fast lane is no send-back').toBeUndefined();

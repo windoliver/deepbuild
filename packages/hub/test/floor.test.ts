@@ -40,7 +40,7 @@ async function claimAfter(change: (repo: string) => void) {
     keep: async (bytes) => createHash('sha256').update(bytes).digest('hex'), run: async () => undefined, invalid: async (claim, _commit, reason) => { invalid.push({ claim, reason }); },
   });
   const task_ref = `session:${session}#0`;
-  await tasks.opened({ session, agent: 'claude-code', cwd: repo, thread: 'thread-1', task_ref, text: ASK });
+  await tasks.opened({ session, agent: 'claude-code', cwd: repo, thread: 'thread-1', task_ref, text: ASK, prompt: ASK, at: now() });
   for (let i = 0; i < 50 && !(await record.raw("SELECT 1 FROM definitions WHERE state = 'locked'")).length; i++) await new Promise((r) => setTimeout(r, 20));
   change(repo);
   await tasks.claim(session, 'claude-code', repo);

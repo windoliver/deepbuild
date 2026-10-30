@@ -28,6 +28,8 @@ export interface ArchiveOptions {
   held?: () => readonly string[];
   /** The forge's REST API (https://api.github.com) and the repos (owner/name) whose CI runs are copied. */
   forge?: { api: string; repos: readonly string[] };
+  /** The repo a session's folder is in, which its copy is recorded under, so what it says reaches that repo (#356). */
+  projectOf?: (cwd: string, agent: string) => string | undefined;
 }
 export interface Archive {
   /** Copies every source new or changed since its last copy, and every completed CI run not yet copied. */
@@ -120,6 +122,20 @@ function secretsIn(text: string): string[] {
     return around === key.match || around.split(/[^\w+/=]+/).some((part) => part.length >= 8 && /\d/.test(part) && /[a-z]/i.test(part));
   }).map(({ match }) => match);
 }
+/**
+ * The folder a transcript's session worked in, as its agent recorded it: Claude Code's `cwd` on an entry, Codex's
+ * on its `session_meta` (#356). Undefined when no line names one.
+ */
+export function cwdOf(text: string): string | undefined {
+  for (const line of text.split('\n')) {
+    let entry: unknown;
+    try { entry = JSON.parse(line); } catch { continue; }
+    if (!isObj(entry)) continue;
+    const cwd = typeof entry.cwd === 'string' ? entry.cwd : entry.type === 'session_meta' && isObj(entry.payload) && typeof entry.payload.cwd === 'string' ? entry.payload.cwd : undefined;
+    if (cwd) return cwd;
+  }
+  return undefined;
+}
 /** Whether a transcript line is a user message, however its agent nests the role. */
 function fromUser(line: string): { uuid?: string } | undefined {
   let entry: unknown;
@@ -160,9 +176,9 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
   // Each agent's newest hook, read from the record a page of new events at a time.
   const hooked = new Map<string, number>();
 
-  const append = async (agent: string | undefined, kind: string, v: number, data: Obj, evidence: string[], session?: string) => {
+  const append = async (agent: string | undefined, kind: string, v: number, data: Obj, evidence: string[], session?: string, project?: string) => {
     const ts = now();
-    const connection = { ...options.connection, ...(agent && { agent }), ...(session && { session }) };
+    const connection = { ...options.connection, ...(agent && { agent }), ...(session && { session }), ...(project && { project }) };
     const event = { v, id: ulid(ts), kind, ts, data: data as EventInput['data'], evidence };
     await record.append(connection, event);
     remember({ ...event, ...connection, log_pos: 0 } as unknown as Event);
@@ -191,7 +207,9 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     const text = raw.toString('utf8');
     const redacted = Buffer.from(scrubText(text, { held: [...(options.held?.() ?? [])] }), 'utf8');
     const evidence = await keep('transcript-copy', `archive:${source.agent}`, redacted, isUtf8(raw));
-    await append(source.agent, 'transcript.archived', 2, { session, evidence, source: { size: raw.length, sha256: sourceSha } }, [evidence]);
+    const cwd = options.projectOf ? cwdOf(text) : undefined;
+    const project = cwd ? options.projectOf!(cwd, source.agent) : undefined;
+    await append(source.agent, 'transcript.archived', 2, { session, evidence, source: { size: raw.length, sha256: sourceSha } }, [evidence], undefined, project);
     seen.set(source.path, mark);
     // Only what the transcript gained since its last copy is searched for pasted keys, so a key asks once.
     const grew = before && before.size <= raw.length && sha256(raw.subarray(0, before.size)) === before.sha256;

@@ -350,6 +350,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
         },
+        "@deepbuild/reading": {
+          "spec": "0.0.0",
+          "why": "Issue #356: setup's wiki build hands the free text pattern matching left to your own agent, a slice at a time through handles, as the one reading the design names."
+        },
         "@deepbuild/resolver-decisions": {
           "spec": "0.0.0",
           "why": "Issue #23: the hub runs resolver-decisions, a first-party extension on by default, registered with its asks core so your saved decisions answer the asks they cover."
@@ -365,6 +369,10 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #26: deep_status reports a run that disagrees with deep_claim's prediction by the verdict engine's own contradiction rule."
+        },
+        "@deepbuild/wiki": {
+          "spec": "0.0.0",
+          "why": "Issue #356: setup writes what it learned as the wiki's claims and pages, and keeps your edits to them through the wiki's own entry."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -445,6 +453,26 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #86: the record the ledger reads its budgets and reservations from and appends them to."
+        }
+      }
+    },
+    "packages/buying/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #69: a purchase past what's left of its budget is asked as an authority ask whose plan shows it at its price."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #69: a purchase reserves its price against the budget you approved (#86), counting purchases reserved and not yet charged, and its receipt is its cost reading."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #69: the canonical hash of a purchase, the inputs its reservation names."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #69: card rules appended and read back, and a receipt kept as evidence."
         }
       }
     },

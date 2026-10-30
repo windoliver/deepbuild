@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, expect } from 'vitest';
 import type { HookRequestLine } from '../../../packages/adapters/src/index.ts';
 import type { Asks, AsksPlant, Delivery } from '../../../packages/asks/src/index.ts';
+import { shownPlanHash, withPlans } from '../plans.ts';
 import type { CheckResult, CheckSpec } from '../../../packages/conformance/src/index.ts';
 import type { ExtensionHost, Plant, ProjectTrust, ReleaseEntry } from '../../../packages/extension-host/src/index.ts';
 import { openRecord, type Connection, type Event, type RecordStore } from '../../../packages/record/src/index.ts';
@@ -101,7 +102,7 @@ export async function openWorld(options: { plant?: AsksPlant } = {}): Promise<Wo
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const deliveries: Delivery[] = [];
   const { openAsks } = await asksCore();
-  const asks = await openAsks({ record, now: Date.now, deliver: (d) => { deliveries.push(d); }, ...(options.plant ? { plant: options.plant } : {}) });
+  const asks = withPlans(await openAsks({ record, now: Date.now, deliver: (d) => { deliveries.push(d); }, ...(options.plant ? { plant: options.plant } : {}) }));
   const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } } });
   const { openTrust } = await host();
   const trust = await openTrust({ record, now: Date.now });
@@ -241,7 +242,7 @@ export async function startSession(w: World, session: string, worktree: string, 
 export const coreFor = (session: string): Connection => ({ writer: 'core', actor: 'you', scope: 'you', session });
 export const raise = (w: World, session: string, source = 'effect.push', ask: Record<string, unknown> = authorityAsk()): Promise<string> => w.asks.raise(coreFor(session), source, ask);
 /** Your approval on the trusted path: the card's click. */
-export const approve = (w: World, ask: string): Promise<void> => w.asks.answer(YOU, ask, { option: 'approve', plan_hash: null, token: `click-${ulid()}` });
+export const approve = async (w: World, ask: string): Promise<void> => w.asks.answer(YOU, ask, { option: 'approve', plan_hash: await shownPlanHash(w.asks, ask), token: `click-${ulid()}` });
 export async function inboxRow(w: World, ask: string) {
   const row = (await w.asks.inbox()).find((r) => r.ask === ask);
   if (!row) throw Error(`${ask} has no inbox row`);

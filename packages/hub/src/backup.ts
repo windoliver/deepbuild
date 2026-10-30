@@ -3,9 +3,10 @@
 // stopped, its lock held so none starts meanwhile, once the OS confirms you: the hub isn't there to ask, so this
 // process asks, as the hub does (confirm.ts). deep-hook's floor denies an agent's `deep restore` (#317). The restored
 // record counts as one after a power cut, and its generation is raised above the backup's and the replaced one's.
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { prepareRestore, type PreparedRestore } from '@deepbuild/record';
+import { writtenOf } from '@deepbuild/wiki';
 import { call } from './client.js';
 import { confirmYou } from './confirm.js';
 import { takeLock } from './lock.js';
@@ -70,6 +71,8 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
       rmSync(staged(name), { recursive: true, force: true });
       await copySynced(join(folder, name), staged(name));
     }
+    // What the wiki last wrote, kept beside its folder (#356), comes back with it, so no restored page reads as your edit.
+    const written = { from: writtenOf(join(folder, 'wiki')), to: writtenOf(root.wiki) };
     prepared = await prepareRestore(from, root.ledger);
     // From here the record and its folders change one by one; the marker stops a hub starting on a mix of the two.
     writeSynced(root.restoring, Buffer.from(`${folder}\n`));
@@ -78,6 +81,8 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
       rmSync(join(root.dir, name), { recursive: true, force: true });
       if (existsSync(staged(name))) renameSync(staged(name), join(root.dir, name));
     }
+    rmSync(written.to, { force: true });
+    if (existsSync(written.from)) copyFileSync(written.from, written.to);
     // How far the replaced record's hub read each transcript is ahead of the restored record: a session is read from
     // where the next hub meets it, as after a power cut.
     rmSync(root.transcripts, { force: true });
