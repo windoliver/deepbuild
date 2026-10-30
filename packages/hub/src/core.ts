@@ -5,7 +5,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { chmod, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { homedir, networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,7 +20,7 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
-import { openLeases } from '@deepbuild/leases';
+import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
@@ -36,11 +37,13 @@ import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hoo
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { argsOf, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
+import { openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
+import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
@@ -224,6 +227,8 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  /** The kernel's lease table (#237), read by deep env down for who holds a port now. */
+  private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -234,6 +239,8 @@ export class Core {
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
+  /** Setup's wiki build (#356). */
+  private wikiBuild!: { build(): Promise<WikiBuilt> };
   /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
   private readonly parked = new Map<string, Promise<void>>();
   /** Each session a reading named a job for, once. */
@@ -404,7 +411,7 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
@@ -479,6 +486,8 @@ export class Core {
     const archive = await openArchive({
       record: this.record, evidence: this.store, asks, adapters: shipped(), env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
       held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
+      // A session's copy is recorded under the repo its folder is in, so what it says reaches that repo's page (#356).
+      projectOf: (cwd, agent) => projectOf(cwd, agent, this.options.plant),
     });
     let archiving: Promise<void> | undefined;
     const archivePass = () => {
@@ -488,8 +497,14 @@ export class Core {
         repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
         await archive.pass();
       })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+      return archiving;
     };
     archivePass();
+    // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
+    this.wikiBuild = openWikiBuild({
+      record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
+      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant,
+    });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
@@ -2283,6 +2298,7 @@ export class Core {
       case 'record.backup': return this.backup(params);
       case 'env.up': return this.envUp(params);
       case 'env.down': return this.envDown(params);
+      case 'wiki.build': return this.wikiBuild.build();
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
@@ -2318,12 +2334,15 @@ export class Core {
       await chmod(partial, 0o600);
       await synced(partial);
       for (const [from, name] of copies) await copySynced(from, join(folder, name));
+      // What the wiki last wrote sits beside its folder (#356): without it, every restored page would read as your edit.
+      if (existsSync(wikiWritten(this.root.wiki))) await copyFile(wikiWritten(this.root.wiki), wikiWritten(join(folder, 'wiki')));
       // ledger.db names a whole backup only once all of it is on disk, and lasts once its folder is synced.
       await synced(folder);
       renameSync(partial, ledger);
     } catch (error) {
       rmSync(partial, { force: true });
       for (const [, name] of copies) rmSync(join(folder, name), { recursive: true, force: true });
+      rmSync(wikiWritten(join(folder, 'wiki')), { force: true });
       throw error;
     }
     // After the rename the backup is whole, so a failed sync here leaves it as it is.
@@ -2714,6 +2733,7 @@ export class Core {
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
+        case 'deep_env': return await this.deepEnv(session!, String(args.action));
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3262,10 +3282,24 @@ export class Core {
     }
   }
   private envUp(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.inTurn(worktree, () => this.riseIn(worktree));
+    return this.upFor(this.worktreeOf(params));
   }
-  private async riseIn(worktree: string): Promise<Obj> {
+  private upFor(worktree: string, holder?: string): Promise<Obj> {
+    return this.inTurn(worktree, () => this.riseIn(worktree, holder));
+  }
+  /**
+   * deep_env (#331): the bound session's own worktree's stack, up or down, as `deep env up` and `deep env down` run
+   * there. The worktree is the session's, from its hooks, never from the call, so a child session in a worktree of its
+   * own leases its own ports there and never its parent's. Its leases name the session's deep mcp as their holder; a
+   * stack already up in that worktree is reused as it is, so the holder says who leased it, not who uses it.
+   */
+  private async deepEnv(session: string, action: string): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
+    const worktree = realpathSync(cwd);
+    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' });
+  }
+  private async riseIn(worktree: string, holder?: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
     // A stack is reused only while its process runs and its health route still answers 200.
     if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
@@ -3278,7 +3312,7 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
@@ -3295,29 +3329,31 @@ export class Core {
    * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
    */
   private envDown(params: Obj): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
+    return this.downFor(this.worktreeOf(params), { path: '/params/worktree', remedy: 'deep env up' });
+  }
+  /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
+  private downFor(worktree: string, at: { path: string; remedy: string }): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
     if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, rising));
+    return this.inTurn(worktree, () => this.downIn(worktree, at, rising));
   }
-  private async downIn(worktree: string, interrupted?: string): Promise<Obj> {
+  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string): Promise<Obj> {
     const stack = this.stacks.get(worktree);
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
-    if (!stack) throw new Refused(refusal('not_found', '/params/worktree', `No stack runs for ${worktree}; start one with deep env up.`, worktree));
+    if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
     const ports = Object.values(stack.ports);
     const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
     const before = recorded.filter(running);
-    // The planted wrong program stops whatever listens on the leased ports, the run's or not.
-    if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
     this.stacks.delete(worktree);
-    const cleaned = await this.takeDown(stack.run);
+    const { result: cleaned, left } = await downLeaving(ports, { listen: listening, leases: async () => (await this.leases.leases()).map((v) => v.lease) }, async () => {
+      // The planted wrong program stops whatever listens on the leased ports, the run's or not.
+      if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+      return this.takeDown(stack.run);
+    });
     const stopped = [...new Set([...before.filter((pid) => !running(pid)), ...cleaned.stopped])];
-    const left = new Map<number, { pid: number; port?: number }>();
-    for (const name of cleaned.left) if (name.startsWith('pid:')) left.set(Number(name.slice(4)), { pid: Number(name.slice(4)) });
-    for (const port of ports) for (const pid of await listening(port)) left.set(pid, { pid, port });
-    return { run: stack.run, stopped, left: [...left.values()] };
+    return { run: stack.run, stopped, left };
   }
 
   // ---- Spool, retention and the test load.

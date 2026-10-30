@@ -21,11 +21,13 @@
     "@deepbuild/evidence": "0.0.0",
     "@deepbuild/extension-host": "0.0.0",
     "@deepbuild/leases": "0.0.0",
+    "@deepbuild/reading": "0.0.0",
     "@deepbuild/record": "0.0.0",
     "@deepbuild/resolver-decisions": "0.0.0",
     "@deepbuild/runner": "0.0.0",
     "@deepbuild/supervisor": "0.0.0",
     "@deepbuild/verdicts": "0.0.0",
+    "@deepbuild/wiki": "0.0.0",
     "better-sqlite3": "13.0.3",
     "yaml": "2.9.1"
   }

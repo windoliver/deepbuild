@@ -1,0 +1,42 @@
+# Base c733840f, once: node node_modules/vitest/vitest.mjs run --root tests/acceptance/356 --no-file-parallelism redraft/merge.test.ts
+# Trimmed: the duplicated 'Received' array is cut; the first line of the third case's error is kept.
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/issue-356-blind/tests/acceptance/356
+
+ ❯ redraft/merge.test.ts (3 tests | 2 failed) 32111ms
+   ❯ #356.482272ce merges on exact keys, an unclear merge comes to you (3)
+     × #356.482272ce setup merges the same path and command from Claude Code and Codex, keeps similar names apart, and raises one ask for the deleted and the live shop; a rerun adds none 14130ms
+     × #356.482272ce (wrong program) a setup that merges by repo name, or never merges, is caught 17866ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  redraft/merge.test.ts > #356.482272ce merges on exact keys, an unclear merge comes to you > #356.482272ce setup merges the same path and command from Claude Code and Codex, keeps similar names apart, and raises one ask for the deleted and the live shop; a rerun adds none
+AssertionError: no claim states `npm run dev`: the api repo's start command
+the api repo (one path, Claude Code and Codex sessions) is on 0 repo pages (), not one
+no claim states `make serve`: the second api repo, at another path
+no repo page holds a claim from the api repo at the second path
+no claim states `npm run dev:api`: a command that only looks like `npm run dev`
+no claim states `GITHUB_TOKEN`: the api repo's release credential
+no claim states `GH_TOKEN`: the web repo's deploy credential
+no claim states `docker compose up`: the deleted shop folder
+no claim states `npm run lint`: the live shop folder
+a shop folder has no repo page claim
+0 asks name both /private/tmp/dh356-D4mDQe/work/old/shop and /private/tmp/dh356-D4mDQe/work/new/shop, not one
+after the rerun: no claim states `npm run dev`: the api repo's start command
+after the rerun: the api repo (one path, Claude Code and Codex sessions) is on 0 repo pages (), not one
+after the rerun: no claim states `make serve`: the second api repo, at another path
+after the rerun: no repo page holds a claim from the api repo at the second path
+after the rerun: no claim states `npm run dev:api`: a command that only looks like `npm run dev`
+after the rerun: no claim states `GITHUB_TOKEN`: the api repo's release credential
+...
+--
+69: FAIL  redraft/merge.test.ts > #356.482272ce merges on exact keys, an unclear merge comes to you > #356.482272ce (wrong program) a setup that merges by repo name, or never merges, is caught
+70-Error: can't reach the hub at /private/tmp/dh356-GbkT46/h/.deepbuild/hub.sock
+71- ❯ check setup19.ts:358:87
+72-    356|       const check = () => {
+73-    357|         if (conn.lines.length > 0) { clearTimeout(timer); conn.wakers.…
+74-    358|         else if (conn.ended) { clearTimeout(timer); conn.wakers.delete…
+75-       |                                                                                       ^
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
