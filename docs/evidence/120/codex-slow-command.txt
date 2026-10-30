@@ -1,0 +1,37 @@
+# Codex: a slow command shows its line at the call's next hook
+
+Codex CLI 0.160.0 (covered), in-process (`--no-daemon`), default approvals, in a terminal (script(1), 120 x 40),
+on 2026-10-29 local time. CODEX_HOME is a scratch folder whose hooks.json runs DeepBuild's deep-hook (PR #804)
+for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop and SessionEnd; its sign-in is yours, linked.
+`job.sh` sleeps the seconds in `dur`: three 2 s runs set its history, then one 25 s run. #80 found no route
+while a call runs in Codex, so the line comes at the call's next hook.
+
+## Typed
+> Run `./job.sh` three times, as three separate shell commands run one after another, never in parallel and never in the background. Then reply with only DONE.
+> Run `./job.sh` once as a shell command, in the foreground, not in the background. Then reply with only DONE.
+
+## The record (ledger.db), session 01a18b84-b4db-7ab2-9226-f490a83a9a8a, hub clock UTC
+06:34:55.067  session.start   {"agent": "codex", "worktree": "/private/tmp/dh120-e2e/work"}
+06:34:55.096  user.ask        {"text": "Run `./job.sh` three times, as three separate shell commands run one after another, never in parallel and never in the background. Then reply with only DONE."}
+06:34:59.133  tool.before     {"call": "exec-018c7731-057d-4c7f-9144-8a4cc43456b4", "kind": "shell", "command": "./job.sh"}
+06:35:01.198  tool.after      {"call": "exec-018c7731-057d-4c7f-9144-8a4cc43456b4", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+06:35:02.965  tool.before     {"call": "exec-e2e71db0-dbc1-4217-a544-f1b71243eb09", "kind": "shell", "command": "./job.sh"}
+06:35:05.019  tool.after      {"call": "exec-e2e71db0-dbc1-4217-a544-f1b71243eb09", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+06:35:06.547  tool.before     {"call": "exec-15253ba7-49bc-4ce4-944c-13e126c36929", "kind": "shell", "command": "./job.sh"}
+06:35:08.604  tool.after      {"call": "exec-15253ba7-49bc-4ce4-944c-13e126c36929", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+06:35:11.431  agent.stop      {"turn": 1, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": null}
+06:35:12.206  user.ask        {"text": "Run `./job.sh` once as a shell command, in the foreground, not in the background. Then reply with only DONE."}
+06:35:15.626  tool.before     {"call": "exec-a2cc6850-e825-41a7-9266-4279f07d897a", "kind": "shell", "command": "./job.sh"}
+06:35:17.692  call.overrun    {"call": "exec-a2cc6850-e825-41a7-9266-4279f07d897a", "kind": "shell", "command": "./job.sh", "expected_ms": 2061, "ran_ms": 2063, "deadline": "none"}
+06:35:43.156  session.reading {"reading": "`./job.sh` ran 28 s, about 2 s was expected"}
+06:35:43.153  tool.after      {"call": "exec-a2cc6850-e825-41a7-9266-4279f07d897a", "kind": "shell", "command": "./job.sh", "outcome": "ok"}
+06:35:45.118  agent.stop      {"turn": 2, "did_work": true, "claim": true, "outcome": "finished", "cause": "unknown", "usage": null}
+06:35:45.384  session.end     {"reason": "other"}
+
+## On screen (the terminal stream, escapes stripped; ⏎ is a line break)
+…  • esc to interrupt) › Ask Codex to do anything GPT-6.1-Sol default · /private/tmp/dh120-e2e/work · Run job three times •9◦•30◦ ⏎  ⏎ ↳ Hook · DeepBuild: `./job.sh` ran 28 s, about 2 s was expected1•◦2•• DONE ⏎  ⏎ • DONE › Ask Codex to do anything GPT-6.1-Sol default · /private/tmp/dh120-e2e/work · Run job three times  ⏎  ⏎ ↳ Hook · says done · next: DeepBuild ·  …
+
+## In the transcript
+Codex's rollout keeps no line for a hook's systemMessage; it shows on screen as "Hook · DeepBuild: …" (above), and the
+record keeps it as session.reading.
+(none)

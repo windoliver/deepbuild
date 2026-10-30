@@ -3707,6 +3707,36 @@ export interface RunStarted {
   evidence?: Array<string>;
 }
 
+/** run.started@2 */
+export interface RunStartedV2 {
+  v: 2;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    commit: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+  };
+  evidence?: Array<string>;
+}
+
 /** sandbox.denied@1 */
 export interface SandboxDenied {
   v: 1;
@@ -3723,6 +3753,30 @@ export interface SandboxDenied {
     run: string;
     operation: string;
     target: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** seed.cloned@1 */
+export interface SeedCloned {
+  v: 1;
+  id: string;
+  kind: "seed.cloned";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    stack: string;
+    source: string;
+    copied_at: string;
+    migration: string;
+    template: string;
+    cloned_at: number;
   };
   evidence?: Array<string>;
 }
@@ -3933,6 +3987,30 @@ export interface SpendApproved {
   evidence?: Array<string>;
 }
 
+/** spend.approved@2 */
+export interface SpendApprovedV2 {
+  v: 2;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    runs?: number;
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
 /** spend.asked@1 */
 export interface SpendAsked {
   v: 1;
@@ -4022,6 +4100,34 @@ export interface SpoolRefused {
     file: string;
     offset: number;
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** stop.held@1 */
+export interface StopHeld {
+  v: 1;
+  id: string;
+  kind: "stop.held";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    stop: string;
+    claim: string | null;
+    total: number;
+    question: number;
+    slow: number;
+    fast: number;
+    snapshot_start: number;
+    queue_wait: number;
+    code_changing: boolean;
+    budget_cost: Array<string>;
   };
   evidence?: Array<string>;
 }
