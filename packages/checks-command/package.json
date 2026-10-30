@@ -14,6 +14,7 @@
   "dependencies": {
     "@deepbuild/conformance": "0.0.0",
     "@deepbuild/evidence": "0.0.0",
+    "@deepbuild/gate": "0.0.0",
     "@deepbuild/supervisor": "0.0.0",
     "typescript": "5.9.3"
   }

@@ -1187,7 +1187,8 @@ class Host implements ExtensionHost {
     const found: unknown[] = [];
     if (!kinds.size) return found;
     for (let after = 0; ;) {
-      const page = await this.options.record.read({ after, limit: PAGE });
+      // Only the granted kinds are read: the rest of the log is never decoded.
+      const page = await this.options.record.read({ after, limit: PAGE, kinds: [...kinds] });
       for (const e of page) if (kinds.has(e.kind)) found.push(JSON.parse(toJson(e)));
       if (page.length < PAGE) return found;
       after = page[page.length - 1]!.log_pos;
