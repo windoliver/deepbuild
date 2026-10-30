@@ -1,0 +1,25 @@
+Base commit: 244a3455f2c2ecb03d57d933dadfdbefa701cbbd
+Node: v24.22.0
+Date: 2026-10-30
+Command: npx vitest run --root tests/acceptance/39 --no-file-parallelism
+
+INCOMPLETE. The machine's disk filled (ENOSPC) during run 2, so no single clean run of the final suite exists.
+Rerun on a machine with free disk and replace this file.
+
+Run 1: 43 tests, 2 passed, 37 failed, 4 skipped. Clean of ENOSPC, but before the fixes below.
+Run 2: 43 tests, 1 passed, 38 failed, 4 skipped. After the fixes. Several failures are ENOSPC, not the expected reason.
+Fixes between the runs: asks open from the daemon's process; waitFor fails as an assertion; AC6 tolerates windows.report's
+refusal; AC12's engine half judges model requests.
+
+Failing at an assertion for the expected reason (no Codex entries, no adapter reply, no reading, and so on):
+AC1 AC4 AC8 AC10 AC11 AC14 AC15 AC16(2) AC17 AC18 AC19(2) AC20(2) AC21 AC22(2) AC23 AC24 AC25(2) AC27 AC29 AC30(3) AC6 AC12(first) AC13(first)
+
+Passed on base:
+AC5 (run 1, not rerun cleanly): two threads on one daemon already bind on base. Needs a twin for the before lane.
+AC9 (run 1, not rerun cleanly): base doctor already reads only the exit code. Needs a twin for the before lane.
+AC12 engine half (run 2): base's Stop block is already applied by Codex. Needs a twin for the before lane.
+
+Reason not established:
+AC13 through the hub: timed out waiting for the ask at an assertion. The authority ask's shape may be my test's error, unchecked.
+AC2 AC3 AC7 AC9 AC26 AC28: run 2 ended in ENOSPC or SqliteError. In run 1, AC2 and AC3 failed at setup's entry, AC26 and AC28
+at the runner's refusal, AC7 at a test bug since fixed. AC7 has no valid base result.
