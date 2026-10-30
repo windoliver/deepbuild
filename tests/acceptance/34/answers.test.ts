@@ -34,7 +34,7 @@ async function paired(w: World, name = 'this Mac\'s app'): Promise<Device> {
   if (!device.id) throw Error(`BLOCKED: device.pair didn't pair the app's key with the OS confirming you: ${JSON.stringify(reply)}`);
   return device;
 }
-const approve = (ask: Seeded): Line => ({ ask: ask.handle, option: 'approve', token: clickToken() });
+const approve = (ask: Seeded): Line => ({ ask: ask.handle, option: 'approve', plan_hash: ask.plan_hash, token: clickToken() });
 async function notCounted(w: World, ask: Seeded, reply: Line): Promise<string | null> {
   return judgeNotCounted(ask.handle, reply, await eventsAbout(w.app, ask.handle, 'ask.answered'), await inboxRow(w.app, ask.handle));
 }

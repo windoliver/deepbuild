@@ -1,6 +1,6 @@
 {
   "title": "ask.answered@3",
-  "description": "You answered an ask. Only the core appends it, from the trusted path. It says where the answer came from (the card, deep inbox answer, or text typed in the session, which is unverified), the revision the ask showed, which it is recorded as answered on, the click token an approval bound, and, from the question card, your words and the screenshot you sent with the answer (#327), kept beside its decision and never saved as one.",
+  "description": "You answered an ask. Only the core appends it, from the trusted path. It says where the answer came from (the card, deep inbox answer, or text typed in the session, which is unverified), the revision the ask showed, which it is recorded as answered on, and the click token an approval bound. @3 adds steps: on a yes to a batch, the steps of the plan your switches left on, which alone the yes approves.",
   "$defs": {
     "pinned_to": {
       "oneOf": [
@@ -176,23 +176,15 @@
           "maxLength": 8192,
           "description": "The click token an approval bound, or null."
         },
-        "words": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1,
-          "maxLength": 8192,
-          "description": "Your own words sent with the answer from the question card: its reason beside an option, or the whole answer with none (then decision is none). null when you typed nothing."
-        },
-        "image": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "pattern": "^[0-9a-f]{64}$",
-          "maxLength": 8192,
-          "description": "The SHA-256, in lower-case hex, of a screenshot sent with the answer, stored in evidence; null without one."
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxItems": 8192,
+          "description": "The steps of the plan your yes approved, by index, when your switches left some off; absent, every step."
         }
       },
       "required": [
@@ -202,9 +194,7 @@
         "via",
         "verified",
         "on",
-        "token",
-        "words",
-        "image"
+        "token"
       ],
       "additionalProperties": false
     },
