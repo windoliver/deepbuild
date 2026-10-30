@@ -19,7 +19,9 @@ export { evidence, judge, type Evidence } from './rules.js';
 
 interface Saved { handle: string; key: string; scope: string; answer: string; bound: number | null; revoked: boolean; overruled: Set<string>; pos: number }
 
-const KINDS = ['ask.created', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'spend.approved'] as const;
+const KINDS = ['session.start', 'session.end', 'ask.created', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'spend.approved'] as const;
+/** How many ended sessions' asks and session decisions stay in memory; the record keeps them all. */
+const ENDED_KEPT = 64;
 const PAGE = 1000;
 /** How the ledger knows the one extension that answers a paid run's request for you. */
 const WRITER = 'ext:resolver-decisions';
@@ -39,6 +41,27 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
   const raisedFor = new Map<string, { actor: string; scope: string }>();
   /** The project budgets you approved, by the repo they cover, in the order you approved them. */
   const projects = new Map<string, string[]>();
+  /** The asks raised in each session, and the sessions that ended, oldest first. */
+  const asked = new Map<string, string[]>();
+  const ended = new Set<string>();
+
+  /** Past the newest ended sessions, each one's asks and the decisions only it could use leave memory. */
+  const forgetEnded = (): void => {
+    for (const session of [...ended].slice(0, Math.max(0, ended.size - ENDED_KEPT))) {
+      for (const ask of asked.get(session) ?? []) {
+        lines.delete(ask);
+        raisedFor.delete(ask);
+      }
+      asked.delete(session);
+      ended.delete(session);
+      for (const saved of [...byHandle.values()].filter((s) => s.scope === `session:${letters(session)}`)) {
+        byHandle.delete(saved.handle);
+        const rest = (byKey.get(saved.key) ?? []).filter((s) => s !== saved);
+        if (rest.length) byKey.set(saved.key, rest);
+        else byKey.delete(saved.key);
+      }
+    }
+  };
 
   const sync = async (): Promise<void> => {
     for (;;) {
@@ -47,7 +70,14 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
         if (e.log_pos <= cursor) continue;
         cursor = e.log_pos;
         const d = isObj(e.data) ? e.data : {};
-        if (e.kind === 'ask.created') {
+        if (e.kind === 'session.start') {
+          if (e.session) ended.delete(e.session);
+        } else if (e.kind === 'session.end') {
+          // Only a verified end counts: an unverified one ends nothing, as in the hub.
+          if (e.session && !e.unverified) ended.add(e.session);
+          forgetEnded();
+        } else if (e.kind === 'ask.created') {
+          if (e.session) asked.set(e.session, [...(asked.get(e.session) ?? []), `ask:${e.id}`]);
           const change = isObj(d.subject) && isObj(d.subject.change) ? d.subject.change : undefined;
           if (typeof change?.lines === 'number') lines.set(`ask:${e.id}`, change.lines);
           raisedFor.set(`ask:${e.id}`, { actor: e.actor, scope: e.scope });

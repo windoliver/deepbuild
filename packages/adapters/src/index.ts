@@ -51,13 +51,13 @@ export function factsAdapter(facts: JsonValue, parts: AdapterParts): Adapter {
       const payload = isObject(request.payload) ? request.payload : {};
       const session = sessionOf(payload);
       const turns = turnsBySession.get(session) ?? new Set<unknown>();
-      turnsBySession.set(session, turns);
       const mapped = mapByFacts({ facts, version, payload, transcript: transcript as readonly Record<string, unknown>[], turns });
       // A stop names its cause from the closed set: one the facts gave no cause is unknown, never a pass.
       const events = mapped.events.map(({ kind, data, rule }) => ({
         agent: request.agent, kind, data: (kind === 'agent.stop' && data.cause === undefined ? { ...data, cause: 'unknown' } : data) as JsonObject, rule,
       }));
-      if (events.some((event) => event.kind === 'session.end')) turnsBySession.delete(session);
+      if (events.some((event) => event.kind === 'session.end') || !turns.size) turnsBySession.delete(session);
+      else turnsBySession.set(session, turns);
       return { events, verified: mapped.verified, readings: mapped.readings };
     },
   };

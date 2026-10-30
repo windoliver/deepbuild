@@ -319,4 +319,29 @@ describe('the resolver gate reads every decision the record holds, however it wa
       off();
     }
   });
+
+  it('forgets an ended session once 64 newer ones ended, but never one with an ask open (#824)', async () => {
+    await start('SOPEN', 'TOPEN');
+    await start('SDONE', 'TDONE');
+    const open = await asks.raise(agent('SOPEN'), 'deep_ask.taste', taste('open'));
+    const done = await asks.raise(agent('SDONE'), 'deep_ask.taste', taste('done'));
+    await asks.answer(card, done, { option: 'green' });
+    await append(hook('SOPEN'), 'session.end', { reason: 'other' });
+    await append(hook('SDONE'), 'session.end', { reason: 'other' });
+    const rows = async (): Promise<string[]> => (await asks.inbox()).map((row) => row.ask);
+    expect(await rows()).toEqual([open, done]);
+    await start('SLIVE', 'TLIVE');
+    const live = await asks.raise(agent('SLIVE'), 'deep_ask.taste', taste('live'));
+    await asks.answer(card, live, { option: 'green' });
+    await append({ ...hook('SLIVE'), verified: false }, 'session.end', { reason: 'other' });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await append(hook(`E${i}`), 'session.end', { reason: 'other' });
+    }
+    expect(await rows(), 'an unverified end ends nothing').toEqual([open, live]);
+    await expect(asks.card(done)).rejects.toThrow('is no ask');
+    expect(await outcome(done)).toBe('answered');
+    await asks.answer(card, open, { option: 'blue' });
+    expect(await outcome(open)).toBe('answered');
+  });
 });

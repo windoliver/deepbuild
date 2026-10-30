@@ -18,6 +18,7 @@ import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
+import { plantedStart } from './plant.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
@@ -943,6 +944,7 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
   const real = Date.now();

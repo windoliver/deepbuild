@@ -45,6 +45,9 @@ const alive = (pid: number): boolean => {
   }
 };
 
+/** How many cleaned runs stay answerable by `status`, `wait` and `cleanup`, newest first. */
+const CLEANED_KEPT = 64;
+
 interface Tracked { start: string; token: string | null }
 interface Run {
   run: string;
@@ -705,8 +708,24 @@ class LocalSupervisor implements Supervisor {
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
     r.cleaned = { run, outcome, left, stopped: [...stopped] };
+    // Last in the table: the window keeps the newest cleaned, however long ago each started.
+    this.runs.delete(r.run);
+    this.runs.set(r.run, r);
+    this.forgetCleaned();
     await this.pump();
     return r.cleaned;
+  }
+
+  /**
+   * Past the newest CLEANED_KEPT, a run that left nothing goes, its process and pipes with it: the record holds it, and a
+   * hub that runs for weeks can't keep every one (#824). A run that left something stays, since its keys cite it.
+   */
+  private forgetCleaned(): void {
+    const done = [...this.runs.values()].filter((r) => r.cleaned?.outcome === 'clean' && !this.lingering.has(r));
+    for (const r of done.slice(0, Math.max(0, done.length - CLEANED_KEPT))) {
+      this.runs.delete(r.run);
+      for (const seen of this.denied) if (seen.startsWith(`${r.run} `)) this.denied.delete(seen);
+    }
   }
 
   /** A resource's cleanup step or check, in the platform sandbox with its folder writable; true when it exits 0. */

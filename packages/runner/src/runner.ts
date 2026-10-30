@@ -22,7 +22,7 @@ import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptio
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 /** The kinds `fold` reads: its switch is on this type, so a case for a kind left out of the list fails to compile. */
-const FOLDED = ['job.recorded', 'job.ended', 'process.starting', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted'] as const;
+const FOLDED = ['job.recorded', 'job.ended', 'process.starting', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'default.undone', 'ask.superseded', 'ask.moot', 'ask.cancelled', 'ask.escalated', 'decision.applied'] as const;
 type Folded = (typeof FOLDED)[number];
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -253,13 +253,27 @@ class LocalRunner implements Runner {
           break;
         case 'ask.created': {
           if (d.kind !== 'unblock' && d.kind !== 'authority') break;
+          this.waiting.add(`ask:${e.id}`);
           // The runner's own asks are found again by their key: one per account without a reading, one per agent's smoke tests.
           if (typeof d.key === 'string') this.keys.set(d.key, `ask:${e.id}`);
           break;
         }
+        // A default undone is open again: your next answer replaces it.
+        case 'default.undone':
+          if (this.answers.delete(e.subject ?? '')) this.waiting.add(e.subject ?? '');
+          break;
+        case 'ask.superseded':
+        case 'ask.moot':
+        case 'ask.cancelled':
+        case 'ask.escalated':
+          this.waiting.delete(e.subject ?? '');
+          break;
+        case 'decision.applied':
+          this.waiting.delete(String(d.ask));
+          break;
         case 'ask.answered':
         case 'ask.defaulted': {
-          this.answers.set(e.subject ?? '', { answer: String(d.answer), decision: String(d.decision ?? 'none') });
+          if (this.waiting.delete(e.subject ?? '')) this.answers.set(e.subject ?? '', { answer: String(d.answer), decision: String(d.decision ?? 'none') });
           break;
         }
       }
@@ -289,6 +303,8 @@ class LocalRunner implements Runner {
     }
   }
   private readonly keys = new Map<string, string>();
+  /** The asks of the kinds a job waits on, until they are answered. */
+  private readonly waiting = new Set<string>();
   private readonly answers = new Map<string, { answer: string; decision: string }>();
 
   async open(): Promise<void> {
