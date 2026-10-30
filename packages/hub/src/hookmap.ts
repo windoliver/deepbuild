@@ -102,6 +102,15 @@ export function versionOf(transcript: string): string | undefined {
       versions.set(transcript, version);
       return version;
     }
+    // Codex's rollout names it once, in the session_meta that opens the file, whose line may outrun the window.
+    const head = Buffer.alloc(Math.min(size, 65_536));
+    readSync(fd, head, 0, head.length, 0);
+    const named = /"cli_version"\s*:\s*"([^"]+)"/.exec(head.toString('utf8'))?.[1];
+    if (named) {
+      if (versions.size > 4096) versions.clear();
+      versions.set(transcript, named);
+      return named;
+    }
   } catch {
     // No transcript yet: the version is read at the session's next hook.
   } finally {

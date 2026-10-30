@@ -29,6 +29,7 @@ import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
+import { codexRelations, holdsFor, modified, stopTimeoutS } from './codex-settings.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -1470,11 +1471,12 @@ export class Core {
    */
   private async commits(meta: HookMeta, live: Live, made: boolean): Promise<void> {
     const head = await headOf(meta.cwd).catch(() => undefined);
-    if (!head) return;
+    // A folder with no commit yet: the first one a call makes is a commit too.
+    if (!head) { live.head ??= ''; return; }
     const before = live.head;
     live.head = head.sha;
-    if (!before || before === head.sha || !made) return;
-    for (const sha of await commitsBetween(meta.cwd, before, head.sha)) {
+    if (before === undefined || before === head.sha || !made) return;
+    for (const sha of before === '' ? [head.sha] : await commitsBetween(meta.cwd, before, head.sha)) {
       if (this.committed.has(sha)) continue;
       this.committed.add(sha);
       const ts = this.now();
@@ -2021,7 +2023,14 @@ export class Core {
     });
     // The claim's fast lane (#29): the hold waits for the checks the budget admitted, and no longer than the hold.
     const stopAt = ulidTime(meta.id);
+    // Codex's hold may run as long as its Stop timeout lets a slow check, but an answer waits no longer than anyone's.
+    const held = until;
+    until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
+    if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
+      const failed = await this.slowStop(meta, judged.claim, held);
+      if (failed) lane.sendBack = failed;
+    }
     let proceeded = false;
     try {
       // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
@@ -2088,6 +2097,24 @@ export class Core {
     const sendBack = ran.findings.length ? `DeepBuild sent this claim back before any check ran:\n${ran.findings.map((f) => `- ${f}`).join('\n')}`
       : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
     return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, fastEndedAt: ran.fastEndedAt, ...(sendBack ? { sendBack } : {}) };
+  }
+  /**
+   * A Codex stop with slow checks (#39): held for them only when each one's deadline ends at least 5 s before the Stop
+   * entry's timeout, so a FAIL reaches the agent in the same turn; otherwise replied at once, with the row saying why,
+   * and the verdict comes with the next message. What it is sent back with, or nothing.
+   */
+  private async slowStop(meta: HookMeta, claim: string, until: number): Promise<string | undefined> {
+    const timeoutS = stopTimeoutS(this.root.dir) ?? 600;
+    const late = this.gate.slowDeadlines(claim).find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
+    await this.gate.turnEnded(claim);
+    if (late) {
+      const deadline = late.deadline_ms === null ? 'has no deadline' : `has a deadline of ${words(late.deadline_ms)}`;
+      await this.appendReading(meta.session, meta.agent, `This stop isn't held: ${late.check} ${deadline}, which must end at least 5 s before Codex's Stop hook timeout, ${timeoutS} s. Its verdict comes with your next message.`).catch(() => undefined);
+      return undefined;
+    }
+    await this.gate.slowEnded(claim, until);
+    const failed = this.gate.standing(claim).filter((c) => c.lane === 'slow' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
+    return failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
   }
   /** A stop held while the agent left a question: what it is sent back with, or nothing. */
   private async stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined> {
@@ -2631,7 +2658,8 @@ export class Core {
   }
   private async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
-      case 'hub.health': return this.health();
+      case 'hub.health':
+      case 'health': return this.health();
       case 'session.wait': return this.waitAnswer(params, context);
       case 'session.note': return this.note(params);
       case 'test.send_back': return this.sendBack(params);
@@ -2714,7 +2742,8 @@ export class Core {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude };
+    const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: modified(this.root.dir) };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude, codex };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -3273,11 +3302,15 @@ export class Core {
    * its deadline and default. Only the session that raised an ask waits on it.
    */
   /** How long deep_ask and deep_wait wait: none once Claude Code's MCP tool timeout leaves no room (the deep_ask relation). */
-  private askWait(): number {
+  private askWait(session: string): number {
+    if (this.sessions.get(session)?.agent === 'codex') {
+      const relation = codexRelations(this.root.dir).find((r) => r.name === 'deep_ask');
+      if (relation) return relation.waitMs;
+    }
     return relations(this.root.dir).find((r) => r.name === 'deep_ask')?.holds === false ? 0 : ASK_WAIT_MS;
   }
   private async waitFor(session: string, handle: string): Promise<Obj> {
-    const until = Date.now() + this.askWait();
+    const until = Date.now() + this.askWait(session);
     for (;;) {
       const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
       if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
@@ -3361,7 +3394,7 @@ export class Core {
     const commit = String((JSON.parse(claim.data) as Obj).commit);
     const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', command], cwd });
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
-    const until = Date.now() + this.askWait();
+    const until = Date.now() + this.askWait(session);
     for (;;) {
       const [done] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = '${sql(String(run))}' LIMIT 1`)) as { data: string }[];
       if (done) {
@@ -3412,7 +3445,7 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes'; expected_ms?: number; deadline_ms?: number }[] }): Promise<void> {
     const at = this.now();
     const lane = (async () => {
       const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
