@@ -1,9 +1,9 @@
 // #111.AC2 Reviving a rejected direction is stopped with the decision cited; and Scope: decisions made in chat are
 // captured from transcripts. A direction is an exact key in backticks (README, Invented here). The agent revives it two
-// ways: by proposing it (deep_propose) and by just doing it (a tool call, through deep-hook).
+// ways: by proposing it (deep_propose, here) and by just doing it (a tool call, through deep-hook: redraft/tool-call.test.ts).
 import { afterAll, describe, expect, it } from 'vitest';
 import {
-  callTool, claudeSession, cleanup, codexSession, compile, decision, decisions, deep, denialText, eventsOf, filedWhileWaiting, hubOf, inboxText, memoryHome, pending, startAgent, toolCallIn, shown, type Line, type Mem,
+  callTool, claudeSession, cleanup, codexSession, compile, decisions, deep, eventsOf, filedWhileWaiting, hubOf, inboxText, memoryHome, pending, startAgent, shown, type Line, type Mem,
 } from './helpers.ts';
 
 afterAll(cleanup, 60_000);
@@ -61,18 +61,6 @@ describe(`${AC2} reviving a rejected direction`, () => {
     const { agent: elsewhere } = await startAgent(m, m.web, 'make the web part better');
     const web = await callTool(elsewhere, 'deep_propose', { target: 'the web part', change: 'Move the web part to `graphql`, marker topaz', evidence: null });
     expect(web.isError, `the decision covers its repo, not ${m.web}: ${JSON.stringify(web.reply).slice(0, 800)}`).toBe(false);
-  }, 900_000);
-
-  it(`${AC2} an agent's tool call that revives it is denied by deep-hook, citing the decision; another package, or the same one in another repo, runs`, async () => {
-    const m = await chatWorld();
-    const [saved] = await rejecting(m, 'graphql');
-    expect(saved, 'the decision is saved').toBeDefined();
-    const denied = await toolCallIn(m, m.api, 'npm install graphql');
-    expect(decision(denied), `the revival is denied: ${shown(denied)}`).toBe('deny');
-    expect(denialText(denied as never), 'citing the decision by its handle').toContain(saved!.handle);
-    expect(decision(await toolCallIn(m, m.api, 'npm install grpc')), 'another package runs').toBe('allow');
-    expect(decision(await toolCallIn(m, m.api, 'npm install graphql-tools')), 'a longer name is another key').toBe('allow');
-    expect(decision(await toolCallIn(m, m.web, 'npm install graphql')), 'the same package in another repo runs').toBe('allow');
   }, 900_000);
 
   it(`${AC2} the option you passed over when you answered a choice is a rejected direction: proposing it is refused, citing the decision that answer saved; the one you chose isn't`, async () => {
