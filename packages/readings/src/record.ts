@@ -98,7 +98,8 @@ export function staleRuns(events: RecordEvent[]) {
     const stale = list.filter((e) => e.kind === 'run.stale');
     if (!stale.length) continue;
     const runs = stale.map((e) => {
-      const reply = list.find((x) => x.kind === 'stop.held' && x.data.claim === e.data.claim);
+      // A claim can span stops; the run started at its last.
+      const reply = list.filter((x) => x.kind === 'stop.held' && x.data.claim === e.data.claim).at(-1);
       // The turn that made the newer claim outdated it; a claim the record doesn't hold falls to the first ask after the reply.
       const newer = list.find((x) => x.kind === 'claim.made' && `claim:${x.id}` === e.data.newer_claim);
       const after = reply ? list.filter((x) => x.kind === 'user.ask' && x.ts > reply.ts) : [];
@@ -234,10 +235,10 @@ function foldSession(session: string, list: RecordEvent[]): Part {
   }
   for (const [turn, t] of byTurn) readings.push({ id: 'cost.turn', subject: turn, value: t.usd, unit: 'usd', source: RECORD, as_of: t.as_of, basis: t.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: t.cost });
   // A turn with no usage, such as one that crashed, leaves what it sums short: the session's, and its tasks'. A turn runs
-  // from its first ask to the next ask after a stop, or a new start: a message typed mid-turn is the same turn, and its
-  // usage lands just behind its stop.
+  // from its first ask to its usage or a new start: a message typed mid-turn is the same turn, a subagent's stop ends none,
+  // and an ask no model read opens none.
   const asks = list.filter((e) => e.kind === 'user.ask');
-  let turn: { at: number; tasks: string[]; stopped: boolean; spent: boolean } | undefined;
+  let turn: { at: number; tasks: string[]; spent: boolean } | undefined;
   let unknownTurns = 0;
   const close = (): void => {
     if (!turn || turn.spent) return;
@@ -246,11 +247,10 @@ function foldSession(session: string, list: RecordEvent[]): Part {
   };
   for (const e of list) {
     if (e.kind === 'session.start') { close(); turn = undefined; }
-    else if (e.kind === 'user.ask' && (!turn || turn.stopped)) {
+    else if (e.kind === 'user.ask' && e.data.no_model !== true && (!turn || turn.spent)) {
       close();
-      turn = { at: e.ts, tasks: Array.isArray(e.data.tasks) ? (e.data.tasks as string[]) : [], stopped: false, spent: false };
-    } else if (turn && (e.kind === 'agent.stop' || e.kind === 'stop.held')) turn.stopped = true;
-    else if (turn && e.kind === 'turn.usage') turn.spent = true;
+      turn = { at: e.ts, tasks: Array.isArray(e.data.tasks) ? (e.data.tasks as string[]) : [], spent: false };
+    } else if (turn && e.kind === 'turn.usage') turn.spent = true;
   }
   close();
   if (used.length) {
@@ -270,8 +270,10 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     }
     let wait = 0;
     let waited = 0;
+    // A main stop writes usage behind it where the agent's usage is read; a subagent's stop never does.
+    const ended = used.length ? 'turn.usage' : 'agent.stop';
     for (const a of typed) {
-      const stop = list.filter((e) => e.kind === 'agent.stop' && e.ts < a.ts).at(-1);
+      const stop = list.filter((e) => e.kind === ended && e.ts < a.ts).at(-1);
       const before = list.filter((e) => e.kind === 'user.ask' && e.ts < a.ts).at(-1);
       if (stop && (!before || before.ts < stop.ts)) { wait += a.ts - stop.ts; waited = a.ts; }
     }

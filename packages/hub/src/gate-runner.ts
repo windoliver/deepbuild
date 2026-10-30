@@ -75,7 +75,7 @@ export class GateRunner {
       const key = `${r.session}\0${c.check}`;
       const queued = this.queue.get(key);
       if (queued) { queued.stale = true; this.queue.delete(key); }
-      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; e.newer = r.claim; } }
+      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; e.newer ??= r.claim; } }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: (await this.expectedMs(c.check)) ?? 0 })));
