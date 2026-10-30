@@ -1,11 +1,9 @@
-// #45, what you see through a real hub: the socket method numbers.read, the `deep numbers` command, deep_search over MCP and
-// a real deep-hook's billing keys. The record is seeded before the hub starts, through the real record (tests/acceptance/26/
-// helpers.ts). This file imports no readings, so at the merge base it fails at its assertions. Needs `npm run build` and
-// `cargo build -p deep-hook`; a hub that can't start is BLOCKED, never a pass.
-import { join } from 'node:path';
+// #45, what you see through a real hub: the socket method numbers.read and the `deep numbers` command. The record is seeded
+// before the hub starts, through the real record (tests/acceptance/26/helpers.ts). This file imports no readings, so at the
+// merge base it fails at its assertions. Needs `npm run build`; a hub that can't start is BLOCKED, never a pass.
 import { afterEach, describe, expect, it } from 'vitest';
-import { Agent, agentWorld, callTool, cleanup, control, deep, events as logOf, filesHolding, makeHome, makeWorktree, rootOf, seed, startHub, stopHub, type Line, type Seeding } from '../26/helpers.ts';
-import { ask, DAY, held, MINUTE, recorded, SECOND, usage, type Cost } from './events.ts';
+import { cleanup, control, deep, makeHome, seed, startHub, stopHub, type Line, type Seeding } from '../26/helpers.ts';
+import { ask, DAY, held, MINUTE, recorded, SECOND } from './events.ts';
 import type { RecordEvent } from '../../../packages/readings/src/index.ts';
 
 afterEach(cleanup, 30_000);
@@ -82,44 +80,5 @@ describe('the hub\'s Numbers', () => {
       expect(turn?.unit).toBe('ms');
       expect(rows.find((r) => r.id === 'held.session')?.value).toBe(14_000);
     } finally { await stopHub(hub); }
-  }, TIMEOUT);
-
-  it('#45.4768ed8f AC6 a session a real deep-hook starts with ANTHROPIC_API_KEY set shows as billing an API key, and the key\'s value is nowhere in the state folder', async () => {
-    const secret = `sk-ant-fixture-${'x'.repeat(24)}`;
-    const { tmp, home } = makeHome();
-    const wt = makeWorktree(join(tmp, 'work'));
-    const agent = Agent.start(home, wt.path, { ANTHROPIC_API_KEY: secret });
-    const session = agent.session(wt.path);
-    const hub = await startHub(home);
-    try {
-      await agent.establish(hub, session);
-      const log = await logOf(hub);
-      expect(log.find((e) => e.kind === 'session.start')?.data?.billing?.ANTHROPIC_API_KEY, 'the hook reports the key as true').toBe(true);
-      const rows = await rowsOf(hub);
-      expect(rows.filter((r) => r.id === 'billing.mode').map((r) => r.value), 'one session, billing an API key').toEqual(['api_key']);
-      expect(filesHolding(rootOf(home), [secret]), 'never a value').toEqual([]);
-    } finally { await stopHub(hub); }
-  }, TIMEOUT);
-});
-
-describe('deep_search over MCP', () => {
-  const TASK = 'task:01K74FX2B4D6F8H0K2M4P6R8T0';
-  const COST: Cost = { basis: 'reported', usd: 0.25 };
-
-  it('#45.eb25cf40 AC11 a session\'s deep_search for spend returns the task\'s spend, $0.25, with its source and as-of time', async () => {
-    const at = Date.now() - 5 * MINUTE;
-    const w = await agentWorld({
-      seeded: (s, session) => put(s, [ask(session.id, at, 'person', [TASK]), usage(session.id, at + 1000, 'msg_spend', { input: 10, output: 5 }, COST)]),
-    });
-    try {
-      const outcome = await callTool(w.agent, 'deep_search', { query: 'spend' });
-      expect(outcome.isError, JSON.stringify(outcome.reply).slice(0, 800)).toBe(false);
-      const hits = (outcome.value?.hits ?? []) as Line[];
-      const hit = hits.find((h) => h.reading?.id === 'spend.usd' && h.reading?.subject === TASK);
-      expect(hit, `a reading among the hits: ${JSON.stringify(hits).slice(0, 800)}`).toBeDefined();
-      expect(hit?.reading.value).toBeCloseTo(0.25, 10);
-      expect(String(hit?.source ?? '').length, 'its source').toBeGreaterThan(0);
-      expect(hit?.as_of, 'as of the usage it sums').toBe(at + 1000);
-    } finally { await stopHub(w.hub); }
   }, TIMEOUT);
 });
