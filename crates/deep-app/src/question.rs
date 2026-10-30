@@ -20,6 +20,7 @@ use crate::{
     arming::{Machine, Outcome, Press, Slot, Source, State, HOLD_STILL},
     confirm,
     kinds::{Kind, Model},
+    states,
 };
 
 /// The card's measured size, in window points, tall enough for a batch of four with its switches: a slot smaller
@@ -688,8 +689,17 @@ impl Controller {
         self.answers
             .push(Value::Object(answer.params(&self.model.ask)));
         if self.faults.answers_second_from_words {
-            for (other, _) in self.model.also_answers(events) {
-                self.answers.push(Value::Object(answer.params(&other)));
+            // The wrong program: every other open ask with this one's key, whatever its scope.
+            let open = states::open_asks(events, None);
+            let key = open
+                .iter()
+                .find(|ask| states::handle(ask) == self.model.ask)
+                .map(|ask| ask["data"]["key"].clone());
+            for other in open.iter().filter(|ask| {
+                states::handle(ask) != self.model.ask && Some(&ask["data"]["key"]) == key.as_ref()
+            }) {
+                self.answers
+                    .push(Value::Object(answer.params(&states::handle(other))));
             }
         }
         self.record("answered", now);
