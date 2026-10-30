@@ -21,6 +21,7 @@ import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.
 
 export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, relationItems, restoreCommand, runMcp, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { statusCommand } from './status.js';
+export { showCommand } from './show.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
 

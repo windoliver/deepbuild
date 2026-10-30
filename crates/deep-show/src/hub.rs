@@ -1121,6 +1121,76 @@ impl<'a> Hub<'a> {
         reply
     }
 
+    /// #806: a document's current revision as the hub records it once presented: its writer, the
+    /// layer the connection stamped and its canonical document, kept in the evidence store by the
+    /// hash it names; and every layer on screen on its panel, back to front, as the app draws them.
+    pub fn presented_revision(&self, doc: &str) -> Option<Value> {
+        let row = self.current(doc)?;
+        let canonical = canonical_in(&row.doc, &self.startup.sealed.kinds()).ok()?;
+        let hash = evidence::put(&self.scenario.evidence, canonical.bytes.as_bytes()).ok()?;
+        let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
+        let panel = self.scenario.docs.get(doc)?;
+        let rect = self.slot(panel)?;
+        let size = [
+            rect[2].round().clamp(1., 8192.) as u16,
+            rect[3].round().clamp(1., 8192.) as u16,
+        ];
+        let record = self.record();
+        let layers: Vec<Value> = self
+            .bands()
+            .iter()
+            .filter(|b| {
+                b.doc
+                    .as_deref()
+                    .is_some_and(|d| self.scenario.docs.get(d) == Some(panel))
+            })
+            .map(|b| {
+                let mut out = b.to_json();
+                let current = b.doc.as_deref().and_then(|d| self.current(d));
+                // The presented document's items this layer draws; another document's layer on the
+                // panel draws none of them.
+                let drawn: Vec<String> = current
+                    .filter(|_| b.doc.as_deref() == Some(doc))
+                    .and_then(|r| r.doc["items"].as_object())
+                    .map(|m| m.keys().cloned().collect())
+                    .unwrap_or_default();
+                // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
+                // kept in the evidence store for the app to draw, by its hash.
+                let picture = current.and_then(|r| {
+                    let doc = r.doc.as_object()?;
+                    let mut renderer = Renderer::new();
+                    let d = renderer
+                        .prepare(
+                            doc,
+                            0,
+                            &self.look.light,
+                            self.look.status.as_ref(),
+                            &record,
+                            &self.scenario.evidence,
+                        )
+                        .ok()?;
+                    let png = snapshot::png(renderer.raster(&d, size, None), size);
+                    evidence::put(&self.scenario.evidence, &png).ok()
+                });
+                out["doc"] = json!(b.doc);
+                out["items"] = json!(drawn);
+                out["picture"] = json!(picture);
+                out
+            })
+            .collect();
+        Some(json!({
+            "doc": doc,
+            "rev": row.rev,
+            "hash": hash,
+            "writer": row.writer.to_json(),
+            "layer": row.writer.layer_id(),
+            "items": items,
+            "panel": panel,
+            "rect": rect,
+            "layers": layers,
+        }))
+    }
+
     /// Every canvas reply carries the core's version and the module-set digest (#305;
     /// technical design: MCP tools); the planted twin leaves the digest out.
     pub fn stamp(&self, reply: &mut Value) {
