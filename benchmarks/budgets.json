@@ -660,6 +660,28 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "panel-bound-value",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "panel-bound-value"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels or bound values in them. One process installs a plug-in whose source answers 600 readings, 100 ms apart, bound to a panel's text, a sheet cell and a chart's label, plays them on the virtual clock through `deep-show run` and reads each surface's frame after every reading, failing unless each shows the reading before it; p50 includes Node's and the binary's start. The issue's one frame per reading stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "panel-pop-out",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "panel-pop-out"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels. One process installs a plug-in with six panels, gives each a click and pops each out onto the second display with its click's serial through `deep-show run`, failing unless every window opens; p50 includes Node's and the binary's start. The issue's 300 ms a pop-out stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
