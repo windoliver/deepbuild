@@ -124,4 +124,25 @@ describe('the gate runner at a real stop', () => {
       expect(claimsOf(events, ref).length).toBe(1);
     } finally { await stopHub(hub); }
   }, 240_000);
+
+  it('a later stop on the same claim counts only its own hold, not the lane\'s times again, and changes no code (#45)', async () => {
+    const { hub, s, ref } = await world();
+    try {
+      await s.read('src/auth.ts');
+      await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > 1');
+      await s.stop('Done with `src/auth.ts`.');
+      await settle(hub, (e) => e.filter((x) => x.kind === 'stop.held').length === 1, HELD_WAIT);
+      await new Promise((r) => setTimeout(r, 1500));
+      await s.stop('Done with `src/auth.ts`, as I said.');
+      const events = await settle(hub, (e) => e.filter((x) => x.kind === 'stop.held').length === 2, HELD_WAIT);
+      expect(claimsOf(events, ref).length, 'the same claim').toBe(1);
+      const [first, again] = events.filter((e) => e.kind === 'stop.held') as (Ev & { data: { total: number; slow: number; fast: number; code_changing: boolean; budget_cost: string[] } })[];
+      expect(first!.data.code_changing, 'a new snapshot with a check').toBe(true);
+      expect(again!.data.code_changing).toBe(false);
+      expect(again!.data.budget_cost).toEqual([]);
+      expect(again!.data.slow, 'the agent\'s time between the stops is no hold').toBe(0);
+      expect(again!.data.fast).toBe(0);
+      expect(again!.data.total, 'its own hold, not the time since the first stop').toBeLessThan(1500);
+    } finally { await stopHub(hub); }
+  }, 240_000);
 });

@@ -4,6 +4,7 @@
 // hub down it opens the hub's database read-only and reads the same tables.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { billingMode } from '@deepbuild/readings';
 import { call } from './client.js';
 import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
@@ -29,7 +30,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const keyed = new Set<string>();
   for (const e of (await query("SELECT session_id, data FROM events WHERE kind = 'session.start' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; data: string | Obj }[]) {
     const data = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
-    if (Object.values((data.billing ?? {}) as Obj).includes(true)) keyed.add(e.session_id);
+    if (billingMode({ id: '', kind: 'session.start', v: 3, ts: 0, session: e.session_id, data }) === 'api_key') keyed.add(e.session_id);
     else keyed.delete(e.session_id);
   }
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));

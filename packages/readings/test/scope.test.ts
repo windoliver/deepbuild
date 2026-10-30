@@ -1,7 +1,8 @@
 // #45's scope items the blind suite doesn't name in a criterion: lifecycle numbers, failed calls, review wait, blocked time,
 // approval wait, and pricing by exact model.
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { countTexts, lifecycleNumbers, readingsOf, recompute, type RecordEvent } from '../src/index.js';
+import { countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, type RecordEvent } from '../src/index.js';
 
 const MIN = 60_000;
 let n = 0;
@@ -45,6 +46,50 @@ describe('from the record', () => {
     const events = [...asked('ask:a', 0, 'authority', 1 * MIN), ...asked('ask:b', 10, 'authority', 5 * MIN), ...asked('ask:c', 20, 'authority', 9 * MIN), ...asked('ask:d', 30, 'taste', 2 * MIN)];
     expect(find(events, 'approval.wait', 'authority')?.value).toBe(5 * MIN);
     expect(find(events, 'approval.wait', 'taste')?.value).toBe(2 * MIN);
+  });
+});
+
+describe('spend from the record', () => {
+  const usage = (ts: number, turn: string, input: number, cost: object, covers = 'turn') => ev('turn.usage', ts, 'A', { turn, model: 'm', covers, tokens: { input, cached: 0, output: 0, exact: true }, cost });
+  const person = (ts: number, msg: number) => ev('user.ask', ts, 'A', { msg, text: 'go', tasks: [], from: 'person' });
+  const start = (ts: number, key: boolean) => ev('session.start', ts, 'A', { agent: 'claude-code', worktree: '/w', branch: null, thread: 'A', loads: [], billing: { ANTHROPIC_API_KEY: key } });
+
+  it('each token counts by the mode in force when it was spent, across a resume that changes it', () => {
+    const events = [start(0, true), usage(1, 't1', 1000, { basis: 'unpriced' }), start(2, false), usage(3, 't2', 10, { basis: 'unpriced' })];
+    expect(planWindowTokens(events).counted_tokens).toBe(10);
+    expect(find(events, 'plan.tokens')?.value).toBe(10);
+  });
+
+  it('a spend sum says its basis: reported, or estimated naming its card once any part is', () => {
+    const reported = [usage(1, 't1', 1, { basis: 'reported', usd: 0.5 })];
+    expect(find(reported, 'spend.usd')?.cost).toEqual({ basis: 'reported', usd: 0.5 });
+    const mixed = [...reported, usage(2, 't2', 1, { basis: 'estimated', usd: 0.25, rate_card: 'card' })];
+    expect(find(mixed, 'spend.usd')?.cost).toEqual({ basis: 'estimated', usd: 0.75, rate_card: 'card' });
+  });
+
+  it('two stops of a turn are one cost row, the turn\'s', () => {
+    const events = [usage(1, 't1', 1, { basis: 'reported', usd: 0.5 }), usage(2, 't1', 1, { basis: 'reported', usd: 0.25 })];
+    expect(readingsOf(recompute(events)).filter((r) => r.id === 'cost.turn').map((r) => r.value)).toEqual([0.75]);
+  });
+
+  it('a message typed mid-turn is no crashed turn; a turn that ends with no usage is, even the last', () => {
+    const paid = { basis: 'reported', usd: 0.5 };
+    const midTurn = [person(0, 1), person(1, 2), ev('agent.stop', 2, 'A', {}), usage(3, 't1', 1, paid)];
+    expect(find(midTurn, 'spend.usd')?.complete).toBe(true);
+    const crashed = [...midTurn, person(4, 3)];
+    expect(find(crashed, 'spend.usd')?.complete).toBe(false);
+    expect(find(crashed, 'tokens.session')?.complete).toBe(false);
+  });
+});
+
+describe('the baseline', () => {
+  const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+  const line = JSON.stringify({ type: 'assistant', timestamp: '2026-09-01T00:00:00.000Z', message: { id: 'm', usage: { input_tokens: 5, output_tokens: 1 } } });
+  const read = (window: { from: number; to: number }) => recomputeBaseline({ baseline_sha256: 'b', measures: [{ id: 'x', kind: 'tokens.total', window, transcripts: [{ sha256: sha(line) }] }], archive: () => Buffer.from(line) }).measures[0];
+
+  it('a window that catches nothing is missing, never a measured zero', () => {
+    expect(read({ from: 0, to: 1 })).toMatchObject({ value: null, status: 'missing' });
+    expect(read({ from: 0, to: Date.UTC(2027, 0) })).toMatchObject({ value: 6, status: 'recomputed' });
   });
 });
 

@@ -182,7 +182,9 @@ export class Forge {
     for (const p of list.filter(isObj)) {
       if (typeof p.merged_at !== 'string' || typeof p.created_at !== 'string') continue;
       try {
-        const reviews = (await this.get(`${root}/pulls/${String(p.number)}/reviews`) as unknown[]).filter(isObj).filter((r) => typeof r.submitted_at === 'string');
+        // A review by the pull request's own author isn't anyone reviewing it.
+        const author = isObj(p.user) ? p.user.login : undefined;
+        const reviews = (await this.get(`${root}/pulls/${String(p.number)}/reviews`) as unknown[]).filter(isObj).filter((r) => typeof r.submitted_at === 'string' && !(isObj(r.user) && r.user.login === author));
         const closing = closes(typeof p.body === 'string' ? p.body : '');
         const issue = closing === undefined ? undefined : await this.get(`${root}/issues/${closing}`);
         out.push({
