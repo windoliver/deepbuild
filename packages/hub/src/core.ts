@@ -29,6 +29,7 @@ import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
+import { codexReadings, loopsCovered, uncoveredLoops } from './codex-loops.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -919,6 +920,7 @@ export class Core {
         await this.stopRecords(draft, meta, session);
         const loop = this.loopAt(live);
         if (loop) data.loop = loop;
+        if (session && meta.agent === 'codex' && !meta.fields?.agent_id && !meta.watchOnly) await this.codexStop(meta, data, live).catch(() => undefined);
         // A check the agent promises for later becomes a wake-up (#120); a subagent's stop promises nothing to you.
         if (session && !meta.fields?.agent_id) await this.promised(meta).catch(() => undefined);
       }
@@ -2248,6 +2250,17 @@ export class Core {
     const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.reading' AND json_extract(data, '$.reading') = '${sql(reading)}' LIMIT 1`);
     if (!seen) await this.appendReading(session, agent, reading);
   }
+  /** What a Codex stop's own records say (#39): its goal and heartbeat as the stop's loop, each new reading once. */
+  private async codexStop(meta: HookMeta, data: Obj, live: Live): Promise<void> {
+    const read = await codexReadings(meta.session, meta.transcript, meta.fields?.turn_id, live.from === 'continuation');
+    if (read.loop) data.loop = read.loop;
+    live.looping = read.loop?.state === 'looping' || live.looping;
+    const readings = read.version && !loopsCovered(read.version) && coveredBy('codex', read.version) ? [uncoveredLoops(read.version)] : read.readings;
+    for (const reading of readings) {
+      const [seen] = await this.record.raw(`SELECT 1 FROM session_readings WHERE session_id = '${sql(meta.session)}' AND reading = '${sql(reading)}' LIMIT 1`);
+      if (!seen) await this.appendReading(meta.session, meta.agent, reading);
+    }
+  }
   /** The pull request a session opened, as its readings record it: the newest. */
   private async prOf(session: string | null): Promise<string | undefined> {
     if (!session) return undefined;
@@ -2650,7 +2663,10 @@ export class Core {
       case 'device.pair': return this.pair(params);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
-      case 'status.read': return this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) }));
+      // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
+      case 'status.read':
+        this.replayLate();
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
