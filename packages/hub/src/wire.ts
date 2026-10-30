@@ -113,8 +113,14 @@ export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']
  * A PreToolUse held for the core: its label, the effect classes that need your authority, an MCP tool, and the
  * classes a standing rule decides (#23) with the shell command they're read from.
  */
+/** The prefix of Claude in Chrome's tools, whose steps act in your own Chrome (#332). */
+export const CHROME = 'mcp__claude-in-chrome__';
+/** The prefixes of the agent's tools whose steps act on a screen or in your own browser (#332). */
+export const SCREEN_TOOLS = ['mcp__computer-use__', 'mcp__remote-devices__computer_', CHROME];
 export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
+  /** A computer-use step: allowed only on what its session leases (#332). */
+  screen?: boolean;
   /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
   stage?: string[] | null;
 }
