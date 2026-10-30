@@ -47,7 +47,7 @@ export const asRefusal = (error: unknown) => (error instanceof Refused ? error.r
 
 if (parentPort && workerData?.core) {
   const port = parentPort;
-  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged) => port.postMessage({ op: 'asking', sessions, judged }), (session) => port.postMessage({ op: 'acking', session }));
+  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged) => port.postMessage({ op: 'asking', sessions, judged }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
