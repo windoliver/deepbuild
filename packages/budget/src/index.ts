@@ -9,7 +9,7 @@
 // decision, so a slow lookup never holds the others. Your yes reaches it only as the asks core's answer.
 import { canonicalize, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
-import type { Asks } from '@deepbuild/asks';
+import type { Asks, PlanStep } from '@deepbuild/asks';
 import { ulid } from '@deepbuild/record';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 
@@ -58,8 +58,15 @@ export interface Ledger {
   approve(connection: Connection, budget: BudgetInput): Promise<string>;
   request(connection: Connection, run: RunRequest): Promise<Outcome>;
   resolve(connection: Connection, ask: string, answer: { decision: string; budget: string }): Promise<Outcome>;
-  charge(connection: Connection, run: string, usd: number): Promise<void>;
+  /** A run's cost reading; `evidence` names what it was read from, such as a purchase's receipt (#69). */
+  charge(connection: Connection, run: string, usd: number, evidence?: string[]): Promise<void>;
   budget(id: string): Promise<BudgetView>;
+  /**
+   * A run priced by its caller against the budget it names (#69: a purchase, against a budget you approved for a
+   * project or a kind of work): reserved when that budget has room, counting runs reserved and not yet charged;
+   * otherwise BLOCKED, with one authority ask to raise it, whose plan shows `step` at its price.
+   */
+  reserveIn(connection: Connection, run: RunRequest, budget: string, usd: number, step: PlanStep): Promise<Outcome>;
 }
 
 const DAY = 86_400_000;
@@ -269,7 +276,7 @@ class BudgetLedger implements Ledger {
     });
   }
 
-  charge(connection: Connection, run: string, cost: number): Promise<void> {
+  charge(connection: Connection, run: string, cost: number, evidence: string[] = []): Promise<void> {
     return this.exclusive(async () => {
       await this.sync();
       if (connection.writer !== 'core') throw new BudgetRefused(`a cost reading comes from the core's runner, not ${connection.writer}`, { run });
@@ -277,7 +284,7 @@ class BudgetLedger implements Ledger {
       if (!held || held.charged) throw new BudgetRefused(`${String(run)} holds no reservation to charge`, { run });
       if (!isPrice(cost)) throw new BudgetRefused('a cost reading is in dollars, zero or more', { run });
       const now = this.options.now();
-      await this.append(this.core(connection), { v: 1, id: ulid(now), kind: 'spend.charged', subject: run, ts: now, data: { run, usd: usd(microUp(cost)) } });
+      await this.append(this.core(connection), { v: 1, id: ulid(now), kind: 'spend.charged', subject: run, ts: now, data: { run, usd: usd(microUp(cost)) }, ...(evidence.length ? { evidence } : {}) });
     });
   }
 
@@ -291,6 +298,26 @@ class BudgetLedger implements Ledger {
         reserved_usd: usd(reservedOf(b)), spent_usd: usd(b.spent), left_usd: usd(left(b)),
         reservations: [...b.reserved].map(([r, m]) => ({ run: r, usd: usd(m) })),
       };
+    });
+  }
+
+  async reserveIn(connection: Connection, input: RunRequest, id: string, price: number, step: PlanStep): Promise<Outcome> {
+    const run = checkRun(input);
+    return this.exclusive(async () => {
+      await this.sync();
+      if (this.runs.has(run.run)) throw new BudgetRefused(`${run.run} already reserved its price`, { run: run.run });
+      if (!isPrice(price)) return { run: run.run, status: 'BLOCKED', cause: 'price', missing: `the price of ${run.run}` };
+      const now = this.options.now();
+      const named = this.live(id, now);
+      if (!named) throw new BudgetRefused(`${String(id)} is no budget in force`, { run: run.run, budget: String(id) });
+      const cost = microUp(price);
+      if (roomFor(named, run.run) < cost) {
+        const ask = await this.wait(connection, { run, usd: cost, because: 'raise', budgets: [named.id] },
+          `${run.check} costs ${dollars(cost)}, and the budget for ${named.scope.ref} has ${dollars(left(named))} left, counting what's reserved and not yet charged. Raise it from ${dollars(named.cap)} to ${dollars(named.cap + cost)}?`,
+          'Raise it', 'Keep it as it is', 'budget.raise', { ...step, cost: usd(cost) });
+        return { run: run.run, status: 'BLOCKED', cause: 'budget', owner: 'you', budget: named.id, ask };
+      }
+      return this.reserve(connection, run, [named.id], cost, null, now);
     });
   }
 
@@ -308,7 +335,7 @@ class BudgetLedger implements Ledger {
   }
 
   /** Raises the ask a paid run waits on, and records what your yes to it does. */
-  private async wait(connection: Connection, waiting: Waiting, question: string, yes: string, no: string, source = 'generation.paid'): Promise<string> {
+  private async wait(connection: Connection, waiting: Waiting, question: string, yes: string, no: string, source = 'generation.paid', step?: PlanStep): Promise<string> {
     const { run } = waiting;
     const now = this.options.now();
     const key = sha256Hex(canonicalize({ because: waiting.because, check: run.check, inputs: run.inputs, run: run.run, budgets: waiting.budgets }));
@@ -320,7 +347,7 @@ class BudgetLedger implements Ledger {
         options: [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }],
         recommended: null, deadline: now + RAISE_WAIT, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
         pinned_to: { kind: 'evidence', ref: run.inputs },
-      });
+      }, { steps: [step ?? this.stepOf(waiting)], diff: run.inputs });
     } finally {
       this.raising = undefined;
     }
@@ -332,6 +359,17 @@ class BudgetLedger implements Ledger {
       },
     });
     return ask;
+  }
+
+  /** What your yes to a paid run's ask does, as its plan's one step: money a run spends can't be undone. */
+  private stepOf(waiting: Waiting): PlanStep {
+    const { run } = waiting;
+    const raised = waiting.budgets.map((id) => this.budgets.get(id)).filter((b): b is Budget => b !== undefined);
+    return waiting.because === 'raise'
+      ? { does: `Raise ${raised.map((b) => `the budget for ${b.scope.ref}`).join(' and ')} by ${dollars(waiting.usd)} and start ${run.check} (${run.run})`,
+        changes: raised.map((b) => `budget:${b.id}`), undo: null, public: false, cost: usd(waiting.usd) }
+      : { does: `Start ${run.check} (${run.run}) for ${dollars(waiting.usd)}${waiting.because === 'rerun' ? ' on inputs whose last paid run didn\'t pass' : ', under a budget for this run alone'}`,
+        changes: [run.issue], undo: null, public: false, cost: usd(waiting.usd) };
   }
 
   /**
@@ -486,7 +524,8 @@ export async function openLedger(options: LedgerOptions): Promise<Ledger> {
     approve: (connection, budget) => ledger.approve(connection, budget),
     request: (connection, run) => ledger.request(connection, run),
     resolve: (connection, ask, answer) => ledger.resolve(connection, ask, answer),
-    charge: (connection, run, cost) => ledger.charge(connection, run, cost),
+    charge: (connection, run, cost, evidence) => ledger.charge(connection, run, cost, evidence),
     budget: (id) => ledger.budget(id),
+    reserveIn: (connection, run, budget, cost, step) => ledger.reserveIn(connection, run, budget, cost, step),
   };
 }

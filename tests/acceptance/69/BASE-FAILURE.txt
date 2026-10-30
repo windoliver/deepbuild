@@ -1,0 +1,206 @@
+# #69 acceptance tests on the base commit 5a6d09a4 (origin/main, no implementation of #69)
+
+Command, from the checkout's root:  npx vitest run tests/acceptance/69 --reporter=verbose
+Machine: Mac15,7 (Apple M3 Pro), Node 23.9.0, on battery. Run 2026-10-29.
+
+Result: every criterion test fails on the base. 7 tests in plan.test.ts and budgets.test.ts fail at their own
+assertion or because a new surface is missing; buying.test.ts and plants.test.ts fail to load because
+packages/buying/src/index.ts doesn't exist (criteria 4 and 5, as #86's suite did for packages/budget).
+
+  #69.9eb13dee  FAIL at its assertion: the base creates an authority ask from effect.push with no plan.
+  #69.f54debdc  FAIL: w.asks.beforeStep is not a function (new surface).
+  #69.3f9c3f3d  FAIL (both tests): the base refuses a step whose undo is null (plan.proposed@1 at /data/steps/1/undo),
+                so a step with no undo can't be raised, let alone marked "can't undo" (new surface: undo: string | null).
+  #69.06d40ef2  FAIL to load: no packages/buying.
+  #69.d8443973  FAIL to load: no packages/buying.
+  #69.275c8f18  FAIL: the batch's plan carries a step with no undo, which the base refuses (as above); asks.batch and
+                asks.approveBatch don't exist either.
+  #69.eb8b7be8  FAIL (both tests): benchmarks/budgets.json has no task plan-preview; the timed preview's last step has
+                no undo, which the base refuses.
+
+================================================================ full output
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-69-blind
+
+ × tests/acceptance/69/plan.test.ts > #69.9eb13dee an authority ask without a plan can't be created, from any source of authority asks, the core's or an agent's, nor with a plan of no steps 66ms
+   → an authority ask from effect.push without a plan: expected the core to refuse it, naming plan, but it returned "ask:01M642SKC0ZX5WWKHGH1CXSWKD": expected undefined to be an instance of AskRefused
+ × tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 the perf lane has the task plan-preview, a #69 first measurement, valid against the merge base's budgets, and it runs 100ms
+   → benchmarks/budgets.json has a task plan-preview: expected undefined to be defined
+ × tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 a plan's preview is drafted in under 2 s, model calls excluded 82ms
+   → plan.proposed@1 refuses the plan at /data/steps/499/undo
+ × tests/acceptance/69/plan.test.ts > #69.f54debdc a run that adds a step after your yes stops before the step and asks again, once; your yes to the new plan runs it 55ms
+   → w.asks.beforeStep is not a function
+ × tests/acceptance/69/plan.test.ts > #69.3f9c3f3d a step with no undo is marked "can't undo" in its plan, on its card and in the record 64ms
+   → plan.proposed@1 refuses the plan at /data/steps/1/undo
+ × tests/acceptance/69/plan.test.ts > #69.3f9c3f3d anything irreversible still defaults to no, even when its raiser names the approving option as its default 43ms
+   → plan.proposed@1 refuses the plan at /data/steps/1/undo
+ × tests/acceptance/69/plan.test.ts > #69.275c8f18 in a batch, a step marked "can't undo" starts switched off and runs only after its own switch is turned on 38ms
+   → plan.proposed@1 refuses the plan at /data/steps/1/undo
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/69/buying.test.ts [ tests/acceptance/69/buying.test.ts ]
+Error: Cannot find module '../../../packages/buying/src/index.ts' imported from ~/dev/claude-worktrees/doneright/issue-69-blind/tests/acceptance/69/buying.ts
+ ❯ tests/acceptance/69/buying.ts:10:1
+      8| import { openLedger } from '../../../packages/budget/src/index.ts';
+      9| import type { Ledger } from '../../../packages/budget/src/index.ts';
+     10| import { BuyingRefused, openBuying } from '../../../packages/buying/sr…
+       | ^
+     11| import type { Buying, Processor } from '../../../packages/buying/src/i…
+     12| import { card, ENDS, openWorld, type Planting, type World } from './he…
+ ❯ tests/acceptance/69/buying.test.ts:6:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/acceptance/69/plants.test.ts [ tests/acceptance/69/plants.test.ts ]
+Error: Cannot find module '../../../packages/buying/src/index.ts' imported from ~/dev/claude-worktrees/doneright/issue-69-blind/tests/acceptance/69/buying.ts
+ ❯ tests/acceptance/69/buying.ts:10:1
+      8| import { openLedger } from '../../../packages/budget/src/index.ts';
+      9| import type { Ledger } from '../../../packages/budget/src/index.ts';
+     10| import { BuyingRefused, openBuying } from '../../../packages/buying/sr…
+       | ^
+     11| import type { Buying, Processor } from '../../../packages/buying/src/i…
+     12| import { card, ENDS, openWorld, type Planting, type World } from './he…
+ ❯ tests/acceptance/69/plants.test.ts:5:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 the perf lane has the task plan-preview, a #69 first measurement, valid against the merge base's budgets, and it runs
+AssertionError: benchmarks/budgets.json has a task plan-preview: expected undefined to be defined
+ ❯ tests/acceptance/69/budgets.test.ts:31:62
+     29|   validateBudgets(current, JSON.parse(execFileSync('git', ['show', `${…
+     30|   const task = current.tasks.find((t) => t.id === TASK);
+     31|   expect(task, `benchmarks/budgets.json has a task ${TASK}`).toBeDefin…
+       |                                                              ^
+     32|   expect(String(task!.initialReason), `${TASK} says why, naming issue …
+     33|   const [command, ...args] = task!.command;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 a plan's preview is drafted in under 2 s, model calls excluded
+AskRefused: plan.proposed@1 refuses the plan at /data/steps/499/undo
+ ❯ packages/asks/src/index.ts:536:32
+    534|         proposed = { ask: `ask:${id}`, steps, diff: plan.diff, hash: s…
+    535|         const planned = validate('plan.proposed@1', { v: 1, id: ulid(n…
+    536|         if (!planned.ok) throw new AskRefused(`plan.proposed@1 refuses…
+       |                                ^
+    537|       }
+    538|       // The same question asked again in its thread, showing the same…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { field: 'plan/steps/499/undo', option: undefined, source: undefined, ask: undefined, outcome: undefined, closed_at: undefined }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/acceptance/69/plan.test.ts > #69.9eb13dee an authority ask without a plan can't be created, from any source of authority asks, the core's or an agent's, nor with a plan of no steps
+AssertionError: an authority ask from effect.push without a plan: expected the core to refuse it, naming plan, but it returned "ask:01M642SKC0ZX5WWKHGH1CXSWKD": expected undefined to be an instance of AskRefused
+ ❯ refused tests/acceptance/69/helpers.ts:129:119
+    127|     error = e;
+    128|   }
+    129|   expect(error, `${what}: expected the core to refuse it, naming ${fie…
+       |                                                                                                                       ^
+    130|   expect(String((error as AskRefused).field ?? ''), `${what}: the refu…
+    131|   return error as AskRefused;
+ ❯ noPlanNoAsk tests/acceptance/69/scenarios.ts:19:5
+ ❯ tests/acceptance/69/plan.test.ts:14:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/acceptance/69/plan.test.ts > #69.f54debdc a run that adds a step after your yes stops before the step and asks again, once; your yes to the new plan runs it
+TypeError: w.asks.beforeStep is not a function
+ ❯ addedStepStops tests/acceptance/69/scenarios.ts:46:24
+     44|   const a = await raiseWithPlan(w, 'effect.delete', fixtureAsk('effect…
+     45|   await w.at(BATCH_1);
+     46|   expect((await w.asks.beforeStep(a, steps[0]!)).run, `before your yes…
+       |                        ^
+     47|   const shown = await approve(w, a, 'click-1');
+     48|   const on = target();
+ ❯ tests/acceptance/69/plan.test.ts:18:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/acceptance/69/plan.test.ts > #69.3f9c3f3d a step with no undo is marked "can't undo" in its plan, on its card and in the record
+ FAIL  tests/acceptance/69/plan.test.ts > #69.3f9c3f3d anything irreversible still defaults to no, even when its raiser names the approving option as its default
+ FAIL  tests/acceptance/69/plan.test.ts > #69.275c8f18 in a batch, a step marked "can't undo" starts switched off and runs only after its own switch is turned on
+AskRefused: plan.proposed@1 refuses the plan at /data/steps/1/undo
+ ❯ packages/asks/src/index.ts:536:32
+    534|         proposed = { ask: `ask:${id}`, steps, diff: plan.diff, hash: s…
+    535|         const planned = validate('plan.proposed@1', { v: 1, id: ulid(n…
+    536|         if (!planned.ok) throw new AskRefused(`plan.proposed@1 refuses…
+       |                                ^
+    537|       }
+    538|       // The same question asked again in its thread, showing the same…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { field: 'plan/steps/1/undo', option: undefined, source: undefined, ask: undefined, outcome: undefined, closed_at: undefined }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  7 failed (7)
+   Start at  11:15:39
+   Duration  608ms (tests 49%, import 26%, transform 23%, worker 2%)
+
+
+================================================================ against a sample fix (not in this checkout)
+To check that each test can pass and that each plant fails for the reason it names, the suite was also run on a
+copy of the checkout in /tmp with a throwaway sample fix: raise() refuses an authority ask without a plan or with no
+steps (field plan) and marks a null undo "can't undo"; beforeStep, batch and approveBatch on the asks core; a
+packages/buying with cardRule, buy and receipt over the #86 ledger and record.keep, scrubbing Luhn-valid card
+numbers; and a perf-lane task plan-preview with a benchmark that drafts one 500-step preview. It isn't the
+implementation and was deleted afterwards. All 17 tests pass and the timing test is INCONCLUSIVE (on battery);
+its readings were 8 to 17 ms per preview against the 2 s limit.
+
+ ✓ tests/acceptance/69/plants.test.ts > #69.9eb13dee fails on a core that drafts a placeholder plan for an authority ask raised without one
+ ✓ tests/acceptance/69/plan.test.ts > #69.9eb13dee an authority ask without a plan can't be created, from any source of authority asks, the core's or an agent's, nor with a plan of no steps
+ ✓ tests/acceptance/69/plants.test.ts > #69.f54debdc fails on a run held to your yes and not to the plan it approved, naming the added step
+ ✓ tests/acceptance/69/buying.test.ts > #69.06d40ef2 DeepBuild never stores or sees a card number: a card rule takes the processor's reference, never a number, and no receipt, event, file or delivery holds one
+ ✓ tests/acceptance/69/buying.test.ts > #69.d8443973 with $100 approved, a second $60 purchase made while the first is still unpriced asks; the first one's receipt is kept as evidence
+ ✓ tests/acceptance/69/plan.test.ts > #69.f54debdc a run that adds a step after your yes stops before the step and asks again, once; your yes to the new plan runs it
+ ✓ tests/acceptance/69/plants.test.ts > #69.3f9c3f3d fails on a core that fills a missing undo with a placeholder, naming the step
+stdout | tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 a plan's preview is drafted in under 2 s, model calls excluded
+ ✓ tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 the perf lane has the task plan-preview, a #69 first measurement, valid against the merge base's budgets, and it runs
+ ✓ tests/acceptance/69/plan.test.ts > #69.3f9c3f3d a step with no undo is marked "can't undo" in its plan, on its card and in the record
+ ✓ tests/acceptance/69/plants.test.ts > #69.3f9c3f3d fails on a core whose default approves an irreversible step
+stdout | tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 a plan's preview is drafted in under 2 s, model calls excluded
+#69 a plan's preview drafted, 500 steps (ms): 8.150, 14.393, 17.181, 13.428, 10.282 against 2000 (margin 111%)
+ ✓ tests/acceptance/69/plan.test.ts > #69.3f9c3f3d anything irreversible still defaults to no, even when its raiser names the approving option as its default
+ ↓ tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 a plan's preview is drafted in under 2 s, model calls excluded [INCONCLUSIVE (reading only: not on mains power: Now drawing from 'Battery Power') #69 a plan's preview drafted, 500 steps (ms): 8.150, 14.393, 17.181, 13.428, 10.282 against 2000 (margin 111%)]
+ ✓ tests/acceptance/69/plan.test.ts > #69.275c8f18 in a batch, a step marked "can't undo" starts switched off and runs only after its own switch is turned on
+ ✓ tests/acceptance/69/plants.test.ts > #69.275c8f18 fails on a batch whose every step starts switched on, naming the step that can't be undone
+ ✓ tests/acceptance/69/plants.test.ts > #69.275c8f18 fails on one switch per ask, where turning on one step that can't be undone runs its ask's others
+ ✓ tests/acceptance/69/plants.test.ts > #69.06d40ef2 fails on a processor adapter that logs the receipt with the card number under the state folder, naming the file
+ ✓ tests/acceptance/69/plants.test.ts > #69.d8443973 fails on a check against charges alone, which lets the second $60 purchase through
+#69 a plan's preview drafted on the plant (ms): 2508.004, 2508.489, 2508.595, 2510.682, 2508.567 against 2000 (margin 5%)
+ ✓ tests/acceptance/69/plants.test.ts > #69.eb8b7be8 fails on a preview that takes 2.5 s to draft, judged by the timing rule wherever it runs
+ Test Files  4 passed (4)
+      Tests  17 passed | 1 skipped (18)
+
+Mutants of the sample fix, each run against buying.test.ts:
+  receipt kept as the processor sent it (no scrub)  -> #69.06d40ef2 FAIL: "the receipt kept as evidence holds the card number"
+  card rule takes a card number                     -> #69.06d40ef2 FAIL: "a card rule given the card number 4000056655665556:
+                                                       expected the buying module to refuse it, naming card"
+  check against cap - charges alone                 -> #69.d8443973 FAIL: "with $100 approved and the first $60 purchase
+                                                       reserved and still unpriced, a second $60 purchase asks: expected
+                                                       'reserved' to be 'asked'"
+
+================================================================ conflict with earlier suites (for the implementer)
+On the sample fix, these earlier acceptance tests fail only because they raise an authority ask with no plan
+(the error each reports is the sample's "an authority ask carries its plan"). Some raise it in the test itself,
+others through code the implementer owns (the ledger's budget raise, the hub). #69.9eb13dee can't pass while those
+tests stay as they are; AGENTS.md says a dispute goes to each suite's blind redraft.
+  318/raise.test.ts     #318.b64bd314         318/sources.test.ts   #318.af2a2599
+  319/deadlines.test.ts #319.3699b37e #319.466f1905 #319.ba0ff138   319/fold.test.ts #319.b1bf1877
+  319/restart.test.ts   #319.1ad1ab09         319/settings.test.ts  #319.49a0402f #319.d452dc28
+  319/plants.test.ts    #319.1ad1ab09 #319.466f1905
+  23/match/keys.test.ts #23.2395159c (5)      23/match/merge.test.ts #23.b439b4e7 #23.cf7a32f5 #23.eba26419
+  23/match/plants.test.ts (4)                 23/match/repeat.test.ts #23.6b5caf42
+  24/agents.test.ts #24.4373d3bf (3)          24/answer.test.ts #24.4963284a   24/budgets.test.ts #24.bbe12971
+  24/confirm.test.ts #24.71112e3b             24/plants.test.ts #24.71112e3b (2)
+  86/*: the ledger raises its budget raise and paid-run asks with no plan; that is the ledger's code, not its tests.

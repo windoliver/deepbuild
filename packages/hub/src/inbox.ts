@@ -13,7 +13,9 @@ const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** Refusals that leave the answer undecided: not confirmed, an agent's command, or a hub that couldn't. */
 const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
-interface Row { ask: string; kind: string; session: string; status: string; age: number; question: string; options: string[] }
+interface Row { ask: string; kind: string; session: string; status: string; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null }
+/** A plan's step, as an authority ask shows it (#69). */
+interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
 interface Offer { offer: string; session: string; command: string; scope: string }
 
@@ -67,7 +69,13 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   // The hub's inbox holds every ask; the list is the open ones.
   const rows = (reply.result.asks as Row[]).filter((r) => r.status !== 'closed');
   if (!rows.length) process.stdout.write('No open asks.\n');
-  for (const r of rows) process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${age(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
+  for (const r of rows) {
+    process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${age(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
+    // Before a yes with authority, what will happen: each step, what it changes, its undo and its cost (#69).
+    if (!r.plan) continue;
+    process.stdout.write(`    plan ${r.plan.hash.slice(0, 12)}: ${r.plan.steps.length} step${r.plan.steps.length === 1 ? '' : 's'}, ${r.plan.steps.filter((s) => s.undo === "can't undo").length} can't be undone\n`);
+    for (const [i, s] of r.plan.steps.entries()) process.stdout.write(`    ${i + 1}. ${s.does}  changes ${s.changes.join(', ')}  undo: ${s.undo}  cost $${s.cost.toFixed(2)}\n`);
+  }
   // What you said yes to in the terminal, offered back: one click saves it as a decision.
   for (const o of (reply.result.offers ?? []) as Offer[]) process.stdout.write(`${o.offer}  offered  ${o.session}  save \`${o.command}\` as a decision for ${o.scope}  (deep inbox save ${o.offer})\n`);
   return 0;
