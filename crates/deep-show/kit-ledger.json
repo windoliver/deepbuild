@@ -2,7 +2,7 @@
   "core": {
     "version": "0.0.0",
     "digest": "a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -12,7 +12,7 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "FAIL"
+      "catalog": "PASS"
     }
   },
   "cells": {

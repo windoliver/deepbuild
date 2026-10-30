@@ -1,0 +1,41 @@
+{
+  "id": "chart.bars",
+  "version": "1.0",
+  "title": "Bars",
+  "license": "MIT",
+  "author": "the #306 acceptance suite",
+  "description": "n rects of rising height, 24 units apart, left to right from the instance's origin.",
+  "inputs": {
+    "n": {
+      "type": "integer",
+      "default": 3,
+      "min": 1,
+      "max": 12,
+      "about": "how many bars"
+    }
+  },
+  "steps": {
+    "bars": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "n",
+        "as": "i"
+      },
+      "params": {
+        "box": [0, 0, 16, "40 + 8 * i"],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": ["24 * i", 0, 0]
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["bars"]
+  }
+}

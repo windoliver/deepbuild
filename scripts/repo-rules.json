@@ -66,6 +66,10 @@
     },
     "crates/deep-app/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row in the spike feeding a busy terminal's changes to it."
+        },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #337: the toolkit under trial, pinned to one commit since gpui-kit is unpublished at this milestone."
