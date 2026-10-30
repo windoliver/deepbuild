@@ -1,0 +1,11 @@
+// A first-party test package (#822 AC3): its check runner notes each run it is asked for, one line in the file
+// waiter.json names, and never answers, so only the host's deadline for the call can end the run.
+import { appendFileSync, readFileSync } from 'node:fs';
+
+export default function (deep: any): void {
+  const { file } = JSON.parse(readFileSync(new URL('./waiter.json', import.meta.url), 'utf8')) as { file: string };
+  deep.registerCheck('ext.test-waiter.wait', (_spec: unknown, ctx: { deadline?: unknown }) => {
+    appendFileSync(file, `${JSON.stringify({ deadline: String(ctx?.deadline) })}\n`);
+    return new Promise(() => undefined);
+  });
+}
