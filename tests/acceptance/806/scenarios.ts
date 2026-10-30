@@ -4,12 +4,14 @@
 // stand-in already answers, so this suite compares the hub's replies with the stand-in's (replay.ts).
 //
 // A scenario's `deep-show run` fields that the hub has no use for (`clock`, the calls' virtual times `at`, `planted`) are
-// ignored by the replay; the app plays the user's calls in order, each after it has drawn what the hub presented.
+// ignored by the replay, which plays in call order on real time; the app plays the user's calls in order, each after it has drawn
+// what the hub presented. The stand-in keeps `clock` and `at`: #384's replies mean what it says only on that clock (`compare384`).
 
 import { MAGENTA, SMALL, board, clone, fixture, label, rect, solidPng, sorted, type JsonObject } from '../393/helpers.ts';
 import * as t384 from '../384/helpers.ts';
 import * as t393 from '../393/helpers.ts';
 import { sha256 } from './helpers.ts';
+import type { Compare, Mutant } from './replay.ts';
 
 export interface Entry {
   /** The sibling suite's criterion this plays: `#393 AC4`, `#384 AC3`. */
@@ -25,6 +27,8 @@ export interface Entry {
   reused?: string[];
   /** Bounds on a call's time in ms, by its index (1-based): the 2 s it answers within, the 1.5 s a late frame is waited for. */
   bounds?: Record<number, { min?: number; max?: number }>;
+  /** What two correct programs can't give the same value for, and the fields to show the comparison fails on (replay.ts, `Compare`); #393's entries have none. */
+  compare?: Compare;
 }
 
 const D = t393.DOC;
@@ -190,9 +194,25 @@ const PARTS = ['alpha.part-api', 'alpha.part-db'];
 const REQUEST = 'why do these two talk so much?';
 const ON_PAY_BUTTON: t384.Point = [692, 228];
 
+/**
+ * The #384 replays' comparison (replay.ts, `Compare`). The stand-in runs on the virtual display clock, which is what makes its replies
+ * mean what #384 says (without `clock` its patches never become current at a latch: the ask's `doc_rev` is 0 and a deleted item's handle
+ * still resolves live), so its scenario keeps `clock` and the hub gets the same meaning from call order. Hence: the clock's own readings
+ * (`arrived`, `checked`, `current`) are compared by their order only; a render-back's `t` may be left out of the hub's reply (it echoes
+ * the request, is not in #393's reply, and the frame's pixels already say which `t` was drawn) but is compared when given; a doc handle's
+ * doc ID is case-folded. `mutants`: the fields this scenario is about, each of which the comparison must be shown to fail on.
+ */
+const compare384 = (mutants: Mutant[], clock = true): Compare => ({ ...(clock ? { clock: true } : {}), time: true, optional: ['t'], foldDocIds: true, mutants });
+const ATTACHED: Mutant[] = [
+  { call: 'ask', path: 'message.attachment.handles' }, { call: 'ask', path: 'message.attachment.precision' }, { call: 'ask', path: 'message.task.open' },
+  { call: 'messages', path: 'messages.0.words' }, { call: 'messages', path: 'context' }, { call: 'messages', path: 'messages.0.resolved.0.handle' },
+];
+const AT_REVISION: Mutant[] = [{ call: 'ask', path: 'message.attachment.doc_rev' }, { call: 'ask', path: 'message.attachment.t' }, { call: 'messages', path: 'messages.0.attachment.doc_rev' }];
+
 export const ENTRIES_384: Record<string, Entry> = {
   selection: {
     from: '#384 AC1', about: 'two parts selected by click and shift-click and a typed request, read by the session', app: true, assets: [SHOT],
+    compare: compare384([...ATTACHED, ...AT_REVISION, { call: 'messages', path: 'messages.0.resolved.1.name' }, { call: 'messages', path: 'messages.0.resolved.0.state' }]),
     build: board384((doc) => {
       const [api, db] = PARTS.map((id) => t384.center(t384.boxOf(doc, id)));
       return [...t384.click(t384.slot(0), api!), ...t384.click(t384.slot(1), db!, true), t384.ask(t384.slot(2), 'main', REQUEST), t384.messagesCall(t384.slot(3))];
@@ -200,22 +220,32 @@ export const ENTRIES_384: Record<string, Entry> = {
   },
   caption: {
     from: '#384 AC2', about: 'the caption pointed at at 4.2 s and revision 14: one message with its time, revision, precision and quote', app: true, assets: [SHOT],
+    compare: compare384([...ATTACHED, ...AT_REVISION, { call: 'ask', path: 'message.attachment.quote' }, { call: 'messages', path: 'messages.0.attachment.quote' }]),
     build: board384((doc) => [t384.ask(t384.slot(0), 'main', t384.WORDS, t384.center(t384.boxOf(doc, CAPTION))), t384.messagesCall(t384.slot(1))]),
   },
   note: {
     from: '#384 AC2', about: 'a caption that reads like an instruction arrives only as quote', app: true, assets: [SHOT],
+    compare: compare384([...ATTACHED, ...AT_REVISION, { call: 'ask', path: 'message.attachment.quote' }, { call: 'ask', path: 'message.words' }]),
     build: board384((doc) => [t384.ask(t384.slot(0), 'main', t384.WORDS, t384.center(t384.boxOf(doc, 'alpha.note'))), t384.messagesCall(t384.slot(1))]),
   },
   screenshot: {
     from: '#384 AC2', about: 'pointing inside a journey screenshot: precision geometry with the image\'s handle and a region', app: true, assets: [SHOT],
+    compare: compare384([...ATTACHED, ...AT_REVISION, { call: 'ask', path: 'message.attachment.region.x' }, { call: 'ask', path: 'message.attachment.region.w' }]),
     build: board384(() => [t384.ask(t384.slot(0), 'main', t384.WORDS, ON_PAY_BUTTON), t384.messagesCall(t384.slot(1))]),
   },
   page: {
     from: '#384 AC2', about: 'pointing inside an HTML deliverable: precision region with no handle', app: true, assets: [],
+    // No document and no patch: no clock readings, no revision, no `t`.
+    compare: compare384([{ call: 'ask', path: 'message.attachment.precision' }, { call: 'ask', path: 'message.attachment.region.y' }, { call: 'ask', path: 'message.task.open' }, { call: 'messages', path: 'messages.0.resolved' }, { call: 'messages', path: 'context' }], false),
     build: (evidence) => t384.pageScenario(evidence, [t384.ask(t384.slot(0), 'page', t384.WORDS, [200, 50]), t384.messagesCall(t384.slot(1))]),
   },
   detached: {
     from: '#384 AC3', about: 'the caption deleted at revision 15 before the session reads: detached, the ask-task open, render-back of revision 14 unchanged', app: true, assets: [SHOT],
+    compare: compare384([
+      ...AT_REVISION, { call: 'messages', path: 'messages.0.resolved.0.state' }, { call: 'messages', path: 'messages.0.resolved.0.name' },
+      { call: 'messages', path: 'messages.0.resolved.0.removed.rev' }, { call: 'messages', path: 'messages.0.resolved.0.removed.writer.id' }, { call: 'messages', path: 'messages.0.task.open' },
+      { call: 'render_back', path: 'rev' }, { call: 'render_back', path: 't' }, { call: 'render_back', path: 'snapshots.0.sha256' },
+    ]),
     build: board384((doc) => [
       t384.ask(t384.slot(0), 'main', t384.WORDS, t384.center(t384.boxOf(doc, CAPTION))),
       t384.renderBack(t384.slot(1), t384.T_POINTED, t384.REV_SEEN),

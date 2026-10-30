@@ -793,3 +793,144 @@ AssertionError: the app's replica builds: cargo build --locked --bin deep-replic
    Start at  20:07:56
    Duration  123.42s (tests 98%, import 1%, transform 1%)
 
+
+
+=== Blind redraft of replay384.test.ts (criterion 1, #384): the three tests at the base ===
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/806 --no-file-parallelism replay384.test.ts
+Base 46e622f8, the redrafted suite untracked. Exit code 1: 3 tests, 3 failed, 0 passed. Each fails on the missing surface (the app replica bin target
+`deep-replica-canvas`); off macOS each would fail INCONCLUSIVE first. No other file of the suite was run again.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/806
+
+ ❯ replay384.test.ts (3 tests | 3 failed) 24693ms
+   ❯ AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#384) (3)
+     × AC1 #384 AC1: two parts selected by click and shift-click and a typed request reach the session by their handles, as the stand-in gives them 5ms
+     × AC1 #384 AC2: pointing at the caption, at a caption that reads like an instruction, inside a screenshot and inside an HTML deliverable gives the stand-in's messages 0ms
+     × AC1 #384 AC3: a handle whose item is gone comes back detached and render-back of revision 14 stays the frame pointed at, as the stand-in gives them 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#384) > AC1 #384 AC1: two parts selected by click and shift-click and a typed request reach the session by their handles, as the stand-in gives them
+AssertionError: the app's replica builds: cargo build --locked --bin deep-replica-canvas: expected 'cargo build --bin deep-replica-canvas…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-replica-canvas failed:
++ error: no bin target named `deep-replica-canvas` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-replica
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:490:98
+    488|   let error = 'not built';
+    489|   beforeAll(() => { error = process.platform === 'darwin' ? t393.build…
+    490|   return () => expect(error, `the app's replica builds: cargo build --…
+       |                                                                                                  ^
+    491| }
+    492|
+ ❯ expectReplayed ac1.ts:14:36
+ ❯ replay384.test.ts:15:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#384) > AC1 #384 AC2: pointing at the caption, at a caption that reads like an instruction, inside a screenshot and inside an HTML deliverable gives the stand-in's messages
+AssertionError: the app's replica builds: cargo build --locked --bin deep-replica-canvas: expected 'cargo build --bin deep-replica-canvas…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-replica-canvas failed:
++ error: no bin target named `deep-replica-canvas` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-replica
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:490:98
+    488|   let error = 'not built';
+    489|   beforeAll(() => { error = process.platform === 'darwin' ? t393.build…
+    490|   return () => expect(error, `the app's replica builds: cargo build --…
+       |                                                                                                  ^
+    491| }
+    492|
+ ❯ expectReplayed ac1.ts:14:36
+ ❯ replay384.test.ts:20:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#384) > AC1 #384 AC3: a handle whose item is gone comes back detached and render-back of revision 14 stays the frame pointed at, as the stand-in gives them
+AssertionError: the app's replica builds: cargo build --locked --bin deep-replica-canvas: expected 'cargo build --bin deep-replica-canvas…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-replica-canvas failed:
++ error: no bin target named `deep-replica-canvas` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-replica
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:490:98
+    488|   let error = 'not built';
+    489|   beforeAll(() => { error = process.platform === 'darwin' ? t393.build…
+    490|   return () => expect(error, `the app's replica builds: cargo build --…
+       |                                                                                                  ^
+    491| }
+    492|
+ ❯ expectReplayed ac1.ts:14:36
+ ❯ replay384.test.ts:26:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  21:56:16
+   Duration  25.31s (tests 99%, import 1%, transform 1%)
+
