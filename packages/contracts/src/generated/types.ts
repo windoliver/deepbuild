@@ -2460,6 +2460,15 @@ export interface ExtensionEdges {
   kernel?: Array<string>;
 }
 
+/** extension.host@1 */
+export interface ExtensionHost {
+  host?: {
+    runs: "terminals";
+    lives: "past_app";
+    owns: Array<"terminals">;
+  };
+}
+
 /** extension.manifest@1 */
 export interface ExtensionManifest {
   id: string;
@@ -3744,6 +3753,24 @@ export interface RunFinished {
     points_to: string | null;
     findings: Array<string>;
     environment: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.kept@1 */
+export interface RunKept {
+  v: 1;
+  id: string;
+  kind: "run.kept";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
   };
   evidence?: Array<string>;
 }
