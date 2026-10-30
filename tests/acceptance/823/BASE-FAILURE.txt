@@ -1,0 +1,65 @@
+Base commit ff81b0d2 (origin/main), Node 24.22.0, macOS, 12 cores, on a Mac shared with other sessions.
+Two runs, from the checkout's root:
+
+  npx vitest run --root tests/acceptance/823 --no-file-parallelism --silent=false
+
+Why each test fails on the base, each at its own assertion:
+
+- #823.da880762, deep_wait (wait.test.ts): FAIL at the p95: 96 ms over 100 answers (median 41 ms), the delays spread
+  evenly from about 11 to 101 ms by waitFor's 100 ms read of the ask. In run 1 the machine was loaded past its cores
+  (12.50 at the end), so the same reading (p95 99 ms) was skipped INCONCLUSIVE, per the load rule; in run 2, at load
+  6.6 to 7.2, it fails.
+- #823.da880762, deep_run (run.test.ts): FAIL at the p95: 97 ms over 20 runs (median 58 ms), runCheck's 100 ms read
+  of run.finished. INCONCLUSIVE in run 1 (load 12.54 to 13.52), FAIL in run 2.
+- #823.f1b9ae1e (wait.test.ts, the count): FAIL: the hub keeps no read log at DEEP_HUB_TEST_READS (the seam README
+  "The surface under test" defines); the file is never made.
+- #823.f1b9ae1e (wait.test.ts, the planted waiter): FAIL: the hub refuses DEEP_HUB_PLANT=deep-wait-polls, a name its
+  plant list lacks.
+- #823.d60a913c (stop.test.ts, both): PASS, as the criterion says ("as today"): the hub destroys its connections
+  before its core stops, so deep mcp answers the waiting deep_wait and deep_run `unavailable` ("it closed the
+  connection") before the hub has exited. Regression protection; its wrong program is the twin stop-answers-waiting.
+
+==== Run 1: the whole folder (04:57, load 9.6 to 13.5)
+ RUN  v5.0.5 <checkout>/tests/acceptance/823
+stdout | wait.test.ts > #823.da880762 an answer to an ask deep_wait waits on reaches the agent within 20 ms of its ask.answered at p95 over 100 answers
+deep_wait, ask.answered to the agent: p95 99 ms over 100 answers (median 45 ms, max 101 ms); 1-minute load 12.50 on 12 cores at the end, 1-minute load 9.60 on 12 cores at the start; delays 83, 42, 20, 37, 89, 89, 90, 57, 44, 58, 99, 30, 48, 36, 17, 87, 101, 52, 72, 44, 38, 80, 23, 34, 35, 14, 15, 69, 84, 18, 15, 24, 50, 33, 26, 31, 13, 61, 100, 12, 13, 92, 101, 91, 84, 37, 29, 38, 13, 12, 94, 18, 20, 18, 39, 28, 33, 82, 36, 81, 25, 16, 43, 56, 25, 79, 101, 72, 16, 87, 29, 23, 81, 22, 39, 14, 45, 86, 47, 22, 55, 99, 86, 85, 23, 55, 97, 90, 62, 58, 86, 31, 14, 87, 85, 94, 63, 94, 31, 89
+INCONCLUSIVE (loaded past its cores): p95 99 ms over 100 answers (median 45 ms, max 101 ms); 1-minute load 12.50 on 12 cores at the end, 1-minute load 9.60 on 12 cores at the start
+   × #823.f1b9ae1e a deep_wait that waits 30 s with nothing happening reads the record for its ask no more than 2 times 2378ms
+   × #823.f1b9ae1e (wrong program) the planted waiter deep-wait-polls, reading its ask every 100 ms, fails the 30 s count, naming it 586ms
+stdout | run.test.ts > #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20 runs)
+deep_run, run.finished to the agent: p95 99 ms over 20 runs (median 60 ms, max 100 ms); 1-minute load 13.52 on 12 cores at the end, 1-minute load 12.54 on 12 cores at the start; delays 39, 62, 59, 72, 58, 55, 87, 98, 99, 50, 25, 58, 76, 60, 100, 70, 9, 95, 28, 29
+INCONCLUSIVE (loaded past its cores): p95 99 ms over 20 runs (median 60 ms, max 100 ms); 1-minute load 13.52 on 12 cores at the end, 1-minute load 12.54 on 12 cores at the start
+stdout | stop.test.ts > #823.d60a913c a deep_wait waiting when the hub stops is answered unavailable, never with a success
+deep_wait with the hub stopping: {"jsonrpc":"2.0","id":"tools/call#3","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (it closed the connection); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}; -94 ms after the hub exited
+stdout | stop.test.ts > #823.d60a913c a deep_run waiting on its run when the hub stops is answered unavailable, never with a success
+deep_run with the hub stopping: {"jsonrpc":"2.0","id":"tools/call#7","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (it closed the connection); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}; -892 ms after the hub exited
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  wait.test.ts > #823.f1b9ae1e a deep_wait that waits 30 s with nothing happening reads the record for its ask no more than 2 times
+AssertionError: the hub must log its record reads to DEEP_HUB_TEST_READS from its start (README: The surface under test); it made no /private/tmp/dh823-cGHCiA/reads.jsonl: expected undefined to be defined
+ FAIL  wait.test.ts > #823.f1b9ae1e (wrong program) the planted waiter deep-wait-polls, reading its ask every 100 ms, fails the 30 s count, naming it
+AssertionError: the hub must start with DEEP_HUB_PLANT=deep-wait-polls (README: The surface under test): Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=deep-wait-polls: file://<checkout>/packages/hub/dist/plant.js:37
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+Error: DEEP_HUB_PLANT=deep-wait-polls names no planted program
+: expected undefined to be defined
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 2 passed | 2 skipped (6)
+   Start at  04:57:52
+   Duration  70.84s (tests 98%, import 2%)
+
+==== Run 2: the two timing tests alone (05:09, load 6.6 to 7.2)
+ RUN  v5.0.5 <checkout>/tests/acceptance/823
+stdout | wait.test.ts > #823.da880762 an answer to an ask deep_wait waits on reaches the agent within 20 ms of its ask.answered at p95 over 100 answers
+deep_wait, ask.answered to the agent: p95 96 ms over 100 answers (median 41 ms, max 101 ms); 1-minute load 6.59 on 12 cores at the end, 1-minute load 7.20 on 12 cores at the start; delays 40, 72, 90, 20, 81, 45, 42, 91, 15, 37, 29, 51, 77, 65, 55, 14, 38, 11, 42, 81, 32, 60, 21, 31, 14, 90, 96, 55, 84, 43, 46, 91, 15, 22, 17, 53, 12, 36, 18, 47, 52, 101, 70, 53, 96, 15, 40, 24, 82, 26, 16, 14, 46, 31, 42, 62, 37, 87, 25, 17, 14, 98, 26, 84, 21, 43, 18, 31, 53, 57, 32, 99, 29, 11, 22, 49, 13, 24, 60, 71, 15, 79, 11, 36, 37, 46, 38, 26, 98, 15, 40, 79, 41, 94, 17, 19, 63, 31, 77, 98
+   × #823.da880762 an answer to an ask deep_wait waits on reaches the agent within 20 ms of its ask.answered at p95 over 100 answers 28947ms
+stdout | run.test.ts > #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20 runs)
+deep_run, run.finished to the agent: p95 97 ms over 20 runs (median 58 ms, max 101 ms); 1-minute load 6.75 on 12 cores at the end, 1-minute load 6.59 on 12 cores at the start; delays 17, 18, 68, 43, 44, 97, 82, 66, 36, 15, 54, 66, 40, 69, 42, 101, 69, 60, 20, 58
+   × #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20 runs) 12066ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  run.test.ts > #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20 runs)
+AssertionError: a run's result must reach the waiting deep_run within 20 ms of run.finished: p95 97 ms over 20 runs (median 58 ms, max 101 ms); 1-minute load 6.75 on 12 cores at the end, 1-minute load 6.59 on 12 cores at the start; delays 17, 18, 68, 43, 44, 97, 82, 66, 36, 15, 54, 66, 40, 69, 42, 101, 69, 60, 20, 58: expected 97 to be less than or equal to 20
+ FAIL  wait.test.ts > #823.da880762 an answer to an ask deep_wait waits on reaches the agent within 20 ms of its ask.answered at p95 over 100 answers
+AssertionError: deep_wait's answer must reach the agent within 20 ms of ask.answered at p95: p95 96 ms over 100 answers (median 41 ms, max 101 ms); 1-minute load 6.59 on 12 cores at the end, 1-minute load 7.20 on 12 cores at the start; delays 40, 72, 90, 20, 81, 45, 42, 91, 15, 37, 29, 51, 77, 65, 55, 14, 38, 11, 42, 81, 32, 60, 21, 31, 14, 90, 96, 55, 84, 43, 46, 91, 15, 22, 17, 53, 12, 36, 18, 47, 52, 101, 70, 53, 96, 15, 40, 24, 82, 26, 16, 14, 46, 31, 42, 62, 37, 87, 25, 17, 14, 98, 26, 84, 21, 43, 18, 31, 53, 57, 32, 99, 29, 11, 22, 49, 13, 24, 60, 71, 15, 79, 11, 36, 37, 46, 38, 26, 98, 15, 40, 79, 41, 94, 17, 19, 63, 31, 77, 98: expected 96 to be less than or equal to 20
+ Test Files  2 failed (2)
+      Tests  2 failed | 2 skipped (4)
+   Start at  05:09:14
+   Duration  41.64s (tests 100%)

@@ -1,0 +1,20 @@
+[package]
+name = "deep-canvas-cells"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #402: the cells canvas module (canvas primitives: Cell grid `cells@1`): a terminal's screen
+# as typed cells, sent as frames and row patches against a revision, and drawn through the one
+# shaper. Here are the emulator that turns a terminal's output into that grid (escapes for the
+# title, cwd, progress, bell, links, modes and the clipboard, whose reads it refuses), the palette
+# rule that keeps a cell off the status colors, and the module the registry and seal take. Pure:
+# no I/O, no clock; the panel host feeds it bytes. Named deep-canvas* so the canvas lint reads it.
+[package.metadata.deep]
+canvas_text = true
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
