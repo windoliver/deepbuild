@@ -58,7 +58,8 @@ export function profile(run: string, cwd: string, grant: Grant, extra: readonly 
   if (grant.run_as_you) {
     // Your files and programs, as you; still no device, no socket or host it doesn't name, and no system service
     // beyond the runtime's own, so nothing it asks launchd or LaunchServices to start runs outside its sandbox.
-    rules.push('(allow file-read* file-write* process-exec file-map-executable)', '(allow ipc-posix* pseudo-tty sysctl-read)');
+    // A pseudo-terminal's ioctls (#104): a hosted terminal's host process opens one, and its program sets its modes.
+    rules.push('(allow file-read* file-write* process-exec file-map-executable)', '(allow ipc-posix* pseudo-tty sysctl-read)', '(allow file-ioctl (literal "/dev/ptmx") (regex #"^/dev/ttys[0-9]+$"))');
   }
   // Last, so no grant reaches them: the files agents read their hooks and MCP servers from, wherever they are.
   const agents = '(deny file-write* (regex #"/\\.claude(/|$)") (regex #"/\\.mcp\\.json$") (regex #"/\\.claude\\.json$") (regex #"/\\.codex(/|$)"))';
