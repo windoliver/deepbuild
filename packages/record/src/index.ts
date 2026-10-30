@@ -110,7 +110,8 @@ export interface RecordStore {
   rebuild(): Promise<void>;
   /** Waits for every queued append, then commits synchronous=FULL: everything appended so far is durable. */
   sync(): Promise<void>;
-  raw(sql: string): Promise<unknown[]>;
+  /** One read-only SELECT; each `?` in it takes the next of `params`, bound, never written into the text. */
+  raw(sql: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
   /**
@@ -720,12 +721,12 @@ class SqliteRecord implements RecordStore {
   }
 
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
-  async raw(sql: string): Promise<unknown[]> {
+  async raw(sql: string, params: readonly (string | number | bigint | null)[] = []): Promise<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
     if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
     const statement = this.db.prepare(sql);
     if (!statement.readonly || !statement.reader) throw new RecordError('storage', 'raw SQL reads the record; it never writes it');
-    return statement.all();
+    return statement.all(...params);
   }
 
   async startSlice(session: string): Promise<SliceEntry[]> {

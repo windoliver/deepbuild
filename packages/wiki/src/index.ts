@@ -87,7 +87,6 @@ const norm = (text: string): string => withoutQueries(text.normalize('NFC').repl
 /** A quote as the record keeps it: the pieces around each query string, each of which is at the source as it is. */
 const pieces = (quote: string): string[] => quote.normalize('NFC').replace(QUERY, '$1\u0000').split('\u0000').map((p) => p.trim()).filter(Boolean);
 const sha256 = (data: string | Uint8Array): string => createHash('sha256').update(data).digest('hex');
-const sqlText = (text: string): string => `'${text.replace(/'/g, "''")}'`;
 
 /**
  * The exact keys a claim states: a code span, and each word that is a path, a file name, a flag, a variable name, a
@@ -139,16 +138,16 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
     }
     if (!norm(bytes.toString('utf8')).includes(quote)) return `the quote "${quote}" is not in ${source.path} at ${source.commit}`;
     // The file is kept for the repo whose sessions work in that folder, so the claim reaches that repo.
-    const [owner] = (await record.raw(`SELECT project_id FROM sessions WHERE worktree = ${sqlText(source.repo)} AND project_id IS NOT NULL LIMIT 1`)) as { project_id: string }[];
+    const [owner] = (await record.raw(`SELECT project_id FROM sessions WHERE worktree = ? AND project_id IS NOT NULL LIMIT 1`, [source.repo])) as { project_id: string }[];
     const ev = await record.keep({ ...CORE, ...(owner ? { project: owner.project_id } : {}) }, { bytes: new Uint8Array(bytes), kind: 'repo.file', source: `${source.path}@${source.commit}` });
     const known: Known = (await trust.trusted(source.repo)) ? 'repo' : 'outside';
     return { known, kept: { repo: source.repo, path: source.path, commit: source.commit, quote, hash: sha256(bytes) }, evidence: pieces(source.quote).map((q) => ({ at: ev, quote: q })) };
   }
 
   /** The claims in force, as the record projects them, each with the change that holds it, oldest first. */
-  const inForce = async (where = ''): Promise<Row[]> => (await record.raw(`SELECT l.id AS id, c.handle AS target, c.page AS page, c.scope AS scope, c.state AS state,
-    l.diff AS diff, l.handle AS handle, l.evidence AS evidence FROM wiki_claims c JOIN learned_layer l ON l.handle = c.change ${where} ORDER BY c.log_pos`)) as Row[];
-  const newest = async (claim: string): Promise<Row | undefined> => (await inForce(`WHERE c.handle = ${sqlText(claim)}`))[0];
+  const inForce = async (where = '', params: string[] = []): Promise<Row[]> => (await record.raw(`SELECT l.id AS id, c.handle AS target, c.page AS page, c.scope AS scope, c.state AS state,
+    l.diff AS diff, l.handle AS handle, l.evidence AS evidence FROM wiki_claims c JOIN learned_layer l ON l.handle = c.change ${where} ORDER BY c.log_pos`, params)) as Row[];
+  const newest = async (claim: string): Promise<Row | undefined> => (await inForce('WHERE c.handle = ?', [claim]))[0];
   /** Your decision, saved by the core from your connection, at a scope; resolves with its handle. */
   async function decide(connection: Connection, answer: string, scope: string, about: string): Promise<string> {
     const ts = now();
@@ -164,13 +163,13 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
     const ts = now();
     const id = ulid(ts);
     await record.append(connection, { v: 1, id, kind: 'learn.applied', ts, data: { layer: 'learned', ...change, replay: null } });
-    const [row] = (await record.raw(`SELECT state, reason FROM learned_layer WHERE id = ${sqlText(id)}`)) as { state: string; reason: string | null }[];
+    const [row] = (await record.raw(`SELECT state, reason FROM learned_layer WHERE id = ?`, [id])) as { state: string; reason: string | null }[];
     return row?.state === 'applied' ? { id } : { id, refused: row?.reason ?? `the record kept ${change.target} out of force` };
   }
 
   /** Every wording a claim has held, in any change of it, whatever that change's state. */
   async function wordings(claim: string): Promise<string[]> {
-    const rows = (await record.raw(`SELECT diff FROM learned_layer WHERE target = ${sqlText(claim)} AND layer = 'learned'`)) as { diff: string | null }[];
+    const rows = (await record.raw(`SELECT diff FROM learned_layer WHERE target = ? AND layer = 'learned'`, [claim])) as { diff: string | null }[];
     return [...new Set(rows.map((r) => (r.diff?.startsWith('+ ') ? parseLine(r.diff.slice(2))?.text : undefined)).filter((t) => t !== undefined))];
   }
   /**
@@ -179,10 +178,10 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
    * before the removal nor a restatement in other forms of the same words brings it back, until you revoke it.
    */
   async function yours(claim: string): Promise<boolean> {
-    const held = (await record.raw(`SELECT l.applied_by AS by FROM wiki_claims c JOIN learned_layer l ON l.handle = c.change WHERE c.handle = ${sqlText(claim)} AND c.state = 'in force'`)) as { by: string | null }[];
+    const held = (await record.raw(`SELECT l.applied_by AS by FROM wiki_claims c JOIN learned_layer l ON l.handle = c.change WHERE c.handle = ? AND c.state = 'in force'`, [claim])) as { by: string | null }[];
     if (held.some((h) => h.by === 'you')) return true;
-    const keys = (await wordings(claim)).map((text) => sqlText(sha256(`wiki ${claim} no: ${text}`)));
-    return keys.length > 0 && ((await record.raw(`SELECT 1 FROM decisions WHERE state = 'active' AND key IN (${keys.join(', ')})`)) as unknown[]).length > 0;
+    const keys = (await wordings(claim)).map((text) => sha256(`wiki ${claim} no: ${text}`));
+    return keys.length > 0 && ((await record.raw(`SELECT 1 FROM decisions WHERE state = 'active' AND key IN (${keys.map(() => '?').join(', ')})`, keys)) as unknown[]).length > 0;
   }
 
   async function learnOne(c: Candidate): Promise<string | undefined> {
@@ -301,7 +300,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
    */
   async function unslice(connection: Connection, page: string, claim: string): Promise<void> {
     const added = new Set((await wordings(claim)).map((text) => `+ ${text}`));
-    const rows = (await record.raw(`SELECT id, diff FROM learned_layer WHERE target = ${sqlText(`slice:${page}`)} AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC`)) as { id: string; diff: string }[];
+    const rows = (await record.raw(`SELECT id, diff FROM learned_layer WHERE target = ? AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC`, [`slice:${page}`])) as { id: string; diff: string }[];
     for (const row of rows) if (row.diff.split('\n').some((line) => added.has(line))) await record.rollBack(connection, { change: row.id });
   }
 
@@ -327,7 +326,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
           // A line you removed: your decision says it isn't so, and the claim leaves the wiki.
           decisions.push(await decide(connection, `no: ${was}`, row.scope, row.target));
           // Every learning of it, newest first: rolling back only the newest would put an older one back in force.
-          const held = (await record.raw(`SELECT id FROM learned_layer WHERE target = ${sqlText(row.target)} AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC`)) as { id: string }[];
+          const held = (await record.raw(`SELECT id FROM learned_layer WHERE target = ? AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC`, [row.target])) as { id: string }[];
           for (const { id } of held) await record.rollBack(connection, { change: id });
         } else {
           const decision = await decide(connection, is, row.scope, row.target);
