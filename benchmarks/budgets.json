@@ -736,6 +736,28 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #40 first measurement: the merge base has no pi package. One process runs interleaved 20-call pi sessions with and without the package against a hub, on real pi (DEEP_PI_CLI) and a scripted model; p50 includes pi's start. The issue's 1 ms per event stays in tests/acceptance/40/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "terminal-60hz",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "terminal-60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #402 first measurement: the merge base has no terminals. One process installs a plug-in whose panel shows a terminal's cell grid, feeds the terminal 600 numbered lines, one every 1/60 s, through `deep-show run` on the virtual clock, and reads its updates, failing unless every update is presented in a frame of its own; p50 includes Node's and the binary's start. The issue's 60 updates a second stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "cell-grid-60hz",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "cell-grid-60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #402 first measurement: the merge base has no cell grid. One process feeds a terminal's cell grid 600 full-screen repaints of 36 rows, one every 1/60 s, through `deep-show run` on the virtual clock, failing unless every patch is presented in a frame of its own; p50 includes Node's and the binary's start. The cell grid's cost (under 5% of a core at 60 patches a second) stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
