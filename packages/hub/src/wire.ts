@@ -85,6 +85,8 @@ export interface HookMeta {
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
+  /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
+  denied?: string;
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
