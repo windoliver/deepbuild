@@ -19,6 +19,7 @@ import { gunzipSync } from 'node:zlib';
 import { expect, type TestContext } from 'vitest';
 import { openRecord, type Connection, type EventInput, type RecordStore } from '../../../../packages/record/src/index.ts';
 import { askSources, openAsks, type AskKind, type Asks } from '../../../../packages/asks/src/index.ts';
+import { withPlans } from '../../plans.ts';
 
 export const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
@@ -307,7 +308,7 @@ export class Seeder {
     mkdirSync(root, { recursive: true, mode: 0o700 });
     const clock = { now: start };
     const record = await openRecord({ path: join(root, 'ledger.db'), now: () => clock.now });
-    const asks = await openAsks({ record, now: () => clock.now, deliver: () => undefined });
+    const asks = withPlans(await openAsks({ record, now: () => clock.now, deliver: () => undefined }));
     return new Seeder(record, asks, clock);
   }
   at(ms: number): this { this.clock.now = ms; return this; }

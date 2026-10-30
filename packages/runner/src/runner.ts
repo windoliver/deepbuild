@@ -541,6 +541,9 @@ class LocalRunner implements Runner {
       options: [{ id: 'allow', label: 'Run its smoke tests', decision: 'allow' }, { id: 'deny', label: "Don't run them", decision: 'deny' }],
       recommended: null, deadline: now + this.o.settings.asks.unblock.deadline_ms, fallback: 'you', default: 'deny', provisional: false, owner: 'you',
       key, pinned_to: { kind: 'evidence', ref: sha256(`smoke tests of ${agent}`) },
+    }, {
+      steps: [{ does: `Run ${facts.agent}'s live smoke test through the runner after each update its facts don't cover`, changes: [`${facts.agent} plan usage, inside your reserve`], undo: null, public: false, cost: 0 }],
+      diff: sha256(`smoke tests of ${agent}`),
     });
     this.smokeAsks.set(agent, { handle: ask });
     return ask;

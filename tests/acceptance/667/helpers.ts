@@ -15,6 +15,7 @@ import { expect } from 'vitest';
 import { openRecord } from '../../../packages/record/src/index.ts';
 import type { Connection } from '../../../packages/record/src/index.ts';
 import { askSources, openAsks } from '../../../packages/asks/src/index.ts';
+import { withPlans } from '../plans.ts';
 
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
@@ -137,7 +138,7 @@ const who = { actor: 'you', scope: 'you' };
 export async function seedAuthority(home: string, agent: Agent, subject: string): Promise<string> {
   let now = Date.now();
   const record = await openRecord({ path: join(rootOf(home), 'ledger.db'), now: () => now });
-  const asks = await openAsks({ record, now: () => now, deliver: () => undefined, home: rootOf(home) });
+  const asks = withPlans(await openAsks({ record, now: () => now, deliver: () => undefined, home: rootOf(home) }));
   try {
     await record.append({ writer: 'hook', ...who, session: agent.session, project: PROJECT, agent: 'claude-code' }, {
       v: 1, id: ulid(now), kind: 'session.start', ts: now, data: { agent: 'claude-code', worktree: agent.cwd, branch: 'main', thread: agent.session },

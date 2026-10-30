@@ -286,7 +286,9 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
     let Some(list) = presented.get("frames").and_then(Value::as_array).cloned() else {
         return presented;
     };
-    let panel = hub.scenario.panels[&panel_id].rect;
+    let panel = hub
+        .slot(&panel_id)
+        .expect("a document's panel is in the scenario");
     let px_size = [
         panel[2].round().clamp(1., 8192.) as u16,
         panel[3].round().clamp(1., 8192.) as u16,

@@ -1,0 +1,296 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-401/tests/acceptance/401
+
+ ❯ ring.test.ts (4 tests | 4 failed) 114700ms
+   ❯ AC1 a panel script can't fetch or run a program (1)
+     × AC1 a panel script that fetches a local URL and runs a program, each once a second, is refused every time: no request reaches the listener and no program runs 1462ms
+   ❯ AC2 a plug-in's toast can't cover the question card (1)
+     × AC2 a toast shown after your click hides while the card shows, also one asked right after a click during the card 19ms
+   ❯ AC3 a focus request, pop-out or clipboard write without a fresh gesture serial from your input is refused (1)
+     × AC3 a panel that asks for focus, a pop-out onto B and a clipboard write every 2 s is refused all 34 times while your input is elsewhere, and goes through right after your click in it 18ms
+   ❯ AC4 no plug-in or suggestion moves a piece you placed (1)
+     × AC4 x, placed by your drag, stays where you put it through a plug-in's place verb and an agent's suggestion, while the plug-in places its own panel 14ms
+ ❯ budgets.test.ts (4 tests | 4 failed) 8661ms
+   ❯ AC8 a bound value updates within one frame of its reading, on the virtual display clock (1)
+     × AC8 each of ten readings shows on the panel, the sheet cell and the chart label in the frame one frame after it lands, and not before it 1350ms
+   ❯ AC8 budgets in the local preflight, compared with the merge base (1)
+     × AC8 the perf lane has a task for each budget, each a #401 first measurement, valid against the merge base's budgets 97ms
+   ❯ AC8 the issue's numbers on the reference Mac (2)
+     × AC8 a bound value updates within one frame (8.33 ms at 120 Hz): 600 readings on three surfaces, against the same run with none 18ms
+     × AC8 a popped-out window opens in under 300 ms: six pop-outs onto B, against the same run with none 18ms
+ ❯ keymap.test.ts (3 tests | 3 failed) 9836ms
+   ❯ AC9 a plug-in keymap that binds a chord to a send, a spend or an answer, or binds the escape chord, is refused at install naming the chord (1)
+     × AC9 five plug-ins, each binding one forbidden chord beside a harmless ⌘R, are each refused naming that chord, and none of their bindings is in the keymap 1454ms
+   ❯ AC9 two plug-ins binding ⌘K in one context install with one conflict reported naming both (1)
+     × AC9 palette-a and palette-b both bind ⌘K in the panel context: both install, and the keymap reports exactly that one conflict 67ms
+   ❯ AC9 with a focused panel that handles that key, the escape chord still reaches the shell (1)
+     × AC9 a panel taking raw input, focused by your click, gets the key k, and the escape chord reaches the shell 61ms
+ ❯ fresh.test.ts (1 test | 1 failed) 10343ms
+   ❯ AC5 a cached answer keeps its as-of time, a failed call makes no reading, and every surface greys the value with its age (1)
+     × AC5 the panel, the sheet cell and the chart label draw 182.40 live until 10:01:00 and greyed from then, with an age of 2 minutes at 10:02:00; the as-of stays 10:00:00 1326ms
+ ❯ session.test.ts (2 tests | 2 failed) 6945ms
+   ❯ AC6 a panel's words without a serial wait as one draft in the box, beside your typed text, for an hour (1)
+     × AC6 120 failed fetches in an hour start no turn and deliver nothing; the box holds one draft with the words, marked with the panel, and your typed text unchanged 1327ms
+   ❯ AC7 one click in that panel lets exactly one send through (1)
+     × AC7 after your click the next send reaches the session and a second from the same click waits as a draft 17ms
+ ❯ serial.test.ts (1 test | 1 failed) 7245ms
+   ❯ AC10 a pop-out carrying a serial 31 s old, or one from your input in another panel, is refused; one 29 s old from this panel opens (1)
+     × AC10 y's pop-out with y's serial 31 s old and with x's serial opens nothing; with y's serial 29 s old it opens; a router that takes any serial in the writer's ring fails, naming the serial 1383ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC8 a bound value updates within one frame of its reading, on the virtual display clock > AC8 each of ten readings shows on the panel, the sheet cell and the chart label in the frame one frame after it lands, and not before it
+AssertionError: ten readings: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ oneFrame budgets.test.ts:52:17
+ ❯ budgets.test.ts:70:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  budgets.test.ts > AC8 budgets in the local preflight, compared with the merge base > AC8 the perf lane has a task for each budget, each a #401 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task panel-bound-value: expected undefined to be defined
+ ❯ budgets.test.ts:91:53
+     89|     for (const id of TASKS) {
+     90|       const task = current.tasks.find((t) => t.id === id);
+     91|       expect(task, `budgets.json has a task ${id}`).toBeDefined();
+       |                                                     ^
+     92|       expect(task!.command.length, `${id} names its command`).toBeGrea…
+     93|       expect(String(task!.initialReason), `${id} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  budgets.test.ts > AC8 the issue's numbers on the reference Mac > AC8 a bound value updates within one frame (8.33 ms at 120 Hz): 600 readings on three surfaces, against the same run with none
+AssertionError: many readings: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ timed budgets.test.ts:145:3
+ ❯ perReading budgets.test.ts:154:39
+ ❯ budgets.test.ts:155:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  budgets.test.ts > AC8 the issue's numbers on the reference Mac > AC8 a popped-out window opens in under 300 ms: six pop-outs onto B, against the same run with none
+AssertionError: six clicks: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ budgets.test.ts:165:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  fresh.test.ts > AC5 a cached answer keeps its as-of time, a failed call makes no reading, and every surface greys the value with its age > AC5 the panel, the sheet cell and the chart label draw 182.40 live until 10:01:00 and greyed from then, with an age of 2 minutes at 10:02:00; the as-of stays 10:00:00
+AssertionError: the freshness fixture: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ freshness fresh.test.ts:58:15
+ ❯ fresh.test.ts:98:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  keymap.test.ts > AC9 a plug-in keymap that binds a chord to a send, a spend or an answer, or binds the escape chord, is refused at install naming the chord > AC9 five plug-ins, each binding one forbidden chord beside a harmless ⌘R, are each refused naming that chord, and none of their bindings is in the keymap
+AssertionError: the five keymaps: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ refusals keymap.test.ts:37:17
+ ❯ keymap.test.ts:50:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  keymap.test.ts > AC9 two plug-ins binding ⌘K in one context install with one conflict reported naming both > AC9 palette-a and palette-b both bind ⌘K in the panel context: both install, and the keymap reports exactly that one conflict
+AssertionError: two palettes: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ conflicts keymap.test.ts:62:17
+ ❯ keymap.test.ts:82:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  keymap.test.ts > AC9 with a focused panel that handles that key, the escape chord still reaches the shell > AC9 a panel taking raw input, focused by your click, gets the key k, and the escape chord reaches the shell
+AssertionError: the focused terminal panel: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ escape keymap.test.ts:95:17
+ ❯ keymap.test.ts:110:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  ring.test.ts > AC1 a panel script can't fetch or run a program > AC1 a panel script that fetches a local URL and runs a program, each once a second, is refused every time: no request reaches the listener and no program runs
+AssertionError: the curious panel: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ run ring.test.ts:56:17
+ ❯ ring.test.ts:73:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  ring.test.ts > AC2 a plug-in's toast can't cover the question card > AC2 a toast shown after your click hides while the card shows, also one asked right after a click during the card
+AssertionError: toasts and the card: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ run ring.test.ts:91:17
+ ❯ ring.test.ts:115:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  ring.test.ts > AC3 a focus request, pop-out or clipboard write without a fresh gesture serial from your input is refused > AC3 a panel that asks for focus, a pop-out onto B and a clipboard write every 2 s is refused all 34 times while your input is elsewhere, and goes through right after your click in it
+AssertionError: the pesky panel on a timer: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ run ring.test.ts:138:17
+ ❯ ring.test.ts:170:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  ring.test.ts > AC4 no plug-in or suggestion moves a piece you placed > AC4 x, placed by your drag, stays where you put it through a plug-in's place verb and an agent's suggestion, while the plug-in places its own panel
+AssertionError: your click in x: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ run ring.test.ts:192:27
+ ❯ ring.test.ts:216:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  serial.test.ts > AC10 a pop-out carrying a serial 31 s old, or one from your input in another panel, is refused; one 29 s old from this panel opens > AC10 y's pop-out with y's serial 31 s old and with x's serial opens nothing; with y's serial 29 s old it opens; a router that takes any serial in the writer's ring fails, naming the serial
+AssertionError: y, 31 s old: your click in y: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ popY serial.test.ts:17:29
+ ❯ f serial.test.ts:31:19
+ ❯ serial.test.ts:38:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  session.test.ts > AC6 a panel's words without a serial wait as one draft in the box, beside your typed text, for an hour > AC6 120 failed fetches in an hour start no turn and deliver nothing; the box holds one draft with the words, marked with the panel, and your typed text unchanged
+AssertionError: an hour of the status panel: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ hour session.test.ts:38:40
+ ❯ session.test.ts:62:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  session.test.ts > AC7 one click in that panel lets exactly one send through > AC7 after your click the next send reaches the session and a second from the same click waits as a draft
+AssertionError: your click in the status panel: deep-show run answers the scenario ok (its `install` call (plug-in manifests: panels with element trees and scripts, sources, actions, keymaps) and the `attempts`, `focus`, `clipboard`, `toasts`, `place`, `pieces`, `drawn`, `reading`, `type`, `box`, `turns` and `keymap` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:195:191
+
+ ❯ Driver.step helpers.ts:218:21
+ ❯ oneClick session.test.ts:75:31
+ ❯ session.test.ts:98:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  15 failed (15)
+   Start at  22:54:22
+   Duration  158.35s (tests 100%)
+

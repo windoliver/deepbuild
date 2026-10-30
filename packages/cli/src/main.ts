@@ -148,16 +148,18 @@ async function debugBundle(): Promise<number> {
 
 // The first `deep` command sets everything up, as the app's Set up click does (#326): in a home with nothing of
 // DeepBuild, the commands you run yourself first run setup's steps without asking. The hub's modules load only then,
-// so a set-up home starts as fast as before (#24's budget).
+// so a set-up home starts as fast as before (#24's budget). deep env with --root names a dev hub and acts on it alone
+// (#331), or is a usage error, so it sets nothing up in the home.
 const yours = ['status', 'inbox', 'off', 'on', 'env', 'install', 'guard'];
-if (yours.includes(args[0] ?? '') && !existsSync(join(homedir(), '.deepbuild'))) {
+const devHub = args[0] === 'env' && args.includes('--root');
+if (yours.includes(args[0] ?? '') && !devHub && !existsSync(join(homedir(), '.deepbuild'))) {
   const { setUpFirst } = await import('@deepbuild/hub');
   const code = await setUpFirst(fileURLToPath(import.meta.url));
   if (code !== 0) process.exit(code);
 }
 
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage\n       deep status  every session, what needs you first\n       deep off | on   every gate watch-only, or back, once the OS confirms you\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop [--root <folder>]\n       deep hub use --root <folder>   this worktree's sessions to a dev hub, once the OS confirms you\n       deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you\n       deep backup <folder>   the record, its evidence and its wiki, copied through the running hub\n       deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage\n       deep status  every session, what needs you first\n       deep off | on   every gate watch-only, or back, once the OS confirms you\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop [--root <folder>]\n       deep hub use --root <folder>   this worktree's sessions to a dev hub, once the OS confirms you\n       deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you\n       deep undo staged:<id>   a destructive command's run undone from the copy staged before it ran\n       deep backup <folder>   the record, its evidence and its wiki, copied through the running hub\n       deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor') {
   const { doctorCommand } = await import('@deepbuild/hub');
   process.exitCode = await doctorCommand(args.slice(1), telemetryItems);
@@ -190,6 +192,9 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
 } else if (args[0] === 'install') {
   const { installCommand } = await import('@deepbuild/hub');
   process.exitCode = await installCommand(args.slice(1));
+} else if (args[0] === 'undo') {
+  const { undoCommand } = await import('@deepbuild/hub');
+  process.exitCode = await undoCommand(args.slice(1));
 } else if (args[0] === 'backup' || args[0] === 'restore') {
   const { backupCommand, restoreCommand } = await import('@deepbuild/hub');
   process.exitCode = await (args[0] === 'backup' ? backupCommand : restoreCommand)(args.slice(1));

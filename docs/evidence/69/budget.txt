@@ -1,0 +1,9 @@
+# #69.eb8b7be8 on the reference Mac, 2026-10-29T23:48:05Z
+Mac15,7 / Apple M3 Pro / 36 GiB, mains power, Low Power Mode off, no thermal warning
+warm-up: 28.5 ms (discarded)
+✓ tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 the perf lane has the task plan-preview, a #69 first measurement, valid against the merge base's budgets, and it runs 420ms
+#69 a plan's preview drafted, 500 steps (ms): 6.828, 9.278, 9.753, 8.868, 15.535 against 2000 (margin 128%)
+✓ tests/acceptance/69/budgets.test.ts > #69.eb8b7be8 a plan's preview is drafted in under 2 s, model calls excluded 275ms
+Tests  2 passed (2)
+
+plan-preview perf-lane task (first measurement; the merge base has none): p50 213 ms, peak 73.6 MB, status INITIAL

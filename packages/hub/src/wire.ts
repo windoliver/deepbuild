@@ -56,6 +56,8 @@ export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string 
 export function ulidTime(id: string): number {
   return [...id.slice(0, 10)].reduce((ms, c) => ms * 32 + CROCKFORD.indexOf(c), 0);
 }
+/** A ULID at `ms` whose random part is a hash of `key`, so the same source always gets the same ID and the record holds it once. */
+export const derivedId = (ms: number, key: string): string => ulid(ms, createHash('sha256').update(key).digest('hex').slice(0, 20));
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
@@ -77,6 +79,8 @@ export interface HookMeta {
   matched: string[];
   /** What deep-hook read of the call for a matched entry, by name, shown with that entry's denial. */
   notes?: Record<string, string>;
+  /** The folders a delete whose reach can't be worked out names, by the entry that matched it, for the hub to stage (#347). */
+  stage?: Record<string, string[]>;
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
@@ -87,13 +91,18 @@ export interface HookMeta {
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
-  /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
+  /**
+   * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
+   * subagent, a stop's last message, and Codex's turn.
+   */
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string; turn_id?: string };
   /**
    * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
+  pr?: string;
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }
@@ -104,7 +113,16 @@ export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']
  * A PreToolUse held for the core: its label, the effect classes that need your authority, an MCP tool, and the
  * classes a standing rule decides (#23) with the shell command they're read from.
  */
-export interface Gated { label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string }
+export interface Gated {
+  label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
+  /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
+  stage?: string[] | null;
+}
+/**
+ * How long the hub holds a call it stages (#347): under Claude Code's 60 s PreToolUse timeout with room for the reply,
+ * so the stage or the ask comes before the agent runs the call anyway. The seconds ceiling is held below it.
+ */
+export const STAGE_HOLD_MS = 45_000;
 /** A parser's answer for one line. */
 export type Parsed =
   | { kind: 'control'; value: Record<string, unknown> }

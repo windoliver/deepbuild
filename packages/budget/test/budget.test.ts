@@ -67,7 +67,7 @@ const wrap = (store: RecordStore): RecordStore => ({
 });
 const approve = (cap: number): Promise<string> => ledger.approve(card, { scope: { kind: 'issue', ref: ISSUE }, cap_usd: cap, ends: T0 + 30 * DAY });
 const askOf = (o: Outcome): string => (o as { ask: string }).ask;
-const yes = (ask: string): Promise<void> => asks.answer(card, ask, { option: 'approve', token: `click-${ask}` });
+const yes = async (ask: string): Promise<void> => asks.answer(card, ask, { option: 'approve', plan_hash: (await asks.card(ask)).plan!.hash, token: `click-${ask}` });
 const finished = async (r: RunRequest, outcome: string): Promise<void> => {
   await record.append(core, {
     v: 1, id: runId().slice(4), kind: 'run.finished', subject: r.run, ts: T0,
