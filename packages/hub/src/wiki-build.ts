@@ -12,11 +12,13 @@ import { basename, join, relative } from 'node:path';
 import { cwdOf } from '@deepbuild/archive';
 import type { Asks } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
+import { scrubText } from '@deepbuild/evidence';
 import { claimId, openReading } from '@deepbuild/reading';
-import { openRecordReader, ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
+import { openRecordReader, parseClaimLine, ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
 import type { Agent, Runner } from '@deepbuild/runner';
 import { openWiki, type Candidate, type Wiki } from '@deepbuild/wiki';
 import { writeJson } from './claude-settings.js';
+import { captureRejected } from './memory.js';
 import { repoOf, type Root } from './paths.js';
 
 export interface WikiBuildOptions {
@@ -55,6 +57,17 @@ const CHECK = /^curl\b.*\/(?:health|healthz|ready|status|ping)(?=[\s"'?]|$)|^(?:
 const CREDENTIAL = /^(?:[A-Z][A-Z0-9]*_)+(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|CREDENTIALS?|URL)$/;
 const ENV_FILE = /(?:^|[\s=])(\.env(?:\.[\w-]+)*)(?=$|[\s;&|)])/;
 const AGENTS = ['claude-code', 'codex'] as const;
+/** Where pi and Cursor keep their transcripts (#111); Claude Code's and Codex's come from their adapters' facts. A Cursor line names no folder, but its project folder's name does. */
+export const MEMORY_TRANSCRIPTS = [
+  { agent: 'pi', transcripts: { home: ['~/.pi/agent'], path: 'sessions/{folder}/{stamp}_{session}.jsonl' } },
+  { agent: 'cursor', transcripts: { home: ['~/.cursor'], path: 'projects/{folder}/agent-transcripts/{session}.jsonl' }, folderNames: -3 },
+];
+/** The memory and instruction files you keep for every repo, one per agent: Claude Code's, Codex's, pi's and Cursor's rules. */
+function userMemory(home: string): string[] {
+  const rules = join('.cursor', 'rules');
+  const cursor = existsSync(join(home, rules)) ? readdirSync(join(home, rules)).filter((n) => n.endsWith('.mdc') || n.endsWith('.md')).sort().map((n) => join(rules, n)) : [];
+  return [join('.claude', 'CLAUDE.md'), join('.codex', 'AGENTS.md'), join('.pi', 'agent', 'AGENTS.md'), ...cursor];
+}
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 const sqlText = (text: string): string => `'${text.replace(/'/g, "''")}'`;
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
@@ -109,7 +122,7 @@ interface Row { id: string; project: string | null; transcript: string; agent: s
 /** Two folders of one name, one of them gone, and the ask whose key names the pair. */
 interface Pair { gone: string; live: string; key: string }
 
-export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt> } {
+export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string> } {
   const { record, root, now } = o;
   const folder = root.wiki;
   /** The sessions a reading job still has, so a build run while one waits doesn't hand them to another. */
@@ -261,11 +274,14 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
     return row?.handle;
   }
 
+  /** A memory file's text scrubbed, and of a URL's password too: the scrub reads one only under a secret-looking user name. */
+  const scrubMemory = (text: string): string => scrubText(text).replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s/@]+@/gi, '$1[REDACTED]@');
   /** A memory file's lines as claims on a page: the ones the page doesn't hold yet, each cited at the file's kept bytes. */
   async function remember(wiki: Wiki, path: string, page: string, scope: string, linesOf: (text: string) => string[], project?: string): Promise<void> {
-    const bytes = readFileSync(path);
+    const raw = readFileSync(path, 'utf8');
+    const bytes = Buffer.from(scrubMemory(raw));
     const missing: { text: string; id: string }[] = [];
-    for (const text of new Set(linesOf(bytes.toString('utf8')).filter((t) => t.length <= 300))) {
+    for (const text of new Set(linesOf(raw).filter((t) => t.length <= 300 && scrubMemory(t) === t))) {
       const id = claimId(text);
       if (!((await record.raw(`SELECT 1 FROM wiki_claims WHERE handle = ${sqlText(`wiki:${page}#${id}`)}`)) as unknown[]).length) missing.push({ text, id });
     }
@@ -277,14 +293,40 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
   /** A memory file's body, past its front matter: each line that says something. */
   const body = (text: string): string[] => text.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n').map((l) => l.replace(/^\s*[-*]\s+/, '').trim()).filter((l) => l && !l.startsWith('#'));
   /**
-   * The memory files you keep for agents: the user-level CLAUDE.md and AGENTS.md as the rules, and Claude Code's memory for
-   * each project (its `memory/` folder, `MEMORY.md` too) as that repo's lines. A repo's own CLAUDE.md and AGENTS.md are not
-   * here: what a repo file says is read from the file, so it is cited by the claims that state it (`citeRepoFiles`).
+   * The memory files you keep for agents: each agent's user-level file as the rules, a rule the files repeat word for word
+   * being one claim with each file as a source, and Claude Code's memory for each project (its `memory/` folder, `MEMORY.md`
+   * too) as that repo's lines. A repo's own CLAUDE.md and AGENTS.md are not here: what a repo file says is read from the
+   * file, so it is cited by the claims that state it (`citeRepoFiles`). A line holding a credential is never read.
    */
   async function rules(wiki: Wiki, projects: Map<string, string>): Promise<void> {
-    for (const path of [join(homedir(), '.claude', 'CLAUDE.md'), join(homedir(), '.codex', 'AGENTS.md')]) {
-      if (existsSync(path)) await remember(wiki, path, 'rules', 'all', bullets);
+    const holders = new Map<string, { file: string; at: string; bytes: Buffer }[]>();
+    for (const rel of userMemory(homedir())) {
+      const path = join(homedir(), rel);
+      if (!existsSync(path)) continue;
+      const raw = readFileSync(path, 'utf8');
+      const clean = scrubMemory(raw);
+      const held = { file: `~/${rel}`, at: `ev:${sha256(clean)}`, bytes: Buffer.from(clean) };
+      for (const text of new Set(bullets(raw.replace(/^---\n[\s\S]*?\n---\n/, '')))) {
+        if (text.length <= 300 && scrubMemory(text) === text) holders.set(text, [...(holders.get(text) ?? []), held]);
+      }
     }
+    const shared: Candidate[] = [];
+    const keep = new Map<string, Buffer>();
+    for (const [text, files] of holders) {
+      const id = claimId(text);
+      const handle = `wiki:rules#${id}`;
+      const [row] = (await record.raw(`SELECT c.state AS state, l.diff AS diff FROM wiki_claims c JOIN learned_layer l ON l.handle = c.change WHERE c.handle = ${sqlText(handle)}`)) as { state: string; diff: string }[];
+      if (row && row.state !== 'in force') continue;
+      const line = row ? parseClaimLine(row.diff.slice(2)) : undefined;
+      const had = (Array.isArray(line?.record.sources) ? line.record.sources : []) as { at?: string; file?: string }[];
+      if (had.length === files.length && files.every((f) => had.some((s) => s.at === f.at && s.file === f.file))) continue;
+      for (const f of files) keep.set(f.at, f.bytes);
+      shared.push({ page: 'rules', id, text, sources: files.map((f) => ({ at: f.at, quote: text, file: f.file })), scope: 'all', ...(row ? { supersedes: handle } : {}) });
+    }
+    for (const [at, bytes] of keep) {
+      if (await record.keep(o.core, { bytes: new Uint8Array(bytes), kind: 'user.memory', source: at }) !== at) throw Error(`the evidence store kept a memory file under another hash than ${at}`);
+    }
+    if (shared.length) await wiki.learn(shared);
     for (const [project, cwd] of projects) {
       const dir = join(homedir(), '.claude', 'projects', cwd.replace(/[^0-9A-Za-z]/g, '-'), 'memory');
       for (const name of existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.md')).sort() : []) {
@@ -414,13 +456,14 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
       const homes = new Map<Agent, string[]>();
       for (const r of rows) {
         if (!r.project) continue;
-        const agent: Agent = r.agent === 'codex' ? 'codex' : 'claude-code';
+        const agent = r.agent === 'codex' || r.agent === 'pi' || r.agent === 'cursor' ? r.agent : 'claude-code';
         const key = `${agent}\n${r.project}`;
         if (folders.has(key)) continue;
         const cwd = cwdOf(Buffer.from(await o.store.read(r.transcript.replace(/^ev:/, ''))).toString('utf8'));
         if (!cwd) continue;
         folders.set(key, cwd);
-        homes.set(agent, [...(homes.get(agent) ?? []), cwd].sort());
+        // Only the agents DeepBuild can run for its own reading have accounts to choose.
+        if (agent === 'codex' || agent === 'claude-code') homes.set(agent, [...(homes.get(agent) ?? []), cwd].sort());
       }
       const readingAgent = choose(homes);
       // A gone folder you said is the live repo's: its sessions count as the live repo's, and what it holds moves there.
@@ -437,6 +480,7 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
         if (from < messages.length && !reading.has(s.id)) unread.push({ session: s.id, project: s.project, messages, from });
       }
       await rules(wiki, projects);
+      await captureRejected(record, o.cli, now, unread);
       // Pattern matching, claims that contradict an earlier one after the rest, so the older is on its page to be replaced.
       const found = [...patterns(unread), ...setup(unread)];
       citeRepoFiles(found, new Map([...projects].map(([project, cwd]) => [`repos/${project.toLowerCase()}`, cwd])), new Map());
@@ -512,5 +556,15 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
       reader.close();
     }
   }
-  return { build: () => (building ??= run().finally(() => { building = undefined; })) };
+  return {
+    build: () => (building ??= run().finally(() => { building = undefined; })),
+    /** Your removal of a claim (#111), once any build has finished: the pages and their index and log follow. */
+    async forget(claim) {
+      await building?.catch(() => undefined);
+      const before = pagesOf();
+      const decision = await (await openWiki({ record, folder, now, pages: STANDING })).forget(o.cli, claim);
+      bookkeeping(changedSince(before));
+      return decision;
+    },
+  };
 }
