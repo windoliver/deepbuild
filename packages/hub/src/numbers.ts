@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { CLASSIFIED, checkClassifier, decisionOneInputs, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
+import { isStatusQuestion } from './verdict-chat.js';
 
 const HOUR = 3_600_000;
 /** How long each outside source stays fresh; the record is read as it lands, so it never goes stale. */
@@ -54,6 +55,8 @@ export class Numbers {
     if (!rows.length) return;
     const fresh = rows.map((r): RecordEvent => {
       const data = JSON.parse(r.data) as Record<string, unknown>;
+      // The hub answers a status question from the record, so no model turn follows it.
+      if (r.kind === 'user.ask' && typeof data.text === 'string' && isStatusQuestion(data.text)) data.no_model = true;
       const run = typeof data.run === 'string' ? data.run : undefined;
       if (r.kind === 'claim.made' && r.session_id) this.claims.set(`claim:${r.id}`, r.session_id);
       if (r.kind === 'run.started' && run) { const s = this.claims.get(String(data.claim)); if (s) this.runs.set(run, s); }

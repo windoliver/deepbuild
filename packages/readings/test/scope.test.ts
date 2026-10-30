@@ -88,6 +88,22 @@ describe('spend from the record', () => {
     expect(find(events, 'spend.usd', 'task:x')?.complete).toBe(false);
   });
 
+  it('a subagent\'s stop neither ends a turn nor starts your review wait; an ask no model read opens no turn', () => {
+    const paid = { basis: 'reported', usd: 0.5 };
+    const events = [person(0, 1), ev('agent.stop', 10, 'A', {}), person(20, 2), ev('agent.stop', 60, 'A', {}), usage(61, 't', 1, paid), ev('agent.stop', 70, 'A', {}), person(100, 3), usage(150, 't2', 1, paid)];
+    expect(find(events, 'tokens.session')?.complete).toBe(true);
+    expect(find(events, 'review.wait')?.value).toBe(39);
+    const status = [person(0, 1), usage(1, 't', 1, paid), ev('user.ask', 2, 'A', { msg: 2, text: 'all done?', tasks: [], from: 'person', no_model: true }), start(3, false)];
+    expect(find(status, 'tokens.session')?.complete).toBe(true);
+  });
+
+  it('a stale run\'s delay counts from its claim\'s last stop', () => {
+    const asked = ev('user.ask', 150_000, 'A', { msg: 1, text: 'go', tasks: [], from: 'person' });
+    const held = (ts: number) => ev('stop.held', ts, 'A', { stop: `s${ts}`, claim: 'claim:c', total: 0 });
+    const events = [held(10_000), held(130_000), asked, ev('run.stale', 200_000, 'A', { run: 'run:r', check: 'j', claim: 'claim:c', newer_claim: 'claim:n' })];
+    expect(staleRuns(events).sessions[0]).toMatchObject({ within_30s: 1, runs: [{ after_ms: 20_000 }] });
+  });
+
   it('an unpriced part leaves its turn unpriced, whichever came first', () => {
     const events = [usage(1, 't1', 1, { basis: 'unpriced' }), usage(2, 't1', 1, { basis: 'reported', usd: 0.5 })];
     expect(find(events, 'cost.turn')?.value).toBeNull();
