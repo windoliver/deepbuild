@@ -97,6 +97,20 @@ impl State {
     }
 }
 
+/// How long until `deadline` from `now`, as a card or a notification says when a default applies: whole days once a
+/// day or more is left ("3 d"), else [`span`]. Read to the nearest minute first, so a deadline a second short of
+/// three days away still reads "3 d".
+pub fn span_until(deadline: u64, now: u64) -> String {
+    const MINUTE: u64 = 60_000;
+    const DAY: u64 = 86_400_000;
+    let left = (deadline.saturating_sub(now) + MINUTE / 2) / MINUTE * MINUTE;
+    if left >= DAY {
+        format!("{} d", left / DAY)
+    } else {
+        span(left)
+    }
+}
+
 /// A span of time as a person reads it: "4 min", "2 h", "12 s".
 pub fn span(ms: u64) -> String {
     match ms / 1000 {
@@ -132,7 +146,8 @@ pub fn mark(state: &State, now: u64) -> String {
     format!("{} {}", glyph(state.entry()), state.text(now))
 }
 
-const CLOSING: [&str; 6] = [
+const CLOSING: [&str; 7] = [
+    "decision.applied",
     "ask.answered",
     "ask.defaulted",
     "ask.escalated",
@@ -146,9 +161,19 @@ pub fn handle(ask: &Value) -> String {
     format!("ask:{}", ask["id"].as_str().unwrap_or_default())
 }
 
-/// Whether an event closed the ask `handle`.
+/// Whether an event closed the ask `handle`, as the core reads it: a decision applied names its ask in its data,
+/// and no agent closes an ask.
 pub fn closes(event: &Value, handle: &str) -> bool {
-    CLOSING.contains(&event["kind"].as_str().unwrap_or_default()) && event["subject"] == handle
+    let writer = event["writer"].as_str().unwrap_or_default();
+    let ask = if event["kind"] == "decision.applied" {
+        &event["data"]["ask"]
+    } else {
+        &event["subject"]
+    };
+    CLOSING.contains(&event["kind"].as_str().unwrap_or_default())
+        && ask == handle
+        && writer != "hook"
+        && !writer.starts_with("mcp:")
 }
 
 /// The open asks, oldest first; of one session when `session` names one. Events carry their session as the
@@ -158,8 +183,42 @@ pub fn open_asks<'a>(events: &'a [Value], session: Option<&str>) -> Vec<&'a Valu
         .iter()
         .filter(|event| event["kind"] == "ask.created")
         .filter(|ask| session.is_none_or(|session| ask["session"] == session))
-        .filter(|ask| !events.iter().any(|event| closes(event, &handle(ask))))
+        .filter(|ask| reading(events, &handle(ask)).0)
         .collect()
+}
+
+/// Whether the ask `handle` is open, as the core reads the record.
+pub fn is_open(events: &[Value], handle: &str) -> bool {
+    reading(events, handle).0
+}
+
+/// When the ask's default applies: the deadline the core's undo of its default gave it, else its own.
+pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
+    reading(events, &handle(ask))
+        .1
+        .or_else(|| ask["data"]["deadline"].as_u64())
+}
+
+/// Whether the ask `handle` is open and the deadline an undo gave it, as the core reads the record in order: the
+/// first close decides, and only the core's undo of a default opens it again.
+fn reading(events: &[Value], handle: &str) -> (bool, Option<u64>) {
+    let mut closed: Option<&str> = None;
+    let mut deadline = None;
+    for event in events {
+        if closed.is_none() && closes(event, handle) {
+            closed = event["kind"].as_str();
+        } else if closed == Some("ask.defaulted")
+            && event["kind"] == "default.undone"
+            && event["writer"] == "core"
+            && event["subject"] == handle
+        {
+            if let Some(again) = event["data"]["deadline"].as_u64() {
+                closed = None;
+                deadline = Some(again);
+            }
+        }
+    }
+    (closed.is_none(), deadline)
 }
 
 /// The sessions in the record, in the order they first appear.
@@ -317,4 +376,77 @@ pub fn menu(events: &[Value], now: u64) -> Vec<String> {
             )
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn ask(id: &str) -> Value {
+        json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn a_decision_the_core_applied_closes_the_ask_it_names() {
+        let events = vec![
+            ask("a1"),
+            ask("a2"),
+            json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a1",
+                   "data": {"decision": "d1", "ask": "ask:a2"}}),
+        ];
+        let open: Vec<&str> = open_asks(&events, None)
+            .iter()
+            .map(|ask| ask["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(open, ["a1"]);
+    }
+
+    #[test]
+    fn the_cores_undo_of_a_default_opens_the_ask_again_with_its_new_deadline() {
+        let undo = |id: &str, writer: &str| json!({"kind": "default.undone", "writer": writer, "subject": format!("ask:{id}"), "data": {"deadline": 9}});
+        let events = vec![
+            ask("a1"),
+            ask("a2"),
+            ask("a3"),
+            ask("a4"),
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a1", "data": {}}),
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a2", "data": {}}),
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a3", "data": {}}),
+            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a4", "data": {}}),
+            // A close after the first changes nothing: the core still undoes the default.
+            json!({"kind": "ask.cancelled", "writer": "core", "subject": "ask:a1", "data": {}}),
+            undo("a1", "core"),
+            undo("a2", "mcp:agent"),
+            undo("a3", "core"),
+            undo("a4", "core"),
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a4", "data": {}}),
+        ];
+        let open: Vec<&str> = open_asks(&events, None)
+            .iter()
+            .map(|ask| ask["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(open, ["a1"]);
+        assert_eq!(deadline(&events, &events[0]), Some(9));
+        let mut own = ask("a5");
+        own["data"]["deadline"] = json!(5);
+        assert_eq!(deadline(&[own.clone()], &own), Some(5));
+    }
+
+    #[test]
+    fn no_agent_closes_an_ask() {
+        let events = vec![
+            ask("a1"),
+            ask("a2"),
+            ask("a3"),
+            json!({"kind": "ask.answered", "writer": "hook", "subject": "ask:a1", "data": {}}),
+            json!({"kind": "ask.cancelled", "writer": "mcp:agent", "subject": "ask:a2", "data": {}}),
+            json!({"kind": "ask.cancelled", "writer": "core", "subject": "ask:a3", "data": {}}),
+        ];
+        let open: Vec<&str> = open_asks(&events, None)
+            .iter()
+            .map(|ask| ask["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(open, ["a1", "a2"]);
+    }
 }
