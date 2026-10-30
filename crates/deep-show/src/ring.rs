@@ -170,6 +170,8 @@ struct Bound {
 struct PanelDef {
     plugin: String,
     bound: Vec<Bound>,
+    /// The terminals whose cell grids the panel shows (#402).
+    terminals: Vec<String>,
     on_read_failed: Vec<Op>,
     raw_input: bool,
 }
@@ -291,6 +293,13 @@ impl Ring {
             Some((f, d)) => d.raw_input.then_some(f),
             None => (!self.owns(named)).then_some(named),
         }
+    }
+
+    /// Whether a plug-in's panel shows `terminal`'s cell grid (#402).
+    pub fn terminal_panel(&self, panel: &str, terminal: &str) -> bool {
+        self.panels
+            .get(panel)
+            .is_some_and(|d| d.terminals.iter().any(|t| t == terminal))
     }
 
     /// Whether a plug-in's install claimed the panel.
@@ -854,6 +863,7 @@ impl Hub<'_> {
         fresh_for: &BTreeMap<String, i64>,
     ) -> Option<PanelDef> {
         let mut found: Vec<(String, &Value)> = Vec::new();
+        let mut terminals = Vec::new();
         for e in p.get("tree")?.as_array()? {
             let eid = e.get("id")?.as_str()?;
             match e.get("component")?.as_str()? {
@@ -865,6 +875,8 @@ impl Hub<'_> {
                     }
                 }
                 "chart" => found.push((format!("{eid}/label"), e.get("label")?.get("bind")?)),
+                // #402: the panel shows a terminal's cell grid.
+                "cells" => terminals.push(e.get("terminal")?.as_str()?.to_string()),
                 _ => return None,
             }
         }
@@ -899,6 +911,7 @@ impl Hub<'_> {
         Some(PanelDef {
             plugin: plugin.to_string(),
             bound,
+            terminals,
             on_read_failed: ops(p.get("script").and_then(|s| s.get("on_read_failed")))?,
             raw_input: p.get("raw_input").and_then(Value::as_bool).unwrap_or(false),
         })

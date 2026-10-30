@@ -110,6 +110,8 @@ deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-graph = { path = "../deep-canvas-graph" }
 deep-canvas-record = { path = "../deep-canvas-record" }
 deep-canvas-sheet = { path = "../deep-canvas-sheet" }
+# Issue #402: the cells canvas module, in the r2 build set and up, and its terminal emulator.
+deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
@@ -118,6 +120,9 @@ deep-gpu = { path = "../deep-gpu" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
 deep-text = { path = "../deep-text" }
+# Issue #402: a terminal's PTY (openpty, login_tty, the window size) and stopping what serve
+# started, by PID; already in the lockfile.
+libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"

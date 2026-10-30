@@ -66,6 +66,10 @@
     },
     "crates/deep-app/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row in the spike feeding a busy terminal's changes to it."
+        },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #337: the toolkit under trial, pinned to one commit since gpui-kit is unpublished at this milestone."
@@ -353,6 +357,10 @@
         "@deepbuild/reading": {
           "spec": "0.0.0",
           "why": "Issue #356: setup's wiki build hands the free text pattern matching left to your own agent, a slice at a time through handles, as the one reading the design names."
+        },
+        "@deepbuild/readings": {
+          "spec": "0.0.0",
+          "why": "Issue #45: the hub serves the Numbers, folded from the record by the readings package, through numbers.read, deep numbers and deep_search."
         },
         "@deepbuild/resolver-decisions": {
           "spec": "0.0.0",
@@ -734,8 +742,28 @@
         }
       }
     },
+    "crates/deep-canvas-cells/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #402: the registry and seal the cells module registers through, the scheduler's typed views it reads a grid's item through, and the OKLab conversion and ops module the palette rule's status distance goes through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #402: a grid's params as the document holds them, and the module's fixture. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-show/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cells canvas module in the r2 build set and up, and the terminal emulator its panel host feeds a program's output through."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #402: a terminal's PTY (openpty, login_tty and its window size) for deep-show serve, and stopping by PID the hosts and programs it started; already in the lockfile."
+        },
         "deep-canvas-graph": {
           "spec": "* path=../deep-canvas-graph",
           "why": "Issue #388: the graph canvas module, in the r1 build set and up."
@@ -1204,6 +1232,18 @@
     }
   },
   "allowedFindings": [
+    {
+      "path": "tests/acceptance/45-redraft/billing.test.ts",
+      "kind": "API key",
+      "sha256": "6680e30ade307323f061e820b9912a7ad632bfaa2c868bcdab8ba9408da87fe4",
+      "why": "Issue #45: the blind redraft's made-up key, which the billing test hands a hook to prove the key's value never reaches the record; no real credential."
+    },
+    {
+      "path": "tests/acceptance/402/cellgrid.test.ts",
+      "kind": "home path",
+      "sha256": "73de225f29dce8dcabd664cb3c25892f80840f279de7a9135a504bdecf37ea2c",
+      "why": "Issue #402: a placeholder cwd (user me) the cell grid's SCOPE test feeds a terminal through OSC 7 and reads back; no real home."
+    },
     {
       "path": "tests/acceptance/79/checks.test.mjs",
       "kind": "home path",
