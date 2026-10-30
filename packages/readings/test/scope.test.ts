@@ -2,7 +2,7 @@
 // approval wait, and pricing by exact model.
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { billingMode, countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, staleRuns, type RecordEvent } from '../src/index.js';
+import { billingMode, countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, searchReadings, staleRuns, type RecordEvent } from '../src/index.js';
 
 const MIN = 60_000;
 let n = 0;
@@ -96,6 +96,13 @@ describe('spend from the record', () => {
     expect(find(events, 'review.wait')?.value).toBe(39);
     const status = [person(0, 1), usage(1, 't', 1, paid), ev('user.ask', 2, 'A', { msg: 2, text: 'all done?', tasks: [], from: 'person', no_model: true }), start(3, false)];
     expect(find(status, 'tokens.session')?.complete).toBe(true);
+  });
+
+  it('search finds a recorded reading by what it measures', () => {
+    const recorded = ev('reading.recorded', 1, null, { reading: 'reading:ownerrepofirstpass', value: 0.5, unit: 'share', as_of: 1, source: 'github' });
+    const readings = readingsOf(recompute([recorded]));
+    expect(searchReadings(readings, 'first pass')).toHaveLength(1);
+    expect(searchReadings(readings, 'first review')).toHaveLength(0);
   });
 
   it('another agent\'s key in the shell doesn\'t bill this session', () => {

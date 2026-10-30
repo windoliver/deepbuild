@@ -1,12 +1,17 @@
 // The hub writes a session's spend off a stop's hook (#45), whether or not the stop names its prompt, and a subagent's stop
 // doesn't count it again.
-import { spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
+import { call } from '../src/client.js';
+import { Forge } from '../src/forge.js';
 import { search } from '../src/search.js';
-import { ulid } from '../src/wire.js';
+import { startOf, ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
 
 const procs: ChildProcess[] = [];
@@ -49,6 +54,57 @@ describe('deep_search', () => {
     const { hits } = await search({ query: 'firstpass', index: { search: async () => [] } as never, raw: async () => [], worktree: undefined, session: undefined, covers: () => true, readings: async () => [{ reading, source: 'github', as_of: 1, status: 'STALE' }] });
     expect(hits).toMatchObject([{ status: 'STALE', quote: 'STALE reading:firstpass: 3 count' }]);
   });
+});
+
+describe('the forge\'s merged pull requests', () => {
+  const pr = (number: number) => ({ number, merged_at: '2026-10-01T00:00:00Z', created_at: '2026-09-30T00:00:00Z', body: '' });
+  const serving = async (answer: (url: string, res: ServerResponse) => void) => {
+    const server = createServer((req, res) => answer(req.url ?? '', res));
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    return { server, api: `http://127.0.0.1:${(server.address() as AddressInfo).port}` };
+  };
+  it('keeps what it read when the budget runs out, and reads no answer as unread', async () => {
+    const { server, api } = await serving((url, res) => {
+      if (url.includes('/pulls/2/')) return; // never answers
+      res.end(JSON.stringify(url.includes('/reviews') ? [] : [pr(1), pr(2)]));
+    });
+    try {
+      expect((await new Forge(api, undefined, 1000).merged('o', 'r'))?.map((p) => p.number)).toEqual([1]);
+      expect(await new Forge(api, undefined, 0).merged('o', 'r')).toBeUndefined();
+    } finally { server.closeAllConnections(); server.close(); }
+  }, 30_000);
+  it('a forge error partway reads unread, never a short count', async () => {
+    const { server, api } = await serving((url, res) => {
+      if (url.includes('/pulls/2/')) { res.statusCode = 500; res.end('{}'); return; }
+      res.end(JSON.stringify(url.includes('/reviews') ? [] : [pr(1), pr(2)]));
+    });
+    try { expect(await new Forge(api, undefined, 30_000).merged('o', 'r')).toBeUndefined(); } finally { server.close(); }
+  }, 30_000);
+});
+
+describe('deep numbers from an agent\'s process tree', () => {
+  it('refuses what feeds your numbers, and still reads them', async () => {
+    await withHub(async (root, home) => {
+      const hook = (event: string, extra: Record<string, unknown> = {}) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, { session_id: SESSION, cwd: home, transcript_path: join(home, '.claude', 'projects', 'tmp', `${SESSION}.jsonl`), hook_event_name: event, ...extra }, { ppid: process.ppid }));
+      await hook('SessionStart', { source: 'startup' });
+      // This process stands for a deep command the agent, its parent, ran.
+      const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+      const token = readFileSync(join(root, 'control.token'), 'utf8').trim();
+      // The hub acknowledges a hook before it holds the session.
+      let refused = await call(join(root, 'hub.sock'), token, 'numbers.refresh', {}, peer);
+      for (let i = 0; i < 50 && 'result' in refused; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        refused = await call(join(root, 'hub.sock'), token, 'numbers.refresh', {}, peer);
+      }
+      expect('error' in refused && refused.error.remediation).toMatch(/no agent feeds its own numbers/);
+      expect('result' in await call(join(root, 'hub.sock'), token, 'numbers.read', {}, peer)).toBe(true);
+      // The command itself, a child of this process, names itself to the hub.
+      const cli = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
+      const ran = spawnSync(process.execPath, [cli, 'numbers', 'refresh'], { env: { ...process.env, HOME: home }, cwd: home, encoding: 'utf8' });
+      expect(ran.stderr).toMatch(/no agent feeds its own numbers/);
+      expect(ran.status).toBe(3);
+    });
+  }, 60_000);
 });
 
 describe('Codex\'s usage', () => {

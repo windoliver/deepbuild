@@ -10,6 +10,7 @@ import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime } from './promises.js';
+import { startOf } from './wire.js';
 
 type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
@@ -190,7 +191,8 @@ export async function numbersCommand(args: readonly string[]): Promise<number> {
   try {
     const socket = hubAddress().path;
     const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
-    const reply = await call(socket, token ? readFileSync(token, 'utf8').trim() : '', asks[0], asks[1]);
+    // Named so the hub can refuse an agent's process tree what feeds your numbers.
+    const reply = await call(socket, token ? readFileSync(token, 'utf8').trim() : '', asks[0], asks[1], { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
     if (!('result' in reply)) {
       process.stderr.write(`deep numbers: ${reply.error.remediation}\n`);
       return 3;
