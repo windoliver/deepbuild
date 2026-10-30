@@ -1,0 +1,38 @@
+{
+  "title": "extension.contract@1",
+  "description": "What a manifest declares about the contract it was built against (#139), beside extension.manifest@1, whose frozen shape doesn't list it: whether the package declares itself stable, the preview entries it uses by name, and the JSON-RPC methods it calls. A package that never says is preview, so it can't call a preview entry without listing it, and a package that lists one can't declare itself stable.",
+  "x-since": "R2",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "stability": {
+      "type": "string",
+      "enum": ["stable", "preview"],
+      "description": "stable: the package calls stable entries only. A package that doesn't say is preview.",
+      "x-closure": {
+        "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+        "reopens": "a new major of this schema",
+        "mark": "exhaustive"
+      }
+    },
+    "requires": {
+      "type": "object",
+      "properties": {
+        "preview": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_.@-]*$", "maxLength": 8192, "description": "A preview entry the package uses, by name: an extension API method or a kind." }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "calls": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_.]*$", "maxLength": 8192, "description": "A JSON-RPC method the package calls on the hub; one deprecated is named at install and by deep doctor." }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

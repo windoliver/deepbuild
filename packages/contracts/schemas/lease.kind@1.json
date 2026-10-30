@@ -1,6 +1,8 @@
 {
   "title": "lease.kind@1",
   "description": "A resource kind the lease table grants (technical-design.md, Lease). The core declares its own; any plug-in declares more in its manifest, and a name belongs to the first that declares it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "name": {

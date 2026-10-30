@@ -1,6 +1,8 @@
 {
   "title": "error@1",
   "description": "The one shape every refusal shares.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "code": {

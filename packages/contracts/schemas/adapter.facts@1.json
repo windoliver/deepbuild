@@ -1,6 +1,8 @@
 {
   "title": "adapter.facts@1",
   "description": "An agent's facts as data: the versions it covers, and per section what the core reads, each naming the core rule that reads it and its conformance case. No core rule branches on the agent's name; a new agent fills a file.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "schema": {

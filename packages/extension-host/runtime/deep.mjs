@@ -93,7 +93,8 @@ export function extensionSide(call, load) {
   }
   return {
     async serve(method, params) {
-      if (method === 'load') return void (await load(deep, params));
+      // What the package's code returned at its load, as JSON: a release's fixture package returns its calls' results (#139).
+      if (method === 'load') return (await load(deep, params)) ?? null;
       if (method === 'run') {
         const runner = checks.get(params?.type);
         if (!runner) throw Error(`no check kind ${params?.type} is registered here`);

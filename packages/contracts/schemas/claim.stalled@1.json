@@ -1,6 +1,8 @@
 {
   "title": "claim.stalled@1",
   "description": "A claim stalled.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

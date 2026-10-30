@@ -1,6 +1,8 @@
 {
   "title": "ask.superseded@1",
   "description": "An ask was superseded: a newer ask from the same session on the same subject replaced it, so it leaves Needs you with the outcome superseded. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

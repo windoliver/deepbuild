@@ -50,6 +50,8 @@ const DOCS = {
   'deep.send': 'Anything that leaves your machine for a person: an ask, or a standing rule.',
   'deep.provide': 'An output other pieces may use, by its interface name@major: readings, actions, notice kinds, views or checks.',
   'deep.use': 'An output interface another piece provides, resolved by type to an installed provider, the one `from` names first; typed and pinned to a version.',
+  'deep.read': 'Reads an output interface the package uses, through the provider the hub wired the use to: its value, or missing when none provides it.',
+  'deep.fetch': 'An outside call the hub makes for the package, only to a host its grant names and within that host\'s quota.',
   'deep.registerAction': 'What panels, your words and agents\' MCP tools can do to the plug-in\'s data. It declares read, change or send, and a change or send returns its report.',
 };
 
