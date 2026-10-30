@@ -68,7 +68,10 @@ class Matcher {
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
         const text = buffer.slice(0, i);
         buffer = buffer.slice(i + 1);
-        try { this.waiting.shift()?.(JSON.parse(text) as Ruling); } catch { this.stop(child); return; }
+        let ruling: Ruling | undefined;
+        try { ruling = JSON.parse(text) as Ruling; } catch { /* not an answer */ }
+        if (!Array.isArray(ruling?.matched) || !Array.isArray(ruling.denials)) { this.stop(child); return; }
+        this.waiting.shift()?.(ruling);
       }
     });
     child.unref();
@@ -231,7 +234,7 @@ export default function deepbuild(pi: Pi): void {
   const delivered = new Set<string>();
   let matcher: Matcher | undefined;
   /** A call read against your rules: 'no setup' in a home with no rules to read it against, 'unread' when there are and nothing could. */
-  async function read(call: Obj): Promise<Ruling | 'unread' | 'no setup'> {
+  async function read(call: Obj): Promise<Ruling | 'unread' | 'unparsed' | 'no setup'> {
     const binary = hookBinary();
     if (!binary) return existsSync(join(process.env.HOME ?? homedir(), '.deepbuild', 'rules.json')) ? 'unread' : 'no setup';
     let build: number;
@@ -239,7 +242,7 @@ export default function deepbuild(pi: Pi): void {
     if (binary !== matcher?.binary || build !== matcher.build) { matcher?.stop(); matcher = new Matcher(binary, build); }
     // Once more on a fresh process: one that died between calls is no reason to hold this one.
     const ruling = await matcher.ask(call) ?? await matcher.ask(call);
-    return !ruling || ruling.unread ? 'unread' : ruling;
+    return !ruling ? 'unread' : ruling.unread ? 'unparsed' : ruling;
   }
 
   /** In the order pi fired them: each goes once the one before is acknowledged, so the handler that sent it doesn't wait. */
@@ -442,9 +445,14 @@ export default function deepbuild(pi: Pi): void {
     const reply = await hook('tool_call', {
       ...call, tool_use_id: String(event.toolCallId),
       ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}),
-    }, ruling === 'unread' || ruling === 'no setup' ? undefined : ruling);
-    // A call nothing read against your rules never passes for one that matched nothing, whatever the hub says.
-    if (ruling === 'unread') return { block: true, reason: 'DeepBuild blocked this: deep-hook couldn\'t read this call against your guards. Run `deep setup` if this repeats, then retry.' };
+    }, typeof ruling === 'string' ? undefined : ruling);
+    // A call deep-hook didn't read never passes for one that matched nothing, whatever the hub says. pi fires no result
+    // for a call it blocks here, so this one's end is said, or the hub keeps it as running.
+    if (ruling === 'unread' || ruling === 'unparsed') {
+      const reason = ruling === 'unread' ? 'DeepBuild blocked this: deep-hook didn\'t answer, so this call wasn\'t read against your guards. Retry; if it repeats, run `deep setup`.' : 'DeepBuild blocked this: deep-hook can\'t parse this call, so it wasn\'t read against your guards. Send it again without what can\'t be encoded.';
+      void hook('tool_result', { ...call, tool_use_id: String(event.toolCallId), outcome: 'failed', error: reason });
+      return { block: true, reason };
+    }
     if (ruling === 'no setup') return undefined;
     if (reply) return reply.exit !== 0 ? { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' } : undefined;
     // The hub didn't answer: a fail-closed entry still holds the call, as deep-hook holds Claude Code's.

@@ -325,16 +325,60 @@ const READ_TOOLS: &[&str] = &[
     "Grep",
 ];
 
-/// A path as pi's file tools open it (pi's `normalizePath`): without one leading `@`, its unicode spaces plain.
+/// A path as pi's file tools open it (pi's `normalizePath`): its unicode spaces plain, without one leading `@`, a bare
+/// `~` the home folder, and a `file://` URL the path it names.
 fn pi_path(path: &str) -> String {
-    path.strip_prefix('@')
-        .unwrap_or(path)
+    let spaced: String = path
         .chars()
         .map(|c| match c {
             '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
             c => c,
         })
-        .collect()
+        .collect();
+    let bare = spaced.strip_prefix('@').unwrap_or(&spaced);
+    if bare == "~" {
+        return "~/".to_string();
+    }
+    match bare.strip_prefix("file://") {
+        Some(url) => file_url_path(url),
+        None => bare.to_string(),
+    }
+}
+
+/// What Node's `fileURLToPath` makes of a `file://` URL's rest: the URL parser ends it at a `?` or `#`, drops tabs and
+/// newlines and what trails it, reads `\` as `/` and an empty or `localhost` host as none; then it is percent-decoded.
+fn file_url_path(url: &str) -> String {
+    let clean: String = url
+        .trim_end_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .map(|c| if c == '\\' { '/' } else { c })
+        .collect();
+    let path = clean.split(['?', '#']).next().unwrap_or("");
+    let path = match path.get(..9) {
+        Some(host) if host.eq_ignore_ascii_case("localhost") => &path[9..],
+        _ => path,
+    };
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = (bytes[i] == b'%')
+            .then(|| path.get(i + 1..i + 3))
+            .flatten()
+            .and_then(|h| u8::from_str_radix(h, 16).ok());
+        match hex {
+            Some(byte) => {
+                out.push(byte);
+                i += 3;
+            }
+            None => {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
@@ -1615,8 +1659,34 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::append;
+    use super::pi_path;
     use super::shell::glob;
     use std::fs;
+
+    #[test]
+    fn a_pi_path_is_the_file_pi_opens() {
+        for (given, opened) in [
+            ("@a/b", "a/b"),
+            ("@@a", "@a"),
+            ("a\u{00A0}b\u{3000}c", "a b c"),
+            ("~", "~/"),
+            ("@~", "~/"),
+            ("~/a", "~/a"),
+            ("file:///h/.d/t", "/h/.d/t"),
+            ("@file:///h/t", "/h/t"),
+            ("file://localhost/h/t", "/h/t"),
+            ("file://LOCALHOST/h/t", "/h/t"),
+            ("file:///h/%2Ed/t%20u", "/h/.d/t u"),
+            ("file:///h/t?x#y", "/h/t"),
+            ("file:///h/t#y?x", "/h/t"),
+            ("file:///h/\tt\n", "/h/t"),
+            ("file:///h\\t", "/h/t"),
+            ("file:///h/t%zz%2", "/h/t%zz%2"),
+            ("file:///h/é%C3%A9", "/h/éé"),
+        ] {
+            assert_eq!(pi_path(given), opened, "{given}");
+        }
+    }
 
     #[test]
     fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {
