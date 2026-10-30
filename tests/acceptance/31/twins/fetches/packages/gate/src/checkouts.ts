@@ -208,12 +208,13 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
 
   /** Clones the ignored folders named, and any of those names deeper down, into a checkout from the worktree: copy-on-write where the file system can, never linked. */
   const cloneIn = async (worktree: string, dir: string, folders: string[]): Promise<void> => {
+    const links = folders.length ? (await git(worktree, ['ls-files', '-o', '--exclude-standard', '-z'])).split('\0').filter((p) => p && folders.includes(basename(p)) && lstatSync(join(worktree, p)).isSymbolicLink()) : [];
     const deeper = folders.length ? (await git(worktree, ['ls-files', '-oi', '--exclude-standard', '--directory', '-z'])).split('\0').flatMap((p) => {
       const parts = p.split('/');
       const at = parts.findIndex((part) => folders.includes(part));
       return at < 0 ? [] : [parts.slice(0, at + 1).join('/')];
     }) : [];
-    for (const folder of new Set([...folders, ...deeper])) {
+    for (const folder of new Set([...folders, ...deeper, ...links])) {
       if (!inside(folder) || !existsSync(join(worktree, folder))) continue;
       // Git doesn't call a folder ignored once it tracks a file in it, though the rest of it still is.
       const linked = lstatSync(join(worktree, folder)).isSymbolicLink();
@@ -436,19 +437,22 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       }
     }
     for (const row of rows) if (row.carried) record(claim.checks.find((c) => c.check === row.check)!, row.head, 1);
+    // What a base run failed to prove, by name: the engine says only that it failed off its named assertions.
+    const whys: string[] = [];
     const judged = verdict({
       claim: claim.claim, agent: 'session:gate', repo: claim.worktree, task: claim.claim, commit, changes: [], waivers: [], now: o.now(), runs: records,
       requirements: claim.checks.map((c) => ({ req: c.check, depth: 'unit' as const, oracle: 'code' as const, on_base: c.on_base })),
       checks: claim.checks.map((c) => {
         const row = rows.find((x) => x.check === c.check)!;
         const proof = row.base && baseProof(row.base, c, o.plant);
+        if (proof?.why) whys.push(`${c.check} ${proof.why}`);
         const base: BaseResult | undefined = row.base ? {
-          outcome: row.base.outcome === 'passed' ? 'passed' : 'failed', on_assertion: row.base.on_assertion, failed_tests: row.base.failures.map((f) => f.test), ...(proof?.why ? { why: proof.why } : {}),
+          outcome: row.base.outcome === 'passed' ? 'passed' : 'failed', on_assertion: row.base.on_assertion, failed_tests: row.base.failures.map((f) => f.test),
         } : undefined;
         return { check: c.check, digest: digestOf(c), source: 'definition' as const, depth: 'unit' as const, proof: 'test_run' as const, covers: [c.check], inputs: c.spec.inputs, environment: {}, tools: {}, state: 'ended' as const, ...(base ? { base } : {}) };
       }),
     });
-    return { claim: claim.claim, snapshot: commit, verdict: judged.outcome, reasons: judged.outcome === 'PASS' ? [] : judged.reasons, smallest: judged.smallest, checks: claim.checks.map((c) => rows.find((x) => x.check === c.check)!) };
+    return { claim: claim.claim, snapshot: commit, verdict: judged.outcome, reasons: judged.outcome === 'PASS' ? [] : judged.outcome === 'INVALID' ? [...whys, ...judged.reasons] : judged.reasons, smallest: judged.smallest, checks: claim.checks.map((c) => rows.find((x) => x.check === c.check)!) };
   };
 
   const prune: Checkouts['prune'] = (cited) => serial(async () => {

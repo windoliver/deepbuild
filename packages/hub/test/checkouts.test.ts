@@ -63,6 +63,18 @@ describe('checkouts from where a session sits', () => {
     await s.close();
   }, 60_000);
 
+  it('a linked install deeper in the repo is cloned too', async () => {
+    const { repo, service, git } = world();
+    git('commit', '-qm', 'base');
+    const s = await service;
+    symlinkSync(join(repo, 'node_modules'), join(repo, 'pkg/node_modules'));
+    const { commit } = await s.snapshot(repo);
+    const c = await s.checkout({ worktree: repo, commit, dependencies: ['node_modules'], runs: ['r'] });
+    expect(lstatSync(join(c.dir, 'pkg/node_modules')).isDirectory(), 'a real folder, no link').toBe(true);
+    expect(existsSync(join(c.dir, 'pkg/node_modules/dep.js'))).toBe(true);
+    await s.close();
+  }, 60_000);
+
   it('in a folder git partly tracks, the base sees the tree\'s bytes, the ignored rest, and nothing else of the worktree\'s', async () => {
     const { repo, service, git } = world();
     writeFileSync(join(repo, 'node_modules/patched.js'), 'broken\n');

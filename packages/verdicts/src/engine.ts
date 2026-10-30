@@ -284,7 +284,7 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       const proves = 'a run of it on the merge base that fails on an assertion it names';
       if (!c.base) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves);
       else if (c.base.outcome === 'passed') row('INVALID', 'passes on the merge base, so it can\'t prove the fix', undefined, proves);
-      else if (!c.base.on_assertion) row('INVALID', c.base.why ?? 'failed on the merge base only off its named assertions, so it proves nothing', undefined, proves);
+      else if (!c.base.on_assertion) row('INVALID', 'failed on the merge base only off its named assertions, so it proves nothing', undefined, proves);
     }
     const causes = new Set<string>();
     for (const r of runs) {
