@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn a_newton_step_that_converges_on_the_bracket_end_is_kept() {
-        // Blender's subdivision curve at 3.3 s: Newton lands exactly on the end it just set.
+        // A subdivision curve at 3.3 s: Newton lands exactly on the end it just set.
         let b = Bezier::new(1.0 / 12.0, 2.0, 1.0, -1.0);
         let u = 1_622_880_000.0 / 8_467_200_000.0;
         let solved = b.solve(u);
