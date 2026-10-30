@@ -592,7 +592,10 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
                 .filter(|f| f["data"]["outcome"] != "passed")
                 .map(|f| {
                     // Where it points, else its first finding (the core's own runs say why there), else its name.
-                    let points_to = f["data"]["points_to"].as_str().map(str::to_owned);
+                    let points_to = f["data"]["points_to"]
+                        .as_str()
+                        .filter(|to| !to.is_empty())
+                        .map(str::to_owned);
                     let finding = f["data"]["findings"][0]
                         .as_str()
                         .map(|finding| format!("{check}: {finding}"));
@@ -1105,6 +1108,20 @@ mod tests {
                 .map(|(_, value)| value.as_str())
         };
         assert_eq!(get("look at"), Some("e2e: its stack never came up: db"));
+        // Where a run points wins over its findings; pointing at nothing ("") is pointing nowhere.
+        for (points_to, look) in [
+            (json!("src/db.rs:4"), "src/db.rs:4"),
+            (json!(""), "e2e: its stack never came up: db"),
+        ] {
+            stopped[2]["data"]["points_to"] = points_to;
+            let model = Model::read(&stopped, "ask:T", 0).unwrap();
+            let got = model
+                .fields
+                .iter()
+                .find(|(field, _)| field == "look at")
+                .map(|(_, value)| value.clone());
+            assert_eq!(got.as_deref(), Some(look));
+        }
 
         // Only a run still going: that is the thing to look at.
         let model = Model::read(&later[..2], "ask:T", 0).unwrap();
