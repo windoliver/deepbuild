@@ -82,6 +82,13 @@ function promptRequest(home, i) {
   const payload = { session_id: session, transcript_path: join(home, '.claude', 'projects', 'work', `${session}.jsonl`), cwd, hook_event_name: 'UserPromptSubmit', prompt };
   return { v: 1, agent: 'claude-code', event: 'UserPromptSubmit', seq: `${1_760_013_452_000_000_000n + BigInt(i)}`, id: `01K74FKZVK8Q2X5R7P${String(i).padStart(8, '0')}`, pid: process.pid, ppid: process.ppid, matched: [], payload };
 }
+/** A SessionStart request as deep-hook sends it after a compaction, which sends the open asks' requirement IDs again (#340). */
+function compactRequest(home, i) {
+  const session = '6f1c2b9e-1111-4222-8333-444455558888';
+  const cwd = join(home, 'work');
+  const payload = { session_id: session, transcript_path: join(home, '.claude', 'projects', 'work', `${session}.jsonl`), cwd, hook_event_name: 'SessionStart', source: i < 0 ? 'startup' : 'compact' };
+  return { v: 1, agent: 'claude-code', event: 'SessionStart', seq: `${1_760_013_453_000_000_000n + BigInt(i + 1)}`, id: `01K74FKZVK8Q2X5R7Q${String(i + 1).padStart(8, '0')}`, pid: process.pid, ppid: process.ppid, matched: [], payload };
+}
 const percentiles = (samples) => {
   samples.sort((a, b) => a - b);
   return { p50Ms: samples[Math.floor(samples.length * 0.5)], p95Ms: samples[Math.floor(samples.length * 0.95)] };
@@ -141,6 +148,17 @@ const modes = {
     for (let i = 0; i < 20; i++) await exchange(socket, promptRequest(home, 1000 + i));
     const samples = [];
     for (let i = 0; i < 1000; i++) samples.push(await exchange(socket, promptRequest(home, i)));
+    await stop(hub);
+    return percentiles(samples);
+  },
+  // A session's start, then 1,000 SessionStart requests after a compaction, one connection each, after 20 to warm up (#340).
+  async compact(home) {
+    const { hub, socket } = await start(home);
+    mkdirSync(join(home, 'work'));
+    await exchange(socket, compactRequest(home, -1));
+    for (let i = 0; i < 20; i++) await exchange(socket, compactRequest(home, 1000 + i));
+    const samples = [];
+    for (let i = 0; i < 1000; i++) samples.push(await exchange(socket, compactRequest(home, i)));
     await stop(hub);
     return percentiles(samples);
   },

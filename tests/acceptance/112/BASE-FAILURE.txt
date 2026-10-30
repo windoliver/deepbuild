@@ -1,0 +1,429 @@
+Base commit: 8ae1587 (main; branch worktree-agent-a17054bbe437cc774, clean apart from tests/acceptance/112/)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/112
+Date: 2026-10-29T02:57:03Z  Node v24.22.0  vitest 5.0.5 darwin-arm64
+Before it: npm ci, then npm run build --workspaces twice (the packages export dist/).
+Exit code: 1
+
+Each of the 19 fast tests fails at a named assertion for the reason the issue is open: the record exports no
+compareReplay or planHash (the comparison rule), and packages/config-eval/src/index.ts (the eval) does not exist.
+The two live tests skip with their reason (DEEP_EVAL_LIVE is not set); they never pass by skipping.
+
+ ci.test.ts: AC2 #112.e99b571a no workflow that starts on a push or pull request runs the eval, and the…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC1 #112.324bbab7 on 10 replayed tasks, four fall from 0.9 to 0.1: the change is held, nam…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC3 #112.e0bfcf89 the decision rests on the 12 tasks after the cutoff; the tasks it was fi…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC3 #112.e0bfcf89 a plan deciding on a task from before the cutoff, or fitting on one afte…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC4 #112.22f2dc6d each agent starts on the task's own words in a plain checkout of its com…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC4 #112.22f2dc6d a plan naming a judge of the agents' own family is refused before anythi…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC5 #112.477ca7b2 usage an agent didn't report reads missing, never 0; a side that failed …
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ eval.test.ts: AC7 #112.72c6ea54 the eval runs three repeats a side and keeps them all: best-of-three win…
+   AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function'
+ rule.test.ts: AC1 #112.324bbab7 six of 20 tasks fall from 0.9 to 0.1 and the rest hold: the comparison r…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC4 #112.22f2dc6d a plan naming a judge of the agents' own family is refused; one of anoth…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC5 #112.477ca7b2 a comparison whose plan changed after either side ran is refused, whiche…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC5 #112.477ca7b2 a pair with a failed side stays in the denominator and never shows impro…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC5 #112.477ca7b2 a missing metric is reported missing, not zero, and the measure it is mi…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC5 #112.477ca7b2 a complete cohort too small to decide reports INCONCLUSIVE, with the REA…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC7 #112.72c6ea54 a change that wins best-of-three on 15 of 20 tasks but whose mean over t…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC8 #112.dbf62f22 20 replayed tasks with a higher mean gain whose bound is below 0 read IN…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ rule.test.ts: AC8 #112.dbf62f22 a bound above 0 on one declared measure and not the other is INCONCLUSIV…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ widen.test.ts: AC8 #112.dbf62f22 after three sessions where it helped again, 20 replayed tasks with a hig…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+ widen.test.ts: AC5 #112.477ca7b2 three complete replayed tasks, INCONCLUSIVE, neither widen a change in i…
+   AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function'
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/112/tsconfig.json exits 0 at the base.
+
+---- full output ----
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/abundant-swinging-parasol/agent-a17054bbe437cc774
+
+ ❯ tests/acceptance/112/ci.test.ts (1 test | 1 failed) 5ms
+   ❯ AC2 #112.e99b571a no eval runs in hosted CI on push (1)
+     × AC2 #112.e99b571a no workflow that starts on a push or pull request runs the eval, and the eval refuses a hosted push or pull request; a dispatched run goes ahead 5ms
+ ❯ tests/acceptance/112/rule.test.ts (9 tests | 9 failed) 8ms
+   ❯ AC1 #112.324bbab7 a change that regresses replayed tasks is held, with the tasks it broke (1)
+     × AC1 #112.324bbab7 six of 20 tasks fall from 0.9 to 0.1 and the rest hold: the comparison regresses and names exactly those six 5ms
+   ❯ AC4 #112.22f2dc6d the judge comes from a different model family than the agents under test (1)
+     × AC4 #112.22f2dc6d a plan naming a judge of the agents' own family is refused; one of another family compares 0ms
+   ❯ AC5 #112.477ca7b2 plans frozen, failed pairs kept, missing metrics missing, small cohorts INCONCLUSIVE (4)
+     × AC5 #112.477ca7b2 a comparison whose plan changed after either side ran is refused, whichever part changed; the plan as frozen compares 0ms
+     × AC5 #112.477ca7b2 a pair with a failed side stays in the denominator and never shows improvement 0ms
+     × AC5 #112.477ca7b2 a missing metric is reported missing, not zero, and the measure it is missing from can't decide 0ms
+     × AC5 #112.477ca7b2 a complete cohort too small to decide reports INCONCLUSIVE, with the README's bound 0ms
+   ❯ AC7 #112.72c6ea54 repeats are averaged, never maxed (1)
+     × AC7 #112.72c6ea54 a change that wins best-of-three on 15 of 20 tasks but whose mean over the three repeats is lower is not adopted 0ms
+   ❯ AC8 #112.dbf62f22 the one rule: adopted only when the one-sided 95% bound beats the base on every declared measure (2)
+     × AC8 #112.dbf62f22 20 replayed tasks with a higher mean gain whose bound is below 0 read INCONCLUSIVE; a bound above 0 adopts 0ms
+     × AC8 #112.dbf62f22 a bound above 0 on one declared measure and not the other is INCONCLUSIVE; a bound worse on any measure regresses 0ms
+ ❯ tests/acceptance/112/widen.test.ts (2 tests | 2 failed) 113ms
+   ❯ AC8 #112.dbf62f22 a learned change widens from its session to the repo only by the comparison rule (1)
+     × AC8 #112.dbf62f22 after three sessions where it helped again, 20 replayed tasks with a higher mean gain whose bound is below 0 keep it at its session, INCONCLUSIVE; a decisive replay widens it 68ms
+   ❯ AC5 #112.477ca7b2 a complete cohort too small to decide leaves the standing rules as they are (1)
+     × AC5 #112.477ca7b2 three complete replayed tasks, INCONCLUSIVE, neither widen a change in its session nor revoke one in force for the repo 35ms
+ ❯ tests/acceptance/112/eval.test.ts (7 tests | 7 failed) 2659ms
+   ❯ AC1 #112.324bbab7 a change that regresses replayed tasks is held, with the tasks it broke (1)
+     × AC1 #112.324bbab7 on 10 replayed tasks, four fall from 0.9 to 0.1: the change is held, naming those four 501ms
+   ❯ AC3 #112.e0bfcf89 replayed tasks come from after the cutoff, and the result reports both sides of it (2)
+     × AC3 #112.e0bfcf89 the decision rests on the 12 tasks after the cutoff; the tasks it was fitted on are reported beside them and never decide 331ms
+     × AC3 #112.e0bfcf89 a plan deciding on a task from before the cutoff, or fitting on one after it, is refused before anything runs 311ms
+   ❯ AC4 #112.22f2dc6d agents under test don't know it's an eval; the judge sees only unlabeled outputs, from another model family (2)
+     × AC4 #112.22f2dc6d each agent starts on the task's own words in a plain checkout of its commit; the judge sees outputs with no side, name or order to tell them by 358ms
+     × AC4 #112.22f2dc6d a plan naming a judge of the agents' own family is refused before anything runs 359ms
+   ❯ AC5 #112.477ca7b2 a failed side stays in the count; a metric not captured stays missing (1)
+     × AC5 #112.477ca7b2 usage an agent didn't report reads missing, never 0; a side that failed keeps its task in the denominator 304ms
+   ❯ AC7 #112.72c6ea54 repeats are averaged, never maxed (1)
+     × AC7 #112.72c6ea54 the eval runs three repeats a side and keeps them all: best-of-three wins on 15 of 20 tasks, the mean is lower, it is not adopted 346ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/112/ci.test.ts > AC2 #112.e99b571a no eval runs in hosted CI on push > AC2 #112.e99b571a no workflow that starts on a push or pull request runs the eval, and the eval refuses a hosted push or pull request; a dispatched run goes ahead
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ tests/acceptance/112/ci.test.ts:26:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC1 #112.324bbab7 a change that regresses replayed tasks is held, with the tasks it broke > AC1 #112.324bbab7 on 10 replayed tasks, four fall from 0.9 to 0.1: the change is held, naming those four
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ runOnFake tests/acceptance/112/helpers.ts:452:20
+ ❯ tests/acceptance/112/eval.test.ts:21:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC3 #112.e0bfcf89 replayed tasks come from after the cutoff, and the result reports both sides of it > AC3 #112.e0bfcf89 the decision rests on the 12 tasks after the cutoff; the tasks it was fitted on are reported beside them and never decide
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ runOnFake tests/acceptance/112/helpers.ts:452:20
+ ❯ tests/acceptance/112/eval.test.ts:49:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC3 #112.e0bfcf89 replayed tasks come from after the cutoff, and the result reports both sides of it > AC3 #112.e0bfcf89 a plan deciding on a task from before the cutoff, or fitting on one after it, is refused before anything runs
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ tests/acceptance/112/eval.test.ts:64:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC4 #112.22f2dc6d agents under test don't know it's an eval; the judge sees only unlabeled outputs, from another model family > AC4 #112.22f2dc6d each agent starts on the task's own words in a plain checkout of its commit; the judge sees outputs with no side, name or order to tell them by
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ runOnFake tests/acceptance/112/helpers.ts:452:20
+ ❯ tests/acceptance/112/eval.test.ts:86:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC4 #112.22f2dc6d agents under test don't know it's an eval; the judge sees only unlabeled outputs, from another model family > AC4 #112.22f2dc6d a plan naming a judge of the agents' own family is refused before anything runs
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ tests/acceptance/112/eval.test.ts:100:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC5 #112.477ca7b2 a failed side stays in the count; a metric not captured stays missing > AC5 #112.477ca7b2 usage an agent didn't report reads missing, never 0; a side that failed keeps its task in the denominator
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ runOnFake tests/acceptance/112/helpers.ts:452:20
+ ❯ tests/acceptance/112/eval.test.ts:122:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/19]⎯
+
+ FAIL  tests/acceptance/112/eval.test.ts > AC7 #112.72c6ea54 repeats are averaged, never maxed > AC7 #112.72c6ea54 the eval runs three repeats a side and keeps them all: best-of-three wins on 15 of 20 tasks, the mean is lower, it is not adopted
+AssertionError: packages/config-eval/src/index.ts exists and exports runEval(options) (README: The surface under test); the file does not exist: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ evalModule tests/acceptance/112/helpers.ts:109:178
+    107|   const path = fileURLToPath(EVAL_ENTRY);
+    108|   const mod = existsSync(path) ? ((await import(EVAL_ENTRY.href)) as P…
+    109|   expect(typeof mod?.runEval, `packages/config-eval/src/index.ts exist…
+       |                                                                                                                                                                                  ^
+    110|   return mod as EvalModule;
+    111| }
+ ❯ runOnFake tests/acceptance/112/helpers.ts:452:20
+ ❯ tests/acceptance/112/eval.test.ts:150:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC1 #112.324bbab7 a change that regresses replayed tasks is held, with the tasks it broke > AC1 #112.324bbab7 six of 20 tasks fall from 0.9 to 0.1 and the rest hold: the comparison regresses and names exactly those six
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:12:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC4 #112.22f2dc6d the judge comes from a different model family than the agents under test > AC4 #112.22f2dc6d a plan naming a judge of the agents' own family is refused; one of another family compares
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:25:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC5 #112.477ca7b2 plans frozen, failed pairs kept, missing metrics missing, small cohorts INCONCLUSIVE > AC5 #112.477ca7b2 a comparison whose plan changed after either side ran is refused, whichever part changed; the plan as frozen compares
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:41:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC5 #112.477ca7b2 plans frozen, failed pairs kept, missing metrics missing, small cohorts INCONCLUSIVE > AC5 #112.477ca7b2 a pair with a failed side stays in the denominator and never shows improvement
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:83:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC5 #112.477ca7b2 plans frozen, failed pairs kept, missing metrics missing, small cohorts INCONCLUSIVE > AC5 #112.477ca7b2 a missing metric is reported missing, not zero, and the measure it is missing from can't decide
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:112:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC5 #112.477ca7b2 plans frozen, failed pairs kept, missing metrics missing, small cohorts INCONCLUSIVE > AC5 #112.477ca7b2 a complete cohort too small to decide reports INCONCLUSIVE, with the README's bound
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:133:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC7 #112.72c6ea54 repeats are averaged, never maxed > AC7 #112.72c6ea54 a change that wins best-of-three on 15 of 20 tasks but whose mean over the three repeats is lower is not adopted
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:151:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC8 #112.dbf62f22 the one rule: adopted only when the one-sided 95% bound beats the base on every declared measure > AC8 #112.dbf62f22 20 replayed tasks with a higher mean gain whose bound is below 0 read INCONCLUSIVE; a bound above 0 adopts
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:168:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/19]⎯
+
+ FAIL  tests/acceptance/112/rule.test.ts > AC8 #112.dbf62f22 the one rule: adopted only when the one-sided 95% bound beats the base on every declared measure > AC8 #112.dbf62f22 a bound above 0 on one declared measure and not the other is INCONCLUSIVE; a bound worse on any measure regresses
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/rule.test.ts:188:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/19]⎯
+
+ FAIL  tests/acceptance/112/widen.test.ts > AC8 #112.dbf62f22 a learned change widens from its session to the repo only by the comparison rule > AC8 #112.dbf62f22 after three sessions where it helped again, 20 replayed tasks with a higher mean gain whose bound is below 0 keep it at its session, INCONCLUSIVE; a decisive replay widens it
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ replay tests/acceptance/112/widen.test.ts:14:24
+ ❯ tests/acceptance/112/widen.test.ts:61:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/19]⎯
+
+ FAIL  tests/acceptance/112/widen.test.ts > AC5 #112.477ca7b2 a complete cohort too small to decide leaves the standing rules as they are > AC5 #112.477ca7b2 three complete replayed tasks, INCONCLUSIVE, neither widen a change in its session nor revoke one in force for the repo
+AssertionError: packages/record/src/index.ts exports compareReplay(result, tasks?) (README: The surface under test): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ rule tests/acceptance/112/helpers.ts:100:139
+     98| export function rule(): RuleSurface {
+     99|   const mod = recordModule as unknown as Partial<RuleSurface>;
+    100|   expect(typeof mod.compareReplay, 'packages/record/src/index.ts expor…
+       |                                                                                                                                           ^
+    101|   expect(typeof mod.planHash, 'packages/record/src/index.ts exports pl…
+    102|   return mod as RuleSurface;
+ ❯ tests/acceptance/112/widen.test.ts:108:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/19]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  19 failed | 2 skipped (21)
+   Start at  19:56:39
+   Duration  2.96s (tests 75%, import 14%, transform 11%)
+
