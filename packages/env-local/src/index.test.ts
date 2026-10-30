@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -145,4 +146,79 @@ test('compose runs with remote includes off and a home of the hub\'s, so loading
   const env = composeKind(hub).release!.env!;
   expect(env).toMatchObject({ COMPOSE_EXPERIMENTAL_GIT_REMOTE: '0', COMPOSE_EXPERIMENTAL_OCI_REMOTE: '0', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   expect(env.HOME).toBe(join(hub, 'home'));
+});
+
+// A login command as a credential's source (#332): run as you, its output is the stack's variable and nothing else's.
+// The stand-in host runs each step for real and stops at the stack's own start, keeping what it would have been given.
+const loginHost = () => {
+  const stack: Record<string, string>[] = [];
+  const exits = new Map<string, number | null>();
+  const host = {
+    name: 'test',
+    start: async (spec: { run: string; argv: string[]; cwd: string; env?: Record<string, string>; output?: { stdout: (c: Buffer) => void } }) => {
+      if (!spec.output) {
+        stack.push(spec.env ?? {});
+        return { run: spec.run, status: 'BLOCKED', cause: 'resource', kind: 'port' };
+      }
+      const ran = spawnSync(spec.argv[0]!, spec.argv.slice(1), { cwd: spec.cwd });
+      spec.output.stdout(ran.stdout);
+      exits.set(spec.run, ran.status);
+      return { run: spec.run, status: 'started', pid: 1, pgid: 1, start: '0', leases: [] };
+    },
+    wait: async (run: string) => ({ run, code: exits.get(run) ?? null, signal: null, evidence: { stdout: '', stderr: '' } }),
+  } as unknown as Host;
+  return { host, stack };
+};
+const withLogin = (argv: string[]): string => {
+  const dir = repo('http://127.0.0.1:${web}/health');
+  writeFileSync(join(dir, '.deepbuild', 'done.yaml'), `environment:\n  up: "true"\n  ports: [web]\n  ready: { http: "http://127.0.0.1:\${web}/health", within: 1 }\n  credentials:\n    SHOP_KEY: { cli: ${JSON.stringify(argv)} }\n`);
+  return dir;
+};
+test('a credential from a login command reaches the stack under its variable, without its trailing newline', async () => {
+  const { host, stack } = loginHost();
+  await upStack(host, { run: 'run:TEST', folder: withLogin(['/bin/sh', '-c', 'printf "sk_test_from_login\\n"']) });
+  expect(stack.map((env) => env.SHOP_KEY)).toEqual(['sk_test_from_login']);
+});
+test('a login command that fails is BLOCKED naming the variable and the command, never what it printed, and nothing starts', async () => {
+  const { host, stack } = loginHost();
+  const up = await upStack(host, { run: 'run:TEST', folder: withLogin(['/bin/sh', '-c', 'echo sk_test_leaked; exit 7']) });
+  expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringMatching(/SHOP_KEY.*\/bin\/sh.*exit 7/) });
+  expect(JSON.stringify(up)).not.toContain('sk_test_leaked');
+  expect(stack).toEqual([]);
+});
+test('a credential dotfile inside the worktree is BLOCKED, naming the variable, and nothing starts', async () => {
+  const { host, stack } = loginHost();
+  const dir = repo('http://127.0.0.1:${web}/health');
+  writeFileSync(join(dir, '.env'), 'SHOP_KEY=sk_test_in_checkout\n');
+  writeFileSync(join(dir, '.deepbuild', 'done.yaml'), 'environment:\n  up: "true"\n  ports: [web]\n  ready: { http: "http://127.0.0.1:${web}/health", within: 1 }\n  credentials:\n    SHOP_KEY: { dotfile: .env }\n');
+  const up = await upStack(host, { run: 'run:TEST', folder: dir });
+  expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringMatching(/SHOP_KEY.*inside the worktree/) });
+  expect(stack).toEqual([]);
+});
+test('a credential too short to scrub by value without mangling the record is BLOCKED, naming the variable, and nothing starts', async () => {
+  const { host, stack } = loginHost();
+  const up = await upStack(host, { run: 'run:TEST', folder: withLogin(['/bin/sh', '-c', 'printf test']) });
+  expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringMatching(/SHOP_KEY.*too short/) });
+  expect(stack).toEqual([]);
+});
+test('a credential dotfile inside the worktree whose name starts with two dots is BLOCKED too', async () => {
+  const { host, stack } = loginHost();
+  const dir = repo('http://127.0.0.1:${web}/health');
+  writeFileSync(join(dir, '..env'), 'SHOP_KEY=sk_test_in_checkout\n');
+  writeFileSync(join(dir, '.deepbuild', 'done.yaml'), 'environment:\n  up: "true"\n  ports: [web]\n  ready: { http: "http://127.0.0.1:${web}/health", within: 1 }\n  credentials:\n    SHOP_KEY: { dotfile: ..env }\n');
+  const up = await upStack(host, { run: 'run:TEST', folder: dir });
+  expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringMatching(/SHOP_KEY.*inside the worktree/) });
+  expect(stack).toEqual([]);
+});
+test('a credential dotfile linked into the worktree from outside it is BLOCKED, since the agent reads it through the link', async () => {
+  const { host, stack } = loginHost();
+  const dir = repo('http://127.0.0.1:${web}/health');
+  const outside = mkdtempSync(join(tmpdir(), 'dh332-outside-'));
+  writeFileSync(join(outside, 'shop.env'), 'SHOP_KEY=sk_test_linked_in\n');
+  symlinkSync(join(outside, 'shop.env'), join(dir, '.env'));
+  writeFileSync(join(dir, '.deepbuild', 'done.yaml'), 'environment:\n  up: "true"\n  ports: [web]\n  ready: { http: "http://127.0.0.1:${web}/health", within: 1 }\n  credentials:\n    SHOP_KEY: { dotfile: .env }\n');
+  const up = await upStack(host, { run: 'run:TEST', folder: dir });
+  rmSync(outside, { recursive: true, force: true });
+  expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringMatching(/SHOP_KEY.*inside the worktree/) });
+  expect(stack).toEqual([]);
 });
