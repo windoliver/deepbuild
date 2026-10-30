@@ -151,6 +151,19 @@ export function peerAgent(scenario: JsonObject, peer: JsonObject, opened: Opened
   return undefined;
 }
 
+const FLICKS = 705_600_000;
+/** A time in flicks as the time grammar's seconds text (`"4.2s"`: Time and the flick), exactly; BLOCKED when it has no exact text. */
+export function secondsText(flicks: number): string {
+  const text = `${flicks / FLICKS}s`;
+  if (Math.round(Number.parseFloat(text) * FLICKS) !== flicks) throw Error(`BLOCKED: ${flicks} flicks has no exact seconds text for deep_show's \`t\``);
+  return text;
+}
+/** The flicks a top-level `t` reads as: a number is flicks, text is the grammar's seconds (`"4.2s"`); anything else is left as it is. */
+const flicksOf = (v: JsonValue | undefined): JsonValue | undefined => {
+  const m = typeof v === 'string' ? /^(\d+(?:\.\d+)?)\s*s$/.exec(v) : null;
+  return m ? Math.round(Number.parseFloat(m[1]!) * FLICKS) : v;
+};
+
 export interface Played { replies: JsonObject[]; ms: number[] }
 
 /** Plays one scenario's calls in order against the opened world; the replies as the hub and app gave them, translated back to the scenario's names. */
@@ -171,7 +184,9 @@ export async function play(scenario: JsonObject, opened: Opened): Promise<Played
       }
       case 'render_back': {
         const agent = opened.agents.get(String(raw['session']))!;
-        reply = (await deepShow(agent.stand, { doc: call['doc'], t: call['t'], rev: call['rev'], size: call['size'], include: ['pixels'] }, 'render-back through deep_show')).reply;
+        // deep_show's `t` is time-grammar text in every replay (one JSON type a field, #26's strict schemas); #384's render_back gives flicks.
+        const t = typeof call['t'] === 'number' ? secondsText(call['t']) : call['t'];
+        reply = (await deepShow(agent.stand, { doc: call['doc'], t, rev: call['rev'], size: call['size'], include: ['pixels'] }, 'render-back through deep_show')).reply;
         break;
       }
       case 'deep show': {
@@ -191,6 +206,12 @@ export async function play(scenario: JsonObject, opened: Opened): Promise<Played
         await opened.app.sync();
         const { at: _at, ...rest } = call;
         void _at;
+        // The scenario's session ID names no real session: the app is told the one the hub knows (the thread is already put in by `out`).
+        if (typeof raw['session'] === 'string') {
+          const agent = opened.agents.get(raw['session']);
+          if (!agent) throw Error(`the scenario's ${kind} call names session ${raw['session']}, which it doesn't hold`);
+          rest['session'] = agent.real;
+        }
         reply = await opened.app.call(rest);
       }
     }
@@ -206,7 +227,32 @@ export async function play(scenario: JsonObject, opened: Opened): Promise<Played
 /** A side's replies made comparable: evidence by content, revision hashes and layer and task handles by where they first appear. */
 export interface Side { replies: JsonObject[]; readEvidence(sha: string): Promise<Buffer>; translate(value: JsonValue): JsonValue }
 
-export async function normalize(side: Side): Promise<JsonValue[]> {
+/**
+ * What a scenario's replies need beyond that, because two correct programs can't give the same value there (README: Criterion 1, the #384
+ * replays). Nothing is set for #393's scenarios, whose comparison is exactly the plain one.
+ */
+export interface Compare {
+  /**
+   * A patch reply's `arrived`, `checked` and `current` are readings of the stand-in's virtual display clock (`clock` and each call's `at`),
+   * which the hub is never given. They leave both sides; what they say that a real clock keeps is their order, so a hub that carries any
+   * must carry all three with arrived ≤ checked ≤ current, else its reply gets a `clock_order` field the stand-in's lacks.
+   */
+  clock?: boolean;
+  /** A reply's own top-level `t` is a time: a number is flicks, text is the grammar's seconds; either compares as flicks. */
+  time?: boolean;
+  /** Top-level fields the hub's reply may lack but, when it has them, must equal the stand-in's (after `time`). */
+  optional?: string[];
+  /** A doc handle's doc ID compares case-folded (a ULID is case-insensitive; #384's `sameHandle`), the item ID exact. */
+  foldDocIds?: boolean;
+  /** Fields (by path) of the hub's replies to change one at a time, besides the top-level ones every replay tries; each must be reported. */
+  mutants?: Mutant[];
+}
+/** `path` is dot-separated (array indexes are numbers); `call` restricts it to the first reply to a call of that kind. */
+export interface Mutant { path: string; call?: string }
+
+const foldDoc = (text: string): string => text.replace(/^doc:([0-9A-Za-z]+)#/, (_m, id: string) => `doc:${id.toLowerCase()}#`);
+
+export async function normalize(side: Side, compare: Compare = {}): Promise<JsonValue[]> {
   const ordinals = new Map<string, string>();
   const ordinal = (kind: string, value: JsonValue | undefined): string => {
     const key = `${kind}:${JSON.stringify(value)}`;
@@ -215,7 +261,7 @@ export async function normalize(side: Side): Promise<JsonValue[]> {
   };
   const walk = async (value: JsonValue, key: string): Promise<JsonValue> => {
     if (Array.isArray(value)) return Promise.all(value.map((v) => walk(v, key)));
-    if (!isObject(value)) return value;
+    if (!isObject(value)) return typeof value === 'string' && compare.foldDocIds ? foldDoc(value) : value;
     const result: JsonObject = {};
     for (const [k, v] of Object.entries(value)) {
       if (k === 'issues_evidence' && typeof v === 'string') {
@@ -239,14 +285,29 @@ export async function normalize(side: Side): Promise<JsonValue[]> {
     }
     return result;
   };
-  return Promise.all(side.replies.map((r) => walk(r, '')));
+  return Promise.all(side.replies.map(async (r) => treat(await walk(r, '') as JsonObject, compare)));
+}
+
+/** The top-level treatments of `Compare`: the clock's readings out (their order checked), `t` as flicks. */
+function treat(reply: JsonObject, compare: Compare): JsonObject {
+  const out: JsonObject = { ...reply };
+  if (compare.time && 't' in out) out['t'] = flicksOf(out['t'])!;
+  if (compare.clock) {
+    const readings = ['arrived', 'checked', 'current'].map((k) => out[k]);
+    const some = readings.some((v) => v !== undefined);
+    for (const k of ['arrived', 'checked', 'current']) delete out[k];
+    const [a, c, u] = readings;
+    const ordered = typeof a === 'number' && typeof c === 'number' && typeof u === 'number' && a <= c && c <= u;
+    if (some && !ordered) out['clock_order'] = `arrived ${JSON.stringify(a ?? null)}, checked ${JSON.stringify(c ?? null)}, current ${JSON.stringify(u ?? null)}: not three numbers in order`;
+  }
+  return out;
 }
 
 const same = (a: JsonValue | undefined, b: JsonValue | undefined): boolean => JSON.stringify(sortKeys(a ?? null)) === JSON.stringify(sortKeys(b ?? null));
 export const sortKeys = (v: JsonValue): JsonValue => (Array.isArray(v) ? v.map(sortKeys) : isObject(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k]!)])) : v);
 
 /** The differences between two calls' replies, each naming the call and the field. A render-back's reply only has to hold the stand-in's fields. */
-export function differences(calls: readonly JsonObject[], standIn: readonly JsonValue[], hub: readonly JsonValue[]): string[] {
+export function differences(calls: readonly JsonObject[], standIn: readonly JsonValue[], hub: readonly JsonValue[], optional: readonly string[] = []): string[] {
   const failures: string[] = [];
   const show = (v: JsonValue | undefined) => JSON.stringify(v ?? null).slice(0, 300);
   standIn.forEach((a, i) => {
@@ -255,7 +316,7 @@ export function differences(calls: readonly JsonObject[], standIn: readonly Json
     const label = `call ${i + 1} (${name})`;
     if (!isObject(a) || !isObject(b)) { if (!same(a, b)) failures.push(`${label}: the stand-in answered ${show(a)}, the hub ${show(b)}`); return; }
     const keys = new Set([...Object.keys(a), ...(name === 'render_back' ? [] : Object.keys(b))]);
-    for (const k of keys) if (!same(a[k], b[k])) failures.push(`${label}: field \`${k}\` is ${show(b[k])} on the hub, ${show(a[k])} on the stand-in`);
+    for (const k of keys) if (!(optional.includes(k) && !(k in b)) && !same(a[k], b[k])) failures.push(`${label}: field \`${k}\` is ${show(b[k])} on the hub, ${show(a[k])} on the stand-in`);
   });
   if (hub.length !== standIn.length) failures.push(`the hub answered ${hub.length} calls, the stand-in ${standIn.length}`);
   return failures;
@@ -274,9 +335,13 @@ export function mutate(hub: readonly JsonValue[], index: number, field: string):
 export const MUTABLE = ['outcome', 'rev', 'issues_evidence', 'snapshots', 'result', 'changed', 'revisions', 'messages', 'bands', 'state'] as const;
 
 /** Runs the scenario on the stand-in and on the hub with the app, compares them and shows the comparison can fail. Returns the hub's side for more checks. */
-export interface Replayed { calls: JsonObject[]; standIn: JsonObject[]; hub: Played; failures: string[]; opened: Opened; hubNorm: JsonValue[]; standNorm: JsonValue[]; evidence: string }
+export interface Replayed {
+  calls: JsonObject[]; standIn: JsonObject[]; hub: Played; failures: string[]; opened: Opened; hubNorm: JsonValue[]; standNorm: JsonValue[]; evidence: string;
+  /** How the hub's replies were read and translated, to normalize a changed copy of them again (`clockProblems`). */
+  hubSide: Omit<Side, 'replies'>;
+}
 
-export async function replay(scenarioFor: (evidence: string) => JsonObject, assets: Buffer[], o: { app: boolean; plant?: string; reused?: string[]; standIn: (scenario: JsonObject) => JsonObject[] }): Promise<Replayed> {
+export async function replay(scenarioFor: (evidence: string) => JsonObject, assets: Buffer[], o: { app: boolean; plant?: string; reused?: string[]; compare?: Compare; standIn: (scenario: JsonObject) => JsonObject[] }): Promise<Replayed> {
   const evidence = tempDir();
   for (const png of assets) await t393.putPng(evidence, png);
   const scenario = scenarioFor(evidence);
@@ -284,9 +349,11 @@ export async function replay(scenarioFor: (evidence: string) => JsonObject, asse
   const opened = await openWorld({ scenario, app: o.app, assets, ...(o.plant ? { plant: o.plant } : {}), ...(o.reused ? { reused: o.reused } : {}) });
   const hub = await play(scenario, opened);
   const calls = (scenario['calls'] ?? []) as JsonObject[];
-  const standNorm = await normalize({ replies: standIn, readEvidence: (sha) => t393.readEvidence(evidence, sha), translate: (v) => v });
-  const hubNorm = await normalize({ replies: hub.replies, readEvidence: (sha) => readEvidence(opened.home, sha), translate: (v) => opened.back(v) });
-  return { calls, standIn, hub, failures: differences(calls, standNorm, hubNorm), opened, hubNorm, standNorm, evidence };
+  const compare = o.compare ?? {};
+  const hubSide = { readEvidence: (sha: string) => readEvidence(opened.home, sha), translate: (v: JsonValue) => opened.back(v) };
+  const standNorm = await normalize({ replies: standIn, readEvidence: (sha) => t393.readEvidence(evidence, sha), translate: (v) => v }, compare);
+  const hubNorm = await normalize({ replies: hub.replies, ...hubSide }, compare);
+  return { calls, standIn, hub, failures: differences(calls, standNorm, hubNorm, compare.optional), opened, hubNorm, standNorm, evidence, hubSide };
 }
 
 
@@ -294,16 +361,58 @@ export async function replay(scenarioFor: (evidence: string) => JsonObject, asse
  * The comparison can fail: one field of the hub's reply changed at a time, for each field this scenario's replies have, must be
  * reported, naming the call and the field. Returns what the comparison missed; empty means every mutant was caught.
  */
-export function mutantProblems(calls: readonly JsonObject[], standIn: readonly JsonValue[], hub: readonly JsonValue[]): string[] {
+export function mutantProblems(calls: readonly JsonObject[], standIn: readonly JsonValue[], hub: readonly JsonValue[], compare: Compare = {}): string[] {
   const problems: string[] = [];
   let tried = 0;
   for (const field of MUTABLE) {
     const i = hub.findIndex((r) => isObject(r) && field in r);
     if (i < 0) continue;
     tried++;
-    const found = differences(calls, standIn, mutate(hub, i, field));
+    const found = differences(calls, standIn, mutate(hub, i, field), compare.optional);
     if (!found.some((f) => f.includes(`call ${i + 1} (`) && f.includes(`\`${field}\``))) problems.push(`a hub reply with \`${field}\` of call ${i + 1} changed is not reported (${found.length} differences: ${found.join('; ').slice(0, 300)})`);
+  }
+  // The fields the scenario is about, nested or on one kind of call: found in the stand-in's replies (a hub that may lack the field gets it, wrong).
+  for (const m of compare.mutants ?? []) {
+    const i = standIn.findIndex((r, n) => (m.call === undefined || calls[n]?.['call'] === m.call) && valueAt(r, m.path) !== undefined);
+    if (i < 0) { problems.push(`no ${m.call ?? ''} reply of the stand-in holds \`${m.path}\`, which this scenario's comparison is to be shown to fail on`); continue; }
+    tried++;
+    const top = m.path.split('.')[0]!;
+    const found = differences(calls, standIn, mutateAt(hub, i, m.path, valueAt(standIn[i]!, m.path)!), compare.optional);
+    if (!found.some((f) => f.includes(`call ${i + 1} (`) && f.includes(`\`${top}\``))) problems.push(`a hub reply with \`${m.path}\` of call ${i + 1} changed is not reported (${found.length} differences: ${found.join('; ').slice(0, 300)})`);
   }
   if (tried === 0) problems.push('no reply holds a field the comparison was shown to fail on');
   return problems;
+}
+
+const valueAt = (v: JsonValue | undefined, path: string): JsonValue | undefined =>
+  path.split('.').reduce<JsonValue | undefined>((at, k) => (Array.isArray(at) ? at[Number(k)] : isObject(at) ? at[k] : undefined), v);
+
+/** One reply of the hub with the value at `path` set to a wrong one, made from `base` (what the stand-in has there), however the hub's reply has it. */
+function mutateAt(hub: readonly JsonValue[], index: number, path: string, base: JsonValue): JsonValue[] {
+  const out = clone(hub as JsonValue[]);
+  const keys = path.split('.');
+  let at = out[index] as JsonValue;
+  for (const k of keys.slice(0, -1)) {
+    const next = Array.isArray(at) ? at[Number(k)] : isObject(at) ? at[k] : undefined;
+    if (next === undefined || typeof next !== 'object' || next === null) return out;
+    at = next;
+  }
+  const last = keys.at(-1)!;
+  const wrong = typeof base === 'string' ? `${base}~` : typeof base === 'number' ? base + 1 : Array.isArray(base) ? [...base, 'extra'] : isObject(base) ? { ...base, extra: 'extra' } : base === true ? false : true;
+  if (Array.isArray(at)) at[Number(last)] = wrong; else (at as JsonObject)[last] = wrong;
+  return out;
+}
+
+/**
+ * `Compare.clock`'s own check: a copy of the hub's raw replies whose first patch reply carries clock readings out of order must read as
+ * a difference naming `clock_order`, so a hub that carried the readings backwards would not pass. Returns what the comparison missed.
+ */
+export async function clockProblems(r: Replayed, compare: Compare): Promise<string[]> {
+  const i = r.calls.findIndex((c) => isObject(c['patch']));
+  if (i < 0) return ['the scenario has no patch call, which is where the clock readings are'];
+  const replies = clone(r.hub.replies as JsonValue[]) as JsonObject[];
+  Object.assign(replies[i]!, { arrived: 10, checked: 5, current: 7 });
+  const hub = await normalize({ replies, ...r.hubSide }, compare);
+  const found = differences(r.calls, r.standNorm, hub, compare.optional);
+  return found.some((f) => f.includes(`call ${i + 1} (`) && f.includes('`clock_order`')) ? [] : [`readings out of order on call ${i + 1} are not reported (${found.length} differences: ${found.join('; ').slice(0, 300)})`];
 }

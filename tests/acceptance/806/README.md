@@ -80,7 +80,9 @@ and each says so.
 now) and without `at`: `doc` (the doc ID the hub minted), one of `document` (a whole revision, with no `id`, no `layers`, no item `layer`),
 `patch` or `undo` (#96's, used by criterion 1's #384 replays), and `removes`, `t` (time grammar text), `size` (`[w, h]` px) and `include`
 (`issues`, `audit`, `timing`, `pixels`); and, **invented here**, `rev` (the revision to render, any it has had; null: the current one),
-which is how #384's agent render-back at an earlier revision is made through the one tool. The reply is #393's, unchanged, as a tool
+which is how #384's agent render-back at an earlier revision is made through the one tool. Each field has one JSON type, in every replay: `t` is
+text in the time grammar (`"1s"`; `"4.2s"` for #384's 2,963,520,000 flicks, which the replay writes from the scenario's flicks, `replay.ts`
+`secondsText`), `rev` a number. The reply is #393's, unchanged, as a tool
 result's `structuredContent` (or the JSON in its first text block), **not** an error: a refused document and a call bound to no session
 are replies with `outcome: "refused"` (README below, Readings), never `isError`.
 
@@ -121,7 +123,8 @@ implementer's.
 
 `canvas.revisions {doc}` and `canvas.messages {session}` on a `cli` connection with the control token, answering what the stand-in's
 `revisions` and `messages` calls answer (#393's and #384's READMEs): `{"revisions": [{"rev", "base_rev", "writer": {"kind", "id"}, "hash",
-"state"}]}` and `{"messages": [Message + {"resolved": [...]}], "context": [doc handle]}`. The issue names no tool or command for an agent to
+"state"}]}` and `{"messages": [Message + {"resolved": [...]}], "context": [doc handle]}`, each with `core` and `set_digest` as the stand-in's replies, and
+#393's deep_show replies, carry them. The issue names no tool or command for an agent to
 read its session's revisions or messages (and #384's "the agent reads them" has no surface at the base), so criterion 1 reads them from
 the hub as `events.read` reads the log. Criteria 2 to 4 don't use them: they read the record and the evidence store.
 
@@ -145,7 +148,7 @@ deep-replica-canvas --out <dir>
 - On stdin it takes one JSON line per call and answers one line each. `{"call": "sync"}` waits until it has drawn every revision the hub has
   presented so far and answers `{"drawn": {doc ID: rev}}`. The user's calls of `deep-show run` — `screen`, `input`, `ask`, `scope`, `view`,
   `presented` — it answers exactly as `deep-show run` does (#383's, #384's, #393's READMEs; the `at` field is dropped: it draws in call order,
-  each call after a `sync`); `screen` with `"out": path` also writes the window as an 8-bit RGB or RGBA PNG and answers `{"bands",
+  each call after a `sync`; a call's `session` is the real session ID the hub knows, which the replay puts in for the scenario's); `screen` with `"out": path` also writes the window as an 8-bit RGB or RGBA PNG and answers `{"bands",
   "width", "height", "items": [{"id", "layer", "box"}]}`, as `deep-show screen`'s reply gives it.
 - Off macOS it exits 2 (`deep-replica`'s own message); the tests fail INCONCLUSIVE before starting it.
 
@@ -194,18 +197,47 @@ the caption, the injected caption, the screenshot, the HTML page, the detached h
   read methods above.
 
 **Compared field for field.** Every field of every call's reply equals the stand-in's; the hub's reply may carry no field the stand-in's
-lacks (a render-back's reply need hold only the stand-in's `{rev, t, snapshots}`, since the tool's reply is #393's whole one). Evidence hashes
+lacks (a render-back's reply need hold only the stand-in's `{rev, snapshots, core, set_digest}`, since the tool's reply is #393's whole one; its
+`t`, read below). Evidence hashes
 are compared by content: `issues_evidence` by the issue list read from each side's evidence store (the hub's, with its thread names put back);
 each snapshot's `sha256` by the SHA-256 of its decoded pixels. **Not by hash, and why:** a revision's `hash` covers the canonical document,
 which names the writer's real thread on the hub and `thread-alpha` on the stand-in, so two correct programs can't share it; revisions
 compare by which of them share a hash (the first distinct hash is `hash#1`, and so on), and by the stand-in's other fields (`rev`,
 `base_rev`, `writer`, `state`); that the hub's hash is the SHA-256 of the canonical document in its evidence store is criterion 2's test.
-Layer IDs and ask-task handles compare by first appearance for the same reason. Times: `at` and `clock` are dropped; the replay waits for
-what the hub has presented where a call needs it.
+Layer IDs and ask-task handles compare by first appearance for the same reason. Times: `at` and `clock` are not sent; the replay waits for
+what the hub has presented where a call needs it. Names that are the scenario's own and no real one are mapped on the way out and back: a
+thread (`thread-alpha`) and a claim handle in every call and reply, a session ID (`sess-alpha`) to the real one in the app's `ask` and the
+hub's `messages`; the ask-task's handle (`task:sess-alpha-6`) is the stand-in's own and is never sent, so it compares by first appearance.
+
+**What the #384 replays compare differently, and why** (`scenarios.ts`, `compare384`; #393's replays have none of this). #384's scenarios
+run on the stand-in's virtual display clock (`clock`, each call's `at`); the hub runs on real time and is never given either.
+
+- The stand-in's replies **mean what #384 says only with that clock**. Played without it (the same calls, no `clock`, no `at`), a patch
+  never becomes current at a latch, so the ask's `doc_rev` is 0, not 14, and the deleted caption's handle still resolves `live`, not
+  `detached`. So the stand-in keeps its clock, and the hub gets the same meaning from call order: the replay plays the patches, then the
+  app is `sync`ed before each of the user's calls, so the revision the panel shows is the last one presented (14), and the delete is
+  current when the session reads (15). `doc_rev`, `state: detached`, `removed.rev` and the playhead's `t` (`attachment.t`, 2,963,520,000)
+  are compared exactly.
+- A patch reply's **`arrived`, `checked` and `current`** are readings of that virtual clock and exist only because the scenario has one;
+  no two correct programs on different clocks can equal them. They are **left out of the comparison, and only these three**: a hub may
+  leave them off (as the stand-in does without a clock) or carry real-clock readings, but if it carries any it must carry all three with
+  `arrived` ≤ `checked` ≤ `current`; otherwise its reply gets a `clock_order` field the stand-in's lacks, and the comparison fails naming it.
+- A render-back's **`t`** echoes the request, is not in #393's reply, and which `t` was drawn is already in the snapshot's pixels (the
+  frame at 4.2 s differs from the one at 0 s: #384's AC3). The hub's reply **may leave it out**; when it carries it, as flicks or as the
+  grammar's text (`"4.2s"`), it must equal the stand-in's. This is the one field the criterion's "field for field" covers that the replay
+  doesn't require of the hub.
+- A doc handle's doc ID compares **case-folded** (a ULID is case-insensitive, as #384's `sameHandle` reads it); the item ID after `#` exact.
+- `cost_delta`, `core`, `set_digest`, `undo`, `achieved`, `serial`, `state`, `commits`, the message's `words`, `task.state` and `task.open`,
+  the `resolved` rows and `context` compare exactly: the same core on both sides gives the same values.
 
 **The comparison can fail.** After each scenario, one field at a time of the hub's replies (`outcome`, `rev`, `issues_evidence`,
 `snapshots`, `result`, `changed`, `revisions`, `messages`, `bands`, `state`: each the first reply that has it) is changed, and the
-comparison must report it naming the call and the field.
+comparison must report it naming the call and the field. The #384 scenarios also change, one at a time, the nested fields they are about
+(`compare384`'s `mutants`: the message's `attachment.doc_rev`, `.t`, `.handles`, `.precision`, `.quote`, `.region`, its `task.open`, a
+handle's `resolved` `state`, `name`, `removed.rev` and `removed.writer.id`, `context`, and a render-back's `rev`, `t` and
+`snapshots[0].sha256`, which is the frame's pixel hash), each must be reported naming the call and the top-level field that holds it, and
+every listed path must exist in the stand-in's replies, so a mutant that can't be made fails too. Where the hub may leave a field out (`t`),
+the mutant puts it in, wrong. A copy of the hub's replies whose clock readings are out of order must be reported as `clock_order`.
 
 ## Readings where the issue and design leave a choice
 
@@ -237,7 +269,7 @@ comparison must report it naming the call and the field.
 - **"Not presented after 2 s"**: the planted hub's reply comes no earlier than 1.9 s after the call and its `outcome` is `not_presented`.
 - **Within 2 s** is the reply's time measured by the test, plus 750 ms for scheduling (#393's slack), as #393 measures it.
 - **#393's and #384's `at` and virtual clock**: the hub runs on real time, so what the scenarios say at a virtual time they say in call
-  order here. #384's board is stored at revision 0 by the world file (`docs[…].document`), its agent patches are `deep_show` calls with
+  order here (and what the clock's readings can't carry across, `Compare`, above). #384's board is stored at revision 0 by the world file (`docs[…].document`), its agent patches are `deep_show` calls with
   `patch`, and its user calls (`input`, `ask`) are the app's.
 - **The question card (#393 AC8)** is replayed in the app's window: the world's `card` is what the shell would show; the test asserts #393's
   check on the replica's PNG (the card's interior equals its isolated render, the flood drawing beside it). The planted compositor of
@@ -260,3 +292,4 @@ that a document is minted for a claim (the world file does it); and the live age
   `closed.test.ts` (AC4); `figure.ts` (the world of criteria 2 to 4).
 - `tsconfig.json`: type-checks the suite under the root's strict options with `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run at the base.
+- `REDRAFT.md`: the blind redraft of the #384 replays of criterion 1: what changed, and why.
