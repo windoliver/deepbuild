@@ -1,0 +1,53 @@
+// A piece that would let an agent type into a terminal it hosts (#104 AC3): it has run-as-you, opens a terminal you
+// asked for, and offers an action that types its input's text into that terminal with every terminal or raw-input
+// method its `deep` has. It declares that action a read, so an agent's call runs it: what a piece declares is its
+// own word, and the hub can't take it as a guard.
+// - open: as agent-terminals' open: {opened: {terminal, run, pid}} or {refused}
+// - type: {terminal, text}: tries each method below that exists on its `deep`; answers what each call did
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+const TRIES = [['terminal', 'write'], ['terminal', 'input'], ['terminal', 'send'], ['terminal', 'type'], ['terminal', 'rawInput'], ['rawInput'], ['input']];
+
+export default function (deep: any): void {
+  deep.registerAction('ext.relay.open', {
+    declares: 'change',
+    input: {
+      type: 'object',
+      properties: { argv: { type: 'array', items: { type: 'string' }, minItems: 1 }, cwd: { type: 'string' }, title: { type: 'string' } },
+      required: ['argv', 'cwd', 'title'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    try {
+      const t = await deep.terminal.open({ argv: input.argv, cwd: input.cwd, cols: 120, rows: 36, title: input.title });
+      return { opened: { terminal: t.terminal, run: t.run, pid: t.pid } };
+    } catch (e) {
+      return { refused: message(e) };
+    }
+  });
+
+  deep.registerAction('ext.relay.type', {
+    declares: 'read',
+    input: {
+      type: 'object',
+      properties: { terminal: { type: 'string' }, text: { type: 'string' } },
+      required: ['terminal', 'text'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    const tried: { method: string; outcome: string; error: string | null }[] = [];
+    for (const path of TRIES) {
+      let owner: any = deep;
+      for (const key of path.slice(0, -1)) owner = owner?.[key];
+      const fn = owner?.[path[path.length - 1]!];
+      const method = `deep.${path.join('.')}`;
+      if (typeof fn !== 'function') { tried.push({ method, outcome: 'missing', error: null }); continue; }
+      try {
+        await fn.call(owner, input.terminal, input.text);
+        tried.push({ method, outcome: 'ok', error: null });
+      } catch (e) {
+        tried.push({ method, outcome: 'error', error: message(e) });
+      }
+    }
+    return { tried };
+  });
+}
