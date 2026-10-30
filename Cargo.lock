@@ -1748,6 +1748,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-cells"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-effects"
 version = "0.0.0"
 dependencies = [
@@ -1951,6 +1959,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
  "deep-canvas-marks",
@@ -1967,6 +1976,7 @@ dependencies = [
  "deep-text-gpui",
  "gpui-kit",
  "image",
+ "libc",
  "serde_json",
  "sha2 0.10.9",
  "vello_cpu",

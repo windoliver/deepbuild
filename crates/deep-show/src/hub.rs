@@ -187,6 +187,20 @@ pub enum Planted {
     ConflictsUnreported,
     /// #401: every key, the escape chord too, goes to the focused panel alone.
     FocusedPanelTakesEscape,
+    /// #402: the terminal applies at most 30 updates a second, merging the rest.
+    Terminal30PerSecond,
+    /// #402: the cell grid draws each patch a frame after the frame it should.
+    CellsAFrameLate,
+    /// #402: a video stream shows the frames a pause queued when its panel resumes.
+    VideoShowsLate,
+    /// #402: a video stream drops frames and its counter stays 0.
+    VideoDropsUncounted,
+    /// #402: the terminal tab draws the terminal's text as text items, outside the cell grid.
+    TabDrawsText,
+    /// #402: the terminal tab redraws at most 30 times a second.
+    TabRedrawsAt30hz,
+    /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
+    TabDrawsCapture,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -232,6 +246,10 @@ pub struct Session {
     pub name: String,
     /// The agent's process, the parent its hooks came from: (pid, start time).
     pub process: (u64, i64),
+    /// #402: where a session runs in a terminal the hub doesn't host, and the captured screen
+    /// of it the page must never draw; both `None` for a hosted one or none.
+    pub runs_in: Option<String>,
+    pub capture: Option<Vec<String>>,
 }
 
 pub struct Process {
@@ -509,6 +527,8 @@ pub enum Call {
     },
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
+    /// Terminals, streams and the session page's terminal tab (#402).
+    Term(Box<crate::terminal::TermCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -636,6 +656,8 @@ pub struct Hub<'a> {
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
+    /// Terminals, streams and session pages (#402).
+    pub terms: crate::terminal::Terms,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -740,6 +762,7 @@ impl<'a> Hub<'a> {
                 scenario.layout.as_ref(),
                 scenario.placement_planted,
             ),
+            terms: crate::terminal::Terms::default(),
         };
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
@@ -1116,6 +1139,7 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Term(t) => self.term_call(t),
         };
         self.stamp(&mut reply);
         reply
