@@ -36,6 +36,12 @@ name = "headless"
 path = "headless.rs"
 harness = false
 
+# Issue #327: a card drawn taller than its slot never arms, measured in the real window.
+[[test]]
+name = "card_size"
+path = "card_size.rs"
+harness = false
+
 # Issue #326, criterion group "panels": the acceptance tests written blind in
 # tests/acceptance/326/panels. `acceptance_326_panels` holds the criteria; `..._planted` runs the
 # wrong programs they name through the same judges. AppKit needs the main thread, so no harness.

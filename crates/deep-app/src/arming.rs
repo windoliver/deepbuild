@@ -163,6 +163,27 @@ impl Machine {
         self.presented
     }
 
+    /// The card as drawn measured `size` points. One that outgrew its slot stops being armed, and arms again only
+    /// once it fits and its interval ran anew.
+    pub fn measured(&mut self, size: [i64; 2], t: u64) {
+        let fitted = self.may_arm();
+        self.size = size;
+        let fits = self.may_arm();
+        match self.state {
+            State::Armed { seq } if !fits => {
+                self.state = State::Presented { seq, t };
+                self.since = t;
+                self.down = None;
+                self.confirming = None;
+            }
+            State::Presented { seq, .. } if fits && !fitted => {
+                self.state = State::Presented { seq, t };
+                self.since = t;
+            }
+            _ => {}
+        }
+    }
+
     /// The seq of a presented or armed card.
     fn shown(&self) -> Option<u64> {
         match self.state {
@@ -294,6 +315,29 @@ mod tests {
         rect: [100, 100, 480, 240],
         visible: [0, 0, 1512, 982],
     };
+
+    #[test]
+    fn a_card_drawn_taller_than_its_slot_never_arms_until_it_fits() {
+        let mut machine = Machine::numbered([480, 240], 0);
+        machine.present(0, SLOT);
+        machine.measured([480, 900], 10);
+        machine.tick(ARM_AFTER + 10);
+        assert!(matches!(machine.state(), State::Presented { .. }));
+        // It fits from 600: the interval runs from then, not from its presentation.
+        machine.measured([480, 240], 600);
+        machine.tick(600 + ARM_AFTER - 1);
+        assert!(matches!(machine.state(), State::Presented { .. }));
+        machine.tick(600 + ARM_AFTER);
+        assert!(matches!(machine.state(), State::Armed { .. }));
+        // Armed, it grows past its slot: it stops being armed, and arms again only once it fits for the interval.
+        machine.measured([480, 900], 700);
+        assert!(matches!(machine.state(), State::Presented { .. }));
+        machine.measured([480, 240], 800);
+        machine.tick(800 + ARM_AFTER - 1);
+        assert!(matches!(machine.state(), State::Presented { .. }));
+        machine.tick(800 + ARM_AFTER);
+        assert!(matches!(machine.state(), State::Armed { .. }));
+    }
 
     fn hardware(t: u64, option: usize) -> Press {
         Press {
