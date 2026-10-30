@@ -55,7 +55,9 @@ export type Plant =
   // #824's: what the churn benchmark must catch, an entry kept per ended session, a listener per reloaded extension,
   // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
   | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
-  | 'churn-no-full-collection' | 'churn-no-resident-read';
+  | 'churn-no-full-collection' | 'churn-no-resident-read'
+  // #27's: deep_ask raised without its subject, so a repeated question reaches you.
+  | 'repeat-reaches-you';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -88,6 +90,7 @@ const PLANTS: readonly string[] = [
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
+  'repeat-reaches-you',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

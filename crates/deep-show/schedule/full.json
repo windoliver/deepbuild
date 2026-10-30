@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "0e5c05e60016233827951098f0f87785407dbdc5ff28985e89933157f9356d0a",
+  "set_digest": "a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c",
   "phases": {
     "validate": [
       {
@@ -33,6 +33,19 @@
       }
     ],
     "items": [
+      {
+        "operator": "cells.grid",
+        "module": "cells",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look"
+        ],
+        "writes": [
+          "cells.grid"
+        ],
+        "per": "item"
+      },
       {
         "operator": "core.fields",
         "module": "core",
