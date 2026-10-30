@@ -553,6 +553,20 @@ describe('raw refuses statements that change the database', () => {
   }
 });
 
+describe('raw binds its parameters', () => {
+  it('a value with a quote in it is read as that value, never as SQL', async () => {
+    const { record: r, S } = await record();
+    const sneaky = "x' OR '1'='1";
+    await r.append(hook(sneaky), event('session.start', T0, undefined));
+    const bound = (await r.raw('SELECT id FROM sessions WHERE id = ? ORDER BY id', [sneaky])) as { id: string }[];
+    expect(bound.map((row) => row.id)).toEqual([sneaky]);
+    // The same text written into the statement matches every session, which is why values are bound.
+    const spliced = (await r.raw(`SELECT id FROM sessions WHERE id = '${sneaky}' ORDER BY id`)) as { id: string }[];
+    expect(spliced.map((row) => row.id).sort()).toEqual([S, sneaky].sort());
+    expect(await r.raw('SELECT count(*) AS n FROM events WHERE session_id = ? AND kind = ?', [sneaky, 'session.start'])).toEqual([{ n: 1 }]);
+  });
+});
+
 describe('a decided ask stays decided', () => {
   it('a hook ask.cancelled after decision.applied keeps decided_for_you', async () => {
     const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
