@@ -13,6 +13,7 @@
       "billing": { "plan": ["plan", "plan_type"] },
       "goals": {
         "record": "a goal tool's output in the rollout, {\"goal\":{\"threadId\",\"status\"}}, as the corpus's goal sessions hold it",
+        "tools": ["create_goal", "get_goal", "update_goal"],
         "statuses": ["active", "paused", "blocked", "usage_limited", "budget_limited", "complete"],
         "continuing": ["active"],
         "store": { "file": "goals_1.sqlite", "table": "thread_goals" }

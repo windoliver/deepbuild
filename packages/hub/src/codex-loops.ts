@@ -16,7 +16,7 @@ interface CodexFacts {
   versions: string[];
   windows: { limit: string; weeklyMinutes: number; ignoredOtherwise: string };
   billing: { plan: string[] };
-  goals: { continuing: string[]; store: { file: string; table: string } };
+  goals: { tools: string[]; statuses: string[]; continuing: string[]; store: { file: string; table: string } };
   heartbeats: { folder: string; file: string; kind: string; active: string };
 }
 const facts = (): CodexFacts => (JSON.parse(readFileSync(new URL('../../../adapters/loops.facts.json', import.meta.url), 'utf8')) as { agents: { codex: CodexFacts } }).agents.codex;
@@ -32,10 +32,13 @@ function homeOf(transcript: string): string {
 }
 
 /** The thread's goal in the store in Codex's home, read-only: a goal set outside a tool call leaves no rollout record. */
-function storedGoal(f: CodexFacts, home: string, session: string): string | undefined {
+function storedGoal(f: CodexFacts, home: string, session: string): { status: string; at: number } | undefined {
   try {
     const db = new DatabaseSync(join(home, f.goals.store.file), { readOnly: true });
-    try { return (db.prepare(`SELECT status FROM ${f.goals.store.table} WHERE thread_id = ?`).get(session) as { status?: string } | undefined)?.status; } finally { db.close(); }
+    try {
+      const row = db.prepare(`SELECT * FROM ${f.goals.store.table} WHERE thread_id = ?`).get(session) as { status?: unknown; updated_at_ms?: unknown } | undefined;
+      return typeof row?.status === 'string' && f.goals.statuses.includes(row.status) ? { status: row.status, at: typeof row.updated_at_ms === 'number' ? row.updated_at_ms : -Infinity } : undefined;
+    } finally { db.close(); }
   } catch { return undefined; }
 }
 /** The account Codex is signed in to, by its ID alone, which a window reading is filed under. */
@@ -49,16 +52,19 @@ function accountIn(home: string): string | undefined {
 /** One window's room, in the words a row shows; a reading is never a used percentage, so a missing one can't read as 0%. */
 const windowLine = (name: string, used: number, at: string): string => `Codex ${name} window: ${Math.max(0, Math.round(100 - used))}% left, read at ${at}`;
 
-/** A goal record: a goal tool's output, `{"goal":{"threadId":…,"status":…}}`, for this thread. */
-function goalIn(entry: Obj, session: string): string | undefined {
+/** Whether a rollout record is a call of one of Codex's goal tools: by its name, or by a script's `tools.<name>(`. */
+const goalCall = (f: CodexFacts, payload: Obj): boolean => /_call$/.test(String(payload.type)) && typeof payload.call_id === 'string'
+  && f.goals.tools.some((t) => payload.name === t || (typeof payload.input === 'string' && payload.input.includes(`tools.${t}(`)));
+/** A goal record: a goal tool's output, `{"goal":{"threadId":…,"status":…}}`, for this thread; any other tool's text that looks like one is no record. */
+function goalIn(f: CodexFacts, entry: Obj, session: string, calls: ReadonlySet<unknown>): string | undefined {
   const payload = isObj(entry.payload) ? entry.payload : undefined;
-  if (!payload || !/_output$/.test(String(payload.type))) return undefined;
+  if (!payload || !/_output$/.test(String(payload.type)) || !calls.has(payload.call_id)) return undefined;
   const parts = Array.isArray(payload.output) ? payload.output.map((p) => (isObj(p) ? p.text : undefined)) : [payload.output];
   for (const text of parts) {
     if (typeof text !== 'string' || !text.startsWith('{"goal"')) continue;
     try {
       const { goal } = JSON.parse(text) as { goal?: unknown };
-      if (isObj(goal) && goal.threadId === session && typeof goal.status === 'string') return goal.status;
+      if (isObj(goal) && goal.threadId === session && typeof goal.status === 'string' && f.goals.statuses.includes(goal.status)) return goal.status;
     } catch { /* a tool's own text that only looks like one */ }
   }
   return undefined;
@@ -105,6 +111,8 @@ export async function codexReadings(session: string, transcript: string, turn: s
   try { text = await readFile(transcript, 'utf8'); } catch { return { readings: [] }; }
   let version: string | undefined;
   let goal: string | undefined;
+  let goalAt = -Infinity;
+  const goalCalls = new Set<unknown>();
   let plan: string | undefined;
   let tokens = false;
   const seen = new Map<string, { used: number; at: string }>();
@@ -135,13 +143,17 @@ export async function codexReadings(session: string, transcript: string, turn: s
         seen.set(typeof w.window_minutes === 'number' && w.window_minutes >= f.windows.weeklyMinutes ? 'weekly' : '5-hour', { used: w.used_percent, at: String(entry.timestamp ?? '') });
       }
     }
-    goal = goalIn(entry, session) ?? goal;
+    if (goalCall(f, payload)) goalCalls.add(payload.call_id);
+    const said = goalIn(f, entry, session, goalCalls);
+    if (said) { goal = said; goalAt = Date.parse(String(entry.timestamp ?? '')) || -Infinity; }
   }
   if (version !== undefined && !f.versions.includes(version)) return { version, readings: [] };
   const readings = [...seen].map(([name, w]) => windowLine(name, w.used, w.at));
   if (tokens) readings.push(plan ? `Codex billing: your ${plan} plan, from the session's logs` : 'Codex billing: no plan in the session\'s logs, so an API account');
   const home = homeOf(transcript);
-  goal ??= storedGoal(f, home, session);
+  // The store is newer than the rollout when Codex itself moved the goal, which leaves no record there.
+  const stored = storedGoal(f, home, session);
+  if (stored && (goal === undefined || stored.at > goalAt)) goal = stored.status;
   const beats = heartbeats(f, home, session);
   const dues = beats.active.flatMap((b) => (b.due === null ? [] : [b.due]));
   const due = dues.length ? Math.min(...dues) : null;
@@ -165,20 +177,32 @@ export const uncoveredLoops = (version: string): string => `Codex ${version} is 
 /** Whether the facts name loops for a version. */
 export const loopsCovered = (version: string): boolean => facts().versions.includes(version);
 
+/** The reading's name: a heartbeat by its automation, any other by what it reads. */
+const readingName = (reading: string): string => /^Codex heartbeat: (?!no automatic)[^,]*/.exec(reading)?.[0] ?? reading.slice(0, reading.indexOf(':'));
+/** Readings, oldest first, as they stand: the newest of each name, heartbeats cleared when none is left, and that cleared when one comes back. */
+export function standingReadings(readings: Iterable<string>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const reading of readings) {
+    const name = readingName(reading);
+    if (name === 'Codex heartbeat') { for (const k of [...out.keys()]) if (k.startsWith('Codex heartbeat:')) out.delete(k); }
+    else if (name.startsWith('Codex heartbeat:')) out.delete('Codex heartbeat');
+    out.set(name, reading);
+  }
+  return out;
+}
+/** Whether a new reading says what its name already stands at. */
+export const stands = (standing: ReadonlyMap<string, string>, reading: string): boolean => standing.get(readingName(reading)) === reading;
+
 /** Each session's newest Codex readings for its row, one per name; a window's reading says how old it is. */
 export async function rowReadings(query: (sql: string) => Promise<unknown[]>, ids: readonly string[], now: number, since: (ms: number) => string): Promise<Map<string, string[]>> {
-  const out = new Map<string, Map<string, string>>();
+  const out = new Map<string, string[]>();
   if (!ids.length) return new Map();
   const list = ids.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
   const rows = (await query(`SELECT session_id, json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND session_id IN (${list}) AND json_extract(data, '$.reading') LIKE 'Codex %: %' ORDER BY log_pos`)) as { session_id: string; reading: string }[];
-  for (const { session_id, reading } of rows) {
-    const name = reading.slice(0, reading.indexOf(':'));
+  for (const { session_id, reading } of rows) out.set(session_id, [...(out.get(session_id) ?? []), reading]);
+  return new Map([...out].map(([id, list]) => [id, [...standingReadings(list).values()].map((reading) => {
     const read = /, read at (\d{4}-\S+)$/.exec(reading);
     const at = read ? Date.parse(read[1]!) : NaN;
-    const shown = read ? reading.slice(0, read.index) + (Number.isNaN(at) ? '' : `, read ${since(now - at)} ago`) : reading;
-    const mine = out.get(session_id) ?? new Map<string, string>();
-    mine.set(name, shown);
-    out.set(session_id, mine);
-  }
-  return new Map([...out].map(([id, m]) => [id, [...m.values()]]));
+    return read ? reading.slice(0, read.index) + (Number.isNaN(at) ? '' : `, read ${since(now - at)} ago`) : reading;
+  })]));
 }
