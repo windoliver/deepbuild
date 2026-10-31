@@ -33,7 +33,8 @@ mod suite {
     use gpui_kit::base::dock::DockPlacement;
     use gpui_kit::test::TestWindowExt;
     use gpui_kit::{
-        AnyWindowHandle, AppContext as _, HeadlessAppContext, TestAppContext, TestDispatcher,
+        AnyWindowHandle, AppContext as _, HeadlessAppContext, Hsla, Rgba, TestAppContext,
+        TestDispatcher,
     };
     use gpui_shell::{ScriptView, ShellRuntime};
     use serde_json::{json, Value};
@@ -255,7 +256,7 @@ mod suite {
     }
 
     /// The readout's pixels: the item says what was asked to be drawn and where; the pixels say
-    /// it was painted, inside that box, in the readout's own amber, #b45309, which nothing else
+    /// it was painted, inside that box, in the look's session readout role, which nothing else
     /// in the shell is drawn in. That the paint went through the atlas is deep-text-gpui's proof
     /// (tests/acceptance/390), not this one's.
     fn session_readout_in_pixels() {
@@ -275,25 +276,36 @@ mod suite {
             .cx
             .capture_screenshot(opened.handle)
             .expect("offscreen rendering is available");
-        let amber = |inside: bool| {
+        let [rr, rg, rb] = bytes(deep_app::chrome::chrome(false).session_readout);
+        let tinted = |inside: bool| {
             image
                 .enumerate_pixels()
                 .filter(|(x, y, pixel)| {
                     let [r, g, b, _] = pixel.0;
                     let (x, y) = (f64::from(*x), f64::from(*y));
                     (x >= x0 && x < x1 && y >= y0 && y < y1) == inside
-                        && r.abs_diff(0xb4) < 40
-                        && g.abs_diff(0x53) < 40
-                        && b.abs_diff(0x09) < 40
+                        && r.abs_diff(rr) < 40
+                        && g.abs_diff(rg) < 40
+                        && b.abs_diff(rb) < 40
                 })
                 .count()
         };
         assert!(
-            amber(true) > 30,
-            "the session page painted its readout in amber inside its box {readout}: {} amber pixels",
-            amber(true)
+            tinted(true) > 30,
+            "the session page painted its readout in its role inside its box {readout}: {} pixels",
+            tinted(true)
         );
-        assert_eq!(amber(false), 0, "amber outside the readout's box {readout}");
+        assert_eq!(
+            tinted(false),
+            0,
+            "the readout's role outside its box {readout}"
+        );
+    }
+
+    /// A chrome role's color as sRGB bytes.
+    fn bytes(color: Hsla) -> [u8; 3] {
+        let c = Rgba::from(color);
+        [c.r, c.g, c.b].map(|v| (v * 255.).round() as u8)
     }
 
     // Script panels in the shell.
@@ -618,21 +630,22 @@ mod suite {
             "the script's canvas drew its line: {items:?}"
         );
         // The item says what was asked to be drawn; the pixels say it was. The line is the
-        // canvas's default blue, #2563eb, which nothing else in the shell is drawn in.
+        // look's line role, the canvas's default, which nothing else in the shell is drawn in.
         let image = opened
             .cx
             .capture_screenshot(opened.handle)
             .expect("offscreen rendering is available");
-        let blue = image
+        let [lr, lg, lb] = bytes(deep_app::chrome::chrome(false).session_line);
+        let line = image
             .pixels()
             .filter(|pixel| {
                 let [r, g, b, _] = pixel.0;
-                r.abs_diff(0x25) < 40 && g.abs_diff(0x63) < 40 && b.abs_diff(0xeb) < 40
+                r.abs_diff(lr) < 40 && g.abs_diff(lg) < 40 && b.abs_diff(lb) < 40
             })
             .count();
         assert!(
-            blue > 200,
-            "the script's canvas painted its line: {blue} line-blue pixels"
+            line > 200,
+            "the script's canvas painted its line: {line} pixels in the line role"
         );
     }
 

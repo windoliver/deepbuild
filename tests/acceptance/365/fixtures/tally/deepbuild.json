@@ -1,0 +1,12 @@
+{
+  "id": "test/tally",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": [] },
+  "checks": ["ext.tally.report"],
+  "stores": ["ext.tally.item"],
+  "actions": ["ext.tally.put_batch", "ext.tally.lookup"],
+  "requires": {
+    "preview": ["deep.schedule", "deep.registerAction", "deep.store", "deep.store.put", "deep.store.get", "deep.store.list"]
+  }
+}

@@ -7,11 +7,11 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Map};
 
-use crate::hub::{self, Hub, Planted, Scenario, Startup};
+use crate::hub::{self, Hub, Job, Planted, Scenario, Startup};
 use crate::shared::FLICKS;
-use crate::workers::{performance_cores, set_priority, Priority, Workers};
+use crate::workers::{set_priority, Priority, Workers};
 
 /// A job copy's progress: its job, its replica (a playtest's), and the frames it has evaluated.
 pub type Progress = (&'static str, Option<usize>, Arc<AtomicU64>);
@@ -46,15 +46,7 @@ pub fn around<T>(
                 let (stop, started) = (&stop, &started);
                 scope.spawn(move || {
                     set_priority(priority);
-                    evaluate(
-                        scenario,
-                        startup,
-                        &job.document,
-                        priority,
-                        &frames,
-                        stop,
-                        started,
-                    );
+                    evaluate(scenario, startup, job, priority, &frames, stop, started);
                 });
             }
         }
@@ -69,29 +61,26 @@ pub fn around<T>(
 fn evaluate(
     scenario: &Scenario,
     startup: &Startup,
-    document: &Value,
+    job: &Job,
     priority: Priority,
     frames: &AtomicU64,
     stop: &AtomicBool,
     started: &Barrier,
 ) {
     let mut hub = Hub::new(scenario, startup);
-    hub.sched.options.pool = Some(Arc::new(Workers {
-        priority,
-        performance_cores: performance_cores(),
-    }));
+    hub.sched.options.pool = Some(Arc::new(Workers::at(priority)));
     hub.sched.options.threads = None;
     let (Some(session), Some(doc)) = (scenario.sessions.keys().next(), scenario.docs.keys().next())
     else {
         started.wait();
         return;
     };
-    let show = json!({"call": "deep_show", "session": session, "doc": doc, "document": document,
+    let show = json!({"call": "deep_show", "session": session, "doc": doc, "document": job.document,
                       "include": ["issues"]});
     if let Some(call) = show.as_object().and_then(crate::call) {
         hub.call(&call);
     }
-    let span = document["transport"]["span"]
+    let span = job.document["transport"]["span"]
         .as_str()
         .and_then(hub::flicks)
         .filter(|s| *s > 0);
