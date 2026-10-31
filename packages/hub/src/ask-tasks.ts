@@ -77,7 +77,7 @@ export interface AskTaskOptions {
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
    * it takes the claim's snapshot and checkout, and starts the fast lane's checks.
    */
-  run(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void>;
+  run(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes'; asserts: string[] }[] }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
@@ -302,7 +302,7 @@ export class AskTasks {
         });
       }
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
-      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' as const : 'fails' as const }] : []));
+      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' as const : 'fails' as const, asserts: r.asserts }] : []));
       await this.o.run({ claim: `claim:${id}`, session, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, checks });
       } catch (error) {
         process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);

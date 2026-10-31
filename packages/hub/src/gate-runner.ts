@@ -6,23 +6,31 @@
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
 // check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
 // with its split. Pure rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
-import type { Checkouts, TempCheckout } from '@deepbuild/gate';
+import type { CheckResult } from '@deepbuild/conformance';
+import { baseProof, ownRead, type Checkouts, type TempCheckout } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 
 /** A base run's check, apart from the check's own runs: its failure is the proof and its time isn't the check's. */
 export const BASE_RUN = '@base';
 
-/** A check of a claim, as the definition locks it: its approved bytes and its lane facts. */
-export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes' }
+/** A check of a claim, as the definition locks it: its approved bytes, its lane facts and the assertions it names. */
+export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes'; asserts: string[] }
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
-  /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null }): Promise<string>;
+  /**
+   * Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle.
+   * `kind`: through its check kind or as an opaque script, as its run on the claim went; unset, as its script reads.
+   */
+  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; kind?: boolean }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
+  /** What an ended run's check kind reported, handed over once; none for an opaque script's run. */
+  report(run: string): CheckResult | undefined;
+  /** The planted wrong program that counts any base run that didn't pass as the fix's proof (#875); tests only. */
+  plant?: 'any-nonzero-base-exit';
   /** CPU slots free now. */
   slots(): { free: number };
   budget_ms: number;
@@ -122,26 +130,33 @@ export class GateRunner {
     return c.checkout;
   }
   /**
-   * A fix check that passed on the snapshot runs on the merge base, in a temporary checkout from the service (#31):
-   * passing there makes the claim INVALID. A base run that can't be made or doesn't finish proves nothing, so the check
-   * doesn't stand as passed, and it has no result until then. A failure here is the proof: a raw script reports no
-   * assertion to read further.
+   * A fix check that passed on the snapshot runs on the merge base, in a temporary checkout from the service (#31),
+   * with the files its run read under the test, fixture and script folders taken from the snapshot (#875): passing
+   * there makes the claim INVALID. A base run that can't be made or doesn't finish proves nothing, so the check doesn't
+   * stand as passed, and it has no result until then. A check its kind runs proves the fix only by failing at an
+   * assertion it names (Failing on an assertion), so any other failure makes the claim INVALID, naming where. An
+   * opaque script, which its kind can't read, reports no assertion: its failing exit is all it can show, so it stands.
    */
   private async onBase(c: Claim, e: Entry, head: string): Promise<void> {
+    const report = this.o.report(e.runs[e.runs.length - 1]!);
     if (e.check.on_base !== 'fails' || head !== 'passed') { e.outcome = head; return; }
     const check = e.check.check;
+    const named = { own: report?.read.filter(ownRead) ?? [], asserts: e.check.asserts };
     try {
       const token = `${e.claim} ${check} base`;
-      const base = await this.o.checkouts().baseCheckout({ worktree: c.worktree, onto: c.base, claim: c.snapshot, own: [], dependencies: DEPENDENCIES, runs: [token] });
+      const base = await this.o.checkouts().baseCheckout({ worktree: c.worktree, onto: c.base, claim: c.snapshot, own: named.own, dependencies: DEPENDENCIES, runs: [token] });
       try {
-        const run = await this.o.start({ claim: e.claim, check: `${check}${BASE_RUN}`, approved: e.check.approved, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null });
+        const run = await this.o.start({ claim: e.claim, check: `${check}${BASE_RUN}`, approved: e.check.approved, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, kind: report !== undefined });
         e.runs.push(run);
         const outcome = await this.o.ended(run);
-        if (outcome === 'passed') {
+        const ran = this.o.report(run);
+        const why = outcome === 'passed' ? 'passes on the merge base, so it can\'t prove the fix'
+          : ran && !this.o.stopping() && this.o.plant !== 'any-nonzero-base-exit' ? baseProof(ran, named).why : null;
+        if (why) {
           e.invalid = true;
-          await this.o.invalid(e.claim, c.snapshot, `${check} passes on the merge base, so it can't prove the fix`);
+          await this.o.invalid(e.claim, c.snapshot, `${check} ${why}`);
         }
-        e.outcome = outcome === 'passed' || outcome === 'failed' || outcome === 'overran' ? head : outcome;
+        e.outcome = why || outcome === 'failed' || outcome === 'overran' ? head : outcome;
       } finally {
         await this.o.checkouts().ended(base, token);
       }
