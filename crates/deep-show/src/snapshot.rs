@@ -798,6 +798,11 @@ pub fn entry(sha: &str, drawn: &Drawn, size: [u16; 2]) -> Value {
     json!({"sha256": sha, "w": size[0], "h": size[1], "marks": marks, "legend": legend})
 }
 
+/// A size as a snapshot's px: rounded, 1 to 8192 each way.
+pub fn px(size: [f64; 2]) -> [u16; 2] {
+    size.map(|v| v.round().clamp(1.0, 8192.0) as u16)
+}
+
 /// An RGBA raster as an 8-bit RGBA PNG, its bytes the same for the same pixels.
 pub fn png(rgba: Vec<u8>, size: [u16; 2]) -> Vec<u8> {
     let mut out = Vec::new();

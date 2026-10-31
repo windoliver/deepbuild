@@ -1,0 +1,92 @@
+{
+  "title": "work.item@1",
+  "description": "A work source's reading (#364): one item where work comes from, with a link back, its acceptance criteria and each author's role as the provider's membership record gives it, never as the item's text says.",
+  "x-since": "R2",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The item's ID at its source, such as owner/repo#12."
+    },
+    "link": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "Where the item lives at its source."
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 8192,
+      "description": "The item's title."
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "A handle to the item's body, never its text inline."
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192,
+        "description": "One acceptance criterion, as the source writes it."
+      },
+      "description": "The item's acceptance criteria, in order."
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "The author's account at the source."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "collaborator",
+              "outside"
+            ],
+            "description": "The author's role, from the provider's membership record.",
+            "x-closure": {
+              "closed": "an author owns the repo, collaborates on it, or is outside it",
+              "reopens": "a new major of this kind",
+              "mark": "exhaustive"
+            }
+          }
+        },
+        "required": [
+          "handle",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Everyone who wrote the item's text, each with their role."
+    },
+    "updated": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "When the source last changed the item, as the source gives it."
+    }
+  },
+  "required": [
+    "source_id",
+    "link",
+    "title",
+    "body",
+    "criteria",
+    "authors",
+    "updated"
+  ],
+  "additionalProperties": false
+}

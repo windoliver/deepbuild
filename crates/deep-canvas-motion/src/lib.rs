@@ -4,6 +4,7 @@
 //!
 //! The math is f64 through deep-canvas's ops module on pinned libm, as the canvas lint requires.
 
+mod canonical;
 pub mod clock;
 pub mod curve;
 pub mod doc;
