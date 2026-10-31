@@ -434,6 +434,25 @@ workloads.judge = () => {
   console.log(JSON.stringify({ class: cls, status, warm, readings, ...(reason ? { reason } : {}) }));
 };
 
+// #402: a terminal's cell grid fed 600 updates, one every 1/60 s, on the virtual clock; fails unless every update is
+// presented in a frame of its own. `terminal-60hz` feeds one numbered line an update, `cell-grid-60hz` a full repaint
+// of all 36 rows.
+const terminal = (repaint) => () => {
+  const step = SEC / 60, rows = 36;
+  const line = (k) => `L${String(k).padStart(8, '0')} ${'x'.repeat(26)}`;
+  const text = (k) => (repaint ? `\u001b[H${Array.from({ length: rows }, (_, r) => `F${k} R${r} ${line(k * 100 + r)}\u001b[K`).join('\r\n')}` : `${line(k)}\r\n`);
+  const feed = Array.from({ length: 600 }, (_, k) => ({ at: 3 * SEC + k * step, text: text(k) }));
+  const manifest = { panels: { screen: { raw_input: true, tree: [{ id: 'screen', component: 'cells', terminal: 'T1' }] } } };
+  const [, updates] = ring({ screen: { rect: [0, 0, 400, 350] } }, manifest, [
+    { call: 'terminal_open', at: SEC, terminal: 'T1', panel: 'screen', cols: 120, rows, feed },
+    { call: 'updates', at: 14 * SEC, terminal: 'T1' },
+  ]);
+  const shown = new Set(updates.updates.map((u) => u.presented));
+  if (updates.updates.length !== 600 || updates.updates.some((u) => u.dropped || u.presented === null) || shown.size !== 600) throw Error(`an update wasn't presented in a frame of its own: ${JSON.stringify(updates).slice(0, 600)}`);
+};
+workloads['terminal-60hz'] = terminal(false);
+workloads['cell-grid-60hz'] = terminal(true);
+
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
 workloads[task]();

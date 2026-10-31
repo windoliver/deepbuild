@@ -70,6 +70,10 @@
     },
     "crates/deep-app/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row in the spike feeding a busy terminal's changes to it."
+        },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #337: the toolkit under trial, pinned to one commit since gpui-kit is unpublished at this milestone."
@@ -294,6 +298,10 @@
           "spec": "0.0.0",
           "why": "Issue #30: the scrub of a run's output by the values its environment and secrets held, before it is digested or shown."
         },
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the one masked-exit rule the core holds, which the validity gate, this check kind and spec drafting all read."
+        },
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
@@ -337,6 +345,10 @@
         "@deepbuild/extension-host": {
           "spec": "0.0.0",
           "why": "Issue #350: the hub opens project trust and the extension host on its record and supervisor at startup, and asks its extensions at run time."
+        },
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the core's gate runner: every check run takes its cpu.slot lease through it, held for the claim's session."
         },
         "@deepbuild/leases": {
           "spec": "0.0.0",
@@ -730,8 +742,28 @@
         }
       }
     },
+    "crates/deep-canvas-cells/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #402: the registry and seal the cells module registers through, the scheduler's typed views it reads a grid's item through, and the OKLab conversion and ops module the palette rule's status distance goes through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #402: a grid's params as the document holds them, and the module's fixture. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-show/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cells canvas module in the r2 build set and up, and the terminal emulator its panel host feeds a program's output through."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #402: a terminal's PTY (openpty, login_tty and its window size) for deep-show serve, and stopping by PID the hosts and programs it started; already in the lockfile."
+        },
         "deep-canvas-graph": {
           "spec": "* path=../deep-canvas-graph",
           "why": "Issue #388: the graph canvas module, in the r1 build set and up."
@@ -1181,9 +1213,31 @@
           "why": "Issue #63: an install writes its findings as wiki claims, and a cite's known-from is the wiki's knownOf."
         }
       }
+    },
+    "packages/gate/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the definition is hashed part by part through the canonical form and SHA-256 every record hash uses."
+        },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #29: every check run and heavy command takes its cpu.slot lease from the kernel's one lease table, never a queue of its own."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
+        }
+      }
     }
   },
   "allowedFindings": [
+    {
+      "path": "tests/acceptance/402/cellgrid.test.ts",
+      "kind": "home path",
+      "sha256": "73de225f29dce8dcabd664cb3c25892f80840f279de7a9135a504bdecf37ea2c",
+      "why": "Issue #402: a placeholder cwd (user me) the cell grid's SCOPE test feeds a terminal through OSC 7 and reads back; no real home."
+    },
     {
       "path": "tests/acceptance/79/checks.test.mjs",
       "kind": "home path",

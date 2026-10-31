@@ -72,7 +72,9 @@ export interface LeaseTable {
   tick(): Promise<void>;
   /**
    * Ends a lease whose holder is no session, citing the events that prove it over: the supervisor's, for a run, once
-   * every process recorded for the run is proven gone. A session's lease ends only on the table's own tick.
+   * every process recorded for the run is proven gone. A session's lease ends only on the table's own tick, unless it
+   * was taken for one run (the gate runner's `cpu.slot`, #29): that one ends with its run, once no process recorded
+   * for the run still runs.
    */
   release(lease: string, proof: string[]): Promise<void>;
   leases(): Promise<LeaseView[]>;
@@ -361,7 +363,11 @@ class Table implements LeaseTable {
     await this.sync();
     const h = this.held.get(lease);
     if (!h) return;
-    if (h.lease.holder.startsWith('session:')) throw Error(`${lease} is ${h.lease.holder}'s: a session's lease ends only once the table reads it ended`);
+    if (h.lease.holder.startsWith('session:')) {
+      if (!h.run) throw Error(`${lease} is ${h.lease.holder}'s: a session's lease ends only once the table reads it ended`);
+      const { running } = this.processes(h.run);
+      if (running.length) throw Error(`${lease} is held open by ${h.run}'s processes still running: ${running.join(', ')}`);
+    }
     await this.end(h, proof);
   }
   private async end(h: Held, proof: string[]): Promise<void> {

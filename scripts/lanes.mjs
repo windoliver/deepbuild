@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inputs as configInputs } from './config-eval.mjs';
+import { inputs as verdictInputs } from './verdict-proofs.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // The repo's declared test paths. The unit lane's runners take their file patterns from them, and perf
@@ -17,21 +19,25 @@ export const testGlobs = (extension) => testPaths
 const ownLane = ['tests/acceptance/684/lean.test.ts'];
 /** Vitest files the unit lane runs one at a time, after the parallel block (see the lane). */
 const alone = ['tests/acceptance/20/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/488/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/',
-  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/671/', 'tests/acceptance/381/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
+  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/671/', 'tests/acceptance/381/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/139/',
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
   'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/25/live/budgets.test.ts', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/347/', 'tests/acceptance/340/',
-  'tests/acceptance/23/permissions/', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/83/', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts'];
+  'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/29/budgets.test.ts',
+  'tests/acceptance/23/permissions/', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/83/', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
+  ...['wake', 'repeat', 'waits', 'outcomes', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/desktop-redraft/'];
 /**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
  * minutes; #666's and #668's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
  * only the release preflight runs them (releaseLanes, below). #112's live eval replays 20 real tasks you export from
  * your archive, on your plan for up to two hours, so only you run it (tests/acceptance/112/README.md, The live run).
+ * #27's first AC3 draft is kept as written but run by hand only: its step 3 is satisfied by step 1's wake (every ask
+ * shares the option ID green), so its blind redraft, desktop-redraft/, is AC3's test (the owner's call on PR #816).
  */
 const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
-  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts'];
+  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/806/live.test.ts'];
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -79,9 +85,9 @@ export const checks = [
   { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs', ...(process.env.DEEP_PREFLIGHT === 'release' ? ['--release'] : [])]], fix: 'Follow the Fix line under each proof lane finding above.' },
   // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's
   // seeded claims and the rank-swap twins. Lean builds take a while, so the local preflight runs it only for a
-  // change to the engine or the model; the release preflight always does.
+  // change to what its script says it checks (#821); the release preflight always does.
   {
-    name: 'verdict proofs', paths: ['packages/verdicts/src/**', 'packages/verdicts/model/**'],
+    name: 'verdict proofs', paths: verdictInputs,
     commands: [[process.execPath, 'scripts/verdict-proofs.mjs'], [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/684', 'lean.test.ts', '-t', 'AC3|AC4', '--silent=false']],
     fix: 'Repair the proof or build error each FAIL line names, keeping every theorem on Lean\'s standard axioms, or make the engine and packages/verdicts/model agree on the vector named; under BLOCKED, install the toolchain as its Fix line says.',
   },
@@ -89,7 +95,7 @@ export const checks = [
   // replay of it on real past tasks that didn't regress. The replay spends plan usage, so you start it; this gate only
   // reads the report it left.
   {
-    name: 'config eval', paths: ['AGENTS.md', 'CLAUDE.md', 'skills/**', '.claude/**', '.codex/**'],
+    name: 'config eval', paths: configInputs,
     commands: [[process.execPath, 'scripts/config-eval.mjs', 'gate']],
     fix: 'Under BLOCKED, run the two commands its Fix line names; under FAIL, the change broke the tasks named, so rework it and replay it again.',
   },
@@ -128,6 +134,8 @@ export const releaseLanes = [
       // #25's routes back into a session: the Stop hold, the waiter's wake, the next prompt and a resume's start.
       ['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/25/live', 'routes.live.test.ts'],
       ['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/25/live-redraft', 'ac2.live.test.ts'],
+      // #27's exit criterion: an answer wakes an idle session, and a repeat in a new session is decided for you.
+      ['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/27', 'session.live.test.ts'],
     ],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` for the settings-tamper sessions.',
   },
@@ -146,8 +154,32 @@ function changedPaths(cwd) {
   if (diff.status !== 0 || untracked.status !== 0) return null;
   return [...diff.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean);
 }
-/** A lane's path: a folder ending in `/**` matches everything under it, anything else matches itself. */
-const covers = (path, file) => (path.endsWith('/**') ? file.startsWith(path.slice(0, -2)) : file === path);
+/**
+ * Whether a lane's paths cover a file: a predicate, such as the `inputs` its script exports, or a list in which a
+ * folder ending in `/**` matches everything under it and anything else matches itself.
+ */
+const covers = (paths, file) => (typeof paths === 'function' ? paths(file)
+  : paths.some((path) => (path.endsWith('/**') ? file.startsWith(path.slice(0, -2)) : file === path)));
+/**
+ * The changed files a lane's script says it reads (its `inputs` export) that the lane's paths miss (#821); null when
+ * the script can't be loaded, so what it reads is unknown. A child loads it, so runLanes stays synchronous.
+ */
+function missed(lane, changed, cwd) {
+  const script = lane.commands.flat().find((arg) => /^scripts\/[^/]+\.mjs$/.test(arg));
+  if (!script) return { files: [] };
+  const code = `import { readFileSync } from 'node:fs';
+    const { inputs } = await import(${JSON.stringify(pathToFileURL(join(cwd, script)).href)});
+    const files = JSON.parse(readFileSync(0, 'utf8'));
+    console.log(JSON.stringify(typeof inputs === 'function' ? files.filter((file) => inputs(file)) : []));`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd, input: JSON.stringify(changed), encoding: 'utf8', maxBuffer: 2 ** 28 });
+  try {
+    if (result.status !== 0) return null;
+    const reads = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    return { script, files: reads.filter((file) => !covers(lane.paths, file)) };
+  } catch {
+    return null;
+  }
+}
 
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
@@ -157,9 +189,17 @@ export function runLanes(lanes, { cwd = root } = {}) {
   for (const lane of lanes) {
     if (lane.paths && !release) {
       changed ??= changedPaths(cwd);
-      if (changed && !changed.some((file) => lane.paths.some((path) => covers(path, file)))) {
-        console.log(`SKIP ${lane.name}: the change touches none of ${lane.paths.join(', ')}`);
-        continue;
+      // A lane skips only when its script reads none of the change either.
+      if (changed && !changed.some((file) => covers(lane.paths, file))) {
+        const misses = missed(lane, changed, cwd);
+        if (misses?.files.length) {
+          failures.push(`FAIL ${lane.name}: its paths miss ${misses.files.join(', ')}, which ${misses.script} reads\n  Fix: Take the lane's paths from the inputs ${misses.script} exports.`);
+          continue;
+        }
+        if (misses) {
+          console.log(`SKIP ${lane.name}: the change touches no file it reads`);
+          continue;
+        }
       }
     }
     const started = performance.now();

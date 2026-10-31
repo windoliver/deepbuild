@@ -29,6 +29,22 @@ export interface Deep {
             kinds?: Array<string>;
         };
     }): Promise<unknown>;
+    "terminal.list"(params: {
+    }): Promise<unknown>;
+    "terminal.open"(params: {
+        spec: {
+            argv: Array<string>;
+            cwd: string;
+            env?: { [key: string]: string };
+            cols: number;
+            rows: number;
+            title: string;
+        };
+    }): Promise<unknown>;
+    "terminal.read"(params: {
+        terminal: string;
+        from: number;
+    }): Promise<unknown>;
     fetch(params: {
         request: {
             url: string;

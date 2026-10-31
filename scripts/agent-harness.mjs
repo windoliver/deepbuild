@@ -77,7 +77,7 @@ function parseArgs(argv) {
   if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line', 'fix-checkout-test', 'settings-tamper', 'deep-answer', 'bash-calls'].includes(options.scenario)) throw Error('run needs a known --scenario');
   if (options.scenario === 'bash-calls' && (options.agent !== 'claude' || !options.workdir || !options.hooks || !(Number.isInteger(options.calls) && options.calls > 0))) throw Error('bash-calls runs claude and needs --workdir, --hooks and a positive whole --calls');
   if (options.calls !== undefined && options.scenario !== 'bash-calls') throw Error('--calls belongs to the bash-calls scenario');
-  if (options.scenario === 'deep-answer' && (options.agent !== 'claude' || !options.workdir || !options.mcpConfig || !['stop-hold', 'idle-wake', 'next-prompt', 'resume'].includes(options.route))) throw Error('deep-answer runs claude and needs --workdir, --mcp-config and a --route of stop-hold, idle-wake, next-prompt or resume');
+  if (options.scenario === 'deep-answer' && (options.agent !== 'claude' || !options.workdir || !options.mcpConfig || !['stop-hold', 'idle-wake', 'next-prompt', 'resume', 'repeat'].includes(options.route))) throw Error('deep-answer runs claude and needs --workdir, --mcp-config and a --route of stop-hold, idle-wake, next-prompt, resume or repeat');
   if (options.scenario === 'add-readme-line' && (options.agent !== 'claude' || !options.workdir || !options.hooks)) throw Error('add-readme-line runs claude and needs --workdir and --hooks');
   if (options.scenario === 'fix-checkout-test' && (options.agent !== 'claude' || !options.workdir)) throw Error('fix-checkout-test runs claude and needs --workdir');
   if (options.scenario === 'settings-tamper' && (options.agent !== 'claude' || !options.workdir || !options.script)) throw Error('settings-tamper runs claude and needs --workdir and --script');
@@ -484,13 +484,19 @@ async function answerRun(options) {
   const exit = async (s) => { s.exiting = Date.now(); await type(s, '/exit'); await until(() => s.exited || Date.now() - s.exiting > 10_000, `${s.name} to exit`); };
   const FOLLOW = 'Reply with only the word READY, unless an answer to a question you asked has reached you; then reply with only the label of the option chosen.';
   // One round: the session asks with deep_ask, two fresh code words as the options' labels; its first stop follows.
-  const ask = async (s, round) => {
-    const words = [`Lantern${randomBytes(2).toString('hex')}`, `Harbor${randomBytes(2).toString('hex')}`];
+  // The repeat route (#27) asks again in a new session, word for word: `again` is the earlier round's words and
+  // subject, and its prompt says what to do when deep_ask itself returns the answer, as a saved decision makes it.
+  const ask = async (s, round, again) => {
+    const words = again?.words ?? [`Lantern${randomBytes(2).toString('hex')}`, `Harbor${randomBytes(2).toString('hex')}`];
+    const subject = again?.subject ?? (route === 'repeat' ? `req:${token.slice(4)}` : undefined);
     const from = stops(s).length;
-    await type(s, `Call the mcp__deep__deep_ask tool once with kind "choice", the question "Which option for round ${round}?" exactly as written, options [{"id":"a","label":"${words[0]}"},{"id":"b","label":"${words[1]}"}] and recommended "a". Whatever it returns, call no other tool and end your turn in one sentence without either label. My answer will reach you later through DeepBuild, as hook feedback or a task notification: when it does, reply with only the label of the option I chose.`);
+    await type(s, subject
+      ? `Call the mcp__deep__deep_ask tool once with kind "choice", the question "Which option for round ${round}?" exactly as written, options [{"id":"a","label":"${words[0]}"},{"id":"b","label":"${words[1]}"}], recommended "a" and subject {"point":"${subject}"}. If it returns an answer, reply with only the label of the option it names. Otherwise call no other tool and end your turn in one sentence without either label. My answer will reach you later through DeepBuild, as hook feedback or a task notification: when it does, reply with only the label of the option I chose.`
+      : `Call the mcp__deep__deep_ask tool once with kind "choice", the question "Which option for round ${round}?" exactly as written, options [{"id":"a","label":"${words[0]}"},{"id":"b","label":"${words[1]}"}] and recommended "a". Whatever it returns, call no other tool and end your turn in one sentence without either label. My answer will reach you later through DeepBuild, as hook feedback or a task notification: when it does, reply with only the label of the option I chose.`);
     const first = await until(() => stops(s)[from], `round ${round}'s first Stop of ${s.name}`);
+    const says = (x) => words.some((w) => String(x?.last_assistant_message ?? '').includes(w));
     // The answered stop: a later one whose reply names an option's label, whatever brought the answer.
-    return { first, after: () => stops(s).slice(from + 1).find((x) => words.some((w) => String(x.last_assistant_message ?? '').includes(w))) };
+    return { first, words, subject, says, after: () => stops(s).slice(from + 1).find(says) };
   };
   let stop = 'done', verdict = 'PASS', reason = '';
   try {
@@ -504,6 +510,15 @@ async function answerRun(options) {
         const r = await ask(a, round);
         await until(() => { const st = r.after(); return st && turnOver(a, st.at); }, `round ${round}'s answered Stop of A and its turn's end`);
       }
+    } else if (route === 'repeat') {
+      // A asks and is answered while idle, as idle-wake's first round; then B, new, asks the same and is answered at once.
+      const r = await ask(a, 1);
+      await until(() => { const st = r.after(); return st && turnOver(a, st.at); }, 'A\'s answered Stop and its turn\'s end');
+      await exit(a);
+      const b = begin('B');
+      await ready(b);
+      const again = await ask(b, 1, r);
+      await until(() => again.says(again.first) || again.after(), 'a Stop of B carrying an option\'s label');
     } else if (route === 'next-prompt') {
       const r = await ask(a, 1);
       await until(() => turnOver(a, r.first.at), 'A\'s turn to end');
@@ -641,7 +656,7 @@ for (const name of signals) process.on(name, () => { interrupted = true; });
 
 let options;
 try { options = parseArgs(process.argv.slice(2)); } catch (error) {
-  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|fix-checkout-test|settings-tamper|deep-answer|bash-calls> [--workdir <dir> [--hooks <settings.json> [--calls <n>] | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
+  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|fix-checkout-test|settings-tamper|deep-answer|bash-calls> [--workdir <dir> [--hooks <settings.json> [--calls <n>] | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume|repeat> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
   process.exit(2);
 }
 options.out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'deep-harness-')));

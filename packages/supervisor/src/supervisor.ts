@@ -31,6 +31,9 @@ const UNBLOCK_SOURCE = 'supervisor.cleanup';
 const RUN = /^run:[0-9A-Za-z]+$/;
 /** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
 const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
+/** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
+const FOLDED = ['process.starting', 'run.kept', 'process.tracked', 'process.ended', 'lease.acquired', 'lease.stale', 'lease.released', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'ask.superseded', 'ask.moot', 'ask.cancelled'] as const;
+type Folded = (typeof FOLDED)[number];
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const alive = (pid: number): boolean => {
@@ -62,6 +65,8 @@ interface Run {
   cleaned?: Cleanup;
   /** Its cleanup while it runs: a second call shares it. */
   cleaning?: Promise<Cleanup>;
+  /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
+  kept?: boolean;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
@@ -94,6 +99,8 @@ class LocalSupervisor implements Supervisor {
   private scanning: Promise<void> = Promise.resolve();
   private pumping: Promise<void> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
+  /** The timer's scan while it is queued or runs. */
+  private timed: Promise<void> | undefined;
   private log: ChildProcess | undefined;
   /** The canary run whose report shows the denial stream is live, and when it last came through. */
   private canary = '';
@@ -136,14 +143,21 @@ class LocalSupervisor implements Supervisor {
     await this.options.record.append(CORE, event);
     return event.id;
   }
+  /**
+   * What the log gained of the kinds the supervisor reads, the rest never decoded. The cursor moves to the head read
+   * first, so a busy log's other events are scanned once, not again at every tick.
+   */
   private async events(): Promise<Event[]> {
+    const head = await this.head();
     const all: Event[] = [];
     for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: 1000 });
-      if (!page.length) return all;
+      const page = await this.options.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
       all.push(...page);
-      this.cursor = page[page.length - 1]!.log_pos;
+      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
+      if (page.length < 1000) break;
     }
+    this.cursor = Math.max(this.cursor, head);
+    return all;
   }
   private async head(): Promise<number> {
     const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
@@ -184,10 +198,13 @@ class LocalSupervisor implements Supervisor {
       const d = e.data as Record<string, unknown>;
       const run = typeof d.run === 'string' ? d.run : e.subject ?? '';
       const r = this.runs.get(run);
-      switch (e.kind) {
+      switch (e.kind as Folded) {
         case 'process.starting':
           this.runs.set(run, { ...blank(run, String(d.cwd), 'running'), leases: this.early.get(run) ?? [] });
           this.early.delete(run);
+          break;
+        case 'run.kept':
+          if (r) r.kept = true;
           break;
         case 'process.tracked':
           if (!r) break;
@@ -271,13 +288,18 @@ class LocalSupervisor implements Supervisor {
       }
     }
     this.early.clear();
-    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker.
-    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned')) {
+    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker. A kept run
+    // was meant to outlive the hub: it stays the run's, scanned and stoppable as before.
+    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned' && !r.kept)) {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
     if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials();
-    this.timer = setInterval(() => void this.scanOnce().catch(() => undefined), SCAN_MS);
+    // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
+    // without end in front of a cleanup's own scan.
+    this.timer = setInterval(() => {
+      this.timed ??= this.scanOnce().catch(() => undefined).finally(() => { this.timed = undefined; });
+    }, SCAN_MS);
     this.timer.unref();
   }
 
@@ -497,6 +519,10 @@ class LocalSupervisor implements Supervisor {
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
+    if (spec.keep) {
+      r.kept = true;
+      await this.append('run.kept', { run: spec.run }, spec.run);
+    }
     if (!this.options.leases) for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
     if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
     const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
@@ -764,8 +790,9 @@ class LocalSupervisor implements Supervisor {
     if (this.asked.size) await this.options.asks.tick();
     for (const e of this.asked.size ? await this.events() : []) {
       if (!e.subject || !this.asked.has(e.subject)) continue;
-      if (e.kind === 'ask.answered' || e.kind === 'ask.defaulted') await this.settleAsk(e);
-      else if (e.kind === 'ask.superseded' || e.kind === 'ask.moot' || e.kind === 'ask.cancelled') this.dropAsk(e.subject);
+      const kind = e.kind as Folded;
+      if (kind === 'ask.answered' || kind === 'ask.defaulted') await this.settleAsk(e);
+      else if (kind === 'ask.superseded' || kind === 'ask.moot' || kind === 'ask.cancelled') this.dropAsk(e.subject);
     }
     // A key out of its pool comes back once a later cleanup check finds it clean, checked once a minute.
     const recheck = Date.now() - this.recheckedAt >= RECHECK_MS;

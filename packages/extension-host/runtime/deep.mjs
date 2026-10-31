@@ -34,6 +34,11 @@ export const API = Object.freeze([
   { method: 'deep.read', needs: null },
   // #44: a lease from the kernel's one table, held by the package itself.
   { method: 'deep.lease', needs: null },
+  // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
+  // only from the panel you focused, through the app.
+  { method: 'deep.terminal.open', needs: 'run_as_you' },
+  { method: 'deep.terminal.list', needs: 'run_as_you' },
+  { method: 'deep.terminal.read', needs: 'run_as_you' },
 ].map((m) => Object.freeze(m)));
 
 /**
@@ -74,7 +79,7 @@ export function extensionSide(call, load) {
     },
   };
   const deep = {};
-  for (const { method } of API) {
+  const add = (method) => {
     const path = method.split('.').slice(1);
     let owner = deep;
     for (const key of path.slice(0, -1)) owner = owner[key] ??= {};
@@ -90,11 +95,16 @@ export function extensionSide(call, load) {
       made.catch(() => undefined);
       return made;
     };
-  }
+  };
+  for (const { method } of API) add(method);
   return {
     async serve(method, params) {
-      // What the package's code returned at its load, as JSON: a release's fixture package returns its calls' results (#139).
-      if (method === 'load') return (await load(deep, params)) ?? null;
+      // A planted host's methods beyond the schema (tests only), before the package's code runs. What the package's
+      // code returned at its load comes back as JSON: a release's fixture package returns its calls' results (#139).
+      if (method === 'load') {
+        for (const planted of params?.planted ?? []) add(planted);
+        return (await load(deep, params)) ?? null;
+      }
       if (method === 'run') {
         const runner = checks.get(params?.type);
         if (!runner) throw Error(`no check kind ${params?.type} is registered here`);
