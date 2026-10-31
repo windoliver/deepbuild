@@ -1,6 +1,8 @@
 {
   "title": "verdict@1",
   "description": "The verdict record that is hashed.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-hash": {
     "excludes": [
       "/checkout"

@@ -1,6 +1,8 @@
 {
   "title": "job.event@1",
   "description": "A hook from one of DeepBuild's own jobs: its session ID is the one the runner read from that job's own output and its stamp falls inside the job's run. It is the job's event, never a session's, a claim, a verdict or task spend.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -1,6 +1,8 @@
 {
   "title": "tool.before@2",
   "description": "A tool call is about to run; one deep-hook let through because the hub was late is marked late and names the guard entries it matched.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "session_files",
     "returns"

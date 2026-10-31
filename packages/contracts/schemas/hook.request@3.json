@@ -1,6 +1,8 @@
 {
   "title": "hook.request@3",
   "description": "deep-hook's request line: the agent's hook JSON, stamped with seq and id; a spooled call let through because the hub was late is marked late, a SessionStart says which billing keys are set, and a matched guard entry can carry a note on what this call does.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "v": {

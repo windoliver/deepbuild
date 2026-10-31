@@ -1,6 +1,8 @@
 {
   "title": "run.kept@1",
   "description": "A supervised run keeps running when the hub stops, as a hosted terminal's host process does (#104): a supervisor opened later adopts it rather than reaping it, and its cleanup still stops every process it owns.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

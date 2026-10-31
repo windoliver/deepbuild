@@ -1,6 +1,8 @@
 {
   "title": "open_item.closed@1",
   "description": "An open item was closed.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "open_items"
   ],

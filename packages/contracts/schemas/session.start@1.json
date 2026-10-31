@@ -1,6 +1,8 @@
 {
   "title": "session.start@1",
   "description": "A session started.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

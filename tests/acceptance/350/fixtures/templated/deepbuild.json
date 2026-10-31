@@ -10,5 +10,6 @@
       "text": "{handle} has {count} checks still open",
       "fields": { "handle": { "type": "handle" }, "count": { "type": "number" } }
     }
-  ]
+  ],
+  "requires": { "preview": ["deep.on"] }
 }

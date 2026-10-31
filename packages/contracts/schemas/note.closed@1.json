@@ -1,6 +1,8 @@
 {
   "title": "note.closed@1",
   "description": "A note was closed, by you or by a check; never by an agent or a plug-in.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "notes"
   ],

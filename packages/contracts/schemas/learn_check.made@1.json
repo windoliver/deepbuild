@@ -1,6 +1,8 @@
 {
   "title": "learn_check.made@1",
   "description": "The core refused a learned change from what it read in the evidence store, and why. Only the core appends it, in the commit of the change it refuses.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "learned_layer"
   ],

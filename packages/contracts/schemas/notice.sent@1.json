@@ -1,6 +1,8 @@
 {
   "title": "notice.sent@1",
   "description": "A notice was sent.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "notices"
   ],

@@ -1,6 +1,8 @@
 {
   "title": "reading.recorded@1",
   "description": "A reading was recorded.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "readings"
   ],
