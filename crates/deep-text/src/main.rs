@@ -1,16 +1,19 @@
 //! `deep-text <subcommand>`: JSON lines in, one JSON line out per input line, in order, exit 0; a
 //! line that can't be read, or holds a number that isn't finite, a size that isn't above zero, a
 //! weight outside 1..=1000 or a negative box side, answers `{"ok":false,"code":"bad_input"}`.
-//! Subcommands: `fit` (the fit check of one Text item against its widest string), `fonts` (the
+//! Subcommands: `fit` (the fit check of one Text item against its widest string), `shape` (#856:
+//! the item shaped through the shaped-run cache, with what it shaped and the cache's size), `fonts` (the
 //! bundled faces by role), and `breaks`, `graphemes` and `bidi` (issue #381: the shaper's UAX #14
 //! line-break opportunities, UAX #29 grapheme ends and UAX #9 levels and visual order, as code point
 //! offsets). `breaks` takes `planted: "space_breaker"` and `bidi` `planted: "logical_arabic"`, the
-//! acceptance suite's wrong programs.
+//! acceptance suite's wrong programs. `--planted no_cache | reshaping_fit | evicts_oldest` after
+//! the subcommand runs #856's.
 
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
+use deep_text::cache::{self, Planted};
 use deep_text::{unicode, Align, Dir, Role, Shaper, Spec, FACES};
 
 fn bad_input() -> Value {
@@ -29,70 +32,72 @@ fn number(input: &Map<String, Value>, key: &str, default: f32) -> Option<f32> {
     }
 }
 
-fn fit_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
+/// A Text item's fields as `fit` and `shape` read them: its spec, its box's height and its widest
+/// string; or the line's refusal.
+fn read_spec(input: &Map<String, Value>) -> Result<(Spec<'_>, Option<f32>, Option<&str>), Value> {
     let Some(text) = input.get("text").and_then(Value::as_str) else {
-        return bad_input();
+        return Err(bad_input());
     };
     let bound = match input.get("number") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(bound)) => *bound,
-        Some(_) => return bad_input(),
+        Some(_) => return Err(bad_input()),
     };
     let role = match input.get("font") {
         None | Some(Value::Null) => Role::Body,
         Some(Value::String(name)) => match Role::parse(name) {
             Some(role) => role,
-            None => return refused("bad_font"),
+            None => return Err(refused("bad_font")),
         },
-        Some(_) => return bad_input(),
+        Some(_) => return Err(bad_input()),
     };
     let (Some(size), Some(weight)) = (number(input, "size", 13.), number(input, "weight", 400.))
     else {
-        return bad_input();
+        return Err(bad_input());
     };
     if size <= 0. || !(1. ..=1000.).contains(&weight.round()) {
-        return bad_input();
+        return Err(bad_input());
     }
     let tabular = match input.get("numerals").and_then(Value::as_str) {
         None => bound,
         Some("tabular") => true,
         Some("proportional") => false,
-        Some(_) => return bad_input(),
+        Some(_) => return Err(bad_input()),
     };
     let (width, height) = match input.get("box") {
         None | Some(Value::Null) => (None, None),
         Some(Value::Object(limits)) => {
             let (Some(w), Some(h)) = (number(limits, "w", f32::NAN), number(limits, "h", f32::NAN))
             else {
-                return bad_input();
+                return Err(bad_input());
             };
             if w < 0. || h < 0. {
-                return bad_input();
+                return Err(bad_input());
             }
             (
                 Some(w).filter(|w| !w.is_nan()),
                 Some(h).filter(|h| !h.is_nan()),
             )
         }
-        Some(_) => return bad_input(),
+        Some(_) => return Err(bad_input()),
     };
     let max_lines = match input.get("max_lines") {
         None | Some(Value::Null) => None,
         Some(value) => match value.as_u64().and_then(|n| u16::try_from(n).ok()) {
             Some(n) => Some(n),
-            None => return bad_input(),
+            None => return Err(bad_input()),
         },
     };
     let mask = match input.get("overflow") {
         None | Some(Value::Null) => false,
         Some(Value::String(overflow)) if overflow == "ellipsis" => false,
         Some(Value::String(overflow)) if overflow == "mask" => true,
-        Some(_) => return bad_input(),
+        Some(_) => return Err(bad_input()),
     };
     let widest = match input.get("widest") {
         None | Some(Value::Null) => None,
         Some(Value::String(widest)) => Some(widest.as_str()),
-        Some(_) => return bad_input(),
+        Some(_) => return Err(bad_input()),
     };
     let spec = Spec {
         text,
@@ -106,6 +111,14 @@ fn fit_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
         bound,
         tabular,
         mask,
+    };
+    Ok((spec, height, widest))
+}
+
+fn fit_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
+    let (spec, height, widest) = match read_spec(input) {
+        Ok(read) => read,
+        Err(refusal) => return refusal,
     };
     let fits_height =
         |lines: usize| height.is_none_or(|h| lines as f32 * spec.line_height() <= h + 0.01);
@@ -125,6 +138,30 @@ fn fit_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
         "shown": shaped.shown,
         "numerals": own.numerals,
         "overflow": own.overflow,
+    })
+}
+
+/// #856: the text shaped as drawing would, through the shaped-run cache: what it shows, and every
+/// text shaped to answer the line (none when its runs were all reused), with the cache after.
+fn shaped_reply(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
+    let (spec, _, _) = match read_spec(input) {
+        Ok(read) => read,
+        Err(refusal) => return refusal,
+    };
+    cache::take_log();
+    let shaped = shaper.shape(&spec);
+    let log: Vec<Value> = cache::take_log()
+        .iter()
+        .map(|s| json!({"text": s.key.text(), "glyphs": s.glyphs}))
+        .collect();
+    let (entries, bytes, bound) = cache::stats();
+    json!({
+        "ok": true,
+        "glyphs": shaped.glyphs.len(),
+        "width": shaped.width,
+        "shown": shaped.shown,
+        "shaped": log,
+        "cache": {"entries": entries, "bytes": bytes, "bound": bound},
     })
 }
 
@@ -215,16 +252,35 @@ fn bidi_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
 }
 
 fn main() {
-    let command = std::env::args().nth(1).unwrap_or_default();
-    let mut shaper = Shaper::new();
-    let stdin = io::stdin();
+    let args: Vec<String> = std::env::args().collect();
+    let command = args.get(1).cloned().unwrap_or_default();
     let stdout = io::stdout();
     let mut out = stdout.lock();
+    match args.get(2..).unwrap_or_default() {
+        [] => {}
+        [flag, name] if flag == "--planted" => match name.as_str() {
+            "no_cache" => cache::plant(Planted::NoCache),
+            "reshaping_fit" => cache::plant(Planted::ReshapingFit),
+            "evicts_oldest" => cache::plant(Planted::EvictsOldest),
+            _ => {
+                writeln!(out, "{}", bad_input()).expect("stdout");
+                std::process::exit(2);
+            }
+        },
+        _ => {
+            writeln!(out, "{}", bad_input()).expect("stdout");
+            std::process::exit(2);
+        }
+    }
+    cache::record();
+    let mut shaper = Shaper::new();
+    let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         let answer = match serde_json::from_str::<Value>(&line) {
             Ok(Value::Object(input)) => match command.as_str() {
                 "fit" => fit_line(&mut shaper, &input),
+                "shape" => shaped_reply(&mut shaper, &input),
                 "fonts" => fonts_line(),
                 "breaks" => breaks_line(&input),
                 "graphemes" => graphemes_line(&input),
