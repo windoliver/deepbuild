@@ -404,6 +404,9 @@ pub struct Planted {
     pub merge_by_finish: bool,
     /// A frame-phase operator may write JSON, which is counted (#855's planted seal).
     pub admits_frame_json: bool,
+    /// A session's own frame runs every node of its frame phases, changed or not (#854's planted
+    /// scheduler).
+    pub runs_every_node: bool,
 }
 
 /// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
@@ -1547,6 +1550,124 @@ impl Session {
         issues
     }
 
+    /// A revision that changes only the values of the items `ids` names (#854): each keeps its
+    /// place in the plan (its parent, order, kind and asset, and every operator's `applies`), and
+    /// nothing else in the document changes. Those items are rekeyed and stamped by the classes
+    /// their changed fields fall in, as `load` would stamp them, without compiling the plan again;
+    /// then the revision's check phases run. `None` when the revision reaches further, for `load`.
+    pub fn revise_items(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        doc: &Value,
+        ids: &[&str],
+    ) -> Option<Vec<OpIssue>> {
+        self.sync_hash(s);
+        let v = s.options.hash;
+        let items = doc.get("items")?.as_object()?;
+        let mut fresh = Vec::with_capacity(ids.len());
+        {
+            let l = self.loaded.as_ref()?;
+            if items.len() != l.items.len() {
+                return None;
+            }
+            for (k, value) in doc.as_object()? {
+                if k != "items" && l.doc.get(k) != Some(value) {
+                    return None;
+                }
+            }
+            for id in ids {
+                let &at = l.index.get(*id)?;
+                let mut value = items.get(*id)?.clone();
+                without_negative_zero(&mut value);
+                let was = &l.items[at].value;
+                let same = |p: &str| was.pointer(p) == value.pointer(p);
+                if !["/parent", "/order", "/kind", "/params/asset"]
+                    .iter()
+                    .all(|p| same(p))
+                {
+                    return None;
+                }
+                let applies_alike =
+                    s.sealed
+                        .ops
+                        .iter()
+                        .all(|sop| match (sop.op.applies, sop.op.per) {
+                            (Some(f), Per::Item) => f(&l.doc, id, was) == f(doc, id, &value),
+                            (Some(f), Per::Document) => {
+                                f(&l.doc, "", &Value::Null) == f(doc, "", &Value::Null)
+                            }
+                            (None, _) => true,
+                        });
+                if !applies_alike {
+                    return None;
+                }
+                fresh.push((at, value));
+            }
+        }
+        let epoch = self.bump();
+        let l = self.loaded.as_mut().expect("checked above");
+        let mut any = false;
+        for (at, value) in fresh {
+            let item = &mut l.items[at];
+            if written_alike(&item.value, &value) {
+                continue;
+            }
+            for c in classes_changed(&item.value, &value) {
+                item.changed_at[c as usize] = epoch;
+            }
+            item.key = item_key(v, &value);
+            item.value = Arc::new(value.clone());
+            if let Some(Value::Object(map)) = Arc::make_mut(&mut l.doc).get_mut("items") {
+                map.insert(item.id.clone(), value);
+            }
+            any = true;
+        }
+        if any {
+            self.items_at = epoch;
+            let key = doc_key(v, Arc::make_mut(&mut l.doc), &l.items);
+            if key != l.doc_key {
+                l.doc_key = key;
+                self.refs_at = epoch;
+            }
+        }
+        self.generation += 1;
+        self.frozen = None;
+        let mut report = Report::default();
+        self.frames += 1;
+        let frame = self.frames;
+        let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
+        for g in 0..groups {
+            let op = self.loaded.as_ref().expect("loaded").groups[g].op;
+            if is_check_phase(&s.sealed.ops[op].op.phase) {
+                self.visit_group(s, g, frame, &mut report);
+            }
+        }
+        let issues = report.issues.clone();
+        self.report = report;
+        Some(issues)
+    }
+
+    /// Every value `array` holds in the current revision, with the item each is for, in plan
+    /// order: only the writer's own nodes are read.
+    pub fn values(&self, s: &Scheduler<'_>, array: &str) -> Vec<(Option<&str>, Val)> {
+        let (Some(l), Some(&op)) = (&self.loaded, s.writer.get(array)) else {
+            return Vec::new();
+        };
+        let Some(k) = s.sealed.ops[op].op.writes.iter().position(|w| w == array) else {
+            return Vec::new();
+        };
+        l.groups
+            .iter()
+            .filter(|g| g.op == op)
+            .flat_map(|g| g.nodes.iter())
+            .filter_map(|&n| {
+                let node = &l.nodes[n];
+                let value = node.out.get(k)?.clone();
+                Some((node.item.map(|i| l.items[i].id.as_str()), value))
+            })
+            .collect()
+    }
+
     /// One frame at `t` under `view`: stamps what changed, then visits only the operators whose
     /// read set changed since they last ran. Once warm, a frame with nothing changed allocates
     /// nothing and runs no operator. Returns how many nodes ran.
@@ -1589,6 +1710,10 @@ impl Session {
         self.frames += 1;
         let frame = self.frames;
         let mut report = std::mem::take(&mut self.report);
+        let live = self.mode;
+        if s.options.planted.runs_every_node {
+            self.mode = Mode::Clean;
+        }
         let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
         for g in 0..groups {
             let (op, dirty) = {
@@ -1611,7 +1736,27 @@ impl Session {
             }
             self.visit_group(s, g, frame, &mut report);
         }
+        self.mode = live;
         self.report = report;
+    }
+
+    /// How many nodes of each operator ran in the last frame, by the operator's key (#854).
+    pub fn ran_by_operator(&self, s: &Scheduler<'_>) -> BTreeMap<String, usize> {
+        let mut out = BTreeMap::new();
+        let Some(l) = &self.loaded else {
+            return out;
+        };
+        for g in &l.groups {
+            let ran = g
+                .nodes
+                .iter()
+                .filter(|&&n| l.nodes[n].visited == self.frames && l.nodes[n].run == Run::Ran)
+                .count();
+            if ran > 0 {
+                *out.entry(s.sealed.ops[g.op].key.clone()).or_default() += ran;
+            }
+        }
+        out
     }
 
     /// A clean evaluation at `t` under `view`, with `perturb` changed for it alone: every node
