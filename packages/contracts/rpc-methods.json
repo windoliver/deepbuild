@@ -72,6 +72,12 @@
     "tracking": "#65"
   },
   {
+    "method": "confirm.enroll",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#880"
+  },
+  {
     "method": "offer.save",
     "since": "R1",
     "stability": "stable",

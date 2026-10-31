@@ -335,6 +335,13 @@ export interface AdapterFacts {
     };
   };
   readUsage?: AdapterFactsOperation;
+  tokenizer?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    name: AdapterFactsText;
+    package: AdapterFactsText;
+    version: AdapterFactsVersion;
+  };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
 }

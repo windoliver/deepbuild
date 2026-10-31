@@ -60,7 +60,9 @@ export type Plant =
   | 'any-nonzero-base-exit'
   // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
   // where the part already starts, and a pass on a stand-in taken as proof.
-  | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves';
+  | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves'
+  // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
+  | 'signature-covers-anything';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -98,6 +100,7 @@ const PLANTS: readonly string[] = [
   'deep-drive-no-lease',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
+  'signature-covers-anything',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
