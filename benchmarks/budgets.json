@@ -760,6 +760,17 @@
       "initialReason": "Issue #402 first measurement: the merge base has no cell grid. One process feeds a terminal's cell grid 600 full-screen repaints of 36 rows, one every 1/60 s, through `deep-show run` on the virtual clock, failing unless every patch is presented in a frame of its own; p50 includes Node's and the binary's start. The cell grid's cost (under 5% of a core at 60 patches a second) stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "capture-save",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "capture-save"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #105 first measurement: the merge base has no screen capture. One process starts a bug capture, picks the second display and holds the capture chord for 119.5 s through `deep-show run` on the virtual clock, then releases it, failing unless the saved asset holds every frame of the hold; p50 includes Node's and the binary's start. The issue's save within 1 s stays in tests/acceptance/105/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "hosted-terminal-60hz",
       "command": [
         "node",
