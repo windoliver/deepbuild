@@ -51,7 +51,6 @@ interface Author { handle: string; role: string }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[] }
 /** A work source's work.item@1 reading: the test source's carries its body as text. */
 export interface WorkItem { source_id: string; link: string; title: string; body: string; authors: { handle: string; role: string }[]; updated: string }
-type Reading = WorkItem;
 /** A definition as locked, without its hash: what the hash covers. */
 interface Definition { task_ref: string; requirements: Requirement[]; deliverables: string[]; issue_rev: string; base_commit: string; budget: JsonValue }
 interface Pending { session: string; agent: string; definition: Definition; handed: string; outside: string[]; at: number }
@@ -109,14 +108,14 @@ export class AskTasks {
     return planted || asksForChange(p.text) ? [`session:${letters(p.session)}#${String(p.msg)}`] : [];
   }
   /** A work item whose link the prompt names, from the work source's readings. */
-  async itemOf(text: string): Promise<Reading | undefined> {
+  async itemOf(text: string): Promise<WorkItem | undefined> {
     if (!this.o.work || !/https?:\/\//.test(text)) return undefined;
-    const readings = await this.json<Reading>(this.o.work, 'readings');
+    const readings = await this.json<WorkItem>(this.o.work, 'readings');
     return readings.find((r) => !r.link.includes('#') && new RegExp(`(?:^|\\s)${r.link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[\\s/#?.,])`).test(text));
   }
 
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */
-  async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: Reading }): Promise<void> {
+  async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: WorkItem }): Promise<void> {
     // A work item's task is opened once, whichever prompt names it again.
     if (t.item && (await this.o.raw(`SELECT 1 FROM tasks WHERE task_ref = ? LIMIT 1`, [t.task_ref])).length) return;
     const connection = this.o.connection(t.session, t.agent);
@@ -130,12 +129,12 @@ export class AskTasks {
   }
 
   /** Locks the definition handed for a task, or asks you first when outside text is in it; with none handed it waits. */
-  private async lock(t: { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: Reading }): Promise<void> {
+  private async lock(t: { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: WorkItem }): Promise<void> {
     const handed = (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => (t.item ? d.issue === t.item.source_id : d.ask === t.text));
     if (!handed) return;
     const head = await headOf(t.cwd).catch(() => undefined);
     if (!head) return;
-    const readings = t.item ? await this.json<Reading>(this.o.work, 'readings') : [];
+    const readings = t.item ? await this.json<WorkItem>(this.o.work, 'readings') : [];
     const authorOf = (line: string): Author => {
       const source = line.replace(/#L\d+$/, '');
       if (source === 'ask') return { handle: 'you', role: 'you' };

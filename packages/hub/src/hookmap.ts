@@ -48,7 +48,8 @@ export function hubAdapters(): AdapterRegistry {
   }
   return reg;
 }
-const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
+/** The hub's adapters, read once per thread. */
+export const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
 
 /**
  * What each tool the agents' facts list counts as where it isn't change (#304), for rules.json: a read or a search

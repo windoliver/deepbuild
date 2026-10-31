@@ -10,7 +10,7 @@ import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { availableParallelism, homedir, networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
+import { shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
@@ -35,7 +35,7 @@ import { addGuards, writeStanding } from './guards.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
-import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
+import { coveredBy, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { GateRunner } from './gate-runner.js';
 import { argsOf, parents, startOf } from './children.js';
@@ -339,8 +339,6 @@ export class Core {
   private readonly versioned = new Set<string>();
   /** The commits recorded, so one made across two hooks is recorded once. */
   private readonly committed = new Set<string>();
-  /** The adapters, which read a prompt's origin and a stop's records from the transcript. */
-  private adapters?: AdapterRegistry;
   /** The watch on Claude Code's user settings, and the readings it and the session-start recheck took. */
   private watcher: FSWatcher | undefined;
   private settingsKey = '';
@@ -936,14 +934,11 @@ export class Core {
     if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: false }));
     return live;
   }
-  private registry(): AdapterRegistry {
-    return (this.adapters ??= hubAdapters());
-  }
   /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
   private mapped(meta: HookMeta, draft: Draft, payload: Obj, transcript: readonly Obj[]): Obj | undefined {
     if (meta.agent === 'pi') return undefined;
     const name = meta.agent === 'codex' ? 'codex' : 'claude';
-    const adapter = this.registry().get(name);
+    const adapter = registry().get(name);
     const version = ((adapter.facts as Obj).versions as string[]).at(-1)!;
     const line = { v: 1 as const, agent: name, event: meta.event, seq: draft.seq ?? '0', id: draft.id, pid: meta.pid, ppid: meta.ppid, matched: [], payload: { session_id: meta.session, hook_event_name: meta.event, ...payload } as JsonValue };
     return adapter.mapHook(line, version, transcript as JsonValue[]).events.find((e) => e.kind === draft.kind)?.data as Obj | undefined;
@@ -1282,7 +1277,7 @@ export class Core {
     const started = this.turnsStarted.get(session.id);
     this.turnsStarted.set(session.id, turn);
     if (meta.event === 'UserPromptSubmit' || meta.event === 'SessionStart' || started === undefined || started === turn) return;
-    const facts = (this.registry().get('codex').facts as Obj).turnWithoutPrompt as { values: Record<string, string>; otherwise: string } | undefined;
+    const facts = (registry().get('codex').facts as Obj).turnWithoutPrompt as { values: Record<string, string>; otherwise: string } | undefined;
     if (!facts) return;
     let text = '';
     let inTurn = false;
@@ -1381,22 +1376,7 @@ export class Core {
    */
   private async turnFrom(session: Session, promptId: string): Promise<Obj[]> {
     if (session.prompts.has(promptId)) return session.entries[0]?.promptId === promptId ? session.entries : [session.prompts.get(promptId)!];
-    let tail = '';
-    try {
-      const handle = await open(session.transcript, 'r');
-      try {
-        const { size } = await handle.stat();
-        const length = Math.min(size, 4 * 1024 * 1024);
-        const buffer = Buffer.alloc(length);
-        const { bytesRead } = await handle.read(buffer, 0, length, size - length);
-        tail = buffer.subarray(0, bytesRead).toString('utf8');
-      } finally {
-        await handle.close();
-      }
-    } catch {
-      return [];
-    }
-    const lines = tail.split('\n');
+    const lines = (await this.tail(session.transcript, 4 << 20)).split('\n');
     const at = lines.findIndex((l) => l.includes(promptId) && l.includes('"promptId"'));
     if (at < 0) return [];
     return lines.slice(at).flatMap((l) => { try { const e: unknown = JSON.parse(l); return isObj(e) && e.isSidechain !== true ? [e] : []; } catch { return []; } }).slice(0, TURN_ENTRIES);
@@ -1699,7 +1679,7 @@ export class Core {
   }
   /** Claude Code's cap on stop-hook continuations in one turn, from its facts. */
   private cap(): number {
-    const continuation = (this.registry().get('claude').facts as Obj).continuation;
+    const continuation = (registry().get('claude').facts as Obj).continuation;
     return isObj(continuation) && typeof continuation.cap === 'number' ? continuation.cap : CONTINUATION_CAP;
   }
 
@@ -2310,7 +2290,7 @@ export class Core {
         if (block) return block;
       }
       if (polls) await new Promise((done) => setTimeout(done, Math.min(250, Math.max(0, until - Date.now()))));
-      else await this.answerOrTimeout(session, Math.min(until - Date.now(), 1000));
+      else await this.wakeable(this.waiting, session, Math.min(until - Date.now(), 1000)).woken;
     }
     // A hold that ran out with the agent's question still open ends on the record (#27), naming what it waited for.
     if (!this.stopping && !this.abandoned.has(meta.id) && Date.now() >= until) {
@@ -2622,9 +2602,6 @@ export class Core {
     this.routesOf(params.session).sendBacks.push(params.reason);
     this.askingSoon();
     return { planted: true };
-  }
-  private answerOrTimeout(session: string, ms: number): Promise<void> {
-    return this.wakeable(this.waiting, session, ms).woken;
   }
   /**
    * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
