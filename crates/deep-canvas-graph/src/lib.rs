@@ -80,6 +80,12 @@ pub struct Place {
     pub y: f64,
 }
 
+impl deep_canvas::schedule::Canonical for Place {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.rank, &self.order, &self.x, &self.y), out);
+    }
+}
+
 /// The layout memory, by stable node ID.
 pub type Memory = BTreeMap<String, Place>;
 

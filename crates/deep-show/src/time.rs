@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use deep_canvas::document::frame_rate_of;
 use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
-use deep_canvas::schedule::{default_view, Scheduler, Session as DocSession, Val};
+use deep_canvas::schedule::{default_view, Scheduler, Session as DocSession};
 use deep_canvas::time::{self as clock, Rate, CHECKPOINT_EVERY};
 use deep_canvas_motion::doc::{read as read_motion, Motion};
 use serde_json::{json, Map, Value};
@@ -427,7 +427,7 @@ impl Hub<'_> {
                 drawn += 1;
                 last = Some(t);
                 let next_motion = match session.value(&self.sched, "motion.next", None) {
-                    Some(Val::Json(v)) => v.as_i64(),
+                    Some(v) => v.as_typed::<Option<i64>>().and_then(|n| *n),
                     _ => None,
                 };
                 let next_step = steps
