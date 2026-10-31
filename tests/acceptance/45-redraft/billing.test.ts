@@ -2,16 +2,21 @@
 // stored nowhere. The real deep-hook binary, as an agent's hook entry runs it, against a real hub; `deep status` read as
 // you read it. README: Surfaces chosen.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, beforeAll, expect, test } from 'vitest';
 import {
   childEnv, cleanup, deep, eventMatching, filesHolding, forms, makeHome, makeWorktree, own, REPO, startHub, stopHub,
 } from '../26/helpers.ts';
 
 afterEach(cleanup, 30_000);
+
+// A proof lane's checkout has no target folder, so the hook is built when it is missing.
+beforeAll(() => {
+  if (!existsSync(join(REPO, 'target/debug/deep-hook'))) spawnSync('cargo', ['build', '-p', 'deep-hook'], { cwd: REPO, stdio: 'ignore' });
+}, 600_000);
 
 const DEEP_HOOK = join(REPO, 'target/debug/deep-hook');
 /** An obvious fixture, no real credential. */
@@ -49,8 +54,8 @@ function rowOf(listing: string, session: string): string {
   return row.join('\n');
 }
 
-test('#45.7c1e4a90 AC6 a session started with ANTHROPIC_API_KEY set shows as billing an API key, its twin without the key does not, and the value is stored nowhere', async () => {
-  if (!existsSync(DEEP_HOOK)) throw Error(`BLOCKED: no deep-hook at ${DEEP_HOOK}; run cargo build -p deep-hook`);
+test('#45.4768ed8f AC6 a session started with ANTHROPIC_API_KEY set shows as billing an API key, its twin without the key does not, and the value is stored nowhere', async () => {
+  if (!existsSync(DEEP_HOOK)) throw Error(`BLOCKED: no deep-hook at ${DEEP_HOOK}; cargo build -p deep-hook failed`);
   const { tmp, home } = makeHome();
   const wt = makeWorktree(join(tmp, 'work'));
   const hub = await startHub(home);

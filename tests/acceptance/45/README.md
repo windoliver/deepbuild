@@ -215,5 +215,7 @@ No test asserts with `toThrow`; each compares values, so a wrong program fails a
 
 Two tests in `hub.test.ts` were disputed and went to one blind redraft, `../45-redraft/`. The owner chose the redraft on PR #844.
 
-- AC6 `#45.4768ed8f`, real deep-hook: `Agent` from `../26/helpers.ts` is a Node stand-in that never sends billing keys, so `the hook reports the key as true` could not pass. Now `#45.7c1e4a90`. `billing.test.ts` keeps the tag.
-- AC11 `#45.eb25cf40`, deep_search over MCP: its seed leaves out `subject`, which `turn.usage@1` requires (`RecordError: required at /subject`). Now `#45.d2b85f36`. `search.test.ts` keeps the tag.
+- AC6 `#45.4768ed8f`, real deep-hook: `Agent` from `../26/helpers.ts` is a Node stand-in that never sends billing keys, so `the hook reports the key as true` could not pass. The redraft's test carries the tag, as does `billing.test.ts`.
+- AC11 `#45.eb25cf40`, deep_search over MCP: its seed leaves out `subject`, which `turn.usage@1` requires (`RecordError: required at /subject`). The redraft's test carries the tag, as does `search.test.ts`.
+
+The redraft's two tests first carried tags of its own, which named no criterion of #45, and its AC6 test needed a hook no proof lane's checkout has. The owner approved both corrections on PR #844: the criterion's tags, and a build when the hook is missing. Nothing it asserts changed.
