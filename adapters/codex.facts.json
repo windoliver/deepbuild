@@ -486,5 +486,12 @@
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
     "conformance": "codex/readUsage/token-count"
+  },
+  "tokenizer": {
+    "readBy": "the perf lane's scene read: a deep_query reply's size in the tokens an agent pays for it",
+    "conformance": "codex/tokenizer/pinned",
+    "name": "o200k_base",
+    "package": "gpt-tokenizer",
+    "version": "4.0.0"
   }
 }

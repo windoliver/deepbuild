@@ -2568,6 +2568,42 @@ impl Contract for AdapterFactsStop {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AdapterFactsTokenizer {
+    pub readBy: AdapterFactsText,
+    pub conformance: AdapterFactsText,
+    pub name: AdapterFactsText,
+    pub package: AdapterFactsText,
+    pub version: AdapterFactsVersion,
+}
+
+impl Contract for AdapterFactsTokenizer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["readBy", "conformance", "name", "package", "version"])?;
+        deep_contracts::check_member(members, at, "readBy", &RULE_6)?;
+        deep_contracts::check_member(members, at, "conformance", &RULE_6)?;
+        deep_contracts::check_member(members, at, "name", &RULE_6)?;
+        deep_contracts::check_member(members, at, "package", &RULE_6)?;
+        deep_contracts::check_member(members, at, "version", &RULE_35)?;
+        Ok(Self {
+            readBy: deep_contracts::required(members, at, "readBy")?,
+            conformance: deep_contracts::required(members, at, "conformance")?,
+            name: deep_contracts::required(members, at, "name")?,
+            package: deep_contracts::required(members, at, "package")?,
+            version: deep_contracts::required(members, at, "version")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("readBy".to_string(), self.readBy.to_json()));
+        members.push(("conformance".to_string(), self.conformance.to_json()));
+        members.push(("name".to_string(), self.name.to_json()));
+        members.push(("package".to_string(), self.package.to_json()));
+        members.push(("version".to_string(), self.version.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AdapterFacts {
     pub schema: AdapterFactsSchema,
     pub versions: Vec<AdapterFactsVersion>,
@@ -2591,13 +2627,14 @@ pub struct AdapterFacts {
     pub signIn: Option<AdapterFactsSignIn>,
     pub stop: Option<AdapterFactsStop>,
     pub readUsage: Option<AdapterFactsOperation>,
+    pub tokenizer: Option<AdapterFactsTokenizer>,
     pub classifyStop: Option<AdapterFactsOperation>,
     pub skills: Option<AdapterFactsOperation>,
 }
 
 impl Contract for AdapterFacts {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["schema", "versions", "agent", "hookTimeouts", "continuation", "launch", "modelFamily", "billing", "usage", "questionTools", "transcripts", "appLinks", "errorTexts", "events", "mapping", "toolKinds", "toolDetail", "patch", "turnWithoutPrompt", "signIn", "stop", "readUsage", "classifyStop", "skills"])?;
+        let members = deep_contracts::members(value, at, &["schema", "versions", "agent", "hookTimeouts", "continuation", "launch", "modelFamily", "billing", "usage", "questionTools", "transcripts", "appLinks", "errorTexts", "events", "mapping", "toolKinds", "toolDetail", "patch", "turnWithoutPrompt", "signIn", "stop", "readUsage", "tokenizer", "classifyStop", "skills"])?;
         deep_contracts::check_member(members, at, "versions", &RULE_36)?;
         deep_contracts::check_member(members, at, "agent", &RULE_18)?;
         Ok(Self {
@@ -2623,6 +2660,7 @@ impl Contract for AdapterFacts {
             signIn: deep_contracts::optional(members, at, "signIn")?,
             stop: deep_contracts::optional(members, at, "stop")?,
             readUsage: deep_contracts::optional(members, at, "readUsage")?,
+            tokenizer: deep_contracts::optional(members, at, "tokenizer")?,
             classifyStop: deep_contracts::optional(members, at, "classifyStop")?,
             skills: deep_contracts::optional(members, at, "skills")?,
         })
@@ -2662,6 +2700,9 @@ impl Contract for AdapterFacts {
         }
         if let Some(value) = &self.readUsage {
             members.push(("readUsage".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tokenizer {
+            members.push(("tokenizer".to_string(), value.to_json()));
         }
         if let Some(value) = &self.classifyStop {
             members.push(("classifyStop".to_string(), value.to_json()));

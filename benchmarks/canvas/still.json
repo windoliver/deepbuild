@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "id": "still-board",
+  "profile": "board",
+  "title": "A still board",
+  "description": "The idle task's document (#854): a card, a label and three bars, none of them moving, bound to nothing.",
+  "size": [640, 360],
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "card": {
+      "id": "card", "kind": "rect@1", "layer": "main", "name": "Card", "order": "a0",
+      "params": { "box": [0, 0, 640, 360], "paint": { "fill": { "role": "ground" } } }
+    },
+    "label": {
+      "id": "label", "kind": "text@1", "layer": "main", "name": "Label", "order": "a1",
+      "params": { "text": "Q3 revenue", "font": "body", "size": 13, "box": { "w": 200, "h": 20 } },
+      "at": { "pos": [24, 24, 0] }
+    },
+    "q1": {
+      "id": "q1", "kind": "rect@1", "layer": "main", "name": "Q1", "order": "a2",
+      "params": { "box": [0, 0, 80, 120], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [80, 200, 0] }
+    },
+    "q2": {
+      "id": "q2", "kind": "rect@1", "layer": "main", "name": "Q2", "order": "a3",
+      "params": { "box": [0, 0, 80, 180], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [200, 140, 0] }
+    },
+    "q3": {
+      "id": "q3", "kind": "rect@1", "layer": "main", "name": "Q3", "order": "a4",
+      "params": { "box": [0, 0, 80, 220], "paint": { "fill": { "role": "accent" } } },
+      "at": { "pos": [320, 100, 0] }
+    }
+  }
+}
