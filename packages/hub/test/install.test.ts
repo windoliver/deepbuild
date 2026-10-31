@@ -58,7 +58,7 @@ describe('deep install', () => {
     try {
       await withHub(async (root, home, hub) => {
         // Each time it loads, it leases a key of its own kind: the record shows every load.
-        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }] });
+        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }], requires: { preview: ['deep.lease'] } });
         writeFileSync(join(from, 'index.ts'), "export default async function (deep: any): Promise<void> {\n  await deep.lease({ kind: 'acme.rig', key: `rig-${Date.now()}` }, 'exclusive').catch(() => undefined);\n}\n");
         const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
         writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...m, digest: packageDigest(from) }));
@@ -80,7 +80,7 @@ describe('deep install', () => {
     writeFileSync(confirm, 'confirmed');
     try {
       await withHub(async (root, home, hub) => {
-        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }] });
+        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }], requires: { preview: ['deep.lease'] } });
         writeFileSync(join(from, 'index.ts'), "export default async function (deep: any): Promise<void> {\n  await deep.lease({ kind: 'acme.rig', key: `rig-${Date.now()}` }, 'exclusive').catch(() => undefined);\n}\n");
         const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
         writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...m, digest: packageDigest(from) }));

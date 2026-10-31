@@ -1,6 +1,8 @@
 {
   "title": "notice.subscribed@1",
   "description": "You asked for a notice.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "notices"
   ],

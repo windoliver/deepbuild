@@ -1,6 +1,8 @@
 {
   "title": "card_rule.set@1",
   "description": "You set a card rule, on the card or from deep inbox (#69): purchases from one seller, up to a named amount, are paid by the payment processor with a card it holds, named by its reference. DeepBuild never holds a card number. The event's ID is the rule's. Only the core appends it, and only from the trusted path.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

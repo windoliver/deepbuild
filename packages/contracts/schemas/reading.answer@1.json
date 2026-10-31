@@ -1,6 +1,8 @@
 {
   "title": "reading.answer@1",
   "description": "A reading job's answer (#63): only findings, each citing a handle and the exact quote at it. Nothing in it is written before each quote is checked at its handle and each handle against what that job was delivered.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "findings": {

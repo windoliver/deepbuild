@@ -2,5 +2,6 @@
   "id": "deepbuild/replies",
   "version": "1.0.0",
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
-  "access": { "words": ["record"] }
+  "access": { "words": ["record"] },
+  "requires": { "preview": ["deep.on"] }
 }

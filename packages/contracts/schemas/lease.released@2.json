@@ -1,6 +1,8 @@
 {
   "title": "lease.released@2",
   "description": "A lease ended. Its proof cites the events that show it: the holder's end (its session.end, or the core's session.gone) and each process.ended of the run that held it, never its expiry.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "leases"
   ],

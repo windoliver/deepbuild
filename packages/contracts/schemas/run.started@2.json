@@ -1,6 +1,8 @@
 {
   "title": "run.started@2",
   "description": "A check run started, with where it ran and what it needed (#29), so a later placement can pick any host from the same record.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "runs"
   ],

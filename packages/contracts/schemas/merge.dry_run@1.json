@@ -1,6 +1,8 @@
 {
   "title": "merge.dry_run@1",
   "description": "A dry merge ran.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "dry_merges"
   ],
