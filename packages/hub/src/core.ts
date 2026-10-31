@@ -423,6 +423,7 @@ export class Core {
       raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       root: this.root.dir, forge: this.options.forge ?? 'https://api.github.com',
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      held: () => this.options.held,
       keep: (bytes, source) => this.keep(bytes, source),
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });

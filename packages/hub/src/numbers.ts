@@ -24,6 +24,8 @@ const SAMPLE = 120;
 /** The reading that names the messages `deep numbers sample` took from a manifest, by their evidence's hash. */
 const POOL = 'reading:labelpool';
 const SAME_MESSAGE_MS = 60_000;
+/** The record cuts a message's text after this, so a longer one is compared by what it kept. */
+const CUT = 8000;
 /** A refresh is yours to wait for, and reads a call or two per pull request: longer than a receipt's forge budget. */
 const REFRESH_MS = 60_000;
 /** An event's id holds its time; the sample hides it behind a hash. */
@@ -40,6 +42,8 @@ export interface NumbersOptions {
   /** Keeps bytes as evidence; resolves with their hash. */
   keep(bytes: Uint8Array, source: string): Promise<string>;
   evidence(sha256: string): Promise<Uint8Array | null>;
+  /** Values the hub holds, scrubbed from text it stores. */
+  held(): readonly string[] | undefined;
 }
 interface Row { id: string; kind: string; v: number; ts: number; session_id: string | null; subject: string | null; data: string; log_pos: number }
 
@@ -52,6 +56,7 @@ export class Numbers {
   private readonly claims = new Map<string, string>();
   private readonly runs = new Map<string, string>();
   private readonly pools = new Map<string, { before: number; messages: Record<string, string> }>();
+  private taking: Promise<unknown> = Promise.resolve();
   constructor(private readonly o: NumbersOptions) {}
 
   /** One at a time, so two reads never fold the same rows. */
@@ -146,7 +151,8 @@ export class Numbers {
     let pool = this.pools.get(sha);
     if (!pool) {
       const bytes = await this.o.evidence(sha);
-      if (!bytes) return {};
+      // Read as nothing, a later draw would write a smaller pool over it.
+      if (!bytes) throw new Error(`the label pool ${sha} can't be read`);
       pool = JSON.parse(Buffer.from(bytes).toString('utf8')) as { before: number; messages: Record<string, string> };
       this.pools.set(sha, pool);
     }
@@ -156,11 +162,18 @@ export class Numbers {
    * Adds a manifest's messages from before the date to the date's pool, never taking one out, so a later draw can't undo
    * a label. A message the record also holds, the same words at about the same time, stays the record's.
    */
-  private async takePool(before: number, manifestPath: string): Promise<{ messages: Record<string, string>; lost: number }> {
+  private takePool(before: number, manifestPath: string): Promise<{ messages: Record<string, string>; lost: number }> {
+    // One at a time, so two draws never merge from the same pool.
+    const taken = this.taking.then(() => this.mergePool(before, manifestPath), () => this.mergePool(before, manifestPath));
+    this.taking = taken.catch(() => undefined);
+    return taken;
+  }
+  private async mergePool(before: number, manifestPath: string): Promise<{ messages: Record<string, string>; lost: number }> {
     const { manifest, bytes } = await this.manifest(manifestPath);
     const { messages, lost } = baselineMessages(manifest.measures, (sha) => bytes.get(sha) ?? null);
     const held = [...this.typed().values()];
-    const fresh = messages.filter((m) => m.ts < before).map((m) => ({ ...m, text: scrubText(m.text) })).filter((m) => !held.some((e) => e.data.text === m.text && Math.abs(e.ts - m.ts) < SAME_MESSAGE_MS));
+    const values = this.o.held();
+    const fresh = messages.filter((m) => m.ts < before).map((m) => ({ ...m, text: scrubText(m.text, values ? { held: values } : undefined) })).filter((m) => !held.some((e) => m.text.slice(0, CUT) === String(e.data.text).slice(0, CUT) && Math.abs(e.ts - m.ts) < SAME_MESSAGE_MS));
     const had = await this.pool(before);
     const pool = { ...had, ...Object.fromEntries(fresh.map((m) => [opaque(`${m.ts}:${m.text}`), m.text])) };
     if (Object.keys(pool).length === Object.keys(had).length) return { messages: pool, lost };
@@ -206,7 +219,7 @@ export class Numbers {
     const typed = [...this.typed()];
     const toMessage = ([message, e]: (typeof typed)[number]) => ({ message, text: String(e.data.text) });
     const taken = manifest ? await this.takePool(before, manifest) : undefined;
-    const earlier = [...typed.filter(([, e]) => e.ts < before).map(toMessage), ...Object.entries(taken?.messages ?? {}).map(([message, text]) => ({ message, text }))];
+    const earlier = [...typed.filter(([, e]) => e.ts < before).map(toMessage), ...Object.entries(taken?.messages ?? await this.pool(before)).map(([message, text]) => ({ message, text }))];
     const later = typed.filter(([, e]) => e.ts >= before).map(toMessage);
     const shuffled = <T>(list: T[]) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
     const half = SAMPLE / 2;

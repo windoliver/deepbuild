@@ -73,7 +73,7 @@ function count(kind: string, whole: string[], window: { from: number; to: number
 
 /**
  * Your dated messages in a baseline's windows, for labelling a period the record never saw. A line with no time of its own
- * can't be placed in a period, so it isn't one; lost counts the transcripts missing or failing their hash.
+ * can't be placed in a period, so it isn't one; lost counts the transcripts missing, failing their hash or named with a window that isn't one.
  */
 export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: string) => Uint8Array | null): { messages: { text: string; ts: number }[]; lost: number } {
   const ms = (v: number | string): number => (typeof v === 'string' ? Date.parse(v) : v);
@@ -83,6 +83,7 @@ export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: 
     const bytes = archive(hash);
     if (!bytes || sha256(bytes) !== hash) { lost.add(hash); return []; }
     const window = { from: ms(m.window.from), to: ms(m.window.to) };
+    if (!Number.isFinite(window.from) || !Number.isFinite(window.to)) { lost.add(hash); return []; }
     return Buffer.from(bytes).toString('utf8').split('\n').flatMap((line) => {
       const ts = timeOf(line);
       if (Number.isNaN(ts) || ts < window.from || ts >= window.to) return [];
