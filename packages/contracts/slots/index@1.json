@@ -1,6 +1,8 @@
 {
   "title": "index@1",
   "description": "The wiki's index: upsert(claims), search(query) giving hits that each cite their claim, page, quote and source, dropSource(source) and rebuild(claims) from the pages. It is never the source of truth; the hub reads each hit's provenance from the claim records.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

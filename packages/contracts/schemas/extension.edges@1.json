@@ -1,6 +1,8 @@
 {
   "title": "extension.edges@1",
   "description": "What a manifest declares about other pieces, beside extension.manifest@1, whose frozen shape doesn't list it: the packages it conflicts with, so an install beside an installed one is refused naming the conflict, and the kernel contract versions it runs on, each a contract entry the kernel must publish.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "conflicts": {

@@ -1,6 +1,8 @@
 {
   "title": "default.undone@1",
   "description": "You undid an ask's default on the trusted path, so the ask is open again, waiting as long as it first did. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

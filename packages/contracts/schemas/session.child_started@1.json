@@ -1,6 +1,8 @@
 {
   "title": "session.child_started@1",
   "description": "An agent started a child session.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

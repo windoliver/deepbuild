@@ -1,6 +1,8 @@
 {
   "title": "job.ended@1",
   "description": "How one of DeepBuild's own jobs ended: finished with its final result, stopped with every process proven gone, refused before it started, or lost to a crash and reported, never run again; with what the runner read from its own output.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -1,6 +1,8 @@
 {
   "title": "layer.rows@1",
   "description": "A map layer's rows, with their citations in the file.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "layer_rows"
   ],

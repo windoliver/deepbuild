@@ -16,6 +16,13 @@ import { openSupervisor, type Supervisor } from '@deepbuild/supervisor';
 import { peer } from '../runtime/deep.mjs';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '../src/index.js';
 
+/** The preview methods a package's code calls, which its manifest lists by name since #139 (requires.preview). */
+const PREVIEW = /\bdeep\.(on|registerResolver|registerSource|registerEnvironment|lease|registerView|readNow|registerAdapter|registerRoute|registerIndex|record\.append|record\.query|evidence\.put|asks\.create|config\.get|notices\.send|store|schedule|secret|send|provide|use|read|fetch|registerAction)\(/g;
+const previewOf = (code: string): { requires?: { preview: string[] } } => {
+  const used = [...new Set([...code.matchAll(PREVIEW)].map((m) => `deep.${m[1]}`))].sort();
+  return used.length ? { requires: { preview: used } } : {};
+};
+
 const dirs: string[] = [];
 const closing: { close(): Promise<void> }[] = [];
 afterAll(async () => {
@@ -32,7 +39,7 @@ const temp = (): string => {
 function pkgOf(id: string, code: string, fields: Record<string, unknown> = {}, file = 'index.ts'): string {
   const folder = temp();
   writeFileSync(join(folder, file), code, { mode: file === 'main' ? 0o755 : 0o644 });
-  const manifest = { id, version: '1.0.0', digest: '', ...fields };
+  const manifest = { id, version: '1.0.0', digest: '', ...previewOf(code), ...fields };
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
   manifest.digest = packageDigest(folder);
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
