@@ -172,7 +172,7 @@ impl Canonical for Run {
 /// The text module's shapers: a fixed count, never one taken from the machine, so texts shaping
 /// on several of the scheduler's threads don't wait on one (#857). Each holds only the bundled
 /// fonts, so any of them shapes a spec to the same glyphs.
-pub struct Shapers(Vec<Mutex<Shaper>>);
+struct Shapers(Vec<Mutex<Shaper>>);
 
 /// How many shapers the text module holds: the most threads a live view's class sets.
 const SHAPERS: usize = 4;

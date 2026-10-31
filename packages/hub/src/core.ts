@@ -237,6 +237,8 @@ export class Core {
   private readonly now: () => number;
   private readonly durable: Durable;
   private record!: RecordStore;
+  /** The record's raw reads, as the helpers that take them call them: parameters bound. */
+  private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   private asks!: Asks;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
@@ -610,7 +612,7 @@ export class Core {
       await this.asks.judged(this.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: judge(e.rule, e.yours, margin) });
     }
     await this.syncStanding();
-    await syncRejected((q) => this.record.raw(q), this.root.dir);
+    await syncRejected(this.raw, this.root.dir);
   }
 
   private writeState(state: 'running' | 'stopped'): void {
@@ -2023,13 +2025,13 @@ export class Core {
   private async tasteAt(session: string, cwd: string, said: string, starting: boolean): Promise<string | undefined> {
     const given = starting ? new Set<string>() : this.tasted.get(session) ?? new Set<string>();
     this.tasted.set(session, given);
-    const fresh = (await tastesFor((q) => this.record.raw(q), repoOf(cwd), said)).filter((t) => !given.has(t.ask));
+    const fresh = (await tastesFor(this.raw, repoOf(cwd), said)).filter((t) => !given.has(t.ask));
     for (const t of fresh) given.add(t.ask);
     return tasteBlock(fresh);
   }
   /** `deep memory`'s list (#111). */
   private async lessons() {
-    return lessonsOf((q) => this.record.raw(q), await repoFolders(this.record, this.store));
+    return lessonsOf(this.raw, await repoFolders(this.record, this.store));
   }
   /**
    * `deep memory keep` and `remove` (#111): yours alone, from your own terminal, once the OS confirms you. Keeping a
@@ -2136,7 +2138,7 @@ export class Core {
         if (prompt.includes('rejected:')) {
           const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
           await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }], true);
-          await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+          await syncRejected(this.raw, this.root.dir).catch(() => undefined);
         }
         // A branch's name may not say which screen a session works on, so its first prompt is read too.
         const first = !this.firstPrompted.has(meta.session);
@@ -2399,7 +2401,7 @@ export class Core {
   }
   /** A claim's state from the record (verdict-chat), with the runs' expected times. */
   private stateOf(claim: string): Promise<ClaimState | undefined> {
-    return claimState((q) => this.record.raw(q), claim.replace(/^claim:/, ''), this.expected);
+    return claimState(this.raw, claim.replace(/^claim:/, ''), this.expected);
   }
   /**
    * A stop that is judged (design: Every stop is judged): one the stop rule (#303) reads as a claim, and a later
@@ -2460,7 +2462,7 @@ export class Core {
     const live = this.live.get(session);
     if (!live) return undefined;
     // After a restart the newest claim is the record's; its line may show once more, never go unseen.
-    live.claim ??= await newestClaim((q) => this.record.raw(q), session).then((id) => (id ? `claim:${id}` : undefined));
+    live.claim ??= await newestClaim(this.raw, session).then((id) => (id ? `claim:${id}` : undefined));
     if (!live.claim) return undefined;
     const state = await this.stateOf(live.claim);
     if (!state) return undefined;
@@ -2508,7 +2510,7 @@ export class Core {
     // the session's own state, whatever the earlier claim says; one that finished unjudged has no claim of its own.
     // With no claim at all the session's own state answers too.
     const unjudged = live?.state !== undefined && live.claimTurn !== live.turn && live.state !== 'finished';
-    const claim = unjudged ? undefined : live?.claim ?? (await newestClaim((q) => this.record.raw(q), meta.session).then((id) => (id ? `claim:${id}` : undefined)));
+    const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop'`, [meta.session])) as { at: number | null }[];
     const needsYou = (await this.asks.inbox()).length;
@@ -2917,10 +2919,10 @@ export class Core {
       case 'env.down': return this.envDown(params, context);
       case 'wiki.build': {
         const built = await this.wikiBuild.build();
-        await syncRejected((q) => this.record.raw(q), this.root.dir);
+        await syncRejected(this.raw, this.root.dir);
         return built;
       }
-      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections((q) => this.record.raw(q)) };
+      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections(this.raw) };
       case 'memory.act': return this.memoryAct(params, context);
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
@@ -3172,7 +3174,7 @@ export class Core {
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [handle])) as { data: string }[];
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
-    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+    await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
@@ -3202,7 +3204,7 @@ export class Core {
     dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
     await this.syncStanding().catch(() => undefined);
-    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+    await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { overruled: id };
   }
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
@@ -3864,7 +3866,7 @@ export class Core {
     const target = scrubText(String(args.target), { held: this.options.held }).slice(0, 1000);
     const change = scrubText(String(args.change), { held: this.options.held }).slice(0, 4000);
     // A direction you rejected isn't asked about again: the agent hears your decision, and you hear nothing (#111).
-    const revived = await revives((q) => this.record.raw(q), change, repoOf(this.sessions.get(session)!.cwd), session);
+    const revived = await revives(this.raw, change, repoOf(this.sessions.get(session)!.cwd), session);
     if (revived) throw refuse('rejected', '/params/arguments/change', `You can't propose \`${revived.direction}\`: the person rejected it (${revived.decision}). Take another direction; only they can overrule that decision.`, revived.decision);
     const question = `Apply this change an agent proposed to ${target}? ${change}`;
     const pinned = await this.pinOf(this.sessions.get(session)!.cwd, question);
