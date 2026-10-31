@@ -55,6 +55,7 @@ pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canva
                     "sprites": painted.sprites,
                     "pages": painted.pages.iter().map(|(page, _)| *page).collect::<Vec<_>>(),
                 }),
+                bounds,
             );
         },
     )

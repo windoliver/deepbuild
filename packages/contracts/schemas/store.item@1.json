@@ -1,0 +1,116 @@
+{
+  "title": "store.item@1",
+  "description": "One item of a plug-in's store (#363): a kind the plug-in declares, ext.<plugin>.<name>, written only by that plug-in, at the store generation whose schema it holds to; the newest item for a key is the store's value, and the call the hub wrote it for, if any.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-tracking": "#363",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$",
+      "description": "The store kind, as the plug-in's manifest declares it."
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^ext:[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+      "description": "The plug-in that owns the store kind: only it writes its items."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The item's key within its kind."
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The store generation whose schema the value holds to; a migration moves an item only to a higher one."
+        },
+        "value": {
+          "x-opaque": "the item, held to the store's schema by the plug-in's host"
+        },
+        "call": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The action call the hub wrote it for, or null for a migration."
+        }
+      },
+      "required": [
+        "key",
+        "generation",
+        "value",
+        "call"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
