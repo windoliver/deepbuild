@@ -36,6 +36,8 @@ deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-gpu = { path = "../deep-gpu" }
 # Issue #327: the image you attach is kept by its SHA-256; the click token is one too (the version already in the tree).
 sha2 = "0.10"
+# Issue #883: a notification gives the default's time as a clock time in your time zone (the version gpui already uses).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
 # Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the
@@ -45,7 +47,9 @@ sha2 = "0.10"
 objc2 = "0.6"
 # Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
 # menu-bar template from the kit's bytes.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator"] }
+# Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFCGTypes", "CFData"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
