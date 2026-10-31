@@ -10,9 +10,10 @@
 //! Documents several writers share (issue #96) are in [`crate::shared`]: patches, undo, reads,
 //! history, the by-writer lens, the record and the clock's latch.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::cost::Coefficients;
@@ -212,6 +213,10 @@ pub struct Startup {
     pub steps_by_name: bool,
     /// A build with a test canvas module: every read every operator makes is logged.
     pub test_build: bool,
+    /// #856: the planted hub that shapes a revision's long text on the UI thread at its latch.
+    pub shapes_on_ui_thread: bool,
+    /// #856: the planted shaped-run cache per document.
+    pub run_per_document: bool,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -303,6 +308,7 @@ pub enum Slot {
 
 /// Who a call came from: an MCP call and the session it bound to, or a `deep` command and its
 /// peer process (pid, start time).
+#[derive(Clone)]
 pub enum Via {
     Mcp(Option<String>),
     Cli(u64, i64),
@@ -313,6 +319,19 @@ pub enum Include {
     Audit,
     Timing,
     Pixels,
+}
+
+/// A `frames` call: `count` frames of a session, `step` apart from `from`; with `paced`, on the
+/// wall clock a step apart; with `revise`, a whole revision arriving at a frame's latch; with
+/// `pixels`, each frame's pixel hash (#387, #856).
+pub struct Frames {
+    pub doc: String,
+    pub count: usize,
+    pub from: i64,
+    pub step: i64,
+    pub paced: bool,
+    pub revise: Option<(usize, Value)>,
+    pub pixels: bool,
 }
 
 pub struct Show {
@@ -388,12 +407,9 @@ pub enum Call {
     /// Seeking against playing, on canonical renders (#488).
     Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
-    Frames {
-        doc: String,
-        count: usize,
-        from: i64,
-        step: i64,
-    },
+    Frames(Box<Frames>),
+    /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
+    ShapedRuns(String),
     /// The replica's `see`: a panel's accessibility tree as data and every announcement it made (#376).
     See(String),
     /// Shows or hides a panel from this call on.
@@ -670,6 +686,11 @@ pub struct Hub<'a> {
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
     pub card_down: Option<(i64, String)>,
+    /// Who sent each document's last whole revision: a revision that arrives at a frame's latch
+    /// comes from them (#856).
+    pub vias: BTreeMap<String, Via>,
+    /// The times the shaper shaped each run's key in this process (#856).
+    pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
 }
@@ -788,7 +809,10 @@ impl<'a> Hub<'a> {
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
+            vias: BTreeMap::new(),
+            shapings: HashMap::new(),
         };
+        deep_text::cache::record();
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
             hub.install_pack(id, dir);
@@ -1084,6 +1108,24 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
+        // #856's planted cache per document: each document's runs are keyed apart.
+        if self.startup.run_per_document {
+            let doc = match call {
+                Call::Show(s) => Some(&s.doc),
+                Call::Patch(p) => Some(&p.doc),
+                Call::Eval(e) => Some(&e.doc),
+                Call::Frames(f) => Some(&f.doc),
+                _ => None,
+            };
+            if let Some(doc) = doc {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                std::hash::Hash::hash(doc, &mut h);
+                deep_text::cache::scope(std::hash::Hasher::finish(&h) | 1);
+            }
+        }
+        if let Call::Show(show) = call {
+            self.vias.insert(show.doc.clone(), show.via.clone());
+        }
         let mut reply = match call {
             Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
             Call::Show(show) => {
@@ -1115,12 +1157,8 @@ impl<'a> Hub<'a> {
                 to,
             } => self.play(doc, *display_hz, *to),
             Call::Determinism(d) => self.determinism(d),
-            Call::Frames {
-                doc,
-                count,
-                from,
-                step,
-            } => self.frames(doc, *count, *from, *step),
+            Call::Frames(f) => self.frames(f),
+            Call::ShapedRuns(text) => self.shaped_runs(text),
             Call::Panel { panel, visible } => {
                 self.panels_shown.insert(panel.clone(), *visible);
                 json!({"panel": panel, "visible": visible})
@@ -1233,6 +1271,9 @@ impl<'a> Hub<'a> {
             Call::Ring(r) => self.ring_call(r),
             Call::Term(t) => self.term_call(t),
         };
+        for shaping in deep_text::cache::take_log() {
+            *self.shapings.entry(shaping.key).or_default() += 1;
+        }
         self.stamp(&mut reply);
         reply
     }

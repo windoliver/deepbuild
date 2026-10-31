@@ -5,6 +5,8 @@
 //! operator's nanoseconds per item, per vertex and per glyph. `benchmarks/canvas.mjs costs`
 //! adds the GPU passes' terms and, on a reference Mac with `--write`, writes them as the
 //! build's coefficients. The canvas core reads no clock; its scheduler calls the hook here.
+//! Issue #856: each board is read cold, the shaped-run cache emptied before each run and each
+//! text distinct, and then warm, its runs already shaped, for shaping's `ns_per_glyph_warm`.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -20,6 +22,8 @@ use crate::hub::Startup;
 /// Runs over each board; the median of their means is the board's reading.
 const RUNS: usize = 5;
 const ITEMS: usize = 60;
+/// The one shaper's operator, whose runs the shaped-run cache keeps: timed warm apart from cold.
+const SHAPE: &str = "text.shape";
 
 /// One finished node: its operator, its item and its ns.
 type Timed = (usize, Option<String>, u64);
@@ -41,13 +45,18 @@ fn timing(op: usize, item: Option<&str>, done: bool) {
     });
 }
 
-/// A board of rects, circles, paths of `segments` segments, texts of `glyphs` characters and
-/// frames, with a channel that moves one rect.
+/// A board of rects, circles, paths of `segments` segments, texts of `glyphs` characters, each
+/// its own, and frames, with a channel that moves one rect.
 fn board(segments: usize, glyphs: usize) -> Value {
     let mut items = Map::new();
     let paint = json!({"fill": {"role": "muted"}});
-    let text: String = "abcdefghij".chars().cycle().take(glyphs).collect();
+    let letter = |n: usize| char::from(b'a' + (n % 26) as u8);
     for i in 0..ITEMS {
+        let text: String = [letter(i / 26), letter(i)]
+            .into_iter()
+            .chain("abcdefghij".chars().cycle())
+            .take(glyphs)
+            .collect();
         let y = (i * 11 % 700) as f64;
         let mut d = format!("M0 {y}");
         for s in 1..=segments {
@@ -80,15 +89,21 @@ fn board(segments: usize, glyphs: usize) -> Value {
 /// Per operator: its mean ns per node, and its nodes' mean vertices and glyphs.
 type Reading = BTreeMap<usize, (f64, f64, f64)>;
 
+/// A board's reading: `cold` empties the shaped-run cache before each run, so every text is
+/// shaped; otherwise the runs the cache holds are reused.
 fn read_board(
     startup: &Startup,
     doc: &Value,
     readings: &BTreeMap<String, Value>,
     tokens: &deep_canvas::schedule::Tokens,
+    cold: bool,
 ) -> Result<Reading, String> {
     let items = doc["items"].as_object().cloned().unwrap_or_default();
     let mut runs: Vec<Reading> = Vec::new();
     for _ in 0..RUNS {
+        if cold {
+            deep_text::cache::clear();
+        }
         CLOCK.with(|c| c.borrow_mut().1.clear());
         let mut sched = Scheduler::new(
             &startup.sealed,
@@ -155,6 +170,7 @@ pub fn measure(startup: &Startup) -> Value {
     };
     let tokens = deep_canvas_marks::modules::tokens(&crate::hub::shipped_look().light);
     let mut readings = Vec::new();
+    let mut warm = Vec::new();
     for (segments, glyphs) in [(10, 4), (400, 4), (10, 120)] {
         let doc = match stamp(
             &board(segments, glyphs),
@@ -167,9 +183,12 @@ pub fn measure(startup: &Startup) -> Value {
                 return json!({"code": "refused", "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>()})
             }
         };
-        match read_board(startup, &doc, &BTreeMap::new(), &tokens) {
-            Ok(r) => readings.push(r),
-            Err(e) => return json!({"code": "refused", "reason": e}),
+        // Cold, then warm: the cold reading's last run leaves the board's runs in the cache.
+        for (cold, out) in [(true, &mut readings), (false, &mut warm)] {
+            match read_board(startup, &doc, &BTreeMap::new(), &tokens, cold) {
+                Ok(r) => out.push(r),
+                Err(e) => return json!({"code": "refused", "reason": e}),
+            }
         }
     }
     // An operator no board runs (a counter, a text animator) is timed on the modules' own
@@ -190,7 +209,7 @@ pub fn measure(startup: &Startup) -> Value {
             .and_then(Value::as_object)
             .map(|r| r.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_default();
-        if let Ok(r) = read_board(startup, &doc, &record, &tokens) {
+        if let Ok(r) = read_board(startup, &doc, &record, &tokens, true) {
             for (op, x) in r {
                 fixtures.entry(op).or_insert(x);
             }
@@ -217,6 +236,13 @@ pub fn measure(startup: &Startup) -> Value {
         };
         let per_vertex = slope(vertices, |x| x.1);
         let per_glyph = slope(glyphs, |x| x.2);
+        let per_glyph_warm = (op.key == SHAPE)
+            .then(|| {
+                let (w0, w1) = (warm[0].get(&i)?, warm[2].get(&i)?);
+                let dx = w1.2 - w0.2;
+                (dx > 0.0).then(|| ((w1.0 - w0.0) / dx).max(0.0))
+            })
+            .flatten();
         let per_item = (t0 - per_vertex * v0 - per_glyph * g0).max(1.0);
         let mut t = Map::new();
         t.insert("ns_per_item".into(), json!(per_item.round()));
@@ -230,6 +256,13 @@ pub fn measure(startup: &Startup) -> Value {
             t.insert(
                 "ns_per_glyph".into(),
                 json!((per_glyph * 100.0).round() / 100.0),
+            );
+        }
+        if let Some(warm) = per_glyph_warm {
+            // At least 0.01 ns, so a measured warm term is never read as none.
+            t.insert(
+                "ns_per_glyph_warm".into(),
+                json!(((warm * 100.0).round() / 100.0).max(0.01)),
             );
         }
         terms.insert(op.key.clone(), Value::Object(t));
