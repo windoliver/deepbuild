@@ -1,0 +1,64 @@
+base commit: 244a3455f2c2ecb03d57d933dadfdbefa701cbbd
+command: npx vitest run tests/acceptance/45-redraft/ --reporter=verbose
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-45-implementation-e83eea/6091b0b3-29a6-4f66-8d31-82491c73f3fa/scratchpad/redraft/base
+
+ × tests/acceptance/45-redraft/billing.test.ts > #45.7c1e4a90 AC6 a session started with ANTHROPIC_API_KEY set shows as billing an API key, its twin without the key does not, and the value is stored nowhere 5967ms
+   → the session started with ANTHROPIC_API_KEY set shows as billing an API key:
+Reading the hub at unix:/private/tmp/dh26-BHeMYP/h/.deepbuild/hub.sock
+2 sessions: 2 working
+Working:
+work4f33207a
+  03202566  working    claude-code  last seen 1s ago
+  b1fddb76  working    claude-code  last seen 1s ago
+: expected '  03202566  working    claude-code  l…' to match /api[ _-]?key/i
+ × tests/acceptance/45-redraft/search.test.ts > #45.d2b85f36 AC11 a session's deep_search for spend returns its task's spend, summed over the task's turns only, with its source and an as-of time 6979ms
+   → deep_search for "spend" returns a hit naming the task task:01M665105F00000000R1G47A17 ("Fix the login page"): []: expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/45-redraft/billing.test.ts > #45.7c1e4a90 AC6 a session started with ANTHROPIC_API_KEY set shows as billing an API key, its twin without the key does not, and the value is stored nowhere
+AssertionError: the session started with ANTHROPIC_API_KEY set shows as billing an API key:
+Reading the hub at unix:/private/tmp/dh26-BHeMYP/h/.deepbuild/hub.sock
+2 sessions: 2 working
+Working:
+work4f33207a
+  03202566  working    claude-code  last seen 1s ago
+  b1fddb76  working    claude-code  last seen 1s ago
+: expected '  03202566  working    claude-code  l…' to match /api[ _-]?key/i
+
+- Expected:
+/api[ _-]?key/i
+
++ Received:
+"  03202566  working    claude-code  last seen 1s ago"
+
+ ❯ tests/acceptance/45-redraft/billing.test.ts:83:112
+     81|   const row = rowOf(status.stdout, keyed);
+     82|   expect(row, `deep status lists the session started with the key:\n${…
+     83|   expect(row, `the session started with ANTHROPIC_API_KEY set shows as…
+       |                                                                                                                ^
+     84|   const twin = rowOf(status.stdout, plain);
+     85|   expect(twin, `deep status lists the session started without the key:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/45-redraft/search.test.ts > #45.d2b85f36 AC11 a session's deep_search for spend returns its task's spend, summed over the task's turns only, with its source and an as-of time
+AssertionError: deep_search for "spend" returns a hit naming the task task:01M665105F00000000R1G47A17 ("Fix the login page"): []: expected undefined to be defined
+ ❯ tests/acceptance/45-redraft/search.test.ts:97:107
+     95|   const handle = task.slice('task:'.length);
+     96|   const reading = hits.find((h) => { const j = JSON.stringify(h); retu…
+     97|   expect(reading, `deep_search for "spend" returns a hit naming the ta…
+       |                                                                                                           ^
+     98|   expect(JSON.stringify(reading), `the hit gives the task's spend, 0.2…
+     99|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  03:17:23
+   Duration  10.55s (tests 68%, transform 29%, import 3%)
+
+exit: 1

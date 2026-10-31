@@ -89,9 +89,9 @@ interface Issue { number: number; state: string; body: string; url: string }
 const issueOf = (i: Obj): Issue => ({ number: Number(i.number), state: String(i.state), body: typeof i.body === 'string' ? i.body : '', url: typeof i.html_url === 'string' ? i.html_url : '' });
 
 export class Forge {
-  private readonly deadline = Date.now() + BUDGET_MS;
+  private readonly deadline: number;
   /** `api` is the REST root (https://api.github.com); `token` goes as a bearer when set. */
-  constructor(private readonly api: string, private readonly token: string | undefined) {}
+  constructor(private readonly api: string, private readonly token: string | undefined, budget_ms = BUDGET_MS) { this.deadline = Date.now() + budget_ms; }
   /** One page: its body and the URL of the next page when the forge names one. */
   private async page(path: string): Promise<{ body: unknown; next: string | undefined }> {
     const left = this.deadline - Date.now();
@@ -168,6 +168,34 @@ export class Forge {
       const status = await this.get(`/repos/${pr.owner}/${pr.repo}/commits/${head}/status`);
       return isObj(status) && status.state === 'pending' && Array.isArray(status.statuses) && status.statuses.length > 0;
     } catch { return false; }
+  }
+  /**
+   * The repo's most recently closed pull requests that merged, for the readings' lifecycle numbers (#45), as far as the
+   * budget reaches; undefined when the forge doesn't answer the list at all.
+   */
+  async merged(owner: string, repo: string): Promise<{ number: number; merged_at: number; opened_at: number; issue_opened_at: number | null; reviews: { at: number; state: string }[] }[] | undefined> {
+    const root = `/repos/${owner}/${repo}`;
+    let list: unknown;
+    try { list = await this.get(`${root}/pulls?state=closed&sort=updated&direction=desc&per_page=30`); } catch { return undefined; }
+    if (!Array.isArray(list)) return undefined;
+    const out = [];
+    for (const p of list.filter(isObj)) {
+      if (typeof p.merged_at !== 'string' || typeof p.created_at !== 'string') continue;
+      try {
+        // A review by the pull request's own author isn't anyone reviewing it.
+        const author = isObj(p.user) ? p.user.login : undefined;
+        const reviews = (await this.get(`${root}/pulls/${String(p.number)}/reviews`) as unknown[]).filter(isObj).filter((r) => typeof r.submitted_at === 'string' && !(isObj(r.user) && r.user.login === author));
+        const closing = closes(typeof p.body === 'string' ? p.body : '');
+        // A closed issue that's gone leaves this one number missing, not the pull request.
+        const issue = closing === undefined ? undefined : await this.get(`${root}/issues/${closing}`).catch(() => undefined);
+        out.push({
+          number: Number(p.number), merged_at: Date.parse(p.merged_at), opened_at: Date.parse(p.created_at),
+          issue_opened_at: isObj(issue) && typeof issue.created_at === 'string' ? Date.parse(issue.created_at) : null,
+          reviews: reviews.map((r) => ({ at: Date.parse(String(r.submitted_at)), state: String(r.state) })),
+        });
+      } catch { return Date.now() >= this.deadline && out.length ? out : undefined; }
+    }
+    return out;
   }
   /**
    * The next unblocked issue in `issue`'s epic once it passed: the lowest-numbered open issue of the same epic,

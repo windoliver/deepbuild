@@ -362,6 +362,10 @@
           "spec": "0.0.0",
           "why": "Issue #356: setup's wiki build hands the free text pattern matching left to your own agent, a slice at a time through handles, as the one reading the design names."
         },
+        "@deepbuild/readings": {
+          "spec": "0.0.0",
+          "why": "Issue #45: the hub serves the Numbers, folded from the record by the readings package, through numbers.read, deep numbers and deep_search."
+        },
         "@deepbuild/resolver-decisions": {
           "spec": "0.0.0",
           "why": "Issue #23: the hub runs resolver-decisions, a first-party extension on by default, registered with its asks core so your saved decisions answer the asks they cover."
@@ -1280,6 +1284,12 @@
     }
   },
   "allowedFindings": [
+    {
+      "path": "tests/acceptance/45-redraft/billing.test.ts",
+      "kind": "API key",
+      "sha256": "6680e30ade307323f061e820b9912a7ad632bfaa2c868bcdab8ba9408da87fe4",
+      "why": "Issue #45: the blind redraft's made-up key, which the billing test hands a hook to prove the key's value never reaches the record; no real credential."
+    },
     {
       "path": "tests/acceptance/402/cellgrid.test.ts",
       "kind": "home path",

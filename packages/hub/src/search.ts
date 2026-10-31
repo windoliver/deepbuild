@@ -9,7 +9,7 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseClaimLine } from '@deepbuild/record';
 
-export interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[] }
+export interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE' }
 export interface Claim { id: string; page: string; source: string; text: string }
 interface IndexHit { claim: string; page: string; quote: string; source: string; [mark: string]: unknown }
 /** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it; a fill that runs elsewhere answers later. */
@@ -115,6 +115,8 @@ export interface SearchIn {
   covers(scope: string): boolean;
   /** A planted wrong program: the index's marks stand, and nothing is dropped. */
   trustsIndex?: boolean;
+  /** The readings the query finds, each with its source and as-of time (#45). */
+  readings(query: string): Promise<{ reading: { id: string; subject: string | null; value: unknown; unit: string }; source: string; as_of: number; status: 'current' | 'STALE' }[]>;
 }
 
 /** Every hit for the query, each citing its source: the wiki's and the spec's, then the session's own, then decisions, newest first. */
@@ -152,6 +154,7 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
     try { text = readFileSync(file, 'utf8'); } catch { /* a repo with no spec has nothing to find */ }
     text.split('\n').forEach((line, i) => { if (holds(line, wanted)) hits.push({ source: `${file}#L${i + 1}`, quote: line.trim().slice(0, QUOTE) }); });
   }
-  const all = [...hits, ...record, ...decided];
+  const numbers: Hit[] = (await input.readings(input.query)).map(({ reading, source, as_of, status }) => ({ source, as_of, reading, status, quote: `${status === 'STALE' ? 'STALE ' : ''}${reading.id}${reading.subject ? ` ${reading.subject}` : ''}: ${reading.value === null ? 'unknown' : String(reading.value)} ${reading.unit}`.slice(0, QUOTE) }));
+  const all = [...hits, ...record, ...numbers, ...decided];
   return { hits: all.slice(0, MAX_HITS), more: Math.max(0, all.length - MAX_HITS) };
 }
