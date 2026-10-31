@@ -826,6 +826,67 @@
       "initialReason": "Issue #104 first measurement: the merge base hosts no terminal for a piece. One process installs a package that asks for run-as-you, approves it on the trusted path, opens 10 hosted terminals whose programs each write 10,000 lines of scrollback, and fails unless each terminal's output holds them all, in order; then it revokes run-as-you. The issue's 300 MB for 10 terminals stays in tests/acceptance/104/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-patch-settled",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "patch-settled"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "settled_p95_ms": 4
+      },
+      "initialReason": "Issue #854 first measurement: the merge base has no such task. A release deep-show shows a 10,000-item board in a headless window and takes 200 patches a run, each moving one item, timing each from its arrival to the settled frame it causes, the CPU of the patch path and the frame plus the GPU time of the frame drawn, five runs after a warm-up one. canvas.mjs judge holds each run's p95 to settled_p95_ms by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-scene-read",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "scene-read"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "summary_ms": 20,
+        "summary_tokens": 2000,
+        "page_ms": 50,
+        "page_rows": 1000
+      },
+      "initialReason": "Issue #854 first measurement: the merge base has no deep_query. A release deep-show holds the same 10,000-item board and answers deep_query's summary and one paged read of 1,000 rows, each timed in the binary, each reply counted in the tokens of the tokenizer adapters/codex.facts.json pins, five runs after a warm-up one. canvas.mjs judge holds the counts on any machine and the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-idle",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "idle"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frames": 0,
+        "wakeups": 1,
+        "cpu_fraction": 0.001
+      },
+      "initialReason": "Issue #854 first measurement: the merge base has no idle reading. A release deep-canvas-render opens a still fixture document in a headless window on the real clock and stays 60 s a run, reading the frames it drew, its wakeups and its CPU from its own process (proc_pid_rusage), five runs after a warm-up one, so the command takes over six minutes. A wakeup is a package-idle wakeup (Activity Monitor's Idle Wake Ups); interrupt wakeups are kept as a reading, since a process that has drawn with Metal takes about 22 a minute from the driver whatever it does. canvas.mjs judge holds frames on any machine and wakeups and CPU on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-cold-start",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "replica-cold-start"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "first_settled_ms": 300
+      },
+      "initialReason": "Issue #854 first measurement: the merge base times no replica's cold start. Each run spawns a fresh release deep-gpu on a fixture document in the app's headless window and reads, from the process's own start time, when its first settled frame was drawn, and which pipelines it compiled during that frame, five runs after a warm-up one. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "replica-launch",
       "command": [
         "node",
