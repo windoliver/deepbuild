@@ -78,10 +78,10 @@ function count(kind: string, whole: string[], window: { from: number; to: number
 export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: string) => Uint8Array | null): { messages: { text: string; ts: number }[]; lost: number } {
   const ms = (v: number | string): number => (typeof v === 'string' ? Date.parse(v) : v);
   const seen = new Set<string>();
-  let lost = 0;
+  const lost = new Set<string>();
   const messages = measures.flatMap((m) => m.transcripts.flatMap(({ sha256: hash }) => {
     const bytes = archive(hash);
-    if (!bytes || sha256(bytes) !== hash) { lost += 1; return []; }
+    if (!bytes || sha256(bytes) !== hash) { lost.add(hash); return []; }
     const window = { from: ms(m.window.from), to: ms(m.window.to) };
     return Buffer.from(bytes).toString('utf8').split('\n').flatMap((line) => {
       const ts = timeOf(line);
@@ -90,7 +90,7 @@ export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: 
       return typed(line, seen).filter((text) => text.trim() && !text.startsWith('[Request interrupted')).map((text) => ({ text, ts }));
     });
   }));
-  return { messages, lost };
+  return { messages, lost: lost.size };
 }
 
 export function recomputeBaseline(input: { baseline_sha256: string; measures: BaselineMeasure[]; archive: (sha256: string) => Uint8Array | null }): BaselineResult {

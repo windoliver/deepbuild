@@ -3,7 +3,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -69,7 +69,7 @@ describe('labelling a period from before the hub', () => {
       const line = (uuid: string, timestamp: string, content: unknown) => JSON.stringify({ type: 'user', uuid, timestamp, message: { role: 'user', content } });
       const secret = `ghp_${'a1'.repeat(18)}`;
       const old = Array.from({ length: 99 }, (_, i) => line(`u${i}`, '2026-09-02T00:00:00Z', `rename file ${i}`));
-      const text = [...old, line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('key', '2026-09-03T00:00:01Z', `use ${secret}`), line('after', '2026-10-05T00:00:00Z', 'after the date, in the window'), line('held', '2026-09-03T00:00:02Z', 'typed after the date'), line('out', '2026-10-25T00:00:00Z', 'outside the window')].join('\n');
+      const text = [...old, line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('key', '2026-09-03T00:00:01Z', `use ${secret}`), line('after', '2026-10-05T00:00:00Z', 'after the date, in the window'), line('older', '2026-09-03T00:00:02Z', 'typed after the date'), line('same', new Date().toISOString(), 'typed after the date'), line('out', '2026-10-25T00:00:00Z', 'outside the window')].join('\n');
       const sha = createHash('sha256').update(text).digest('hex');
       mkdirSync(join(home, 'pilot'));
       writeFileSync(join(home, 'pilot', sha), text);
@@ -93,17 +93,27 @@ describe('labelling a period from before the hub', () => {
       const decision = async () => (await call(socket, token, 'numbers.read', {}) as { result: { decision_one: { used: string[]; refused: { id: string; why: string }[] } } }).result.decision_one;
       // The drawn sample is 60 a side, and a check needs 100: more of the pool's messages, by the ids a later draw shows.
       const all = new Map(drawn.messages.map((m) => [m.message, m.text]));
-      for (let i = 0; i < 40 && all.size < 102; i++) for (const m of (await call(socket, token, 'numbers.sample', { before, manifest }) as { result: Drawn }).result.messages) all.set(m.message, m.text);
-      expect(all.size, 'the whole pool and the record\'s message').toBe(102);
+      for (let i = 0; i < 40 && all.size < 103; i++) for (const m of (await call(socket, token, 'numbers.sample', { before, manifest }) as { result: Drawn }).result.messages) all.set(m.message, m.text);
+      expect(all.size, 'the whole pool and the record\'s message').toBe(103);
       const texts = [...all.values()];
       expect(texts).toContain('is it done yet?');
       expect(texts.filter((t) => t === 'is it done yet?'), 'a resume\'s repeated line is one message').toHaveLength(1);
-      expect(texts.filter((t) => t === 'typed after the date'), 'the record\'s own, once').toHaveLength(1);
+      expect(texts.filter((t) => t === 'typed after the date'), 'the same words from an earlier day are another message').toHaveLength(2);
       expect(texts).not.toContain('after the date, in the window');
       expect(texts).not.toContain('outside the window');
       expect(JSON.stringify(texts), 'scrubbed, in every draw').not.toContain(secret);
       write([...all].map(([message, t]) => ({ message, label: t === 'is it done yet?' })));
       expect((await decision()).used, 'your labels, on both periods, pass').toContain('is_it_done');
+      renameSync(join(home, 'pilot'), join(home, 'moved'));
+      const lost = (await call(socket, token, 'numbers.sample', { before, manifest }) as { result: Drawn }).result;
+      expect(lost.warning, 'both named hashes').toContain('2 of the manifest\'s transcripts');
+      expect((await decision()).used, 'a draw that can\'t read the archive undoes no label').toContain('is_it_done');
+      // The same message, on the record and in the transcript, is the record's once the date is past both.
+      renameSync(join(home, 'moved'), join(home, 'pilot'));
+      writeFileSync(manifest, JSON.stringify({ baseline_sha256: 'a'.repeat(64), archive_dir: 'pilot', measures: [{ id: 'all', kind: 'is_it_done', window: { from: '2026-09-01', to: Date.now() + 86_400_000 }, transcripts: [{ sha256: sha }] }] }));
+      const later = new Map<string, string>();
+      for (let i = 0; i < 40; i++) for (const m of (await call(socket, token, 'numbers.sample', { before: Date.now() + 86_400_000, manifest }) as { result: Drawn }).result.messages) later.set(m.message, m.text);
+      expect([...later.values()].filter((t) => t === 'typed after the date'), 'the record\'s and the older one').toHaveLength(2);
       write([...all].slice(0, 2).map(([message, t]) => ({ message, label: t === 'is it done yet?' })).concat(Array.from({ length: 100 }, (_, i) => ({ message: `forged${i}`, label: false }))));
       expect((await decision()).refused.find((r) => r.id === 'is_it_done')?.why, 'ids nothing holds count for nothing').toMatch(/over 2 messages/);
     });

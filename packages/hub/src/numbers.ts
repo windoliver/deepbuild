@@ -23,6 +23,7 @@ const suffixOf = (kind: string | undefined): string => (kind === 'rework' ? `rew
 const SAMPLE = 120;
 /** The reading that names the messages `deep numbers sample` took from a manifest, by their evidence's hash. */
 const POOL = 'reading:labelpool';
+const SAME_MESSAGE_MS = 60_000;
 /** A refresh is yours to wait for, and reads a call or two per pull request: longer than a receipt's forge budget. */
 const REFRESH_MS = 60_000;
 /** An event's id holds its time; the sample hides it behind a hash. */
@@ -135,7 +136,7 @@ export class Numbers {
     }
     return { manifest, bytes };
   }
-  /** The newest pool taken for a date: only the core writes its reading, so a file can't add messages to your sample. */
+  /** The pool taken for a date: only the core writes its reading, so a file can't add messages to your sample. */
   private poolSha(before: number): string | undefined {
     return this.events.flatMap((e) => (e.kind === 'reading.recorded' && e.data.reading === `${POOL}${before}` ? [String(e.data.source).slice('labelpool:'.length)] : [])).at(-1);
   }
@@ -151,15 +152,19 @@ export class Numbers {
     }
     return pool.messages;
   }
-  /** Takes a manifest's messages from before the date into a pool the core holds. A message the record also has stays the record's. */
+  /**
+   * Adds a manifest's messages from before the date to the date's pool, never taking one out, so a later draw can't undo
+   * a label. A message the record also holds, the same words at about the same time, stays the record's.
+   */
   private async takePool(before: number, manifestPath: string): Promise<{ messages: Record<string, string>; lost: number }> {
     const { manifest, bytes } = await this.manifest(manifestPath);
     const { messages, lost } = baselineMessages(manifest.measures, (sha) => bytes.get(sha) ?? null);
-    const held = new Set([...this.typed().values()].map((e) => String(e.data.text)));
-    const pool = Object.fromEntries(messages.filter((m) => m.ts < before).map((m) => [opaque(`${m.ts}:${m.text}`), scrubText(m.text)] as const).filter(([, text]) => !held.has(text)));
+    const held = [...this.typed().values()];
+    const fresh = messages.filter((m) => m.ts < before).map((m) => ({ ...m, text: scrubText(m.text) })).filter((m) => !held.some((e) => e.data.text === m.text && Math.abs(e.ts - m.ts) < SAME_MESSAGE_MS));
+    const had = await this.pool(before);
+    const pool = { ...had, ...Object.fromEntries(fresh.map((m) => [opaque(`${m.ts}:${m.text}`), m.text])) };
+    if (Object.keys(pool).length === Object.keys(had).length) return { messages: pool, lost };
     const sha = await this.o.keep(Buffer.from(JSON.stringify({ before, messages: pool })), 'readings:label-pool');
-    // Another draw from the same pool records nothing new.
-    if (this.poolSha(before) === sha) return { messages: pool, lost };
     const ts = this.o.now();
     await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence: [sha], data: { reading: `${POOL}${before}`, value: Object.keys(pool).length, unit: 'count', as_of: ts, source: `labelpool:${sha}`, n: Object.keys(pool).length, outside: false } });
     await this.catchUp();
