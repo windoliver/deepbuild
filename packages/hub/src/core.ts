@@ -2940,7 +2940,7 @@ export class Core {
       case 'numbers.read': return this.reflecting(async () => this.numbers.read() as unknown as Obj);
       case 'numbers.baseline': await this.notAnAgent(context, method); return this.numbers.baseline(String(params.manifest));
       case 'numbers.refresh': await this.notAnAgent(context, method); return this.numbers.refresh();
-      case 'numbers.sample': await this.notAnAgent(context, method); return this.numbers.sample(Number(params.before));
+      case 'numbers.sample': await this.notAnAgent(context, method); return this.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.change(params);
       case 'evidence.read': return this.evidence(params);
       case 'ask.answer': return this.answer(params, context);

@@ -178,14 +178,14 @@ export function render(rows: readonly StatusRow[], from: string): string {
 
 /** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */
 export async function numbersCommand(args: readonly string[]): Promise<number> {
-  const [sub, arg] = args;
+  const [sub, arg, extra] = args;
   const asks: [string, Record<string, unknown>] | undefined = !sub || sub === '--json' ? ['numbers.read', {}]
     : sub === 'refresh' && !arg ? ['numbers.refresh', {}]
     : sub === 'baseline' && arg ? ['numbers.baseline', { manifest: resolve(arg) }]
-    : sub === 'sample' && arg && !Number.isNaN(Date.parse(arg)) ? ['numbers.sample', { before: Date.parse(arg) }]
+    : sub === 'sample' && arg && !Number.isNaN(Date.parse(arg)) ? ['numbers.sample', { before: Date.parse(arg), ...(extra ? { manifest: resolve(extra) } : {}) }]
     : undefined;
   if (!asks) {
-    process.stderr.write('Usage: deep numbers [--json] | refresh | baseline <manifest> | sample <before date>\n');
+    process.stderr.write('Usage: deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]\n');
     return 2;
   }
   try {
