@@ -1,0 +1,19 @@
+{
+  "format": "deep_drive.run@1",
+  "agent": { "name": "codex", "version": "0.144.0" },
+  "session": "session:01KB124CODEX00000000000001",
+  "panel": "/work/panel",
+  "calls": [
+    { "call": "launch", "launch": { "from": "fixture", "panel": "/work/panel", "size": [1512, 982], "scale": 2, "theme": "light", "clock": "virtual" } },
+    { "call": "wait_for", "replica": "replica:A", "wait_for": { "state": "settled" }, "timeout": 5000 },
+    { "call": "act", "replica": "replica:A", "locator": { "role": "text_input" }, "act": { "kind": "click" } },
+    { "call": "act", "replica": "replica:A", "act": { "kind": "type", "text": "grace@example.org" } },
+    { "call": "act", "replica": "replica:A", "act": { "kind": "press", "keys": "tab" } },
+    { "call": "see", "replica": "replica:A", "see": { "scope": "panel", "include": ["roles", "names", "values"] } },
+    { "call": "expect", "replica": "replica:A", "locator": { "role": "button", "name": "Save" }, "expect": { "name": "save-enabled", "assert": "state", "state": "enabled" } },
+    { "call": "act", "replica": "replica:A", "locator": { "role": "button", "name": "Save" }, "act": { "kind": "click" }, "timeout": 5000 },
+    { "call": "expect", "replica": "replica:A", "locator": { "text": "Saved grace@example.org" }, "expect": { "name": "saved", "assert": "count", "count": 1 } },
+    { "call": "expect", "replica": "replica:A", "locator": { "text": "Not saved" }, "expect": { "name": "no-longer-unsaved", "assert": "count", "count": 0 } },
+    { "call": "screenshot", "replica": "replica:A", "screenshot": { "target": "panel" } }
+  ]
+}
