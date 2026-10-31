@@ -274,6 +274,21 @@ fn text_extent(text: &str, frame: Size<Pixels>, window: &Window) -> Option<Size<
     Some(extent)
 }
 
+/// A `:` call that is behavior and stays in the host: exactly a callback's text. A state style prints the same way and
+/// isn't one, and an action's id prints unescaped, so an id that could open a quote could hide the styles after it.
+fn behavior(op: &crate::panel_tree::Op) -> bool {
+    match op.name.as_str() {
+        "track_focus" => number(&op.args).is_some(),
+        "on_action" => op.args.strip_suffix(", fn").is_some_and(|id| {
+            !id.is_empty()
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'))
+        }),
+        _ => op.args == "fn" || op.args == "registered",
+    }
+}
+
 /// Everything a host may send that this app can draw. Behavior stays in the host; any other node or style, or a
 /// style with arguments this can't read, is refused, since the layout this app measures wouldn't be the panel's.
 fn unknown_element(node: &Node) -> Option<String> {
@@ -297,8 +312,7 @@ fn unknown_element(node: &Node) -> Option<String> {
     }
     let drawable = |op: &&crate::panel_tree::Op| {
         let name = op.name.as_str();
-        // A `:` call is behavior, a callback that stays in the host. A state style prints the same way, and isn't one.
-        (!op.style && (op.args.ends_with("fn") || op.args == "registered"))
+        (!op.style && behavior(op))
             || BARE.contains(&name)
             || (SIZES.contains(&name) && number(&op.args).is_some())
             || (COLORS.contains(&name) && color(&op.args).is_some())
@@ -486,6 +500,8 @@ pub fn check(args: &[String]) -> i32 {
 fn run_check(args: &[String]) -> Result<i32, String> {
     let (host_path, panel) = panel_args(args)?;
     let out = flag(args, "--out").ok_or("--out FILE")?;
+    // An earlier run's verdict must not stand beside this run's exit.
+    let _ = std::fs::remove_file(&out);
     let updates: usize = flag(args, "--updates")
         .and_then(|n| n.parse().ok())
         .filter(|n| *n > 0)
@@ -516,47 +532,63 @@ fn run_check(args: &[String]) -> Result<i32, String> {
         return Ok(1);
     }
 
-    let mut host = Host::start(&host_path, &panel, serving)?;
-    let mut trees = Vec::new();
-    let mut found = Vec::new();
-    for update in 0..updates {
-        let (text, _) = host.update()?;
-        let tree = parse(&text)?;
-        if let Some(kind) = unknown_element(&tree) {
-            found.push(json!({ "kind": "unknown_element", "update": update, "element": kind }));
-            trees.push(tree.to_json(&[]));
-            continue;
+    let mut held = Held {
+        trees: Vec::new(),
+        found: Vec::new(),
+    };
+    let host_pid = std::cell::Cell::new(None);
+    // A check that stops early still says what it found: a panel can't turn a known failure into "couldn't tell".
+    let stopped = |error: String, held: &Held| {
+        let result = if held.found.is_empty() {
+            UNTOLD
+        } else {
+            "fail"
+        };
+        write(result, host_pid.get(), &held.trees, &held.found)?;
+        if held.found.is_empty() {
+            return Err(error);
         }
-        let bounds = check.lay_out(tree.clone())?;
-        found.extend(violations(update, &bounds, check.area, check.card)?);
-        trees.push(tree.to_json(&bounds));
-    }
-    // Before the verdict: a picture that can't be taken leaves no report saying pass.
-    if let Some(png) = &png {
-        check.png(png)?;
-    }
-    let failed = !found.is_empty();
-    let host_pid = host.pid;
+        eprintln!("deep-app panel-check: {error}");
+        Ok(1)
+    };
+    let checked = (|| {
+        let mut host = Host::start(&host_path, &panel, serving)?;
+        host_pid.set(Some(host.pid));
+        for update in 0..updates {
+            let (text, _) = host.update()?;
+            let tree = parse(&text)?;
+            if let Some(kind) = unknown_element(&tree) {
+                held.found
+                    .push(json!({ "kind": "unknown_element", "update": update, "element": kind }));
+                held.trees.push(tree.to_json(&[]));
+                continue;
+            }
+            let bounds = check.lay_out(tree.clone())?;
+            held.found
+                .extend(violations(update, &bounds, check.area, check.card)?);
+            held.trees.push(tree.to_json(&bounds));
+        }
+        if let Some(png) = &png {
+            check.png(png)?;
+        }
+        Ok::<_, String>(host)
+    })();
+    let host = match checked {
+        Ok(host) => host,
+        Err(error) => return stopped(error, &held),
+    };
+    let failed = !held.found.is_empty();
     write(
         if failed { "fail" } else { "pass" },
-        Some(host.pid),
-        &trees,
-        &found,
+        host_pid.get(),
+        &held.trees,
+        &held.found,
     )?;
     if serving {
-        let mut held = Held { trees, found };
         let served = serve(check, host, app_pid, &mut held, |result, held| {
-            write(result, Some(host_pid), &held.trees, &held.found)
+            write(result, host_pid.get(), &held.trees, &held.found)
         });
-        if served.is_err() {
-            let result = if held.found.is_empty() {
-                UNTOLD
-            } else {
-                "fail"
-            };
-            write(result, Some(host_pid), &held.trees, &held.found)?;
-        }
-        return served;
+        return served.or_else(|error| stopped(error, &held));
     }
     Ok(i32::from(failed))
 }
@@ -632,10 +664,11 @@ fn serve(
             held,
         )
     };
-    let exit = |held: &Held, untold: bool| match (held.found.is_empty(), untold) {
-        (false, _) => 1,
-        (true, true) => 2,
-        (true, false) => 0,
+    let finish = |held: &Held, untold: bool| match (held.found.is_empty(), untold) {
+        (false, _) => Ok(1),
+        (true, true) => Ok(2),
+        // The trees served since the first report.
+        (true, false) => report("pass", held).map(|()| 0),
     };
     loop {
         if waiting.is_none() {
@@ -681,7 +714,7 @@ fn serve(
             }
         }
         if closed && waiting.is_none() && queue.is_empty() {
-            return Ok(exit(held, untold));
+            return finish(held, untold);
         }
         match inbox.recv_timeout(Duration::from_millis(20)) {
             // Liveness is the app's own, so a ping passes whatever waits on the host.
@@ -782,7 +815,7 @@ fn serve(
                     say(json!({ "error": "host_stuck" }));
                 }
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(exit(held, untold)),
+            Err(mpsc::RecvTimeoutError::Disconnected) => return finish(held, untold),
         }
     }
 }
