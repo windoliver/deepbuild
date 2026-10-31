@@ -1,6 +1,8 @@
 {
   "title": "agent.stop@1",
   "description": "The agent stopped a turn.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

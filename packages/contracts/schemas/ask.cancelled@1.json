@@ -1,6 +1,8 @@
 {
   "title": "ask.cancelled@1",
   "description": "An ask was cancelled.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

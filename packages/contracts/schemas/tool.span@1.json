@@ -1,6 +1,8 @@
 {
   "title": "tool.span@1",
   "description": "One tool call as the agent's own telemetry saw it: how long it took and how long of that it waited on you.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "readings"
   ],

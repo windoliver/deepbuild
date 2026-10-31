@@ -1,6 +1,8 @@
 {
   "title": "verdict.made@1",
   "description": "The verdict engine made a verdict. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "requirements": {
       "type": "array",

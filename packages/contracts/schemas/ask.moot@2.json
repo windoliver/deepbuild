@@ -1,6 +1,8 @@
 {
   "title": "ask.moot@2",
   "description": "An ask became moot: its check passed, its attempt was replaced, the plan window it waited for reset, or the thread it watched got the reply it expected, so it leaves Needs you with the outcome moot. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

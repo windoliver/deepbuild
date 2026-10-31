@@ -1,6 +1,8 @@
 {
   "title": "process.ended@1",
   "description": "A tracked process is proven gone: no process has its ID, or the one that has it started at another time.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

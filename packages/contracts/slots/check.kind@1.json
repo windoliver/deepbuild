@@ -1,6 +1,8 @@
 {
   "title": "check.kind@1",
   "description": "A check runner: one kind of check, run(spec, ctx) answering a closed run outcome with its results, never a verdict.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

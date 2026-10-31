@@ -1,6 +1,8 @@
 {
   "title": "definition.drafted@1",
   "description": "A definition of done was drafted, without the session's work.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "definitions"
   ],

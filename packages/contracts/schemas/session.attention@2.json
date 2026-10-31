@@ -1,6 +1,8 @@
 {
   "title": "session.attention@2",
   "description": "A session's attention state; silence never counts as finished.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],
