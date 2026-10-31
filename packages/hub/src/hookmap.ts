@@ -15,7 +15,11 @@ import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, 
  * Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts read their
  * payloads, but their events are recorded under their own agent, never as Claude Code's.
  */
-const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude' };
+const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude', pi: 'pi' };
+/** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
+const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  pi: { session_start: 'SessionStart', session_shutdown: 'SessionEnd', input: 'UserPromptSubmit', tool_call: 'PreToolUse', tool_result: 'PostToolUse', agent_before_settle: 'Stop' },
+};
 const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 'unknown'];
 const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
@@ -50,7 +54,8 @@ export function hubAdapters(): AdapterRegistry {
   }
   return reg;
 }
-const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
+/** The hub's adapters, read once per thread. */
+export const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
 
 /**
  * What each tool the agents' facts list counts as where it isn't change (#304), for rules.json: a read or a search
@@ -161,11 +166,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (!name) return { kind: 'refused', id, error: refusal('enum', '/agent', `No adapter maps ${request.agent}; send one of ${Object.keys(ADAPTERS).join(', ')}.`, request.agent) };
   if (!isObj(request.payload)) return { kind: 'refused', id, error: refusal('type', '/payload', "Send the agent's hook JSON object as the payload.", request.payload) };
   const payload = request.payload;
+  const moments = MOMENTS[name];
+  const event = moments?.[request.event] ?? request.event;
   // Who is calling: a payload that carries Cursor's own fields is Cursor's, whatever command ran it.
   const agent = request.agent === 'claude-code' && typeof payload.cursor_version === 'string' ? 'cursor' : request.agent;
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
-    id: request.id, agent, event: request.event, session: str(payload.session_id), cwd: str(payload.cwd),
+    id: request.id, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
   if (str(payload.tool_use_id)) meta.toolUse = str(payload.tool_use_id);
@@ -175,17 +182,19 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
+  if (name === 'pi' && str(payload.parent)) meta.parent = str(payload.parent);
   const tool = str(payload.tool_name);
-  if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
+  if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
-  if ((request.event === 'PreToolUse' || request.event === 'PermissionRequest' || request.event === 'PostToolUse') && tool) {
+  if ((event === 'PreToolUse' || event === 'PermissionRequest' || event === 'PostToolUse') && tool) {
     meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
   }
   // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
-  const replies = request.event === 'Stop' || request.event === 'PermissionRequest' || (request.event === 'PreToolUse' && request.matched.length > 0);
-  const version = replies ? versionOf(meta.transcript) : undefined;
+  const replies = event === 'Stop' || event === 'PermissionRequest' || (event === 'PreToolUse' && request.matched.length > 0);
+  // An agent whose transcript names no version says it in the payload.
+  const version = str(payload.agent_version) || (replies ? versionOf(meta.transcript) : undefined);
   if (version) meta.version = version;
   if (version && !coveredBy(agent, version)) meta.watchOnly = true;
 
@@ -205,6 +214,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       if (request.billing) data.billing = request.billing;
       fill = 'loads';
       v = 3;
+      if (typeof mapped.parent === 'string' && mapped.parent) {
+        data.parent = mapped.parent;
+        v = 4;
+      }
       break;
     case 'session.end':
       data = { reason: str(payload.reason) || 'other' };
@@ -213,11 +226,16 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // Where the prompt came from is the core's to read, from the transcript entry it joins to.
       data = { msg: 0, text: scrub(str(mapped.text ?? payload.prompt)), tasks: [], from: FROM.includes(str(mapped.from)) ? mapped.from : 'unknown' };
       fill = 'msg';
+      if (mapped.disposition === 'handled') {
+        data.disposition = 'handled';
+        v = 2;
+      }
       break;
     case 'tool.before':
     case 'tool.after': {
       // A tool's kind, command and paths are read from its call, which the facts map on PreToolUse.
-      const call = kind === 'tool.before' ? mapped : registry().mapHook({ ...request, agent: name, event: 'PreToolUse', payload: { ...payload, hook_event_name: 'PreToolUse' } }, newest(name)).events.find((e) => e.kind === 'tool.before')?.data ?? {};
+      const before = Object.entries(moments ?? {}).find(([, moment]) => moment === 'PreToolUse')?.[0] ?? 'PreToolUse';
+      const call = kind === 'tool.before' ? mapped : registry().mapHook({ ...request, agent: name, event: before, payload: { ...payload, hook_event_name: before } }, newest(name)).events.find((e) => e.kind === 'tool.before')?.data ?? {};
       const callKind = TOOL_KINDS.includes(str(call.kind)) ? str(call.kind) : 'unknown';
       data = {
         kind: callKind, paths: Array.isArray(call.paths) ? call.paths.filter((p) => typeof p === 'string' && p) : [],
@@ -239,6 +257,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
+        // The agent's own record of the calls this one made: incomplete stays incomplete.
+        if (isObj(mapped.nested) && typeof mapped.nested.complete === 'boolean') {
+          data.nested = { complete: mapped.nested.complete, ...(Number.isSafeInteger(mapped.nested.calls) ? { calls: mapped.nested.calls } : {}) };
+          v = 3;
+        }
         // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
         // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a
         // Codex session's rollout is never read.
@@ -247,7 +270,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
           if (url) meta.pr = url;
         }
       }
-      const loop = loopFact(name, tool, request.event, payload);
+      const loop = loopFact(name, tool, event, payload);
       if (loop) meta.loop = loop;
       // A patch the adapter can't read is denied before it runs (#39), unless the session's version is past its facts.
       if (kind === 'tool.before' && typeof mapped.denied === 'string') {
@@ -285,6 +308,9 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         ...(typeof mapped.command === 'string' ? { command: scrub(mapped.command) } : {}),
         ...(Array.isArray(mapped.paths) ? { paths: mapped.paths.filter((p) => typeof p === 'string' && p) } : {}),
       };
+      break;
+    case 'session.activity':
+      data = { activity: str(mapped.activity) || request.event };
       break;
     case 'task.completed':
       data = { agent_task: str(mapped.agent_task) || '-', title: scrub(str(mapped.title)) || '-' };

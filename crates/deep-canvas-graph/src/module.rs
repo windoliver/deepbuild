@@ -3,10 +3,11 @@
 //! kept by its layout memory, one node per item, for what draws or checks its positions.
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
-use crate::{keep, layered, read_graph, read_layout, read_memory, write_memory, Refused};
+use crate::{keep, layered, read_graph, read_layout, read_memory, Refused};
 
 /// The graph module: its manifest and its one register call.
 pub fn module() -> Module {
@@ -71,8 +72,9 @@ fn refused(id: &str, r: Refused) -> OpError {
 /// The item's layout memory: laid out afresh, or kept as its memory says.
 fn layout(v: &mut View<'_>) -> Result<(), OpError> {
     let fields = v
-        .json("core.fields")?
-        .ok_or_else(|| OpError::new("input_missing", v.path()))?;
+        .typed::<Fields>("core.fields")?
+        .ok_or_else(|| OpError::new("input_missing", v.path()))?
+        .to_json();
     let id = v.id().unwrap_or_default().to_string();
     let params = &fields["params"];
     let graph = read_graph(&params["graph"]).map_err(|r| refused(&id, r))?;
@@ -91,7 +93,7 @@ fn layout(v: &mut View<'_>) -> Result<(), OpError> {
                 })?
         }
     };
-    v.write("graph.layout", Val::json(write_memory(&memory)))
+    v.write("graph.layout", Val::typed(memory))
 }
 
 fn board() -> Value {

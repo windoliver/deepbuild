@@ -739,6 +739,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake3"
+version = "1.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8ee0c1824c4dea5b5f81736aff91bae041d2c07ee1192bec91054e10e3e601e"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
+]
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1225,6 +1238,12 @@ dependencies = [
  "once_cell",
  "tiny-keccak",
 ]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "convert_case"
@@ -1718,6 +1737,7 @@ name = "deep-app"
 version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
+ "deep-canvas-cells",
  "deep-canvas-marks",
  "deep-gpu",
  "deep-marks-gpui",
@@ -1741,11 +1761,19 @@ dependencies = [
 name = "deep-canvas"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "libm",
- "serde",
  "serde_json",
  "sha2 0.10.9",
  "unicode-normalization",
+]
+
+[[package]]
+name = "deep-canvas-cells"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
 ]
 
 [[package]]
@@ -1827,7 +1855,6 @@ version = "0.0.0"
 name = "deep-effects-render"
 version = "0.0.0"
 dependencies = [
- "bytemuck",
  "deep-canvas-effects",
  "deep-gpu",
  "deep-scene3d-render",
@@ -1952,6 +1979,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
  "deep-canvas-marks",
@@ -1968,6 +1996,7 @@ dependencies = [
  "deep-text-gpui",
  "gpui-kit",
  "image",
+ "libc",
  "serde_json",
  "sha2 0.10.9",
  "vello_cpu",
@@ -8760,7 +8789,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

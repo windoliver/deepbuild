@@ -1,6 +1,8 @@
 {
   "title": "learn.rolled_back@1",
   "description": "A learned change was rolled back.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "evidence": {
       "type": "array",

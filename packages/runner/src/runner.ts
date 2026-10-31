@@ -15,8 +15,8 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
-import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
-import type { Grant } from '@deepbuild/supervisor';
+import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
+import { after, badDeadline, type Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, Subagent, WindowReport } from './types.js';
 
@@ -80,6 +80,10 @@ interface AgentParts {
   exactVersions?: true;
   /** Whether an account has no plan window for a job to wait on: with no plan account signed in, a budget is its only gate. */
   planless?(account: string | null): boolean;
+  /** It installs by npm, so it reads its dependencies around its own folder, and its version check reads what its job's grant names. */
+  packaged?: boolean;
+  /** It reports no plan window: its job waits for no reading of one. */
+  windowless?: boolean;
   /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
   token(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<string | undefined>;
   /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
@@ -90,7 +94,10 @@ interface AgentParts {
 export function programRoot(real: string): string {
   const own = dirname(real);
   const up = dirname(own);
-  return existsSync(join(up, 'package.json')) ? up : own;
+  const pkg = readJson(join(up, 'package.json'));
+  const bin = isObj(pkg) ? pkg.bin : undefined;
+  const named = typeof bin === 'string' ? [bin] : isObj(bin) ? Object.values(bin) : [];
+  return named.some((b) => typeof b === 'string' && resolve(up, b) === real) ? up : own;
 }
 export const shownVersion = (text: string, exact: boolean): string | undefined => (exact ? /(\d+\.\d+\.\d+(?:-[\w.]+)?)/ : /(\d+\.\d+\.\d+)/).exec(text)?.[1];
 /** Codex's plan windows, each named by its length as the hub's row reads it, or by its slot where a snapshot gives none. Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows. */
@@ -223,7 +230,7 @@ export function codexLogRefused(log: string): boolean {
     if (p.type === 'custom_tool_call' && p.name === 'exec') {
       // Each command the script names as a literal, its quoted words dropped: `grep "a -> b"` writes nothing.
       commands.set(p.call_id, [...String(p.input).matchAll(/\bcmd"?\s*:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/g)]
-        .map((m) => (m[1] ?? m[2] ?? m[3] ?? '').replace(/\\(.)/g, '$1').replace(/"[^"]*"|'[^']*'/g, '""')));
+        .map((m) => (m[1] ?? m[2] ?? m[3] ?? '').replace(/\\(.)/g, (_, c: string) => (c === 'n' ? '\n' : c)).replace(/"[^"]*"|'[^']*'/g, '""')));
     }
     if (p.type !== 'custom_tool_call_output') continue;
     const asked = commands.get(p.call_id);
@@ -234,7 +241,27 @@ export function codexLogRefused(log: string): boolean {
   return false;
 }
 
-interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
+AGENTS.pi = {
+  facts: new URL('../../../adapters/pi.facts.json', import.meta.url),
+  // pi has no MCP and no sub-agents: a job that names them is refused, never run without them.
+  confine: (mcp, subagents) => {
+    if (Object.keys(mcp).length || Object.keys(subagents).length) throw Error('a pi job takes no MCP server and no sub-agent');
+    return [];
+  },
+  account: () => null,
+  // pi locks and writes its agent folder even to read it, and a read-only job gets no write to your sign-in or settings:
+  // its agent folder is its own, so it signs in by the API key its facts bill, never by a login pi stored.
+  signIn: () => [],
+  windows: () => new Map(),
+  windowless: true,
+  packaged: true,
+  hosts: ['api.anthropic.com:443'],
+  reach: ({ temp, proxy }) => ({ TMPDIR: temp, PI_CODING_AGENT_DIR: temp, HTTPS_PROXY: proxy, https_proxy: proxy, PI_OFFLINE: '1', PI_TELEMETRY: '0' }),
+  token: async () => undefined,
+  expires: async () => undefined,
+};
+
+interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; errorTexts: { causes?: Record<string, string> }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
 interface Verified { path: string; real: string; digest: string; version: string; id: string }
 const identity = (st: Stats): string => `${st.dev}:${st.ino}:${st.size}:${st.mtimeMs}:${st.ctimeMs}`;
@@ -262,6 +289,8 @@ interface Job {
   ended: Promise<JobRecord>;
   end(rec: JobRecord): void;
   stopCause?: StopCause;
+  /** The end of a pi job's stderr. */
+  failure?: string;
   /** Its result was marked an error: no answer. */
   errored?: boolean;
   settling?: Promise<void>;
@@ -275,9 +304,12 @@ interface Job {
   finished?: boolean;
   /** Its checkout is still being written: nothing starts it before then. */
   preparing?: boolean;
-  timers: NodeJS.Timeout[];
+  /** Cancels its deadline and its quiet watch. */
+  timers: (() => void)[];
   /** Its own temp folder, removed when it ends. */
   temp?: string;
+  /** The text of a pi job's last answer: its result once it has settled. */
+  said?: string;
 }
 interface Account { windows: Map<string, { used: number; resets: number | null; at: number }> }
 interface Asked { handle: string; answer?: string }
@@ -319,16 +351,8 @@ class LocalRunner implements Runner {
    * a busy log's other events are scanned once, not again at every pump.
    */
   private async events(): Promise<Event[]> {
-    const [row] = (await this.o.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
-    const head = Number(row?.head ?? 0);
     const all: Event[] = [];
-    for (;;) {
-      const page = await this.o.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
-      all.push(...page);
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < 1000) break;
-    }
-    this.cursor = Math.max(this.cursor, head);
+    this.cursor = await readSince(this.o.record, this.cursor, FOLDED, (e) => all.push(e));
     return all;
   }
   /** What the record gained: the jobs a crash left, and answers to the runner's asks. */
@@ -416,6 +440,10 @@ class LocalRunner implements Runner {
     if (this.closed) throw Error('the runner is closed');
     if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read or smoke, not ${String(isObj(spec) ? spec.kind : spec)}`);
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
+    for (const field of ['deadline_ms', 'output_timeout_ms'] as const) {
+      const bad = spec[field] !== undefined ? badDeadline(field, spec[field]) : null;
+      if (bad) throw Error(`a job's ${bad}`);
+    }
     const id = `run:${ulid(this.o.now())}`;
     const jobs = join(this.o.root, 'jobs');
     mkdirSync(jobs, { recursive: true, mode: 0o700 });
@@ -560,7 +588,7 @@ class LocalRunner implements Runner {
       if (approval === 'deny') return { refused: `you declined smoke tests of ${facts.agent} versions its facts don't cover` };
       if (approval !== 'allow') return this.blocked(job, 'standing approval', { ...(approval ? { ask: approval } : {}), why: `${facts.agent} ${binary.version} is outside what its facts cover; its smoke test waits for your standing approval` });
     }
-    const window = await this.window(job);
+    const window = AGENTS[job.spec.agent]!.windowless ? undefined : await this.window(job);
     if (window) return window;
     const budget = await this.budget(job, facts);
     if (budget) return budget;
@@ -616,11 +644,11 @@ class LocalRunner implements Runner {
       try { real = realpathSync(path); } catch { return { refused: `${path} is gone` }; }
       const before = identity(statSync(real));
       const digest = await fileDigest(real);
-      const shown = await this.step([path, '--version'], job.rec.folder, { read: this.programs(real) }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
+      const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
       const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
-      if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version` };
+      if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
       return verified;
@@ -635,8 +663,9 @@ class LocalRunner implements Runner {
     }
   }
   /** What a job's programs may read and run: the binary's folder and the login shell's PATH. */
-  private programs(real: string): string[] {
-    const dirs = new Set([programRoot(real)]);
+  private programs(real: string, parts: AgentParts | undefined): string[] {
+    const installed = parts?.packaged ? real.indexOf('/node_modules/') : -1;
+    const dirs = new Set([installed >= 0 ? real.slice(0, installed + '/node_modules'.length) : programRoot(real)]);
     for (const dir of this.o.loginPath.split(delimiter)) if (dir && isAbsolute(dir) && existsSync(dir)) dirs.add(realpathSync(dir));
     return [...dirs];
   }
@@ -868,7 +897,7 @@ class LocalRunner implements Runner {
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
     const grant: Grant = {
-      read: [...this.programs(binary.real), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
+      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
       ...(job.spec.grant?.sockets?.length ? { sockets: job.spec.grant.sockets } : {}),
     };
     // A launch that ends in `-`, the prompt on stdin, keeps it last.
@@ -889,7 +918,10 @@ class LocalRunner implements Runner {
       // The prompt goes only to the bytes it verified: swapped during the start, its process reads nothing and is stopped.
       input: () => (this.unchanged(binary) && !job.cancelled ? Buffer.from(job.spec.prompt, 'utf8') : undefined),
       ...(job.spec.leases ? { leases: job.spec.leases } : {}),
-      output: { stdout: (chunk) => this.read(job, chunk), stderr: () => { job.outputAt = Date.now(); } },
+      output: { stdout: (chunk) => this.read(job, chunk), stderr: (chunk) => {
+        job.outputAt = Date.now();
+        if (job.spec.agent === 'pi') job.failure = `${job.failure ?? ''}${chunk.toString()}`.slice(-4096);
+      } },
     });
     if (started.status !== 'started') {
       if (job.cancelled) {
@@ -913,7 +945,7 @@ class LocalRunner implements Runner {
       return;
     }
     if (this.o.plant === 'records-launched-model') job.answered = launched;
-    if (job.spec.deadline_ms) job.timers.push(setTimeout(() => void this.stop(job, 'timed_out'), job.spec.deadline_ms));
+    if (job.spec.deadline_ms) job.timers.push(after(job.spec.deadline_ms, () => void this.stop(job, 'timed_out')));
     if (job.spec.output_timeout_ms) this.watchQuiet(job, job.spec.output_timeout_ms);
     job.exited = this.o.supervisor.wait(job.rec.job).then(() => {
       job.endedAt ??= Date.now();
@@ -947,7 +979,7 @@ class LocalRunner implements Runner {
     }
     if (e.type !== 'turn.completed' && e.type !== 'turn.failed') return;
     job.resultAt ??= Date.now();
-    for (const t of job.timers) clearTimeout(t);
+    for (const cancel of job.timers) cancel();
     if (isObj(e.usage)) {
       // Codex's input includes the cached tokens, taken back out (its facts' usage).
       const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
@@ -959,7 +991,47 @@ class LocalRunner implements Runner {
     if (e.type === 'turn.failed') { job.errored = true; job.stopCause ??= 'unknown'; }
     void this.settle(job, job.resultAt);
   }
+  /** A pi job's own stream: its session line, each message once as it ends, and its settling as its result. */
+  private piEvent(job: Job, e: Obj): void {
+    if (e.type === 'session' && typeof e.id === 'string') job.rec.session ??= e.id;
+    if (e.type === 'message_end' && isObj(e.message) && e.message.role === 'assistant') {
+      const msg = e.message;
+      if (typeof msg.model === 'string') job.answered = msg.model;
+      if (isObj(msg.usage)) {
+        const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
+        u.input += num(msg.usage.input) + num(msg.usage.cacheWrite);
+        u.cached += num(msg.usage.cacheRead);
+        u.output += num(msg.usage.output);
+        job.rec.usage = u;
+        const cost = isObj(msg.usage.cost) ? msg.usage.cost.total : undefined;
+        if (typeof cost === 'number') job.rec.cost_usd = (job.rec.cost_usd ?? 0) + cost;
+      }
+      // pi retries some errors itself: only the last message says how the run ended.
+      const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted' || msg.stopReason === 'length';
+      job.errored = failed;
+      delete job.stopCause;
+      delete job.said;
+      if (failed) {
+        job.stopCause = this.piCause(String(msg.errorMessage ?? ''));
+      } else if (Array.isArray(msg.content)) {
+        job.said = msg.content.flatMap((part) => (isObj(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('');
+      }
+    }
+    if (e.type === 'agent_settled') {
+      job.resultAt ??= Date.now();
+      for (const cancel of job.timers) cancel();
+      if (!job.errored && job.said !== undefined) job.rec.result = job.said;
+      void this.settle(job, job.resultAt);
+    }
+  }
+  /** The cause the facts name for an error's words: a status code only as a word of its own, so no token count reads as one. */
+  private piCause(error: string): StopCause {
+    const text = error.toLowerCase();
+    const causes = this.facts('pi').errorTexts.causes ?? {};
+    return (Object.entries(causes).find(([needle]) => (/^\d+$/.test(needle) ? new RegExp(`\\b${needle}\\b`).test(text) : text.includes(needle.toLowerCase())))?.[1] ?? 'unknown') as StopCause;
+  }
   private event(job: Job, e: Obj): void {
+    if (job.spec.agent === 'pi') return this.piEvent(job, e);
     if (typeof e.session_id === 'string' && !job.rec.session) job.rec.session = e.session_id;
     if (e.type === 'assistant' && isObj(e.message)) {
       const msg = e.message;
@@ -981,7 +1053,7 @@ class LocalRunner implements Runner {
     if (e.type === 'result') {
       job.resultAt ??= Date.now();
       // Its grace stops it from here; no deadline ends it twice.
-      for (const t of job.timers) clearTimeout(t);
+      for (const cancel of job.timers) cancel();
       if (typeof e.result === 'string') job.rec.result = e.result;
       if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
       if (!job.answered && isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
@@ -1008,7 +1080,7 @@ class LocalRunner implements Runner {
       });
     }, Math.min(ms, 1000));
     t.unref();
-    job.timers.push(t);
+    job.timers.push(() => clearInterval(t));
   }
 
   /**
@@ -1039,7 +1111,7 @@ class LocalRunner implements Runner {
     job.ending = true;
     job.rec.state = 'stopping';
     job.stopCause ??= cause;
-    for (const t of job.timers) clearTimeout(t);
+    for (const cancel of job.timers) cancel();
     const cleaned = await this.o.supervisor.cleanup(job.rec.job).catch(() => ({ left: ['unconfirmed'] }));
     if (refused) job.rec.refused = refused;
     await this.confirm(job, cleaned.left);
@@ -1062,13 +1134,15 @@ class LocalRunner implements Runner {
     }
     delete job.left;
     delete job.unconfirmed;
-    for (const t of job.timers) clearTimeout(t);
+    for (const cancel of job.timers) cancel();
     if (job.rec.ran) job.rec.ran.to = Date.now();
     job.rec.model = job.answered ?? 'unknown';
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
     if (job.temp && AGENTS[job.spec.agent]?.refusedIn?.(job.temp)) job.stopCause ??= 'refusal';
-    const cause = job.stopCause ?? (finished ? undefined : 'agent_crashed');
+    // pi says on stderr what stops a run before its first message, as a missing key does.
+    const said = job.failure && !finished && !job.stopCause ? this.piCause(job.failure) : 'unknown';
+    const cause = job.stopCause ?? (finished ? undefined : said !== 'unknown' ? said : 'agent_crashed');
     if (cause) job.rec.stop = { cause };
     if (this.o.plant === 'widens-range-on-smoke' && job.spec.kind === 'smoke' && job.rec.binary) this.widened.add(job.rec.binary.version);
     // Charged what its output said it cost; with no cost read, its reservation stays held, never charged as zero.
@@ -1134,7 +1208,7 @@ class LocalRunner implements Runner {
   async close(): Promise<void> {
     this.closed = true;
     clearInterval(this.timer);
-    for (const job of this.jobs.values()) for (const t of job.timers) clearTimeout(t);
+    for (const job of this.jobs.values()) for (const cancel of job.timers) cancel();
     await this.chain;
     for (const forwarder of this.forwarders.values()) await (await forwarder.catch(() => undefined))?.close();
   }

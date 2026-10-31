@@ -1,6 +1,8 @@
 {
   "title": "ask.escalated@1",
   "description": "An ask was escalated.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

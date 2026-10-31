@@ -1,0 +1,729 @@
+# Base run of tests/acceptance/822 at ff81b0d27e805eb509adb640f4aabe73458b4633 (nothing of #822 implemented), 2026-10-30T17:35Z, Node v24.22.0, macOS 26.7.1
+# node node_modules/vitest/vitest.mjs run tests/acceptance/822
+
+
+ RUN  v5.0.5 <repo>
+
+(node:37264) TimeoutNegativeWarning: -5 is a negative number.
+Timeout duration was set to 1.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37264) TimeoutOverflowWarning: Infinity does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+(node:37267) TimeoutNegativeWarning: -5 is a negative number.
+Timeout duration was set to 1.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37268) TimeoutNaNWarning: NaN is not a number.
+Timeout duration was set to 1.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/acceptance/822/runner.test.ts (13 tests | 11 failed) 6083ms
+   ❯ AC1 #822 a job with a deadline_ms of 30 days runs until 30 days on a fake clock (1)
+     × AC1 is still running just after its start and after 24.8 days, and is stopped as timed_out at 30 days, not at its start 3561ms
+   ❯ AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value (11)
+     × AC2 deadline_ms 0 is refused before the job starts, naming deadline_ms and 0 601ms
+     × AC2 deadline_ms -5 is refused before the job starts, naming deadline_ms and -5 86ms
+     × AC2 deadline_ms 1.5 is refused before the job starts, naming deadline_ms and 1.5 124ms
+     × AC2 deadline_ms NaN is refused before the job starts, naming deadline_ms and NaN 56ms
+     × AC2 deadline_ms Infinity is refused before the job starts, naming deadline_ms and Infinity 55ms
+     × AC2 output_timeout_ms 0 is refused before the job starts, naming output_timeout_ms and 0 76ms
+     × AC2 output_timeout_ms -5 is refused before the job starts, naming output_timeout_ms and -5 87ms
+     × AC2 output_timeout_ms 1.5 is refused before the job starts, naming output_timeout_ms and 1.5 114ms
+     × AC2 output_timeout_ms NaN is refused before the job starts, naming output_timeout_ms and NaN 252ms
+     × AC2 output_timeout_ms Infinity is refused before the job starts, naming output_timeout_ms and Infinity 58ms
+(node:37267) TimeoutNaNWarning: NaN is not a number.
+Timeout duration was set to 1.
+(node:37268) TimeoutOverflowWarning: Infinity does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+(node:37267) TimeoutOverflowWarning: Infinity does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+ ❯ tests/acceptance/822/checks.test.ts (6 tests | 6 failed) 6824ms
+   ❯ AC3 #822 a check's deadline of 30 days waits its full time (1)
+     × AC3 checks-command: a run with a deadline of 30 days is still running after 24.8 days on a fake clock, and ends overran at 30 days 3046ms
+   ❯ AC3 #822 a check's deadline that is not a positive whole number of ms is refused, naming it (5)
+     × AC3 checks-command: deadline 0 is refused before the check's process starts, naming deadline and 0 890ms
+     × AC3 checks-command: deadline -5 is refused before the check's process starts, naming deadline and -5 811ms
+     × AC3 checks-command: deadline 1.5 is refused before the check's process starts, naming deadline and 1.5 694ms
+     × AC3 checks-command: deadline NaN is refused before the check's process starts, naming deadline and NaN 696ms
+     × AC3 checks-command: deadline Infinity is refused before the check's process starts, naming deadline and Infinity 598ms
+ ❯ tests/acceptance/822/extension.test.ts (6 tests | 6 failed) 7111ms
+   ❯ AC3 #822 a check run's deadline of 30 days in the extension host waits its full time (1)
+     × AC3 extension host within: runCheck with a deadline of 30 days hasn't returned after 24.8 days on a fake clock, and returns overran at 30 days 3200ms
+   ❯ AC3 #822 a check run's deadline that is not a positive whole number of ms is refused by the extension host, naming it (5)
+     × AC3 extension host within: runCheck with deadline 0 is refused before the package's runner is called, naming deadline and 0 919ms
+     × AC3 extension host within: runCheck with deadline -5 is refused before the package's runner is called, naming deadline and -5 1138ms
+     × AC3 extension host within: runCheck with deadline 1.5 is refused before the package's runner is called, naming deadline and 1.5 552ms
+     × AC3 extension host within: runCheck with deadline NaN is refused before the package's runner is called, naming deadline and NaN 747ms
+     × AC3 extension host within: runCheck with deadline Infinity is refused before the package's runner is called, naming deadline and Infinity 440ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/822/checks.test.ts > AC3 #822 a check's deadline of 30 days waits its full time > AC3 checks-command: a run with a deadline of 30 days is still running after 24.8 days on a fake clock, and ends overran at 30 days
+AssertionError: a signal reached the run just after its start: its 30-day deadline fired at once: expected [ 'SIGKILL', 'SIGKILL' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "SIGKILL",
++   "SIGKILL",
++ ]
+
+ ❯ tests/acceptance/822/checks.test.ts:77:107
+     75|     // Just after its start: Node keeps a delay past 2³¹ − 1 ms as 1 m…
+     76|     await realSleep(1_500);
+     77|     expect(h.signals, 'a signal reached the run just after its start: …
+       |                                                                                                           ^
+     78|     expect(going.settled(), 'the run returned just after its start').t…
+     79|     expect(alive(h.pids[0]), 'its process is alive').toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  tests/acceptance/822/checks.test.ts > AC3 #822 a check's deadline that is not a positive whole number of ms is refused, naming it > AC3 checks-command: deadline 0 is refused before the check's process starts, naming deadline and 0
+AssertionError: a process started for a check with deadline 0: expected [ 'run:01K822CHECK000000000000001' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01K822CHECK000000000000001",
++ ]
+
+ ❯ tests/acceptance/822/checks.test.ts:107:86
+    105|       const h = host(false);
+    106|       const got = await outcomeOf(() => runCommandCheck({ host: h.host…
+    107|       expect(h.starts, `a process started for a check with deadline ${…
+       |                                                                                      ^
+    108|       if (!got.threw) {
+    109|         const r = got.value as CommandRun;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  tests/acceptance/822/checks.test.ts > AC3 #822 a check's deadline that is not a positive whole number of ms is refused, naming it > AC3 checks-command: deadline -5 is refused before the check's process starts, naming deadline and -5
+AssertionError: a process started for a check with deadline -5: expected [ 'run:01K822CHECK000000000000002' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01K822CHECK000000000000002",
++ ]
+
+ ❯ tests/acceptance/822/checks.test.ts:107:86
+    105|       const h = host(false);
+    106|       const got = await outcomeOf(() => runCommandCheck({ host: h.host…
+    107|       expect(h.starts, `a process started for a check with deadline ${…
+       |                                                                                      ^
+    108|       if (!got.threw) {
+    109|         const r = got.value as CommandRun;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  tests/acceptance/822/checks.test.ts > AC3 #822 a check's deadline that is not a positive whole number of ms is refused, naming it > AC3 checks-command: deadline 1.5 is refused before the check's process starts, naming deadline and 1.5
+AssertionError: a process started for a check with deadline 1.5: expected [ 'run:01K822CHECK000000000000003' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01K822CHECK000000000000003",
++ ]
+
+ ❯ tests/acceptance/822/checks.test.ts:107:86
+    105|       const h = host(false);
+    106|       const got = await outcomeOf(() => runCommandCheck({ host: h.host…
+    107|       expect(h.starts, `a process started for a check with deadline ${…
+       |                                                                                      ^
+    108|       if (!got.threw) {
+    109|         const r = got.value as CommandRun;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  tests/acceptance/822/checks.test.ts > AC3 #822 a check's deadline that is not a positive whole number of ms is refused, naming it > AC3 checks-command: deadline NaN is refused before the check's process starts, naming deadline and NaN
+AssertionError: a process started for a check with deadline NaN: expected [ 'run:01K822CHECK000000000000004' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01K822CHECK000000000000004",
++ ]
+
+ ❯ tests/acceptance/822/checks.test.ts:107:86
+    105|       const h = host(false);
+    106|       const got = await outcomeOf(() => runCommandCheck({ host: h.host…
+    107|       expect(h.starts, `a process started for a check with deadline ${…
+       |                                                                                      ^
+    108|       if (!got.threw) {
+    109|         const r = got.value as CommandRun;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  tests/acceptance/822/checks.test.ts > AC3 #822 a check's deadline that is not a positive whole number of ms is refused, naming it > AC3 checks-command: deadline Infinity is refused before the check's process starts, naming deadline and Infinity
+AssertionError: a process started for a check with deadline Infinity: expected [ 'run:01K822CHECK000000000000005' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01K822CHECK000000000000005",
++ ]
+
+ ❯ tests/acceptance/822/checks.test.ts:107:86
+    105|       const h = host(false);
+    106|       const got = await outcomeOf(() => runCommandCheck({ host: h.host…
+    107|       expect(h.starts, `a process started for a check with deadline ${…
+       |                                                                                      ^
+    108|       if (!got.threw) {
+    109|         const r = got.value as CommandRun;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  tests/acceptance/822/extension.test.ts > AC3 #822 a check run's deadline of 30 days in the extension host waits its full time > AC3 extension host within: runCheck with a deadline of 30 days hasn't returned after 24.8 days on a fake clock, and returns overran at 30 days
+AssertionError: the call returned just after it started: its 30-day deadline fired at once ({"outcome":"overran","testsRun":0,"evidence":[],"read":[],"mask":null,"failures":[{"test":"extension host","file":"","line":0,"stack":null,"assertion":false,"message":"deepbuild/test-waiter's ext.test-waiter.wait ran past its deadline of 2592000000 ms"}]}): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/822/extension.test.ts:82:187
+     80|     // Just after the call: Node keeps a delay past 2³¹ − 1 ms as 1 ms…
+     81|     await realSleep(1_000);
+     82|     expect(going.settled(), `the call returned just after it started: …
+       |                                                                                                                                                                                           ^
+     83|
+     84|     await advance(MAX_TIMER + MINUTE);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  tests/acceptance/822/extension.test.ts > AC3 #822 a check run's deadline that is not a positive whole number of ms is refused by the extension host, naming it > AC3 extension host within: runCheck with deadline 0 is refused before the package's runner is called, naming deadline and 0
+AssertionError: the package's runner was called for a run with deadline 0: expected [ '{"deadline":"0"}' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"deadline\":\"0\"}",
++ ]
+
+ ❯ tests/acceptance/822/extension.test.ts:105:97
+    103|       const got = await outcomeOf(() => host.runCheck(KIND, SPEC, { ch…
+    104|       await realSleep(200);
+    105|       expect(calls(), `the package's runner was called for a run with …
+       |                                                                                                 ^
+    106|       if (!got.threw) {
+    107|         const r = got.value as CheckResult;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  tests/acceptance/822/extension.test.ts > AC3 #822 a check run's deadline that is not a positive whole number of ms is refused by the extension host, naming it > AC3 extension host within: runCheck with deadline -5 is refused before the package's runner is called, naming deadline and -5
+AssertionError: the package's runner was called for a run with deadline -5: expected [ '{"deadline":"-5"}' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"deadline\":\"-5\"}",
++ ]
+
+ ❯ tests/acceptance/822/extension.test.ts:105:97
+    103|       const got = await outcomeOf(() => host.runCheck(KIND, SPEC, { ch…
+    104|       await realSleep(200);
+    105|       expect(calls(), `the package's runner was called for a run with …
+       |                                                                                                 ^
+    106|       if (!got.threw) {
+    107|         const r = got.value as CheckResult;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  tests/acceptance/822/extension.test.ts > AC3 #822 a check run's deadline that is not a positive whole number of ms is refused by the extension host, naming it > AC3 extension host within: runCheck with deadline 1.5 is refused before the package's runner is called, naming deadline and 1.5
+AssertionError: the package's runner was called for a run with deadline 1.5: expected [ '{"deadline":"1.5"}' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"deadline\":\"1.5\"}",
++ ]
+
+ ❯ tests/acceptance/822/extension.test.ts:105:97
+    103|       const got = await outcomeOf(() => host.runCheck(KIND, SPEC, { ch…
+    104|       await realSleep(200);
+    105|       expect(calls(), `the package's runner was called for a run with …
+       |                                                                                                 ^
+    106|       if (!got.threw) {
+    107|         const r = got.value as CheckResult;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  tests/acceptance/822/extension.test.ts > AC3 #822 a check run's deadline that is not a positive whole number of ms is refused by the extension host, naming it > AC3 extension host within: runCheck with deadline NaN is refused before the package's runner is called, naming deadline and NaN
+AssertionError: the package's runner was called for a run with deadline NaN: expected [ '{"deadline":"NaN"}' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"deadline\":\"NaN\"}",
++ ]
+
+ ❯ tests/acceptance/822/extension.test.ts:105:97
+    103|       const got = await outcomeOf(() => host.runCheck(KIND, SPEC, { ch…
+    104|       await realSleep(200);
+    105|       expect(calls(), `the package's runner was called for a run with …
+       |                                                                                                 ^
+    106|       if (!got.threw) {
+    107|         const r = got.value as CheckResult;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  tests/acceptance/822/extension.test.ts > AC3 #822 a check run's deadline that is not a positive whole number of ms is refused by the extension host, naming it > AC3 extension host within: runCheck with deadline Infinity is refused before the package's runner is called, naming deadline and Infinity
+AssertionError: the package's runner was called for a run with deadline Infinity: expected [ '{"deadline":"Infinity"}' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"deadline\":\"Infinity\"}",
++ ]
+
+ ❯ tests/acceptance/822/extension.test.ts:105:97
+    103|       const got = await outcomeOf(() => host.runCheck(KIND, SPEC, { ch…
+    104|       await realSleep(200);
+    105|       expect(calls(), `the package's runner was called for a run with …
+       |                                                                                                 ^
+    106|       if (!got.threw) {
+    107|         const r = got.value as CheckResult;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC1 #822 a job with a deadline_ms of 30 days runs until 30 days on a fake clock > AC1 is still running just after its start and after 24.8 days, and is stopped as timed_out at 30 days, not at its start
+AssertionError: a 30-day deadline stopped the job at its start: {"job":"run:01M66Y3EHNV3JBW4W3VX9TX8ZY","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"stopped","folder":"/tmp/dh822-…/root/jobs/01M66Y3EHNV3JBW4W3VX9TX8ZY","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":38739,"pgid":38739,"start":"Fri Oct 30 10:35:45 2026","ran":{"from":1793381745317,"to":1793381745617},"session":"00000000-0000-4000-8000-000000000822","model":"unknown","stop":{"cause":"timed_out"}}: expected 'timed_out' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"timed_out"
+
+ ❯ tests/acceptance/822/runner.test.ts:43:115
+     41|     const start = await read(w, submitted.job);
+     42|     own(start.rec.pgid);
+     43|     expect(start.rec.stop?.cause, `a 30-day deadline stopped the job a…
+       |                                                                                                                   ^
+     44|     expect(start.rec.state, 'just after its start the job runs').toBe(…
+     45|     expect(start.up, `its process ${String(start.rec.pid)} is alive`).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 deadline_ms 0 is refused before the job starts, naming deadline_ms and 0
+AssertionError: deadline_ms 0 was taken: the job is running ({"job":"run:01M66Y3J01ZS939XPRB4K2J3Q1","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3J01ZS939XPRB4K2J3Q1","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39522,"pgid":39522,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747220}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 deadline_ms -5 is refused before the job starts, naming deadline_ms and -5
+AssertionError: deadline_ms -5 was taken: the job is running ({"job":"run:01M66Y3JJTPBFGR0PBK2JH0FTY","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3JJTPBFGR0PBK2JH0FTY","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39549,"pgid":39549,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747324}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 deadline_ms 1.5 is refused before the job starts, naming deadline_ms and 1.5
+AssertionError: deadline_ms 1.5 was taken: the job is running ({"job":"run:01M66Y3JNGFE40RZ3CFC6WRX0Y","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3JNGFE40RZ3CFC6WRX0Y","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39639,"pgid":39639,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747407}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 deadline_ms NaN is refused before the job starts, naming deadline_ms and NaN
+AssertionError: deadline_ms NaN was taken: the job is running ({"job":"run:01M66Y3JSCMPD6WEAQMPVMVHEH","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3JSCMPD6WEAQMPVMVHEH","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39703,"pgid":39703,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747516}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 deadline_ms Infinity is refused before the job starts, naming deadline_ms and Infinity
+AssertionError: deadline_ms Infinity was taken: the job is running ({"job":"run:01M66Y3JV4MAHYBZ0ZZ49AXM5P","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3JV4MAHYBZ0ZZ49AXM5P","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39710,"pgid":39710,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747575}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 output_timeout_ms 0 is refused before the job starts, naming output_timeout_ms and 0
+AssertionError: output_timeout_ms 0 was taken: the job is running ({"job":"run:01M66Y3JWVSDSWR636N0KY9FPY","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3JWVSDSWR636N0KY9FPY","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39721,"pgid":39721,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747632}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 output_timeout_ms -5 is refused before the job starts, naming output_timeout_ms and -5
+AssertionError: output_timeout_ms -5 was taken: the job is running ({"job":"run:01M66Y3JZ75EY8C32VXY5Y3XSZ","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3JZ75EY8C32VXY5Y3XSZ","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39773,"pgid":39773,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747695}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 output_timeout_ms 1.5 is refused before the job starts, naming output_timeout_ms and 1.5
+AssertionError: output_timeout_ms 1.5 was taken: the job is running ({"job":"run:01M66Y3K1YBCQ4NP61ND2S860S","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3K1YBCQ4NP61ND2S860S","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39921,"pgid":39921,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747833}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 output_timeout_ms NaN is refused before the job starts, naming output_timeout_ms and NaN
+AssertionError: output_timeout_ms NaN was taken: the job is running ({"job":"run:01M66Y3K5GAFDT2E6KZ3Y0Z5YT","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3K5GAFDT2E6KZ3Y0Z5YT","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":39939,"pgid":39939,"start":"Fri Oct 30 10:35:47 2026","ran":{"from":1793381747913}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  tests/acceptance/822/runner.test.ts > AC2 #822 a deadline_ms or output_timeout_ms that is not a positive whole number of ms is refused before the job starts, naming the field and the value > AC2 output_timeout_ms Infinity is refused before the job starts, naming output_timeout_ms and Infinity
+AssertionError: output_timeout_ms Infinity was taken: the job is running ({"job":"run:01M66Y3KDC7T7PYVM98741613R","kind":"read","agent":"claude-code","account":"0b0b0b0b-1111-4222-8333-444444444444","state":"running","folder":"/tmp/dh822-…/root/jobs/01M66Y3KDC7T7PYVM98741613R","binary":{"path":"/tmp/dh822-…/bin/claude","version":"2.1.308"},"pid":40058,"pgid":40058,"start":"Fri Oct 30 10:35:48 2026","ran":{"from":1793381748153}}): expected 'running' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "running"
+
+ ❯ tests/acceptance/822/runner.test.ts:89:118
+     87|           if (!got.threw) {
+     88|             const rec = got.value as JobRecord;
+     89|             expect(rec.state, `${field} ${bad.written} was taken: the …
+       |                                                                                                                      ^
+     90|             expect(rec.pid, 'a refused job has no process').toBeUndefi…
+     91|           }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  23 failed | 2 passed (25)
+   Start at  10:35:42
+   Duration  8.22s (tests 88%, transform 8%, import 4%)
+
+# exit 1
+
+# ---- Appended: tests/acceptance/822/hub.test.ts (AC3, the hub's check-run deadline from done.yaml), run against the working tree, whose hub code is still the base's (packages/hub/src at ff81b0d2), 2026-10-30T19:50Z, Node v24.22.0
+# node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json   (the hub's build, which the test loads)
+# node node_modules/vitest/vitest.mjs run tests/acceptance/822/hub.test.ts
+
+
+ RUN  v5.0.5 <repo>
+
+deep supervisor: the system log never showed a sandbox report, so denials go unrecorded
+deep supervisor: the system log never showed a sandbox report, so denials go unrecorded
+deep supervisor: the system log never showed a sandbox report, so denials go unrecorded
+ ❯ tests/acceptance/822/hub.test.ts (7 tests | 6 failed) 78484ms
+   ❯ AC3 #822 a check run's deadline of 30d in done.yaml waits its full time (1)
+     × AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at 30 days 3878ms
+   ❯ AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it (6)
+     × AC3 hub deep_run: a check with deadline: 0m is refused before its run starts, naming deadline and 0m 12215ms
+     × AC3 hub deep_run: a check with deadline: -5m is refused before its run starts, naming deadline and -5m 11425ms
+     × AC3 hub deep_run: a check with deadline: 1.5h is refused before its run starts, naming deadline and 1.5h 13050ms
+     × AC3 hub deep_run: a check with deadline: soon is refused before its run starts, naming deadline and soon 12427ms
+     × AC3 hub deep_run: a check with deadline: .inf is refused before its run starts, naming deadline and .inf 11267ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline of 30d in done.yaml waits its full time > AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at 30 days
+AssertionError: a 30-day deadline ended the run at its start: {"run":"run:01M675SMV9J0ERGEZXFE5X5AAN","outcome":"overran","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","27a57639a2498004d06fa610946eda520db56643fb5d2cf12558bdcaf413c076"],"check":"month","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":["still running at its deadline of 30 days, so it was stopped"],"environment":"darwin-arm64"}: expected { …(14) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "actual": null,
+  "assertion": null,
+  "check": "month",
+  "environment": "darwin-arm64",
+  "evidence": [
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "27a57639a2498004d06fa610946eda520db56643fb5d2cf12558bdcaf413c076",
+  ],
+  "expected": null,
+  "findings": [
+    "still running at its deadline of 30 days, so it was stopped",
+  ],
+  "outcome": "overran",
+  "passed": 0,
+  "points_to": null,
+  "run": "run:01M675SMV9J0ERGEZXFE5X5AAN",
+  "runs": 1,
+  "step": null,
+  "tests_run": 0,
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:163:123
+    161|     await realSleep(1_500);
+    162|     const start = await h.runsOf('month');
+    163|     expect(start.finished?.data, `a 30-day deadline ended the run at i…
+       |                                                                                                                           ^
+    164|     expect(alive(pid), `its process ${String(pid)} is alive`).toBe(tru…
+    165|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: 0m is refused before its run starts, naming deadline and 0m
+AssertionError: a run started for a check with deadline: 0m: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675SPSS4YAJH7ZER06RNRHN",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675SPST68D38ANAQ5P76ZDV",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: -5m is refused before its run starts, naming deadline and -5m
+AssertionError: a run started for a check with deadline: -5m: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675T2PQYQY6J9QX1YPHHXEW",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675T2PXM16BPYGHCR5QGP39",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: 1.5h is refused before its run starts, naming deadline and 1.5h
+AssertionError: a run started for a check with deadline: 1.5h: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675TEAZFPMMEF2PPW1616PH",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675TEB147DJM4531XAH4RYV",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: soon is refused before its run starts, naming deadline and soon
+AssertionError: a run started for a check with deadline: soon: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675TTKR4537C03EPF24087S",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675TTM8N8B6ABPDEGTFC170",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/822/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: .inf is refused before its run starts, naming deadline and .inf
+AssertionError: a run started for a check with deadline: .inf: expected { …(7) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "check": "odd",
+  "claim": "claim:01M675V6RBT7Y6QEBVHFTNSQSB",
+  "commit": "c0ffee0000000000000000000000000000000822",
+  "host": "local",
+  "lane": "slow",
+  "needs": {
+    "cores": 1,
+    "expected_ms": null,
+    "gpus": 0,
+    "memory_mb": 0,
+    "stack_slot": 0,
+  },
+  "run": "run:01M675V6RDATQP8NVY0YBYX3GD",
+}
+
+ ❯ tests/acceptance/822/hub.test.ts:202:88
+    200|       await realSleep(500);
+    201|       const { started, finished } = await h.runsOf('odd');
+    202|       expect(started?.data, `a run started for a check with deadline: …
+       |                                                                                        ^
+    203|       if (!got.threw) expect(words(got.value).join(' '), `deep_run ans…
+    204|       expect(finished, 'no run finished').toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 1 passed (7)
+   Start at  12:50:07
+   Duration  79.17s (tests 99%)
+
+# exit 1

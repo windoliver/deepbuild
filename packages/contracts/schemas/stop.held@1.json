@@ -1,6 +1,8 @@
 {
   "title": "stop.held@1",
   "description": "How long a stop was held (#29), from deep-hook's stamp on its request to its reply, split by why: each moment goes to the first reason that applies, so the parts sum to the hold.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

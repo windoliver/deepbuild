@@ -110,17 +110,6 @@ pub enum RingCall {
     Keymap,
 }
 
-fn rect4(v: Option<&Value>) -> Option<[f64; 4]> {
-    let a = v?.as_array().filter(|a| a.len() == 4)?;
-    let r = [
-        a[0].as_f64()?,
-        a[1].as_f64()?,
-        a[2].as_f64()?,
-        a[3].as_f64()?,
-    ];
-    (r.iter().all(|n| n.is_finite()) && r[2] > 0.0 && r[3] > 0.0).then_some(r)
-}
-
 /// One of this issue's calls, or `None` for a line that lacks a field it needs.
 pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<RingCall> {
     let s = |k: &str| Some(c.get(k)?.as_str()?.to_string());
@@ -135,7 +124,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<RingCall> {
         "toasts" => RingCall::Toasts,
         "place" => RingCall::Place {
             piece: s("piece")?,
-            rect: rect4(c.get("rect"))?,
+            rect: crate::rect(c.get("rect"))?,
             by: match (c.get("serial"), c.get("session")) {
                 (Some(n), None) => Placer::You(n.as_u64()?),
                 (None, Some(v)) => {
@@ -170,6 +159,8 @@ struct Bound {
 struct PanelDef {
     plugin: String,
     bound: Vec<Bound>,
+    /// The terminals whose cell grids the panel shows (#402).
+    terminals: Vec<String>,
     on_read_failed: Vec<Op>,
     raw_input: bool,
 }
@@ -293,14 +284,16 @@ impl Ring {
         }
     }
 
+    /// Whether a plug-in's panel shows `terminal`'s cell grid (#402).
+    pub fn terminal_panel(&self, panel: &str, terminal: &str) -> bool {
+        self.panels
+            .get(panel)
+            .is_some_and(|d| d.terminals.iter().any(|t| t == terminal))
+    }
+
     /// Whether a plug-in's install claimed the panel.
     pub fn owns(&self, panel: &str) -> bool {
         self.panels.contains_key(panel)
-    }
-
-    /// Your press moved keyboard focus to `panel`, a plug-in's or not.
-    pub fn focus(&mut self, panel: &str) {
-        self.kb_focus = Some(panel.to_string());
     }
 
     /// Where the piece is laid out in the main window: its slot until something placed it.
@@ -501,7 +494,7 @@ fn op(v: &Value) -> Option<Op> {
         },
         "place" => Op::Place {
             piece: s("piece")?,
-            rect: rect4(v.get("rect"))?,
+            rect: crate::rect(v.get("rect"))?,
         },
         _ => return None,
     })
@@ -588,10 +581,6 @@ fn run_program(argv: &[String]) -> bool {
 }
 
 impl Hub<'_> {
-    fn planted_is(&self, p: Planted) -> bool {
-        self.scenario.planted == Some(p)
-    }
-
     /// One of this issue's calls.
     pub fn ring_call(&mut self, call: &RingCall) -> Value {
         let now = self.now;
@@ -610,7 +599,7 @@ impl Hub<'_> {
                 let showing = card.is_some_and(|c| {
                     matches!(c.states.last(), Some((s, _)) if *s == "presented" || *s == "armed")
                 });
-                let shown = !showing || self.planted_is(Planted::ToastsIgnoreCard);
+                let shown = !showing || self.planted(Planted::ToastsIgnoreCard);
                 let list: Vec<Value> = self
                     .ring
                     .toasts
@@ -632,7 +621,7 @@ impl Hub<'_> {
                         }
                     }
                     Placer::Suggestion => {
-                        let moves = self.planted_is(Planted::PlacementMovesYours);
+                        let moves = self.planted(Planted::PlacementMovesYours);
                         self.ring.place(piece, *rect, "suggestion", moves)
                     }
                 };
@@ -697,7 +686,7 @@ impl Hub<'_> {
     }
 
     fn reported_conflicts(&self) -> Vec<Value> {
-        match self.planted_is(Planted::ConflictsUnreported) {
+        match self.planted(Planted::ConflictsUnreported) {
             true => Vec::new(),
             false => self.ring.conflicts(),
         }
@@ -798,7 +787,7 @@ impl Hub<'_> {
                 let Some(chord) = canonical_chord(written) else {
                     return bad(&format!("keymap/{i}/chord"));
                 };
-                if !self.planted_is(Planted::KeymapUnchecked) {
+                if !self.planted(Planted::KeymapUnchecked) {
                     // Judged in its one spelling; the refusal names it as the plug-in wrote it.
                     if let Err(mut refused) = check_binding(&chord, command, &kinds) {
                         refused["chord"] = json!(written);
@@ -854,6 +843,7 @@ impl Hub<'_> {
         fresh_for: &BTreeMap<String, i64>,
     ) -> Option<PanelDef> {
         let mut found: Vec<(String, &Value)> = Vec::new();
+        let mut terminals = Vec::new();
         for e in p.get("tree")?.as_array()? {
             let eid = e.get("id")?.as_str()?;
             match e.get("component")?.as_str()? {
@@ -865,6 +855,8 @@ impl Hub<'_> {
                     }
                 }
                 "chart" => found.push((format!("{eid}/label"), e.get("label")?.get("bind")?)),
+                // #402: the panel shows a terminal's cell grid.
+                "cells" => terminals.push(e.get("terminal")?.as_str()?.to_string()),
                 _ => return None,
             }
         }
@@ -899,6 +891,7 @@ impl Hub<'_> {
         Some(PanelDef {
             plugin: plugin.to_string(),
             bound,
+            terminals,
             on_read_failed: ops(p.get("script").and_then(|s| s.get("on_read_failed")))?,
             raw_input: p.get("raw_input").and_then(Value::as_bool).unwrap_or(false),
         })
@@ -963,11 +956,11 @@ impl Hub<'_> {
         let mut failed_read = false;
         let (outcome, serial) = match op {
             // The panel's policy is empty: no network or program of its own.
-            Op::Fetch(url) => match self.planted_is(Planted::PanelPolicyOpen) && fetch(url) {
+            Op::Fetch(url) => match self.planted(Planted::PanelPolicyOpen) && fetch(url) {
                 true => ("done", None),
                 false => ("refused", None),
             },
-            Op::Run(argv) => match self.planted_is(Planted::PanelPolicyOpen) && run_program(argv) {
+            Op::Run(argv) => match self.planted(Planted::PanelPolicyOpen) && run_program(argv) {
                 true => ("done", None),
                 false => ("refused", None),
             },
@@ -976,7 +969,7 @@ impl Hub<'_> {
                 if self.ring.sources.get(source).map(|s| s.plugin.as_str()) != Some(&plugin) {
                     ("refused", None)
                 } else {
-                    let restamp = self.planted_is(Planted::RefreshRestampsCached);
+                    let restamp = self.planted(Planted::RefreshRestampsCached);
                     match self.ring.call_source(source, now, restamp) {
                         true => ("done", None),
                         false => {
@@ -993,7 +986,7 @@ impl Hub<'_> {
             } => self.say(&plugin, panel, session, kinds, text),
             _ => {
                 let serial = self.placement.fresh_serial(panel, now, |_| true);
-                let unguarded = self.planted_is(Planted::ScriptOpsNeedNoSerial)
+                let unguarded = self.planted(Planted::ScriptOpsNeedNoSerial)
                     && matches!(op, Op::Focus | Op::PopOut(_) | Op::Clipboard(_));
                 match serial.is_some() || unguarded {
                     true if self.gated(&plugin, panel, op, serial) => ("done", serial),
@@ -1055,7 +1048,7 @@ impl Hub<'_> {
                 return reply.get("window").is_some();
             }
             Op::Place { piece, rect } => {
-                let moves = self.planted_is(Planted::PlacementMovesYours);
+                let moves = self.planted(Planted::PlacementMovesYours);
                 let placed = self.ring.place(piece, *rect, "plugin", moves);
                 self.lay_out(piece);
                 return placed.get("piece").is_some();
@@ -1082,13 +1075,13 @@ impl Hub<'_> {
         let n = self.ring.sends.entry(panel.to_string()).or_default();
         let kind = kinds[*n % kinds.len()].clone();
         *n += 1;
-        let many = self.planted_is(Planted::SerialCarriesManySends);
+        let many = self.planted(Planted::SerialCarriesManySends);
         let spent = &self.ring.spent;
         let serial = self
             .placement
             .fresh_serial(panel, now, |s| many || !spent.contains(&s));
         let by = json!({"plugin": plugin, "panel": panel});
-        if serial.is_some() || self.planted_is(Planted::SendsWithoutSerial) {
+        if serial.is_some() || self.planted(Planted::SendsWithoutSerial) {
             if let Some(s) = serial {
                 self.ring.spent.insert(s);
             }
@@ -1139,13 +1132,13 @@ impl Hub<'_> {
         self.placement.input(now, panel);
         match event {
             Event::Down { .. } => {
-                self.ring.focus(panel);
+                self.ring.kb_focus = Some(panel.to_string());
                 self.placement.gesture(now, panel, serial);
                 (serial, None)
             }
             Event::Key { key, .. } => {
                 let escape = key.eq_ignore_ascii_case(ESCAPE);
-                let takes = self.planted_is(Planted::FocusedPanelTakesEscape);
+                let takes = self.planted(Planted::FocusedPanelTakesEscape);
                 let to = self.ring.key_to(panel, escape, takes).map(str::to_string);
                 if let Some(f) = &to {
                     self.placement.gesture(now, f, serial);
@@ -1176,7 +1169,7 @@ impl Hub<'_> {
             return json!({"code": "not_presented"});
         };
         let lead = self.scenario.clock.map_or(0, |c| c.lead);
-        let late = match self.planted_is(Planted::BoundValueAFrameLate) {
+        let late = match self.planted(Planted::BoundValueAFrameLate) {
             true => grid.period,
             false => 0,
         };

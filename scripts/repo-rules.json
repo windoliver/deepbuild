@@ -61,11 +61,19 @@
         "@types/better-sqlite3": {
           "spec": "7.6.13",
           "why": "Issue #14: the types of better-sqlite3 for the record package."
+        },
+        "@microsoft/api-extractor": {
+          "spec": "7.60.0",
+          "why": "Issue #139: API Extractor's report of the TypeScript extension API, compared in the local preflight with the copy committed in contracts/api-report, so an interface change shows in the pull request that made it."
         }
       }
     },
     "crates/deep-app/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row in the spike feeding a busy terminal's changes to it."
+        },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #337: the toolkit under trial, pinned to one commit since gpui-kit is unpublished at this milestone."
@@ -184,13 +192,13 @@
           "spec": "^0.2",
           "why": "Issue #389: the one ops module's pinned math, so CPU math a check reads matches across machines."
         },
-        "serde": {
-          "spec": "^1",
-          "why": "Issue #389: the document envelope, items and patches read and written as JSON."
-        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #389: the document JSON and the canonical bytes a revision hashes; already in the workspace tree."
+        },
+        "blake3": {
+          "spec": "^1",
+          "why": "Issue #855: hash@2, the BLAKE3 content keys and result digests."
         },
         "sha2": {
           "spec": "^0.10",
@@ -417,6 +425,10 @@
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The record's event data is the contracts' JsonValue."
         },
         "@deepbuild/leases": {
           "spec": "0.0.0",
@@ -734,8 +746,28 @@
         }
       }
     },
+    "crates/deep-canvas-cells/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #402: the registry and seal the cells module registers through, the scheduler's typed views it reads a grid's item through, and the OKLab conversion and ops module the palette rule's status distance goes through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #402: a grid's params as the document holds them, and the module's fixture. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-show/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #402: the cells canvas module in the r2 build set and up, and the terminal emulator its panel host feeds a program's output through."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #402: a terminal's PTY (openpty, login_tty and its window size) for deep-show serve, and stopping by PID the hosts and programs it started; already in the lockfile."
+        },
         "deep-canvas-graph": {
           "spec": "* path=../deep-canvas-graph",
           "why": "Issue #388: the graph canvas module, in the r1 build set and up."
@@ -1094,10 +1126,6 @@
           "spec": "^0.28",
           "why": "Issue #380: the criterion names it: per-pass GPU timestamps for the frame budget."
         },
-        "bytemuck": {
-          "spec": "^1",
-          "why": "Issue #380: operator inputs and the frame uniform written to GPU buffers."
-        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #380: operators and their parameters as JSON."
@@ -1201,9 +1229,63 @@
           "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
         }
       }
+    },
+    "packages/adapters/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The adapter registry validates each facts file and payload against the published contract schemas, and its types are the contracts' JsonValue."
+        }
+      }
+    },
+    "packages/cli/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "deep run reads a recorded run result through the one code table, the conformance package's judge and exit code (#313)."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "deep run holds a run result to run.finished@1 through the contracts' validate (#313)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "deep debug bundle scrubs the logs and doctor output it writes, by pattern and by value, through the evidence package's scrub."
+        },
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "Every hub command (deep hub, setup, status, inbox, env, doctor and the rest) is the hub package's."
+        },
+        "@deepbuild/otlp": {
+          "spec": "0.0.0",
+          "why": "deep doctor reads the telemetry receiver's own doctor items (#42)."
+        },
+        "@deepbuild/reading": {
+          "spec": "0.0.0",
+          "why": "deep find and deep read are the reading package's query API (#63)."
+        }
+      }
+    },
+    "packages/conformance/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "The adapter kit drives an adapter through its contract, and its fake agent maps hooks by a facts file."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The slot checks read the frozen API digests and error codes the contracts publish."
+        }
+      }
     }
   },
   "allowedFindings": [
+    {
+      "path": "tests/acceptance/402/cellgrid.test.ts",
+      "kind": "home path",
+      "sha256": "73de225f29dce8dcabd664cb3c25892f80840f279de7a9135a504bdecf37ea2c",
+      "why": "Issue #402: a placeholder cwd (user me) the cell grid's SCOPE test feeds a terminal through OSC 7 and reads back; no real home."
+    },
     {
       "path": "tests/acceptance/79/checks.test.mjs",
       "kind": "home path",

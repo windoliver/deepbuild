@@ -5,8 +5,13 @@ import { FORMATS } from './validate.js';
 
 export interface LintProblem { schema: string; path: string; reason: string }
 
-const ANNOTATIONS = ['title', 'description', 'examples', '$comment'];
-const ROOT_ONLY = ['$defs', 'x-hash', 'x-feeds', 'x-closure', 'x-rules'];
+// `x-acts` marks a field a reader must act on (it can deny, block, answer or lower a verdict), which a minor may never
+// add (#139); an annotation, read by the contract step only.
+const ANNOTATIONS = ['title', 'description', 'examples', '$comment', 'x-acts'];
+// The entry's history (#139): the release it arrived in, its stability with the issue that tracks a preview entry, and
+// once replaced, the release that deprecated it and what replaced it. Annotations, so they never change a digest.
+const HISTORY = ['x-since', 'x-stability', 'x-tracking', 'x-deprecated_since', 'x-replaced_by'];
+const ROOT_ONLY = ['$defs', 'x-hash', 'x-feeds', 'x-closure', 'x-rules', ...HISTORY];
 /** The keywords each closed node type may use besides its annotations. */
 const NODE_KEYWORDS: Record<string, string[]> = {
   string: ['type', 'pattern', 'minLength', 'maxLength', 'enum', 'format', 'x-closure'],

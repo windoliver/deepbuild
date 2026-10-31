@@ -35,5 +35,6 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         ),
         modules: failed,
         arrays: Vec::new(),
+        operators: Vec::new(),
     })
 }

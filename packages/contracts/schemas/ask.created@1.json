@@ -1,6 +1,8 @@
 {
   "title": "ask.created@1",
   "description": "An ask was created. It always ends: it has a deadline, a fallback and a default.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "pinned_to": {
       "oneOf": [

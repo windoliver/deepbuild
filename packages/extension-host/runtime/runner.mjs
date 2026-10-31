@@ -31,7 +31,7 @@ if (entry === 'main') {
       registerHooks({ load: (at, context, next) => (at === url ? { format: 'module', source: params.source, shortCircuit: true } : next(at, context)) });
     }
     const code = await import(url);
-    await code.default(deep);
+    return await code.default(deep);
   });
   wire = peer(socket, side.serve);
 }

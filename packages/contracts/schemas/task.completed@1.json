@@ -1,6 +1,8 @@
 {
   "title": "task.completed@1",
   "description": "An agent marked a task of its own completed (Claude Code's TaskCompleted). It is the agent's word, held at the child gate until its checks pass; it never closes the task, which only a verdict does (task.closed).",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "tasks"
   ],

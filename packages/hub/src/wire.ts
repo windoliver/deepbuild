@@ -63,6 +63,8 @@ export const derivedId = (ms: number, key: string): string => ulid(ms, createHas
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
 /** What the parser read of a hook request that the core needs to check and bind it. */
 export interface HookMeta {
+  /** The session this one replaced in the same process, where its agent says. */
+  parent?: string;
   id: string;
   agent: string;
   event: string;

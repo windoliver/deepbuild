@@ -48,7 +48,7 @@ describe('an agent installed as a package', () => {
   it('has its whole package readable, since its launcher in bin loads the rest from there', () => {
     const pkg = realpathSync(mkdtempSync(join(tmpdir(), 'deep-pkg-')));
     mkdirSync(join(pkg, 'bin'));
-    writeFileSync(join(pkg, 'package.json'), '{}');
+    writeFileSync(join(pkg, 'package.json'), '{"bin":{"codex":"bin/codex.js"}}');
     writeFileSync(join(pkg, 'bin', 'codex.js'), '');
     expect(programRoot(join(pkg, 'bin', 'codex.js'))).toBe(pkg);
     rmSync(pkg, { recursive: true });
@@ -114,5 +114,20 @@ describe('A Codex session log', () => {
     expect(codexLogRefused(logged('ls -R ~/Library > $TMPDIR/l; cat $TMPDIR/l', 0, 'ls: Operation not permitted\n'))).toBe(false);
     expect(codexLogRefused(logged('grep "a -> b" f', 71, 'sandbox-exec: sandbox_apply: Operation not permitted\n'))).toBe(false);
     expect(codexLogRefused(logged("grep 'rm ' f", 71, 'sandbox-exec: sandbox_apply: Operation not permitted\n'))).toBe(false);
+  });
+  it('reads each line of a command of many lines', () => {
+    expect(codexLogRefused(logged('cd x\ntouch y', 71, 'sandbox-exec: sandbox_apply: Operation not permitted\n'))).toBe(true);
+  });
+});
+
+describe('A program whose folder sits under some other package', () => {
+  it('has only its own folder readable: that package does not own it', () => {
+    const top = realpathSync(mkdtempSync(join(tmpdir(), 'program-')));
+    try {
+      mkdirSync(join(top, 'bin'));
+      writeFileSync(join(top, 'bin', 'codex'), '');
+      writeFileSync(join(top, 'package.json'), '{"name":"home"}');
+      expect(programRoot(join(top, 'bin', 'codex'))).toBe(join(top, 'bin'));
+    } finally { rmSync(top, { recursive: true, force: true }); }
   });
 });

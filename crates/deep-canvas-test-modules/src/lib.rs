@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
+use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
@@ -268,9 +269,9 @@ fn register_up(r: &mut Registrar) {
             let value = v
                 .item()?
                 .pointer("/params/value")
-                .cloned()
-                .unwrap_or(json!(0));
-            v.write("test.up.value", Val::json(value))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            v.write("test.up.value", Val::typed(value))
         });
     r.operator("audit", "check", &["self"], &["test.up.audit"])
         .applies(|_, _, item| of_kind(item, "test.up@1"))
@@ -328,9 +329,22 @@ fn register_nudge(r: &mut Registrar) {
                     .and_then(Value::as_f64)
                     .unwrap_or(0.0)
             };
-            let edits = json!([{"op": "add", "path": ["pos"], "value": [at("dx"), at("dy"), 0.0]}]);
-            v.write("test.nudge.offset", Val::json(edits))
+            v.write("test.nudge.offset", moved_by([at("dx"), at("dy"), 0.0]))
         });
+}
+
+/// A count a step wrote.
+pub fn count_of(v: &Val) -> Option<i64> {
+    v.as_typed::<i64>().map(|n| *n)
+}
+
+/// A contribution that moves its item's position by `d`.
+pub fn moved_by(d: [f64; 3]) -> Val {
+    Val::typed(Edits(vec![Edit {
+        add: true,
+        path: vec!["pos".into()],
+        value: Datum::Nums(d.to_vec()),
+    }]))
 }
 
 /// `test.nudge`: its items move by `[dx, dy]`, contributed to the core's transform, which never
@@ -345,27 +359,15 @@ pub fn nudge() -> Module {
 /// One step: this module's count one up from what its last step left, and the other module's
 /// count read at this step's time (`at_time`) or as earlier steps left it.
 fn step(v: &mut View<'_>, own: &str, other: &str, at_time: bool) -> Result<(), OpError> {
-    let count = v
-        .carried(own)
-        .and_then(|c| match c {
-            Val::Json(j) => j.as_i64(),
-            _ => None,
-        })
-        .unwrap_or(0)
-        + 1;
+    let count = v.carried(own).and_then(|c| count_of(&c)).unwrap_or(0) + 1;
     let read = if at_time {
         v.array(other)?
     } else {
         v.earlier(other)?
     };
-    let read = read
-        .and_then(|c| match c {
-            Val::Json(j) => j.as_i64(),
-            _ => None,
-        })
-        .unwrap_or(0);
+    let read = read.and_then(|c| count_of(&c)).unwrap_or(0);
     v.note_step(count, read);
-    v.write(own, Val::json(json!(count)))
+    v.write(own, Val::typed(count))
 }
 
 /// A stepping module `name` at `hz`, reading `other`'s count at its own step's time or as
@@ -482,13 +484,14 @@ pub fn steps_cycle() -> [Module; 2] {
 #[derive(Debug)]
 pub struct Points(pub Vec<[f64; 2]>);
 
-fn points_val(points: Vec<[f64; 2]>) -> Val {
-    let mut bytes = Vec::with_capacity(points.len() * 16);
-    for p in &points {
-        bytes.extend_from_slice(&p[0].to_le_bytes());
-        bytes.extend_from_slice(&p[1].to_le_bytes());
+impl deep_canvas::schedule::Canonical for Points {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&self.0, out);
     }
-    Val::typed(Points(points), bytes)
+}
+
+fn points_val(points: Vec<[f64; 2]>) -> Val {
+    Val::typed(Points(points))
 }
 
 fn register_scatter(r: &mut Registrar) {
@@ -602,7 +605,7 @@ fn register_peek(r: &mut Registrar) {
         .run(|v| {
             let _ = v.item()?;
             let locale = v.locale()?.to_string();
-            v.write("test.peek.out", Val::json(json!(locale)))
+            v.write("test.peek.out", Val::typed(locale))
         });
 }
 

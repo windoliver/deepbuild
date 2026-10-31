@@ -12,6 +12,7 @@ mod ask;
 mod costs;
 mod evidence;
 mod frames;
+mod host;
 mod hub;
 mod input;
 mod kit;
@@ -21,9 +22,13 @@ mod placement;
 mod planted;
 mod ring;
 mod scene3d;
+mod serve;
 mod shared;
 mod snapshot;
+mod terminal;
 mod time;
+#[cfg(any(feature = "test-json", feature = "test-debug-digest"))]
+mod twins;
 mod verdict;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -81,7 +86,9 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
+use deep_canvas::cost::{self, Coefficients};
 use deep_canvas::registry::{BuildSet, Fault, Module, Registry, SealError};
+use deep_canvas::schedule::HashVersion;
 use serde_json::{json, Map, Value};
 
 use hub::{
@@ -93,6 +100,11 @@ use shared::{Clock, CommitFault, Quota};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
+}
+
+/// A refusal's code.
+fn refused(code: &str) -> Value {
+    json!({"code": code})
 }
 
 /// Standard base64 (RFC 4648, with padding) to bytes; `None` for anything else.
@@ -205,6 +217,19 @@ fn entries<T>(
     }
 }
 
+/// An optional `[w, h]` in whole px, each one `ok` keeps; absent is `Some(None)`.
+fn px_size(value: Option<&Value>, ok: impl Fn(&u16) -> bool) -> Option<Option<[u16; 2]>> {
+    let Some(v) = value else {
+        return Some(None);
+    };
+    let s: Vec<u16> = v
+        .as_array()?
+        .iter()
+        .map(|n| n.as_u64().and_then(|n| u16::try_from(n).ok()).filter(&ok))
+        .collect::<Option<_>>()?;
+    Some(Some(<[u16; 2]>::try_from(s.as_slice()).ok()?))
+}
+
 fn strings(value: Option<&Value>) -> Option<Vec<String>> {
     match value {
         None => Some(Vec::new()),
@@ -259,6 +284,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             None => Some(default),
             Some(t) => flicks(t.as_str()?),
         }
+    };
+    let flag = |k: &str| match c.get(k) {
+        None => Some(false),
+        Some(b) => b.as_bool(),
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
@@ -357,10 +386,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "ask" => {
             let pointer = match c.get("pointer") {
                 None => None,
-                Some(p) => {
-                    let a = p.as_array().filter(|a| a.len() == 2)?;
-                    Some([a[0].as_f64()?, a[1].as_f64()?])
-                }
+                Some(p) => Some(input::point(p)?),
             };
             return Some(Call::Ask {
                 panel: c.get("panel")?.as_str()?.to_string(),
@@ -371,27 +397,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "messages" => return Some(Call::Messages(c.get("session")?.as_str()?.to_string())),
         "render_back" => {
-            let size = match c.get("size") {
-                None => None,
-                Some(v) => {
-                    let s: Vec<u16> = v
-                        .as_array()?
-                        .iter()
-                        .map(|n| {
-                            n.as_u64()
-                                .and_then(|n| u16::try_from(n).ok())
-                                .filter(|n| *n > 0)
-                        })
-                        .collect::<Option<_>>()?;
-                    Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
-                }
-            };
             return Some(Call::RenderBack {
                 session: c.get("session")?.as_str()?.to_string(),
                 doc: doc()?,
                 t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
-                size,
+                size: px_size(c.get("size"), |n| *n > 0)?,
             });
         }
         "screen" => return Some(Call::Screen),
@@ -404,6 +415,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "costs" => return Some(Call::Costs),
+        "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
+        "keys" => {
+            return Some(Call::Keys {
+                doc: doc()?,
+                runs: c.get("runs")?.as_u64().filter(|n| (1..=1000).contains(n))? as usize,
+            })
+        }
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
         "rate" | "time" | "export" | "play" | "determinism" => {
@@ -417,22 +435,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             if view.keys().any(|k| k != "locale" && k != "reduced_motion") {
                 return None;
             }
-            let size = match c.get("size") {
-                None => None,
-                Some(v) => {
-                    let s: Vec<u16> = v
-                        .as_array()?
-                        .iter()
-                        .map(|n| n.as_u64().and_then(|n| u16::try_from(n).ok()))
-                        .collect::<Option<_>>()?;
-                    Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
-                }
-            };
-            let flag = |k: &str| match c.get(k) {
-                None => Some(false),
-                Some(b) => b.as_bool(),
-            };
             return Some(Call::Eval(Box::new(Eval {
+                debug_text: flag("debug_text")?,
                 doc: doc()?,
                 t: crate::time::eval_time(c.get("t"))?,
                 view,
@@ -442,16 +446,30 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                     Some(p) => Some(p.as_str()?.to_string()),
                 },
                 pixels: flag("pixels")?,
-                size,
+                size: px_size(c.get("size"), |_| true)?,
             })));
         }
         "frames" => {
-            return Some(Call::Frames {
+            // #856: a whole revision arriving at a frame's latch.
+            let revise = match c.get("revise") {
+                None => None,
+                Some(r) => Some((
+                    r.get("frame")?.as_u64()? as usize,
+                    r.get("document")?.clone(),
+                )),
+            };
+            return Some(Call::Frames(Box::new(crate::hub::Frames {
                 doc: doc()?,
                 count: c.get("count")?.as_u64()?.min(100_000) as usize,
                 from: time("from", 0)?,
                 step: time("step", flicks("1/60s").unwrap_or(11_760_000))?,
-            })
+                paced: flag("paced")?,
+                revise,
+                pixels: flag("pixels")?,
+            })));
+        }
+        "shaped_runs" => {
+            return Some(Call::ShapedRuns(c.get("text")?.as_str()?.to_string()));
         }
         "panel" => {
             return Some(Call::Panel {
@@ -564,6 +582,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(r) = ring::parse_call(name, c) {
         return Some(Call::Ring(Box::new(r)));
     }
+    if let Some(t) = terminal::parse_call(name, c) {
+        return Some(Call::Term(Box::new(t)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -595,21 +616,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
             .collect::<Option<_>>()?,
     };
-    let size = match c.get("size") {
-        None => None,
-        Some(v) => {
-            let s: Vec<u16> = v
-                .as_array()?
-                .iter()
-                .map(|n| {
-                    n.as_u64()
-                        .and_then(|n| u16::try_from(n).ok())
-                        .filter(|n| (1..=8192).contains(n))
-                })
-                .collect::<Option<_>>()?;
-            Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
-        }
-    };
+    let size = px_size(c.get("size"), |n| (1..=8192).contains(n))?;
     Some(Call::Show(Box::new(Show {
         via,
         doc: c.get("doc")?.as_str()?.to_string(),
@@ -635,10 +642,24 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let sessions = entries(input, "sessions", |s| {
         let p = s.get("process")?.as_object()?;
+        // #402: a session's terminal, hosted by the hub or running elsewhere.
+        let (runs_in, capture) = match s.get("terminal") {
+            None => (None, None),
+            Some(t) if t.get("hosted")?.as_bool()? => (None, None),
+            Some(t) => (
+                Some(t.get("runs_in")?.as_str()?.to_string()),
+                match t.get("capture") {
+                    None => None,
+                    Some(c) => Some(strings(c.get("lines"))?),
+                },
+            ),
+        };
         Some(Session {
             thread: s.get("thread")?.as_str()?.to_string(),
             name: s.get("name")?.as_str()?.to_string(),
             process: (p.get("pid")?.as_u64()?, p.get("start")?.as_i64()?),
+            runs_in,
+            capture,
         })
     })?;
     let processes = match input.get("processes") {
@@ -975,6 +996,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "keymap_unchecked" => Planted::KeymapUnchecked,
             "conflicts_unreported" => Planted::ConflictsUnreported,
             "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
+            "terminal_30_per_second" => Planted::Terminal30PerSecond,
+            "cells_a_frame_late" => Planted::CellsAFrameLate,
+            "video_shows_late" => Planted::VideoShowsLate,
+            "video_drops_uncounted" => Planted::VideoDropsUncounted,
+            "tab_draws_text" => Planted::TabDrawsText,
+            "tab_redraws_at_30hz" => Planted::TabRedrawsAt30hz,
+            "tab_draws_capture" => Planted::TabDrawsCapture,
             _ => return None,
         }),
     };
@@ -984,6 +1012,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let epoch_start = u32_field("epoch_start")?;
     let shuffle = u32_field("shuffle")?;
+    // #855: a process keys with `hash@2` unless the scenario keys as before its migration.
+    let hash = match input.get("hash") {
+        None => HashVersion::V2,
+        Some(h) => hash_named(h.as_str()?)?,
+    };
     let environment = match input.get("environment") {
         None => Map::new(),
         Some(e) => {
@@ -1057,6 +1090,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         commit_fault,
         epoch_start: epoch_start.unwrap_or(0),
         shuffle,
+        hash,
         goldens: match input.get("goldens") {
             None => None,
             Some(g) => Some(PathBuf::from(g.as_str()?)),
@@ -1100,6 +1134,106 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
         }
         "live" => live(&scenario, startup),
         _ => bad_input(),
+    }
+}
+
+/// The virtual display clock `canvas` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
+/// half a millisecond a check, and each call ten frames after the one before, so a patch is current
+/// at a latch before the next call arrives, as on the stand-in's clock (#384, #96).
+const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
+const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
+
+/// `deep-show canvas` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
+/// `calls`, `clock` and `at`) is the hub's: the sessions it bound, the documents it minted, the
+/// record's objects, the claims, the window and card. Each call is played after every call before
+/// it, on the clock `canvas` keeps, and answered with its reply, so the replies are the stand-in's for
+/// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
+/// played again before it.
+struct CanvasSide {
+    world: Map<String, Value>,
+    calls: Vec<Value>,
+}
+
+impl CanvasSide {
+    fn scenario(&self, fault: bool) -> Option<Scenario> {
+        let mut input = self.world.clone();
+        if !fault {
+            input.remove("fault");
+        }
+        let (refresh_hz, lead, check) = CANVAS_CLOCK;
+        input.insert(
+            "clock".into(),
+            json!({"refresh_hz": refresh_hz, "lead": lead, "check": check}),
+        );
+        let calls: Vec<Value> = self
+            .calls
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let mut c = c.clone();
+                c["at"] = json!((i as i64 + 1) * CANVAS_SPACING);
+                c
+            })
+            .collect();
+        input.insert("calls".into(), Value::Array(calls));
+        scenario(&input)
+    }
+
+    fn line(&mut self, startup: &Startup, line: &str) -> Value {
+        let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
+            return bad_input();
+        };
+        if let Some(Value::Object(world)) = input.get("world") {
+            let before = std::mem::replace(&mut self.world, world.clone());
+            if self.scenario(false).is_none() {
+                self.world = before;
+                return bad_input();
+            }
+            return json!({"ok": true});
+        }
+        let Some(Value::Object(call)) = input.get("call") else {
+            return bad_input();
+        };
+        let mut call = call.clone();
+        let out = call.remove("out");
+        let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
+        self.calls.push(Value::Object(call));
+        let Some(scenario) = self.scenario(true) else {
+            self.calls.pop();
+            return bad_input();
+        };
+        match out.as_ref().and_then(Value::as_str) {
+            // The window as the calls leave it, drawn and written to `out`; the reply is the
+            // `screen` call's own, with the picture's size and each item's box beside it.
+            Some(out) if scenario.window.is_some() => {
+                let mut drawn = screen(&scenario, startup, out);
+                let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
+                else {
+                    return drawn;
+                };
+                let mut reply = replies.pop().unwrap_or(Value::Null);
+                for k in ["width", "height", "items"] {
+                    reply[k] = drawn[k].take();
+                }
+                json!({"ok": true, "reply": reply})
+            }
+            _ => {
+                let mut hub = hub::Hub::new(&scenario, startup);
+                let mut replies = hub.run_calls();
+                let reply = replies.pop().unwrap_or(Value::Null);
+                let presented = match doc.as_deref() {
+                    Some(doc)
+                        if reply.get("rev").is_some()
+                            && reply["outcome"] != "refused"
+                            && reply["outcome"] != "applied" =>
+                    {
+                        hub.presented_revision(doc)
+                    }
+                    _ => None,
+                };
+                json!({"ok": true, "reply": reply, "presented": presented})
+            }
+        }
     }
 }
 
@@ -1180,6 +1314,8 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-text",
     feature = "test-check-kind",
     feature = "test-leave-out-logic",
+    feature = "test-json",
+    feature = "test-debug-digest",
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
@@ -1203,6 +1339,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         ]);
     }
     if set >= BuildSet::R2 {
+        // Issue #402: the cell grid, on the text module.
+        out.push(deep_canvas_cells::module::module());
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame.
         out.push(deep_canvas_effects::module::module());
@@ -1213,6 +1351,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.retain(|m| m.manifest.name != "text");
     #[cfg(feature = "test-accent")]
     out.push(planted::accent());
+    #[cfg(feature = "test-json")]
+    out.push(twins::json_writer());
+    #[cfg(feature = "test-debug-digest")]
+    out.push(twins::debug_digest());
     #[cfg(feature = "test-peek")]
     out.push(deep_canvas_test_modules::peek());
     #[cfg(feature = "test-up-1-0")]
@@ -1260,9 +1402,17 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out
 }
 
+/// Every shipped canvas module's manifest, for the `module` call's dependencies (#402).
+pub fn shipped_manifests() -> Vec<deep_canvas::registry::Manifest> {
+    modules(BuildSet::Full)
+        .into_iter()
+        .map(|m| m.manifest)
+        .collect()
+}
+
 /// Registers the build's canvas modules in sorted name order and seals, timing both; the
 /// planted seal (`--planted treats_every_dependency_required`) is the criterion's wrong program.
-fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
+fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, SealError> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let held = modules(build_set());
@@ -1275,11 +1425,12 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
                 code: "missing_core_module",
                 modules: vec![name.to_string()],
                 arrays: Vec::new(),
+                operators: Vec::new(),
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
             });
         }
     }
-    let mut registry = Registry::new(build_set());
+    let mut registry = Registry::new(build_set()).with_costs(costs);
     for module in held {
         registry = registry.with(module);
     }
@@ -1292,18 +1443,24 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
         sealed,
         seal_ms: started.elapsed().as_secs_f64() * 1000.0,
         steps_by_name: planted == Some(StartPlanted::StepsByName),
+        admits_frame_json: planted == Some(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         test_build: TEST_BUILD,
+        shapes_on_ui_thread: planted == Some(StartPlanted::ShapesOnUiThread),
+        run_per_document: planted == Some(StartPlanted::RunPerDocument),
     })
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
 /// reads every dependency as required, #387's scheduler that orders steps at one time by
-/// canvas-module name, or #388's seal that lets a build without look start.
+/// canvas-module name, #388's seal that lets a build without look start, or #856's hub that
+/// shapes a long text on the UI thread and its shaped-run cache per document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
     StepsByName,
     StartsWithoutLook,
+    ShapesOnUiThread,
+    RunPerDocument,
 }
 
 #[cfg(test)]
@@ -1314,8 +1471,16 @@ mod tests {
     fn every_seal_in_the_process_counts() {
         use std::sync::atomic::Ordering;
         let before = hub::SEAL_RUNS.load(Ordering::Relaxed);
-        seal(None).expect("the shipped set seals");
-        seal(None).expect("the shipped set seals");
+        seal(
+            None,
+            Coefficients::read(cost::REFERENCE).expect("the build's own"),
+        )
+        .expect("the shipped set seals");
+        seal(
+            None,
+            Coefficients::read(cost::REFERENCE).expect("the build's own"),
+        )
+        .expect("the shipped set seals");
         assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
     }
 
@@ -1327,7 +1492,10 @@ mod tests {
             sealed: deep_canvas::registry::core(),
             seal_ms: 0.0,
             steps_by_name: false,
+            admits_frame_json: false,
             test_build: false,
+            shapes_on_ui_thread: false,
+            run_per_document: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-305-stamp-{}", std::process::id()));
         let doc = "01JB7D00000000000000000001";
@@ -1424,20 +1592,29 @@ mod tests {
     }
 
     #[test]
-    fn run_takes_planted_and_nothing_else() {
+    fn run_takes_planted_and_costs_once_each_and_nothing_else() {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(matches!(planted_arg(&args(&["run"])), Ok(None)));
+        assert!(matches!(start_args(&args(&["run"])), Ok((None, None))));
         assert!(matches!(
-            planted_arg(&args(&[
+            start_args(&args(&[
                 "run",
                 "--planted",
                 "treats_every_dependency_required"
             ])),
-            Ok(Some(StartPlanted::Seal(Fault::EveryDependencyRequired)))
+            Ok((
+                Some(StartPlanted::Seal(Fault::EveryDependencyRequired)),
+                None
+            ))
         ));
         assert!(matches!(
-            planted_arg(&args(&["run", "--planted", "orders_steps_by_name"])),
-            Ok(Some(StartPlanted::StepsByName))
+            start_args(&args(&[
+                "run",
+                "--costs",
+                "c.json",
+                "--planted",
+                "admits_frame_json"
+            ])),
+            Ok((Some(StartPlanted::Seal(Fault::AdmitsFrameJson)), Some(_)))
         ));
         let twin = "treats_every_dependency_required";
         for stray in [
@@ -1446,8 +1623,9 @@ mod tests {
             &["run", "--planted", "nonsense"],
             &["run", "--planted", twin, "extra"],
             &["run", "--planted", twin, "--planted", twin],
+            &["run", "--costs", "a", "--costs", "b"],
         ] {
-            assert!(planted_arg(&args(stray)).is_err(), "{stray:?}");
+            assert!(start_args(&args(stray)).is_err(), "{stray:?}");
         }
     }
 
@@ -1471,7 +1649,10 @@ mod tests {
             sealed: deep_canvas::registry::core(),
             seal_ms: 0.0,
             steps_by_name: false,
+            admits_frame_json: false,
             test_build: false,
+            shapes_on_ui_thread: false,
+            run_per_document: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-383-view-{}", std::process::id()));
         let doc = "01JB383V00000000000000000A";
@@ -1601,35 +1782,89 @@ mod tests {
     }
 }
 
-/// The seal's planted twin from the arguments after the command: none, or
-/// `--planted <name>` and nothing else; an unknown name or a stray argument is bad input.
-fn planted_arg(args: &[String]) -> Result<Option<StartPlanted>, ()> {
-    match args.get(1..).unwrap_or_default() {
-        [] => Ok(None),
-        [flag, twin] if flag == "--planted" && twin == "treats_every_dependency_required" => {
-            Ok(Some(StartPlanted::Seal(Fault::EveryDependencyRequired)))
+/// The arguments after the command: `--planted <name>` and `--costs <path>`, each at most once,
+/// in either order; an unknown name or a stray argument is bad input.
+fn start_args(args: &[String]) -> Result<(Option<StartPlanted>, Option<String>), ()> {
+    let (mut planted, mut costs) = (None, None);
+    let mut rest = args.get(1..).unwrap_or_default();
+    while let [flag, value, more @ ..] = rest {
+        match flag.as_str() {
+            "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
+            "--costs" if costs.is_none() => costs = Some(value.clone()),
+            _ => return Err(()),
         }
-        [flag, twin] if flag == "--planted" && twin == "orders_steps_by_name" => {
-            Ok(Some(StartPlanted::StepsByName))
+        rest = more;
+    }
+    if rest.is_empty() {
+        Ok((planted, costs))
+    } else {
+        Err(())
+    }
+}
+
+/// The planted twin a startup argument names.
+fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
+    match twin {
+        "treats_every_dependency_required" => {
+            Ok(StartPlanted::Seal(Fault::EveryDependencyRequired))
         }
-        [flag, twin] if flag == "--planted" && twin == "starts_without_look" => {
-            Ok(Some(StartPlanted::StartsWithoutLook))
-        }
+        "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+        "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
+        "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
+        "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
+        "run_per_document" => Ok(StartPlanted::RunPerDocument),
         _ => Err(()),
     }
+}
+
+/// A hash version by its name: `hash@1` or `hash@2`.
+fn hash_named(name: &str) -> Option<HashVersion> {
+    [HashVersion::V1, HashVersion::V2]
+        .into_iter()
+        .find(|v| v.name() == name)
+}
+
+/// The coefficients this process estimates with: the file `--costs` names, else the build's
+/// own; one whose build isn't optimized is refused, naming its profile (#855).
+fn coefficients(path: Option<&str>) -> Result<Coefficients, cost::Refused> {
+    let text = match path {
+        None => cost::REFERENCE.to_string(),
+        Some(p) => std::fs::read_to_string(p).map_err(|e| cost::Refused {
+            profile: None,
+            what: format!("costs: {p} can't be read: {e}"),
+        })?,
+    };
+    Coefficients::read(&text)
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().cloned().unwrap_or_default();
+    // #402: the terminal side on the wall clock, and a terminal's panel host; neither seals.
+    match command.as_str() {
+        "serve" => std::process::exit(serve::run()),
+        "host" => std::process::exit(host::run(&args)),
+        _ => {}
+    }
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let Ok(fault) = planted_arg(&args) else {
+    let Ok((fault, costs)) = start_args(&args) else {
         let _ = writeln!(out, "{}", bad_input());
         std::process::exit(2);
     };
+    // The cost model reads its coefficients before any scenario: a file a debug build measured
+    // answers none.
+    let coefficients = match coefficients(costs.as_deref()) {
+        Ok(c) => c,
+        Err(refused) => {
+            let line = json!({"ok": false, "code": "costs_refused", "profile": refused.profile, "what": refused.what});
+            let _ = writeln!(out, "{line}");
+            let _ = out.flush();
+            std::process::exit(2);
+        }
+    };
     // The seal runs before the first line is read: a refused set answers no scenario.
-    let startup = match seal(fault) {
+    let startup = match seal(fault, coefficients) {
         Ok(startup) => startup,
         Err(err) => {
             let line = json!({
@@ -1637,6 +1872,7 @@ fn main() {
                 "code": "seal_refused",
                 "reason": err.code,
                 "modules": err.modules,
+                "operators": err.operators,
                 "arrays": err.arrays,
                 "what": err.what,
             });
@@ -1646,9 +1882,17 @@ fn main() {
         }
     };
     let stdin = io::stdin();
+    let mut canvas = CanvasSide {
+        world: Map::new(),
+        calls: Vec::new(),
+    };
+    canvas.world.insert("evidence".into(), json!(""));
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
-        let reply = answer(&command, &startup, &line);
+        let reply = match command.as_str() {
+            "canvas" => canvas.line(&startup, &line),
+            _ => answer(&command, &startup, &line),
+        };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
         if command == "live" {

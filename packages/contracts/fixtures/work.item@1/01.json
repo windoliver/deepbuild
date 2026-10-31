@@ -1,0 +1,21 @@
+{
+  "source_id": "acme/shop#12",
+  "link": "https://github.com/acme/shop/issues/12",
+  "title": "Checkout drops the tax line",
+  "body": "ev:9f2c6b1f0e7a4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a",
+  "criteria": [
+    "The receipt shows the tax line",
+    "A cart with no taxable item shows none"
+  ],
+  "authors": [
+    {
+      "handle": "maya",
+      "role": "owner"
+    },
+    {
+      "handle": "drive-by",
+      "role": "outside"
+    }
+  ],
+  "updated": "2026-10-29T15:00:00Z"
+}
