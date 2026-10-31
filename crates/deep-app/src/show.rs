@@ -180,7 +180,7 @@ fn bounds(r: [f32; 4]) -> Bounds<Pixels> {
 }
 
 impl Render for CanvasPanel {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let mut layers: Vec<Composed> = Vec::new();
         for p in &self.shown {
             for l in &p.layers {
@@ -198,8 +198,8 @@ impl Render for CanvasPanel {
             .iter()
             .filter_map(|(_, _, n)| n.clone().map(Label::new))
             .collect();
-        let muted = hsla(0., 0., 0.55, 1.);
-        let ground = hsla(0., 0., 1., 1.);
+        let chrome = crate::chrome::of(window);
+        let (muted, ground) = (chrome.ink_secondary, chrome.ground);
         div().size_full().child(
             canvas(
                 move |_, window, _| {
