@@ -1,0 +1,12 @@
+{
+  "id": "test/brief",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "checks": ["ext.brief.report"],
+  "actions": ["ext.brief.send_digest"],
+  "sources": [{ "name": "ext.brief.pause", "variant": "polled" }],
+  "requires": {
+    "preview": ["deep.registerSource", "deep.schedule", "deep.send", "deep.registerAction"]
+  }
+}
