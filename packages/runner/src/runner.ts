@@ -84,6 +84,12 @@ interface AgentParts {
   expires(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<number | undefined>;
 }
 /** The version a binary shows: its suffix kept where the facts list exact builds, so a stable build is never its alpha. */
+/** What a program reads to run: the package holding it, since a launcher in bin loads the rest from there, or its own folder. */
+export function programRoot(real: string): string {
+  const own = dirname(real);
+  const up = dirname(own);
+  return existsSync(join(up, 'package.json')) ? up : own;
+}
 export const shownVersion = (text: string, exact: boolean): string | undefined => (exact ? /(\d+\.\d+\.\d+(?:-[\w.]+)?)/ : /(\d+\.\d+\.\d+)/).exec(text)?.[1];
 /** Codex's plan windows, each named by its length as the hub's row reads it, or by its slot where a snapshot gives none. Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows. */
 export function codexWindows(limits: unknown): Map<string, { used: number; resets: number | null }> {
@@ -593,7 +599,7 @@ class LocalRunner implements Runner {
   }
   /** What a job's programs may read and run: the binary's folder and the login shell's PATH. */
   private programs(real: string): string[] {
-    const dirs = new Set([dirname(real)]);
+    const dirs = new Set([programRoot(real)]);
     for (const dir of this.o.loginPath.split(delimiter)) if (dir && isAbsolute(dir) && existsSync(dir)) dirs.add(realpathSync(dir));
     return [...dirs];
   }

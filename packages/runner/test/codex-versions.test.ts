@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { programRoot } from '../src/runner.js';
 // Codex's versions and windows in the runner (#39): a build its facts don't list isn't covered by a listed build's
 // numbers, and a window is the one its length says, as the hub's row reads it.
 import { describe, expect, it } from 'vitest';
@@ -35,5 +39,22 @@ describe('what counts as a refusal', () => {
     expect(codexRefused(ran('cat /private/secret'))).toBe(false);
     expect(codexRefused(ran('cat /private/secret 2>/dev/null'))).toBe(false);
     expect(codexRefused(ran('touch out.txt', 'completed'))).toBe(false);
+  });
+});
+
+describe('an agent installed as a package', () => {
+  it('has its whole package readable, since its launcher in bin loads the rest from there', () => {
+    const pkg = realpathSync(mkdtempSync(join(tmpdir(), 'deep-pkg-')));
+    mkdirSync(join(pkg, 'bin'));
+    writeFileSync(join(pkg, 'package.json'), '{}');
+    writeFileSync(join(pkg, 'bin', 'codex.js'), '');
+    expect(programRoot(join(pkg, 'bin', 'codex.js'))).toBe(pkg);
+    rmSync(pkg, { recursive: true });
+  });
+  it('is only its own folder when no package holds it', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-bare-')));
+    writeFileSync(join(dir, 'codex'), '');
+    expect(programRoot(join(dir, 'codex'))).toBe(dir);
+    rmSync(dir, { recursive: true });
   });
 });

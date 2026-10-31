@@ -226,3 +226,11 @@ describe('how long deep mcp waits for the hub', () => {
     expect(answerWaitMs(undefined, () => 600)).toBe(55_000);
   });
 });
+
+describe('DeepBuild\'s MCP server in Codex', () => {
+  it('needs no approval: a prompt for its own deep_* tools would ask you what no one needs you for', () => {
+    const tables = tomlTables(withServer('', '/node', '/cli.js'));
+    if ('refused' in tables) throw Error(tables.refused);
+    expect(tables.tables.get('mcp_servers.deep')?.get('default_tools_approval_mode')).toBe('"approve"');
+  });
+});
