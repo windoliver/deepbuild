@@ -2,10 +2,9 @@
 // no extension at all; and the rule behind AC5 the acceptance tests reach only with changed bytes: what an agent
 // built runs sandboxed even when its bytes are the release's. Each runs a real package through a real host, record
 // and supervisor.
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request } from 'node:http';
 import { PassThrough } from 'node:stream';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CheckSpec } from '@deepbuild/conformance';
@@ -15,36 +14,10 @@ import { openRecord, ulid, type RecordStore } from '@deepbuild/record';
 import { openSupervisor, type Supervisor } from '@deepbuild/supervisor';
 import { peer } from '../runtime/deep.mjs';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '../src/index.js';
+import { cleanup, closing, pkgOf, temp } from './package.js';
 
-/** The preview methods a package's code calls, which its manifest lists by name since #139 (requires.preview). */
-const PREVIEW = /\bdeep\.(on|registerResolver|registerSource|registerEnvironment|lease|registerView|readNow|registerAdapter|registerRoute|registerIndex|record\.append|record\.query|evidence\.put|asks\.create|config\.get|notices\.send|store|schedule|secret|send|provide|use|read|fetch|registerAction)\(/g;
-const previewOf = (code: string): { requires?: { preview: string[] } } => {
-  const used = [...new Set([...code.matchAll(PREVIEW)].map((m) => `deep.${m[1]}`))].sort();
-  return used.length ? { requires: { preview: used } } : {};
-};
+afterAll(cleanup);
 
-const dirs: string[] = [];
-const closing: { close(): Promise<void> }[] = [];
-afterAll(async () => {
-  for (const c of closing.reverse()) await c.close();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
-const temp = (): string => {
-  const d = realpathSync(mkdtempSync(join(tmpdir(), 'deep-ext-test-')));
-  dirs.push(d);
-  return d;
-};
-
-/** A package of `code`, its manifest's id and fields given, its digest stamped. */
-function pkgOf(id: string, code: string, fields: Record<string, unknown> = {}, file = 'index.ts'): string {
-  const folder = temp();
-  writeFileSync(join(folder, file), code, { mode: file === 'main' ? 0o755 : 0o644 });
-  const manifest = { id, version: '1.0.0', digest: '', ...previewOf(code), ...fields };
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  manifest.digest = packageDigest(folder);
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  return folder;
-}
 /** A package whose check kind ext.stuck.run answers `body`'s value, and which runs `also` as it loads. */
 const stuck = (body: string, also = '', fields: Record<string, unknown> = {}): string =>
   pkgOf('test/stuck', `export default function (deep: any): void {\n  deep.registerCheck('ext.stuck.run', () => ${body});\n  ${also}\n}\n`, { checks: ['ext.stuck.run'], ...fields });

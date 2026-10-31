@@ -8,10 +8,9 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { validate } from '@deepbuild/contracts';
-import { call, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
-import { startOf, type Plant } from './wire.js';
+import type { Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -120,8 +119,6 @@ export function writeRejected(dir: string, rejected: Obj): void {
 }
 
 const USAGE = 'Usage: deep guard add <file>';
-/** Refusals that leave nothing added and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */
-const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
 /** `deep guard add <file>`: exit 0 added, 1 refused, 2 a usage error, 3 not decided. */
 export async function guardCommand(args: readonly string[]): Promise<number> {
@@ -137,22 +134,8 @@ export async function guardCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep guard add: ${from} isn't readable JSON (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
-  let reply: Reply;
-  try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, 'guard.add', { guards }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
-  } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; nothing was added\n`);
-    return 3;
-  }
-  if ('error' in reply) {
-    process.stderr.write(`${reply.error.remediation}\n`);
-    return UNDECIDED_CODES.has(reply.error.code) ? 3 : 2;
-  }
-  if (reply.result.status === 'refused') {
-    process.stderr.write(`REFUSED: ${String(reply.result.reason)}\n`);
-    return 1;
-  }
-  process.stdout.write(`Added ${(reply.result.names as string[]).join(', ')} to your rules\n`);
+  const result = await callAsYou('guard.add', { guards }, 'nothing was added');
+  if (typeof result === 'number') return result;
+  process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);
   return 0;
 }
