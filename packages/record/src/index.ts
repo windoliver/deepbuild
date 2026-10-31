@@ -110,7 +110,8 @@ export interface RecordStore {
   rebuild(): Promise<void>;
   /** Waits for every queued append, then commits synchronous=FULL: everything appended so far is durable. */
   sync(): Promise<void>;
-  raw(sql: string): Promise<unknown[]>;
+  /** One read-only SELECT; each `?` in it takes the next of `params`, bound, never written into the text. */
+  raw(sql: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
   /**
@@ -140,6 +141,22 @@ export interface RecordStore {
    */
   backup(path: string): Promise<void>;
   close(): Promise<void>;
+}
+
+/**
+ * The events of `kinds` after `cursor`, in log order, and the cursor to read from next: the log's head read before
+ * the first page, so the other kinds are scanned once and never decoded, and what lands after the head is read next
+ * time. Every fold that follows the log with a cursor reads it this way.
+ */
+export async function readSince(record: RecordStore, cursor: number, kinds: readonly string[], each: (event: Event) => void): Promise<number> {
+  const [row] = (await record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+  const head = Number(row?.head ?? 0);
+  for (;;) {
+    const page = await record.read({ after: cursor, limit: 1000, kinds });
+    for (const e of page) each(e);
+    if (page.length) cursor = page[page.length - 1]!.log_pos;
+    if (page.length < 1000) return Math.max(cursor, head);
+  }
 }
 
 /** The record's JSON for one event: seq as its decimal string. */
@@ -714,12 +731,12 @@ class SqliteRecord implements RecordStore {
   }
 
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
-  async raw(sql: string): Promise<unknown[]> {
+  async raw(sql: string, params: readonly (string | number | bigint | null)[] = []): Promise<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
     if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
     const statement = this.db.prepare(sql);
     if (!statement.readonly || !statement.reader) throw new RecordError('storage', 'raw SQL reads the record; it never writes it');
-    return statement.all();
+    return statement.all(...params);
   }
 
   async startSlice(session: string): Promise<SliceEntry[]> {

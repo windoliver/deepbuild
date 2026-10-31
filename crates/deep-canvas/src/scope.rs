@@ -122,15 +122,15 @@ struct View {
 
 /// How each item differs between two revisions, by ID.
 fn diff(before: &Value, after: &Value) -> Map<String, Value> {
-    let items = |d: &Value| {
+    let empty = Map::new();
+    let items = |d| {
         member(d, "items")
             .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default()
+            .unwrap_or(&empty)
     };
     let (a, b) = (items(before), items(after));
     let mut out = Map::new();
-    for (id, item) in &b {
+    for (id, item) in b {
         let how = match a.get(id) {
             None => "added",
             Some(was) if was != item => "changed",
@@ -674,7 +674,7 @@ impl Scope {
                 if member(item, "kind").and_then(Value::as_str) == Some("camera@1") {
                     continue;
                 }
-                if hidden.contains(id) {
+                if hidden.binary_search(id).is_ok() {
                     item["visible"] = json!(false);
                 }
                 if let (Some(role), Some(params)) = (roles.get(id), item.get_mut("params")) {
@@ -719,7 +719,7 @@ impl Scope {
     fn shown_targets(&self, doc: &Value) -> Vec<Target> {
         let hidden = self.hidden(doc);
         let mut all = targets(doc, self.rig.flat);
-        all.retain(|t| !hidden.contains(&t.id));
+        all.retain(|t| hidden.binary_search(&t.id).is_err());
         all
     }
 
@@ -1157,7 +1157,7 @@ impl Scope {
                 .into_iter()
                 .flatten()
                 .filter(|(id, item)| {
-                    !hidden.contains(id)
+                    hidden.binary_search(id).is_err()
                         && member(item, "kind").and_then(Value::as_str) != Some("camera@1")
                 })
                 .map(|(id, item)| {

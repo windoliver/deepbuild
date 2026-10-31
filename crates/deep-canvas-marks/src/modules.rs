@@ -19,7 +19,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver, TableValue};
-use deep_canvas::schedule::{OpError, Outside, Val, View};
+use deep_canvas::schedule::core_ops::{Datum, Edits, Fields, StatusBase, Transform};
+use deep_canvas::schedule::{Canonical, OpError, Outside, Val, View};
 use deep_text::{Role, Shaped, Shaper};
 use serde_json::{json, Map, Value};
 
@@ -78,18 +79,45 @@ fn record_of(outside: &Outside) -> Record {
     record
 }
 
-fn shown_json(s: &Shown) -> Value {
-    json!({"bound": s.bound, "text": s.text, "stale": s.stale, "age": s.age, "changes_at": s.changes_at})
+impl Canonical for Shown {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (
+            &self.bound,
+            &self.text,
+            self.stale,
+            self.age,
+            self.changes_at,
+        )
+            .encode(out);
+    }
 }
 
-fn shown_of(v: &Value) -> Option<Shown> {
-    Some(Shown {
-        bound: v.get("bound")?.as_str()?.to_string(),
-        text: v.get("text")?.as_str()?.to_string(),
-        stale: v.get("stale")?.as_bool()?,
-        age: v.get("age").and_then(Value::as_i64),
-        changes_at: v.get("changes_at").and_then(Value::as_i64),
-    })
+/// An item's fields as the document writes them, built here from `core.fields` with motion's
+/// edits applied.
+fn fields_of(v: &mut View<'_>) -> Result<Value, OpError> {
+    let fields = v
+        .typed::<Fields>("core.fields")?
+        .ok_or_else(|| missing(v))?;
+    Ok(fields.to_json())
+}
+
+/// Every item's fields with its world transform as `at`, built here for the scene, which reads
+/// items as the document writes them.
+fn placed_items(v: &mut View<'_>) -> Result<Map<String, Value>, OpError> {
+    let worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
+    let mut items = Map::new();
+    for (id, fields) in v.every("core.fields")? {
+        let Some(fields) = fields.as_typed::<Fields>() else {
+            continue;
+        };
+        let mut item = fields.to_json();
+        let world = worlds.get(id).and_then(|w| w.as_typed::<Transform>());
+        if let (Some(map), Some(at)) = (item.as_object_mut(), world) {
+            map.insert("at".into(), at.to_json());
+        }
+        items.insert(id.to_string(), item);
+    }
+    Ok(items)
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -109,6 +137,31 @@ pub fn text() -> Module {
 pub struct Run {
     pub spec: TextSpec,
     pub shaped: Arc<Shaped>,
+}
+
+impl Canonical for TextSpec {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.text.encode(out);
+        self.font.encode(out);
+        self.size.encode(out);
+        self.weight.encode(out);
+        self.width.encode(out);
+        (self.align as u8).encode(out);
+        self.bound.encode(out);
+    }
+}
+
+impl Canonical for Run {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.spec.encode(out);
+        let s = &self.shaped;
+        s.glyphs.len().encode(out);
+        for g in &s.glyphs {
+            (g.font.index, g.size, g.id, g.x, g.y, g.grapheme).encode(out);
+        }
+        (s.width, s.height, s.lines, s.ellipsized).encode(out);
+        s.shown.encode(out);
+    }
 }
 
 fn fonts() -> TableValue {
@@ -265,16 +318,15 @@ fn counter(v: &mut View<'_>) -> Result<(), OpError> {
         locale,
     )
     .map_err(refused)?;
-    v.write(
-        "text.counter",
-        Val::json(shown.as_ref().map_or(Value::Null, shown_json)),
-    )
+    v.write("text.counter", Val::typed(shown))
 }
 
 /// The item's text shaped once by the one shaper: what drawing and the fit check read.
 fn shape(v: &mut View<'_>) -> Result<(), OpError> {
-    let fields = v.json("core.fields")?.ok_or_else(|| missing(v))?;
-    let shown = v.json("text.counter")?.and_then(|s| shown_of(&s));
+    let fields = fields_of(v)?;
+    let shown = v
+        .typed::<Option<Shown>>("text.counter")?
+        .and_then(|s| (*s).clone());
     // The locale picks the shaping language; it keys every run, a label's included.
     let _ = v.locale()?;
     let id = v.id().unwrap_or_default();
@@ -302,15 +354,7 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
         .lock()
         .map_err(|_| OpError::new("shaper_poisoned", format!("items/{id}")))?
         .shape(&shaper_spec);
-    let mut bytes = spec.text.clone().into_bytes();
-    for g in &shaped.glyphs {
-        bytes.extend_from_slice(&g.id.to_le_bytes());
-        bytes.extend_from_slice(&g.font.index.to_le_bytes());
-        bytes.extend_from_slice(&g.x.to_bits().to_le_bytes());
-        bytes.extend_from_slice(&g.y.to_bits().to_le_bytes());
-        bytes.extend_from_slice(&g.size.to_bits().to_le_bytes());
-    }
-    v.write("text.run", Val::typed(Run { spec, shaped }, bytes))
+    v.write("text.run", Val::typed(Run { spec, shaped }))
 }
 
 /// A text animator's coverage of each unit (its glyphs, in order), mapped to a lift and an
@@ -318,7 +362,7 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
 /// eases them; `props.y` lifts and `props.opacity` fades a covered unit. Under reduced motion
 /// only opacity is kept, so units fade in place (Transport).
 fn animate(v: &mut View<'_>) -> Result<(), OpError> {
-    let fields = v.json("core.fields")?.ok_or_else(|| missing(v))?;
+    let fields = fields_of(v)?;
     let run = v.typed::<Run>("text.run")?.ok_or_else(|| missing(v))?;
     let reduced = v.reduced_motion()?;
     let units = run.shaped.glyphs.len();
@@ -377,7 +421,7 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    v.write("text.animated", Val::json(json!(out)))
+    v.write("text.animated", Val::typed(out))
 }
 
 fn counter_board() -> Value {
@@ -419,6 +463,23 @@ fn counter_record() -> Value {
 pub struct StatusDrawing {
     pub marks: Vec<Labelled>,
     pub legend: Vec<LegendEntry>,
+}
+
+impl Canonical for StatusDrawing {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.marks.len().encode(out);
+        for l in &self.marks {
+            let m = &l.mark;
+            (&m.item, &m.binding, m.slot as u8, m.state).encode(out);
+            (m.color, m.bounds, m.radius, &m.glyph, m.word).encode(out);
+            (m.ink, m.core, m.outline, l.label).encode(out);
+        }
+        self.legend.len().encode(out);
+        for e in &self.legend {
+            (e.state, &e.glyph, e.word, e.color).encode(out);
+            (e.ink, e.swatch, e.label).encode(out);
+        }
+    }
 }
 
 /// A status mark and the box its glyph and word draw in, in u.
@@ -475,35 +536,24 @@ pub fn unmapped() -> Status {
 fn status(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let record = record_of(v.outside()?);
-    let worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
-    let mut items = Map::new();
-    for (id, fields) in v.every("core.fields")? {
-        let Val::Json(fields) = fields else { continue };
-        let mut item = (*fields).clone();
-        if let (Some(map), Some(Val::Json(at))) = (item.as_object_mut(), worlds.get(id)) {
-            map.insert("at".into(), (**at).clone());
-        }
-        items.insert(id.to_string(), item);
-    }
-    let base = v.json("core.status")?.ok_or_else(|| missing(v))?;
-    let mut palette = Palette::new();
-    for (role, value) in base["roles"].as_object().into_iter().flatten() {
-        let c: Option<Vec<u8>> = value.as_array().and_then(|c| {
-            c.iter()
-                .map(|x| x.as_u64().and_then(|x| u8::try_from(x).ok()))
-                .collect()
-        });
-        if let Some(rgb) = c.and_then(|c| <[u8; 3]>::try_from(c.as_slice()).ok()) {
-            palette.insert(role.clone(), rgb);
-        }
-    }
-    let map = Status::from_json(&base["map"]);
+    let items = placed_items(v)?;
+    let base = v
+        .typed::<StatusBase>("core.status")?
+        .ok_or_else(|| missing(v))?;
+    let palette: Palette = base.roles.clone();
+    let map = base
+        .map
+        .as_ref()
+        .and_then(|m| m.as_typed::<Option<Status>>())
+        .and_then(|m| (*m).clone());
     let unmapped = unmapped();
     let status = map.as_ref().unwrap_or(&unmapped);
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
-    let marks =
+    let mut marks =
         scene::status_marks(doc, &items, &record, Some(status), &palette).map_err(refused)?;
+    // In binding order, however the document lists its bindings: equal documents draw alike.
+    marks.sort_by(|a, b| a.binding.cmp(&b.binding));
     let height = doc
         .get("size")
         .and_then(|s| s.get(1))
@@ -514,8 +564,7 @@ fn status(v: &mut View<'_>) -> Result<(), OpError> {
         .lock()
         .map_err(|_| OpError::new("shaper_poisoned", "status_bindings"))?;
     let out = status_drawing(marks, map.as_ref(), &palette, height, &mut shaper);
-    let bytes = format!("{out:?}").into_bytes();
-    v.write("text.status", Val::typed(out, bytes))
+    v.write("text.status", Val::typed(out))
 }
 
 /// Status marks with the box their glyph and word draw in, shaped by `shaper`, and the legend:
@@ -637,6 +686,19 @@ pub struct LookValue {
     pub status: Option<Status>,
 }
 
+impl Canonical for Status {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.colors, &self.glyphs, self.core_min_px, &self.outline).encode(out);
+        self.min_distance.encode(out);
+    }
+}
+
+impl deep_canvas::schedule::Canonical for LookValue {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
+    }
+}
+
 fn register_look(r: &mut Registrar) {
     r.array("look.palette", "palette", "document", "shading", "items");
     // The status map every status mark draws from, into the core's array (The status-color rule).
@@ -683,7 +745,6 @@ pub fn tokens(palette: &Palette) -> BTreeMap<String, Value> {
 fn palette(v: &mut View<'_>) -> Result<(), OpError> {
     let tokens = v.look()?;
     let mut palette = Palette::new();
-    let mut bytes = Vec::new();
     for (role, value) in tokens {
         let rgb: Option<Rgb> = value.as_array().and_then(|c| {
             let c: Vec<u8> = c
@@ -695,21 +756,17 @@ fn palette(v: &mut View<'_>) -> Result<(), OpError> {
         let Some(rgb) = rgb else {
             return Err(OpError::new("bad_look", format!("look: {role}")));
         };
-        bytes.extend_from_slice(role.as_bytes());
-        bytes.extend_from_slice(&rgb);
         palette.insert(role.clone(), rgb);
     }
     let status = clean().status;
-    bytes.extend_from_slice(format!("{status:?}").as_bytes());
-    let map = status.as_ref().map(Status::to_json).unwrap_or(Value::Null);
     v.write(
         "look.status",
-        Val::json(json!([{"op": "set", "path": ["map"], "value": map}])),
+        Val::typed(Edits::set(
+            &["map"],
+            Datum::Typed(Val::typed(status.clone())),
+        )),
     )?;
-    v.write(
-        "look.palette",
-        Val::typed(LookValue { palette, status }, bytes),
-    )
+    v.write("look.palette", Val::typed(LookValue { palette, status }))
 }
 
 fn roles_board() -> Value {
@@ -761,15 +818,37 @@ fn is_scale(_: &Value, _: &str, item: &Value) -> bool {
     item.get("kind").and_then(Value::as_str) == Some("scale@1")
 }
 
+/// A scale's nice domain, range and step, and its ticks with their labels (`data.scale`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScaleValue {
+    pub domain: [f64; 2],
+    pub range: [f64; 2],
+    pub step: f64,
+    pub ticks: Vec<(f64, String)>,
+}
+
+impl deep_canvas::schedule::Canonical for ScaleValue {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.domain, &self.range, &self.step, &self.ticks),
+            out,
+        );
+    }
+}
+
 /// A scale's nice domain, range, step and labelled ticks.
 fn scale(v: &mut View<'_>) -> Result<(), OpError> {
-    let fields = v.json("core.fields")?.ok_or_else(|| missing(v))?;
+    let fields = fields_of(v)?;
     let id = v.id().unwrap_or_default();
     let s = crate::data::scale_of(id, &fields).map_err(refused)?;
-    let ticks: Vec<Value> = s.ticks().into_iter().map(|(t, l)| json!([t, l])).collect();
     v.write(
         "data.scale",
-        Val::json(json!({"domain": s.domain, "range": s.range, "step": s.step, "ticks": ticks})),
+        Val::typed(ScaleValue {
+            domain: s.domain,
+            range: s.range,
+            step: s.step,
+            ticks: s.ticks(),
+        }),
     )
 }
 
@@ -811,6 +890,24 @@ pub struct Drawing {
     pub frame: Frame,
     pub runs: BTreeMap<String, Arc<Run>>,
     pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+}
+
+/// A frame by its size, its ground and each layer's ID and content key, which covers every mark
+/// the layer draws.
+impl Canonical for Frame {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (self.size, self.ground).encode(out);
+        self.layers.len().encode(out);
+        for l in &self.layers {
+            (&l.id, l.key.0).encode(out);
+        }
+    }
+}
+
+impl deep_canvas::schedule::Canonical for Drawing {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.frame, &self.runs, &self.animated), out);
+    }
 }
 
 fn register_marks2d(r: &mut Registrar) {
@@ -958,37 +1055,23 @@ fn register_marks2d(r: &mut Registrar) {
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let record = record_of(v.outside()?);
-    let worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
-    let mut items = Map::new();
-    for (id, fields) in v.every("core.fields")? {
-        let Val::Json(fields) = fields else { continue };
-        let mut item = (*fields).clone();
-        if let (Some(map), Some(Val::Json(at))) = (item.as_object_mut(), worlds.get(id)) {
-            map.insert("at".into(), (**at).clone());
-        }
-        items.insert(id.to_string(), item);
-    }
+    let items = placed_items(v)?;
     let mut bound = BTreeMap::new();
     for (id, s) in v.every("text.counter")? {
-        if let Val::Json(j) = &s {
-            if let Some(shown) = shown_of(j) {
-                bound.insert(id.to_string(), shown);
-            }
+        if let Some(shown) = s.as_typed::<Option<Shown>>().and_then(|s| (*s).clone()) {
+            bound.insert(id.to_string(), shown);
         }
     }
     let mut runs = BTreeMap::new();
     for (id, r) in v.every("text.run")? {
-        if let Val::Any(any, _) = r {
-            if let Ok(run) = any.downcast::<Run>() {
-                runs.insert(id.to_string(), run);
-            }
+        if let Some(run) = r.as_typed::<Run>() {
+            runs.insert(id.to_string(), run);
         }
     }
     let mut animated = BTreeMap::new();
     for (id, a) in v.every("text.animated")? {
-        if let Val::Json(j) = a {
-            let units: Vec<[f64; 2]> = serde_json::from_value((*j).clone()).unwrap_or_default();
-            animated.insert(id.to_string(), units);
+        if let Some(units) = a.as_typed::<Vec<[f64; 2]>>() {
+            animated.insert(id.to_string(), (*units).clone());
         }
     }
     let look = v
@@ -1009,25 +1092,13 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    let mut bytes = format!("{frame:?}{animated:?}").into_bytes();
-    for (id, run) in &runs {
-        bytes.extend_from_slice(id.as_bytes());
-        for g in &run.shaped.glyphs {
-            bytes.extend_from_slice(&g.id.to_le_bytes());
-            bytes.extend_from_slice(&g.x.to_bits().to_le_bytes());
-            bytes.extend_from_slice(&g.y.to_bits().to_le_bytes());
-        }
-    }
     v.write(
         "marks2d.frame",
-        Val::typed(
-            Drawing {
-                frame,
-                runs,
-                animated,
-            },
-            bytes,
-        ),
+        Val::typed(Drawing {
+            frame,
+            runs,
+            animated,
+        }),
     )
 }
 
