@@ -74,6 +74,8 @@ interface AgentParts {
   hosts: string[];
   /** What a real agent needs in its job's environment: its own temp folder, the forwarder, and your sign-in token if the hub read one. */
   reach(o: { temp: string; proxy: string; token?: string; home: string; env: Record<string, string | undefined> }): Record<string, string>;
+  /** Whether what it left in its job's temp folder shows its read-only mode refusing, where its output doesn't say. */
+  refusedIn?(temp: string): boolean;
   /** Its facts cover exactly the versions they list, not the range between them. */
   exactVersions?: true;
   /** Whether an account has no plan window for a job to wait on: with no plan account signed in, a budget is its only gate. */
@@ -161,28 +163,35 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
       const id = isObj(v) && isObj(v.tokens) ? v.tokens.account_id : undefined;
       return typeof id === 'string' && id ? id : null;
     },
-    signIn: (home, env) => [join(codexHome(home, env), 'auth.json')],
+    signIn: codexSignIn,
     // Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows.
     windows: codexWindows,
     hosts: ['api.openai.com:443', 'chatgpt.com:443'],
-    // A home of its own in its temp folder, so it writes no rollout or state into yours and your history never counts
-    // it as a session of yours, with your sign-in linked in place. The sandbox refuses every write under a folder named
-    // .codex, so that home goes by another name, with a link at the place Codex looks by default.
-    reach: ({ temp, proxy, home, env }) => {
-      const own = join(temp, 'home');
-      const codex = join(temp, 'codex-home');
-      mkdirSync(own);
-      mkdirSync(codex);
-      symlinkSync(codex, join(own, '.codex'));
-      if (home) symlinkSync(join(codexHome(home, env), 'auth.json'), join(codex, 'auth.json'));
-      return { TMPDIR: temp, HOME: own, CODEX_HOME: codex, HTTPS_PROXY: proxy, https_proxy: proxy };
-    },
+    reach: codexReach,
+    refusedIn: (temp) => codexLogs(temp).some(codexLogRefused),
     token: async () => undefined,
     expires: async () => undefined,
     exactVersions: true,
     planless: (account) => account === null,
   },
 };
+/** The system's root certificates as a file: a Codex job's HTTP client can't load them from the keychain in its sandbox. */
+const CODEX_ROOTS = '/etc/ssl/cert.pem';
+export function codexSignIn(home: string, env: Record<string, string | undefined>): string[] {
+  return [join(codexHome(home, env), 'auth.json'), CODEX_ROOTS];
+}
+// A home of its own in its temp folder, so it writes no rollout or state into yours and your history never counts
+// it as a session of yours, with your sign-in linked in place. The sandbox refuses every write under a folder named
+// .codex, so that home goes by another name, with a link at the place Codex looks by default.
+export function codexReach({ temp, proxy, home, env }: { temp: string; proxy: string; home: string; env: Record<string, string | undefined> }): Record<string, string> {
+  const own = join(temp, 'home');
+  const codex = join(temp, 'codex-home');
+  mkdirSync(own);
+  mkdirSync(codex);
+  symlinkSync(codex, join(own, '.codex'));
+  if (home) symlinkSync(join(codexHome(home, env), 'auth.json'), join(codex, 'auth.json'));
+  return { TMPDIR: temp, HOME: own, CODEX_HOME: codex, HTTPS_PROXY: proxy, https_proxy: proxy, SSL_CERT_FILE: CODEX_ROOTS };
+}
 /** Your Codex home, as its facts name it. */
 const codexHome = (home: string, env: Record<string, string | undefined>): string => env.CODEX_HOME || join(home, '.codex');
 /** An MCP server as the inline TOML table `-c` takes: JSON's strings and arrays read the same there. */
@@ -196,6 +205,28 @@ const WRITES = /(?<![\d&])>>?\s*(?!\/dev\/)[^\s&]|\b(?:tee|touch|mkdir|rmdir|rm|
 /** Its read-only mode refusing a write: a patch it declined, or a write the sandbox stopped. */
 export const codexRefused = (item: { type?: unknown; status?: unknown; command?: unknown; aggregated_output?: unknown }): boolean =>
   (item.status === 'failed' || item.status === 'declined') && (item.type === 'file_change' || (item.type === 'command_execution' && WRITES.test(String(item.command)) && SANDBOX_REFUSED.test(String(item.aggregated_output))));
+
+/** Each session log a Codex job left in its own home. */
+function codexLogs(temp: string): string[] {
+  const sessions = join(temp, 'codex-home', 'sessions');
+  if (!existsSync(sessions)) return [];
+  return readdirSync(sessions, { recursive: true, encoding: 'utf8' }).filter((f) => /rollout-.*\.jsonl$/.test(f)).map((f) => readFileSync(join(sessions, f), 'utf8'));
+}
+/** A write the sandbox stopped, from a session log: Codex's --json carries no item for a command run through its exec tool. */
+export function codexLogRefused(log: string): boolean {
+  const commands = new Map<string, string[]>();
+  for (const line of log.split('\n')) {
+    let e: unknown;
+    try { e = JSON.parse(line); } catch { continue; }
+    const p = isObj(e) && isObj(e.payload) ? e.payload : undefined;
+    if (!p || typeof p.call_id !== 'string') continue;
+    if (p.type === 'custom_tool_call' && p.name === 'exec') {
+      commands.set(p.call_id, [...String(p.input).matchAll(/\bcmd"?:\s*("(?:[^"\\]|\\.)*")/g)].map((m) => String(JSON.parse(m[1]!))));
+    }
+    if (p.type === 'custom_tool_call_output' && commands.get(p.call_id)?.some((c) => WRITES.test(c)) && SANDBOX_REFUSED.test(JSON.stringify(p.output))) return true;
+  }
+  return false;
+}
 
 interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
@@ -1030,6 +1061,7 @@ class LocalRunner implements Runner {
     job.rec.model = job.answered ?? 'unknown';
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
+    if (job.temp && AGENTS[job.spec.agent]?.refusedIn?.(job.temp)) job.stopCause ??= 'refusal';
     const cause = job.stopCause ?? (finished ? undefined : 'agent_crashed');
     if (cause) job.rec.stop = { cause };
     if (this.o.plant === 'widens-range-on-smoke' && job.spec.kind === 'smoke' && job.rec.binary) this.widened.add(job.rec.binary.version);
