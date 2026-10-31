@@ -204,15 +204,17 @@ test('a command crossing a panel\'s timer move still happens, and its reply is i
 
 test('a tree served later is checked: its violations come back, the report fails and the exit is 1', async () => {
   const { session, out } = await opened(panel(
-    'this.n++ >= 1 ? div().absolute().left(-500).top(0).w(50).h(50) : div().size_full()',
+    'this.n++ === 1 ? div().absolute().left(-500).top(0).w(50).h(50) : div().size_full()',
     'n = 0;',
   ));
   assert.equal(report(out).result, 'pass');
   const reply = await session.send({ cmd: 'invalidate' });
   assert.equal(reply?.violations?.[0]?.kind, 'outside_panel', JSON.stringify(reply));
   assert.equal(report(out).result, 'fail');
+  assert.ok((await session.send({ cmd: 'invalidate' }))?.tree);
   session.child.stdin.end();
   assert.equal(await session.exited, 1);
+  assert.equal(report(out).trees.length, 3);
 });
 
 test('a served panel that stays in bounds exits 0 when its client closes', async () => {
