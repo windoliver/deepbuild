@@ -786,6 +786,183 @@ export interface AgentStopV4 {
   evidence?: Array<string>;
 }
 
+export type AgentStopV5Turn = number;
+
+export type AgentStopV5Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV5Count;
+  cached: AgentStopV5Count;
+  output: AgentStopV5Count;
+  context_fill: number | null;
+  cost: AgentStopV5Cost;
+} | null;
+
+export type AgentStopV5Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV5Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+export type AgentStopV5Loop = {
+  state: "looping";
+  due: number | null;
+} | {
+  state: "none_left";
+};
+
+/** agent.stop@5 */
+export interface AgentStopV5 {
+  v: 5;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "refusal";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "max_turns";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "timed_out";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "unknown";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+    subagent?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** answer.refused@1 */
 export interface AnswerRefused {
   v: 1;
@@ -2195,6 +2372,52 @@ export interface DefinitionLockedV2 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@3 */
+export interface DefinitionLockedV3 {
+  v: 3;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -2244,6 +2467,26 @@ export interface DeliveryOutcome {
     delivery: string;
     via: "steer" | "interrupt" | "stop_hold" | "next_prompt";
     outcome: "delivered" | "stalled" | "timed_out" | "replaced";
+  };
+  evidence?: Array<string>;
+}
+
+/** delivery.outcome@2 */
+export interface DeliveryOutcomeV2 {
+  v: 2;
+  id: string;
+  kind: "delivery.outcome";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    delivery: string;
+    via: "steer" | "interrupt" | "stop_hold" | "next_prompt" | "on_task";
+    outcome: "delivered" | "stalled" | "timed_out" | "replaced" | "waiting";
   };
   evidence?: Array<string>;
 }

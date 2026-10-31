@@ -7,6 +7,7 @@
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
+import { toolTimeoutS } from './codex-settings.js';
 import { hubAddress } from './paths.js';
 import { toolList } from './tools.js';
 import { line, refusal, startOf, type Refusal } from './wire.js';
@@ -14,6 +15,7 @@ import { line, refusal, startOf, type Refusal } from './wire.js';
 type Obj = Record<string, unknown>;
 const UNREACHABLE_MS = 1000;
 /** Longer than any call the hub holds open: deep_ask and deep_wait answer "still waiting" after 40 s. */
+// A held deep_ask answers just before the tool timeout Codex gives this server (#39), which this outlasts.
 const ANSWER_MS = 55_000;
 const unreachable = (why: string): Refusal => refusal('unavailable', '', `The DeepBuild hub is unreachable (${why}); nothing was recorded. Call again once it is back.`, '', true);
 
@@ -78,7 +80,7 @@ class Hub {
     if (!(await this.connect()) || !this.sock) return { ok: false, value: unreachable('no answer on its socket') };
     const id = `mcp#${++this.ids}`;
     const reply = await new Promise<Obj>((resolve) => {
-      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, ANSWER_MS);
+      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, Math.max(ANSWER_MS, toolTimeoutS() * 1000));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
       this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
     });

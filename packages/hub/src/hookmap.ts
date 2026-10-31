@@ -257,7 +257,21 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       }
       break;
     }
+    case 'session.compact':
+    case 'subagent.start':
+    case 'turn.interrupted': {
+      // What Codex says beside a turn is a reading, which is no event of its turn: it names the hook it came from.
+      const said = kind === 'turn.interrupted' ? 'you interrupted this turn' : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
+      meta.reading = `${request.event}: ${scrub(said)}`;
+      return { kind: 'hook', drafts: [], meta };
+    }
     case 'agent.stop':
+      // A Codex subagent's hooks carry the root's session ID with an agent_id: its stop is the child's (#39), no turn of the root's.
+      if (name === 'codex' && request.event === 'SubagentStop') {
+        data = { turn: 0, did_work: false, claim: false, outcome: 'finished', cause: 'unknown', usage: null, subagent: str(payload.agent_id) || 'unknown' };
+        v = 5;
+        break;
+      }
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };

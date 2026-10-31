@@ -115,6 +115,8 @@ export class AskTasks {
     return readings.find((r) => !r.link.includes('#') && new RegExp(`(?:^|\\s)${r.link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[\\s/#?.,])`).test(text));
   }
 
+  /** Each session's definitions still being locked. */
+  private readonly locking = new Map<string, Promise<void>>();
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */
   async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: Reading }): Promise<void> {
     // A work item's task is opened once, whichever prompt names it again.
@@ -123,7 +125,10 @@ export class AskTasks {
     // The task's ID follows from its prompt's event, and its lock's from the task's: the same hook replayed appends
     // the same events, which the record holds once.
     await this.o.append(connection, { v: 1, id: derivedId(t.at, `${t.prompt}:task`), kind: 'task.created', ts: t.at, data: { task_ref: t.task_ref, thread: t.thread, owner: connection.actor, title: (t.item?.title ?? t.text).slice(0, 200) || '-' } });
-    void this.lock(t).catch((error: unknown) => this.unlocked(t.task_ref, error));
+    // Off the hook's path, but a stop that follows at once claims against the definition, never ahead of it.
+    const locked = this.lock(t).catch((error: unknown) => this.unlocked(t.task_ref, error));
+    const all = Promise.all([this.locking.get(t.session), locked]).then(() => { if (this.locking.get(t.session) === all) this.locking.delete(t.session); });
+    this.locking.set(t.session, all);
   }
   private unlocked(task_ref: string, error: unknown): void {
     process.stderr.write(`deep hub: the definition of ${task_ref} was not locked: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -210,7 +215,7 @@ export class AskTasks {
     const ts = this.o.now();
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 2, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: definition.requirements.some((r) => r.expected_ms !== undefined || r.deadline_ms !== undefined) ? 3 : 2, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
@@ -258,6 +263,7 @@ export class AskTasks {
    * made, in order; one task's failure is reported and the others still claimed.
    */
   async claim(session: string, agent: string, cwd: string): Promise<string[]> {
+    await this.locking.get(session);
     const head = await headOf(cwd).catch(() => undefined);
     const made: string[] = [];
     for (const row of await this.lockedIn(session)) {

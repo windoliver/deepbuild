@@ -206,14 +206,15 @@ export class Projector {
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,
       // a call is work again unless its turn already stopped, and a stop ends the turn finished, failed, or stuck on a
       // block only you or a service can clear. The core and the app say the rest with session.attention.
-      if (e.writer === 'hook') {
+      if (e.writer === 'hook' && !d.subagent) {
         const state = e.kind === 'user.ask' || e.kind === 'tool.before' || e.kind === 'tool.after' ? 'working' : e.kind === 'permission.request' ? 'waiting'
           : e.kind === 'agent.stop' ? (d.outcome !== 'failed' ? 'finished' : d.owner === 'you' || d.owner === 'service' ? 'stuck' : 'failed') : undefined;
         const late = e.kind === 'tool.before' || e.kind === 'tool.after' ? " AND status NOT IN ('finished', 'failed', 'stuck')" : '';
         if (state) this.stmt(`UPDATE sessions SET status = ?, ended_log_pos = ? WHERE id = ?${late}`).run(state, ENDED.has(state) ? e.log_pos : null, e.session);
       }
       // A reading the hub took of a session is about it, never one of its turn's events.
-      if (e.kind !== 'session.reading') this.turn(e, d);
+      // Nor is a subagent's stop: it ends no turn of the session's.
+      if (e.kind !== 'session.reading' && !d.subagent) this.turn(e, d);
     }
     switch (e.kind) {
       case 'session.reading':
@@ -267,6 +268,7 @@ export class Projector {
         break;
       }
       case 'agent.stop':
+        if (d.subagent) break;
         this.up('returns', { id: e.id, session: e.session, turn: int(d.turn), did_work: int(d.did_work), at: e.ts });
         break;
       case 'commit.made':
