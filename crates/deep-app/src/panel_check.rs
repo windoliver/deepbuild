@@ -502,12 +502,15 @@ fn run_check(args: &[String]) -> Result<i32, String> {
     let out = flag(args, "--out").ok_or("--out FILE")?;
     // An earlier run's verdict must not stand beside this run's exit.
     let _ = std::fs::remove_file(&out);
+    let png = flag(args, "--png");
+    if let Some(png) = &png {
+        let _ = std::fs::remove_file(png);
+    }
     let updates: usize = flag(args, "--updates")
         .and_then(|n| n.parse().ok())
         .filter(|n| *n > 0)
         .ok_or("--updates N, at least one: no tree checked is no pass")?;
     let serving = args.iter().any(|arg| arg == "--serve");
-    let png = flag(args, "--png");
     let mut check = Check::open(args)?;
     let app_pid = std::process::id();
     let card = check
@@ -525,10 +528,10 @@ fn run_check(args: &[String]) -> Result<i32, String> {
     // Refused before anything could fetch it: the host never starts.
     if let Some(dependency) = crate::fetched_dependency(&panel) {
         let found = [json!({ "kind": "git_dependency", "update": 0, "dependency": dependency })];
-        write("fail", None, &[], &found)?;
         if let Some(png) = &png {
             check.png(png)?;
         }
+        write("fail", None, &[], &found)?;
         return Ok(1);
     }
 
@@ -664,10 +667,10 @@ fn serve(
             held,
         )
     };
+    // Every exit writes the report once more, for the trees served since it was last written.
     let finish = |held: &Held, untold: bool| match (held.found.is_empty(), untold) {
-        (false, _) => Ok(1),
-        (true, true) => Ok(2),
-        // The trees served since the first report.
+        (false, _) => report("fail", held).map(|()| 1),
+        (true, true) => report(UNTOLD, held).map(|()| 2),
         (true, false) => report("pass", held).map(|()| 0),
     };
     loop {
