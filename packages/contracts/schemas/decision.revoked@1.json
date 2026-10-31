@@ -1,6 +1,8 @@
 {
   "title": "decision.revoked@1",
   "description": "A decision you saved was revoked on the trusted path: from then on it covers nothing, and a resolver that names it is refused. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "decisions"
   ],

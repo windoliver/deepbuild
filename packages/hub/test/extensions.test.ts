@@ -46,6 +46,7 @@ function exchange(socket: string, line: string): Promise<{ ack: Record<string, u
 const MANIFEST = {
   id: ID, version: '1.0.0', digest: 'd1:0000000000000000000000000000000000000000000000000000000000000000',
   access: { words: ['record'] },
+  requires: { preview: ['deep.on'] },
   templates: [
     { name: 'blocked', hook: 'tool.before', text: 'this is a {what} call', fields: { what: { type: 'one_of', values: ['force-push'] } } },
     { name: 'open', hook: 'tool.before', text: '{count} notes are open', fields: { count: { type: 'number' } } },

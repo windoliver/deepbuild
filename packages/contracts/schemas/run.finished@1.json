@@ -1,6 +1,8 @@
 {
   "title": "run.finished@1",
   "description": "A check run finished.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "runs"
   ],

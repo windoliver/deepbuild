@@ -1,6 +1,8 @@
 {
   "title": "session.gone@1",
   "description": "A session's agent process is proven gone, with no SessionEnd: no process has its ID, or the one that has it started at another time. The session has ended.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

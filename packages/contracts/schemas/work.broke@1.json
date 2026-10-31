@@ -1,6 +1,8 @@
 {
   "title": "work.broke@1",
   "description": "Work an ask decided later broke: its change was reverted, a follow-up fixed it, you asked whether it was done after it passed, or a later issue cited it. What standing rules are judged by. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

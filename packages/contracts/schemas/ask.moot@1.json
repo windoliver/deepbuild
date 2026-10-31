@@ -1,6 +1,8 @@
 {
   "title": "ask.moot@1",
   "description": "An ask became moot: its check passed or its attempt was replaced, so it leaves Needs you with the outcome moot. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

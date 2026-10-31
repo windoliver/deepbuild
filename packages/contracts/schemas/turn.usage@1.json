@@ -1,6 +1,8 @@
 {
   "title": "turn.usage@1",
   "description": "What a turn, or the session so far, spent: tokens by the agent's own count, a cost only with its basis, and the model that actually answered.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

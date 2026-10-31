@@ -40,7 +40,8 @@ function pkg() {
   const folder = join(dir, `pkg${n}`);
   mkdirSync(folder);
   writeFileSync(join(folder, 'index.ts'), CODE);
-  const manifest = { id: `bench/sub${n}`, version: '1.0.0', digest: '', access: { words: ['record'] } };
+  // deep.on is preview until a shipped piece calls it, so the package lists it by name (#139).
+  const manifest = { id: `bench/sub${n}`, version: '1.0.0', digest: '', access: { words: ['record'] }, requires: { preview: ['deep.on'] } };
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
   manifest.digest = packageDigest(folder);
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));

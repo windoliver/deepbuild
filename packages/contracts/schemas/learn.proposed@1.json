@@ -1,6 +1,8 @@
 {
   "title": "learn.proposed@1",
   "description": "DeepBuild proposed a change to the learned layer.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "evidence": {
       "type": "array",

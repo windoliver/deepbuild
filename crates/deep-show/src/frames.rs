@@ -7,15 +7,18 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use deep_canvas::document::Issue;
-use deep_canvas::schedule::{default_view, OpIssue, Session as DocSession, Target, Val};
-use deep_canvas_marks::modules::{Drawing, StatusDrawing};
+use deep_canvas::schedule::{
+    default_view, HashVersion, OpIssue, Session as DocSession, Target, Val,
+};
+use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
+use deep_text::worker::Pending;
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::hub::{Eval, Hub, SEAL_RUNS};
+use crate::hub::{Call, Eval, Frames, Hub, Show, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// An operator's error as a revision's issue.
@@ -119,7 +122,7 @@ impl<'a> Hub<'a> {
             .collect();
         // #379: every render pass the build registers, and every operator's and pass's cost
         // model, its coefficients and the micro-benchmark that measured them.
-        let reference = deep_canvas::cost::Coefficients::reference();
+        let reference = &sealed.costs;
         let mut passes = Map::new();
         let mut costs = Map::new();
         let mut cost = |name: &str, module: &str| {
@@ -235,13 +238,18 @@ impl<'a> Hub<'a> {
             .nodes(&self.sched)
             .into_iter()
             .map(|n| {
-                json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
-                       "key": n.key, "result": n.result, "run": n.run.name()})
+                let mut node = json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
+                       "key": n.key, "result": n.result, "run": n.run.name()});
+                if e.debug_text {
+                    node["debug"] = debug_digest(&n.values);
+                }
+                node
             })
             .collect();
         let report = &evaluated.report;
         let mut reply = json!({
             "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
+            "hash": self.sched.hash().name(),
             "rev": rev,
             "t": t,
             "epoch": evaluated.epoch(),
@@ -296,13 +304,7 @@ impl<'a> Hub<'a> {
         let drawn = self
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| {
-            let [w, h] = drawn.frame.size;
-            [
-                w.round().clamp(1.0, 8192.0) as u16,
-                h.round().clamp(1.0, 8192.0) as u16,
-            ]
-        });
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
         let rgba = self.renderer.raster(&drawn, size, Some(ground));
         let png = snapshot::png(rgba, size);
@@ -314,25 +316,179 @@ impl<'a> Hub<'a> {
     }
 
     /// `count` frames of a session, `step` apart from `from`: how many nodes ran in each, the
-    /// heap allocations the scheduler made and its CPU time.
-    pub fn frames(&mut self, doc: &str, count: usize, from: i64, step: i64) -> Value {
-        if !self.doc_visible(doc) {
+    /// heap allocations the scheduler made and its CPU time (#387); and (#856) the UI thread's CPU
+    /// per frame, whether the frame is settling and, with `pixels`, its pixel hash. A revision
+    /// that arrives at a frame's latch is admitted there, unless a text in it that the cost model
+    /// estimates past 1 ms to shape isn't shaped yet: that text shapes on the render worker, and
+    /// the frames draw the current revision, its last shaped run, settling, until it is ready.
+    pub fn frames(&mut self, f: &Frames) -> Value {
+        if !self.doc_visible(&f.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "frames": []});
         }
-        let Some(session) = self.sessions.get_mut(doc) else {
+        if !self.sessions.contains_key(&f.doc) {
             return json!({"outcome": "refused", "code": "no_revision", "frames": []});
-        };
-        let view = session_view(session, &Map::new());
-        let mut out = Vec::with_capacity(count);
-        for k in 0..count {
-            let t = from + step * k as i64;
-            let started = Instant::now();
+        }
+        let started = Instant::now();
+        let period = Duration::from_secs_f64(f.step.max(0) as f64 / FLICKS_PER_SECOND);
+        let mut pending: Option<(&Value, Vec<Pending>)> = None;
+        let mut revised = Value::Null;
+        // The last frame's drawing and its hash: an unchanged drawing isn't drawn again.
+        let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
+        let mut out = Vec::with_capacity(f.count);
+        for k in 0..f.count {
+            if f.paced {
+                let due = started + period * k as u32;
+                if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                    std::thread::sleep(wait);
+                }
+            }
+            let cpu = thread_cpu_ns();
+            if let Some((_, document)) = f.revise.as_ref().filter(|(at, _)| *at == k) {
+                let shaping = if self.startup.shapes_on_ui_thread {
+                    Vec::new()
+                } else {
+                    shape_ahead(document)
+                };
+                pending = Some((document, shaping));
+            }
+            if pending
+                .as_ref()
+                .is_some_and(|(_, shaping)| shaping.iter().all(Pending::ready))
+            {
+                let (document, _) = pending.take().expect("checked above");
+                revised = self.revise(&f.doc, document);
+            }
+            let Some(session) = self.sessions.get_mut(&f.doc) else {
+                break;
+            };
+            let view = session_view(session, &Map::new());
+            let t = f.from + f.step * k as i64;
+            let _ = self.sched.take_json();
+            let frame_started = Instant::now();
             let (ran, allocs) =
                 crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
-            let ms = started.elapsed().as_secs_f64() * 1000.0;
-            out.push(json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms}));
+            let ms = frame_started.elapsed().as_secs_f64() * 1000.0;
+            // #855: the JSON values the frame's operators wrote, each counted by the heap
+            // allocations it takes, which a copy of it takes again, and its shared handle.
+            let json_values: u64 = self
+                .sched
+                .take_json()
+                .iter()
+                .map(|v| crate::count_allocations(|| (**v).clone()).1 + 1)
+                .sum();
+            let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
+                                   "settling": pending.is_some(), "json_values": json_values});
+            let mut capture = 0;
+            if f.pixels {
+                let before = thread_cpu_ns();
+                let drawing = drawing_of(&self.sched, &self.sessions[&f.doc]);
+                let ptrs = drawing.as_ref().map_or((None, None), |d| {
+                    (
+                        d.drawing.as_ref().map(Arc::as_ptr),
+                        d.status.as_ref().map(Arc::as_ptr),
+                    )
+                });
+                let hash = match (&last, &drawing) {
+                    (Some((a, b, hash)), Some(d)) if (*a, *b) == ptrs && d.boxes.is_empty() => {
+                        Some(hash.clone())
+                    }
+                    (_, Some(d)) => self.canonical_png(d, None).ok().map(|(sha, _, _)| sha),
+                    (_, None) => None,
+                };
+                if let Some(hash) = &hash {
+                    last = Some((ptrs.0, ptrs.1, hash.clone()));
+                }
+                frame["pixel_hash"] = json!(hash);
+                capture = thread_cpu_ns() - before;
+            }
+            let ui = thread_cpu_ns().saturating_sub(cpu).saturating_sub(capture);
+            frame["ui_ms"] = json!(ui as f64 / 1e6);
+            out.push(frame);
         }
-        json!({ "frames": out })
+        let mut reply = json!({ "frames": out });
+        if !revised.is_null() {
+            reply["revised"] = revised;
+        }
+        reply
+    }
+
+    /// A whole revision of `doc` from whoever sent its last one, admitted as a deep_show call is.
+    fn revise(&mut self, doc: &str, document: &Value) -> Value {
+        let Some(via) = self.vias.get(doc).cloned() else {
+            return json!({"outcome": "refused", "code": "no_session"});
+        };
+        self.call(&Call::Show(Box::new(Show {
+            via,
+            doc: doc.to_string(),
+            document: document.clone(),
+            removes: Vec::new(),
+            t: 0,
+            size: None,
+            include: Vec::new(),
+            check: false,
+            claim: None,
+        })))
+    }
+
+    /// #856: the shaped-run cache's runs of `text`: the times this process shaped each one's key,
+    /// and the documents whose current revision draws it, each evaluated at its frame.
+    pub fn shaped_runs(&mut self, text: &str) -> Value {
+        for shaping in deep_text::cache::take_log() {
+            *self.shapings.entry(shaping.key).or_default() += 1;
+        }
+        let mut drawn: Vec<(String, Arc<deep_text::Shaped>)> = Vec::new();
+        for (doc, session) in self.sessions.iter_mut() {
+            let view = session_view(session, &Map::new());
+            session.frame(&mut self.sched, 0, &view);
+            let ids: Vec<String> = session
+                .document()
+                .and_then(|d| d["items"].as_object())
+                .map(|items| items.keys().cloned().collect())
+                .unwrap_or_default();
+            for id in ids {
+                let run = session
+                    .value(&self.sched, "text.run", Some(&id))
+                    .and_then(|v| v.as_typed::<Run>());
+                if let Some(run) = run {
+                    drawn.push((doc.clone(), run.shaped.clone()));
+                }
+            }
+        }
+        let runs: Vec<Value> = deep_text::cache::runs_of(text)
+            .into_iter()
+            .map(|(key, run)| {
+                let docs: Vec<&String> = drawn
+                    .iter()
+                    .filter(|(_, r)| Arc::ptr_eq(r, &run))
+                    .map(|(doc, _)| doc)
+                    .collect();
+                json!({"shaped": self.shapings.get(&key).copied().unwrap_or(0), "docs": docs})
+            })
+            .collect();
+        json!({ "runs": runs })
+    }
+
+    /// `migrate`: rekeys the process's content-key cache under `to`, once (#855).
+    pub fn migrate(&mut self, to: HashVersion) -> Value {
+        let from = self.sched.hash();
+        let mut sessions: Vec<&mut DocSession> = self.sessions.values_mut().collect();
+        let rekeyed = self.sched.migrate(to, &mut sessions);
+        json!({"from": from.name(), "to": to.name(), "entries": self.sched.cached(), "rekeyed": rekeyed})
+    }
+
+    /// `keys`: every content key of the session's current revision computed afresh, `runs`
+    /// times, each pass timed by this binary's clock (#855).
+    pub fn keys(&mut self, doc: &str, runs: usize) -> Value {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let mut ns = Vec::with_capacity(runs);
+        for _ in 0..runs {
+            let started = Instant::now();
+            session.rekey(&mut self.sched);
+            ns.push(started.elapsed().as_nanos() as u64);
+        }
+        json!({"hash": self.sched.hash().name(), "nodes": session.node_count(), "ns": ns})
     }
 
     /// An item's interned handle in the session's current revision.
@@ -370,6 +526,49 @@ impl<'a> Hub<'a> {
             "hashes": hashes.iter().map(|h| json!({"of": h.of, "bytes": h.bytes})).collect::<Vec<_>>(),
         })
     }
+}
+
+/// Flicks in a second: the document clock's unit.
+const FLICKS_PER_SECOND: f64 = 705_600_000.0;
+
+/// The calling thread's CPU time, in ns.
+fn thread_cpu_ns() -> u64 {
+    let mut t = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `t` is a valid timespec for the call to fill.
+    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
+    t.tv_sec as u64 * 1_000_000_000 + t.tv_nsec as u64
+}
+
+/// Hands the render worker each text of `document` whose shaping the cost model estimates past
+/// 1 ms, cold, and whose run the shaped-run cache doesn't hold yet; what to wait for.
+fn shape_ahead(document: &Value) -> Vec<Pending> {
+    let terms = deep_canvas::cost::Coefficients::reference().get("text.shape");
+    let mut out = Vec::new();
+    for (id, item) in document["items"].as_object().into_iter().flatten() {
+        let is_text = item["kind"]
+            .as_str()
+            .is_some_and(|k| k.split('@').next() == Some("text"));
+        let Some(params) = item["params"].as_object().filter(|_| is_text) else {
+            continue;
+        };
+        let glyphs = deep_canvas::cost::counts(item).glyphs;
+        if terms.ns_per_item + terms.ns_per_glyph * glyphs <= 1e6 {
+            continue;
+        }
+        let Ok(spec) = deep_canvas_marks::scene::text_spec(id, params, None) else {
+            continue;
+        };
+        let Some(spec) = spec.shaper_spec() else {
+            continue;
+        };
+        if !deep_text::Shaper::is_cached(&spec) {
+            out.push(deep_text::worker::shape_later(&spec));
+        }
+    }
+    out
 }
 
 /// The view a frame reads: the session's current revision's defaults, with the call's locale
@@ -430,7 +629,10 @@ fn core_boxes(
         .filter_map(|(_, id)| {
             let lowered = json("core.lowered", id)?;
             let b = lowered["params"]["box"].as_array()?;
-            let pos = json("core.world", id).map(|w| [num(&w["pos"][0]), num(&w["pos"][1])]);
+            let pos = session
+                .value(sched, "core.world", Some(id))
+                .and_then(|w| w.as_typed::<deep_canvas::schedule::core_ops::Transform>())
+                .map(|w| [w.pos[0], w.pos[1]]);
             let [x, y] = pos.unwrap_or([0.0, 0.0]);
             let role = lowered["params"]["paint"]["fill"]["role"]
                 .as_str()
@@ -461,10 +663,10 @@ fn cell_grids(
     use deep_canvas_marks::scene::{self, Fill, Mark};
     let mut out = Vec::new();
     for (id, _) in doc["items"].as_object().into_iter().flatten() {
-        let Some(Val::Any(any, _)) = session.value(sched, "cells.grid", Some(id)) else {
-            continue;
-        };
-        let Ok(g) = any.downcast::<Grid>() else {
+        let Some(g) = session
+            .value(sched, "cells.grid", Some(id))
+            .and_then(|v| v.as_typed::<Grid>())
+        else {
             continue;
         };
         let mark = |m: Mark| scene::Drawn {
@@ -533,11 +735,9 @@ pub(crate) fn drawing_of(
     session: &DocSession,
 ) -> Option<Painted> {
     let doc = session.document()?;
-    let typed = |array: &str| match session.value(sched, array, None) {
-        Some(Val::Any(any, _)) => Some(any),
-        _ => None,
-    };
-    let mut drawing = typed("marks2d.frame").and_then(|a| a.downcast::<Drawing>().ok());
+    let mut drawing = session
+        .value(sched, "marks2d.frame", None)
+        .and_then(|v| v.as_typed::<Drawing>());
     // #402: each cell grid's rows, drawn through the one shaper over the frame's marks.
     let grids = cell_grids(sched, session, doc);
     if let (Some(d), false) = (&mut drawing, grids.is_empty()) {
@@ -553,7 +753,9 @@ pub(crate) fn drawing_of(
             animated: d.animated.clone(),
         });
     }
-    let status = typed("text.status").and_then(|a| a.downcast::<StatusDrawing>().ok());
+    let status = session
+        .value(sched, "text.status", None)
+        .and_then(|v| v.as_typed::<StatusDrawing>());
     let side = |k: usize| doc["size"][k].as_f64().unwrap_or(1.0);
     let boxes = match drawing {
         Some(_) => Vec::new(),
@@ -565,4 +767,28 @@ pub(crate) fn drawing_of(
         status,
         size: [side(0), side(1)],
     })
+}
+
+/// A value's Debug text, as a diagnostic shows it; never a digest's input. A test build with
+/// `test-debug-alt` prints every value another way, as another compiler might (#855).
+pub(crate) fn debug_text(value: &dyn std::fmt::Debug) -> String {
+    if cfg!(feature = "test-debug-alt") {
+        format!("{value:#?} (alt)")
+    } else {
+        format!("{value:?}")
+    }
+}
+
+/// The SHA-256 of the Debug text of the typed values a node wrote, in the order it wrote them;
+/// `null` when it wrote none. A diagnostic only: no key or digest reads it.
+fn debug_digest(values: &[Val]) -> Value {
+    let texts: Vec<String> = values
+        .iter()
+        .filter_map(Val::debug)
+        .map(debug_text)
+        .collect();
+    if texts.is_empty() {
+        return Value::Null;
+    }
+    json!(deep_canvas::schedule::sha256_hex(texts.concat().as_bytes()))
 }

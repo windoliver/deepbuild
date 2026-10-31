@@ -102,7 +102,7 @@ pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
 }
 
 /// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
-/// from `coefficients` (the reference Mac's when `None`).
+/// from `coefficients` (the sealed set's when `None`).
 fn check_by(
     doc: &Value,
     sealed: &Sealed,
@@ -409,14 +409,7 @@ fn budget_check(
     let Some((class, limits)) = crate::budget::of(lowered) else {
         return;
     };
-    let reference;
-    let coefficients = match coefficients {
-        Some(c) => c,
-        None => {
-            reference = Coefficients::reference();
-            &reference
-        }
-    };
+    let coefficients = coefficients.unwrap_or(&sealed.costs);
     let e = crate::cost::estimate(lowered, sealed, coefficients);
     let over: Vec<String> = [
         ("CPU", e.cpu_ms, limits.cpu_ms, "ms"),

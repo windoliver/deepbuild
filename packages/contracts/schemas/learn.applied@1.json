@@ -1,6 +1,8 @@
 {
   "title": "learn.applied@1",
   "description": "A learned change was applied.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "evidence": {
       "type": "array",
