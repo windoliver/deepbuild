@@ -424,8 +424,9 @@ export class Core {
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run),
       report: (run) => { const r = this.reports.get(run); this.reports.delete(run); return r; },
-      ...(options.plant === 'any-nonzero-base-exit' ? { plant: options.plant } : {}),
       checkouts: () => this.checkouts, invalid: (claim, commit, reason) => this.invalid(claim, commit, reason), stopping: () => this.stopping,
+      stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
+      ...(options.plant === 'any-nonzero-base-exit' || options.plant === 'stand-in-surface-dropped' || options.plant === 'stand-in-unrecorded' || options.plant === 'stand-in-pass-proves' ? { plant: options.plant } : {}),
       slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
@@ -510,7 +511,10 @@ export class Core {
     });
     // The base-commit service (#31), its checkouts under the hub's root: opening removes what a crash left, whose
     // processes the supervisor has just reaped; no run writes the store, each only its own checkout.
-    this.checkouts = await openCheckouts({ store: join(this.root.dir, 'objects'), root: join(this.root.dir, 'checkouts'), kinds: [], host: this.supervisor, leases, now: this.now });
+    this.checkouts = await openCheckouts({
+      store: join(this.root.dir, 'objects'), root: join(this.root.dir, 'checkouts'), kinds: [], host: this.supervisor, leases, now: this.now,
+      ...(this.options.plant === 'stand-in-always' ? { plant: 'stands-in-always' as const } : {}),
+    });
     // The keys a stack leased per session before this start (#332): its processes were reaped as the supervisor opened,
     // so each ends now that the record proves them gone.
     for (const v of await leases.leases()) {
@@ -3086,7 +3090,7 @@ export class Core {
       // A forge that didn't answer leaves the state unknown, never a guess.
       const asks = [{ ask: state.task, pr: url ? { state: pulled?.state ?? 'unknown', url } : null }];
       const second = [
-        state.checks.length ? `checks: ${state.checks.map((c) => `${c.check} ${c.outcome}`).join(', ')}` : '',
+        state.checks.length ? `checks: ${state.checks.map((c) => `${c.check} ${c.outcome}${c.stand_in ? ', proven on a stand-in' : ''}`).join(', ')}` : '',
         url ? `PR ${pulled?.state ?? 'unknown'} ${url}` : '',
         files.length ? `wrote ${files.join(', ')}` : '',
         next_issue ? `next issue #${next_issue.number} ${next_issue.url}` : '',
@@ -3995,7 +3999,7 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: ClaimCheck[] }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: ClaimCheck[] }): Promise<void> {
     const at = this.now();
     const lane = (async () => {
       const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
@@ -4004,7 +4008,7 @@ export class Core {
       // Head trust (#29): checks run as you only when every commit since the base was recorded from a DeepBuild
       // session; any other head runs only in the platform sandbox, with no network and no credentials.
       this.untrusted.set(r.claim, !(await this.trustedHead(r.cwd, r.base)));
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, cwd: r.cwd, base: r.base, checks: r.checks, stopAt: at });
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, checks: r.checks, stopAt: at });
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
@@ -4045,7 +4049,7 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
-  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; kind?: boolean }): Promise<string> {
+  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; kind?: boolean; env?: Record<string, string>; hosts?: string[] }): Promise<string> {
     let script = join(this.root.dir, 'checks', r.approved);
     if (this.options.plant === 'runs-disk-bytes') script = join(r.cwd, r.check);
     else if (!existsSync(script)) {
@@ -4054,12 +4058,13 @@ export class Core {
       renameSync(`${script}.tmp`, script);
     }
     // An untrusted head's run gets its checkout and nothing else: no network, no credentials, none of your files.
-    const grant = this.untrusted.get(r.claim) ? { write: [r.cwd], read: [r.cwd, script] } : RUN_AS_YOU;
+    // A stand-in's port (#874) is the one host it may reach beyond its grant.
+    const grant: Grant = { ...(this.untrusted.get(r.claim) ? { write: [r.cwd], read: [r.cwd, script] } : RUN_AS_YOU), ...(r.hosts?.length ? { hosts: r.hosts } : {}) };
     // The command check kind runs a script it can read, its lines but the `#!` line and comments as one command, so its
     // runs say where each test failed (#875); any other is an opaque script, run as it is, whose exit is all it shows.
     const command = readFileSync(script, 'utf8').split('\n').filter((l) => l.trim() && !l.trimStart().startsWith('#')).join('\n');
     const spec: CheckSpec | undefined = (r.kind ?? unreadable(command, r.cwd) === null) ? { kind: 'command', runner: command, inputs: [], depth: 'unit', oracle: 'code', contract: null } : undefined;
-    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null }, undefined, spec);
+    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null }, undefined, spec);
     return String(run);
   }
   /**

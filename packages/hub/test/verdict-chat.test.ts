@@ -1,6 +1,9 @@
 // The status question matcher and answer (#83): the issue's four questions, with a tag after, are status; work is not.
+// A claim's checks as the receipt reads them from the record, a check proven on a stand-in marked so (#874).
+import { fixtures, type JsonValue } from '@deepbuild/contracts';
+import { openRecord, testStorage, type Connection } from '@deepbuild/record';
 import { describe, expect, it } from 'vitest';
-import { isStatusQuestion, statusAnswer } from '../src/verdict-chat.js';
+import { claimState, isStatusQuestion, statusAnswer } from '../src/verdict-chat.js';
 
 describe('isStatusQuestion', () => {
   it('matches the four questions, in any case, with or without a one-word tag in parentheses', () => {
@@ -31,5 +34,37 @@ describe('statusAnswer', () => {
     expect(a).toContain('resume: codex resume 0b1dba30-7d4e-4c66-83df-ce84df27db32');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 7_200_000 })).toContain('(for 2h)');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 2 * 86_400_000 })).toContain('(for 2d)');
+  });
+});
+
+describe('claimState', () => {
+  it('a check whose requirement the record holds a stand-in for is marked proven on one; a check without is not (#874)', async () => {
+    const T = 1_760_013_451_123;
+    const r = await openRecord({ path: 'record.db', now: () => T, storage: testStorage() });
+    try {
+      const core: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+      const fixture = (name: string) => fixtures(name)[0] as { v: number; id: string; kind: string; ts: number; data: Record<string, JsonValue> };
+      const at = (e: ReturnType<typeof fixture>, id: string, data: Record<string, JsonValue> = {}) => ({ v: e.v, id, kind: e.kind, ts: T, data: { ...e.data, ...data } });
+      // R1's check, seq-number.sh, has no stand-in; R2's, health.sh, was proven on one.
+      await r.append(core, at(fixture('definition.locked@3'), '01K74FKZVK8Q2X5R7M3N9P4T60'));
+      await r.append(core, at(fixture('definition.stood_in@1'), '01K74FKZVK8Q2X5R7M3N9P4T61'));
+      const claim = '01K74FKZVK8Q2X5R7M3N9P4T62';
+      await r.append(core, at(fixture('claim.made@3'), claim));
+      const started = fixture('run.started@2');
+      const finished = fixture('run.finished@1');
+      let n = 3;
+      for (const check of ['.deepbuild/checks/seq-number.sh', '.deepbuild/checks/health.sh']) {
+        const run = `run:01K74FKZVK8Q2X5R7M3N9P4T${String(n++)}0`;
+        await r.append(core, { ...at(started, `01K74FKZVK8Q2X5R7M3N9P4T${String(n++)}0`, { run, check, claim: `claim:${claim}` }), subject: run });
+        await r.append(core, at(finished, `01K74FKZVK8Q2X5R7M3N9P4T${String(n++)}0`, { run, check, outcome: 'passed' }));
+      }
+      const state = await claimState((q) => r.raw(q), claim, new Map());
+      expect(state?.checks).toEqual([
+        { check: '.deepbuild/checks/seq-number.sh', outcome: 'passed' },
+        { check: '.deepbuild/checks/health.sh', outcome: 'passed', stand_in: true },
+      ]);
+    } finally {
+      await r.close();
+    }
   });
 });

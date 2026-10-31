@@ -19,7 +19,7 @@ const STATUS = ['still going', 'all done', "what'?s next", 'anything for me']
 export const isStatusQuestion = (prompt: string): boolean => STATUS.some((re) => re.test(prompt));
 
 /** What the record shows of a claim: its line's state and the checks that ran. */
-export interface ClaimState { task: string; session: string | null; created: number; state: LineState; checks: { check: string; outcome: string }[]; verdictAt: number | null }
+export interface ClaimState { task: string; session: string | null; created: number; state: LineState; checks: { check: string; outcome: string; stand_in?: true }[]; verdictAt: number | null }
 /**
  * A claim's state from the record: its newest verdict in force, with its requirements; with no verdict, what its
  * runs show (each check that passed counts once, each with any run counts once); the runs still going, each with
@@ -29,7 +29,10 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   const [claim] = (await query(`SELECT id, session_id, subject_ref, created, round FROM claims WHERE id = '${sql(id)}'`)) as { id: string; session_id: string | null; subject_ref: string; created: number; round: number | null }[];
   if (!claim) return undefined;
   const [definition] = (await query(`SELECT requirements FROM definitions WHERE task_ref = '${sql(claim.subject_ref)}'`)) as { requirements: string | null }[];
-  const fixes = (JSON.parse(definition?.requirements ?? '[]') as Obj[]).filter((r) => typeof r.check === 'string' && r.on_base !== 'passes').map((r) => String(r.check));
+  const requirements = JSON.parse(definition?.requirements ?? '[]') as Obj[];
+  const fixes = requirements.filter((r) => typeof r.check === 'string' && r.on_base !== 'passes').map((r) => String(r.check));
+  // A check proven on a stand-in (#874) says so on the receipt.
+  const stoodIn = new Set(requirements.filter((r) => typeof r.check === 'string' && r.stand_in).map((r) => String(r.check)));
   const runs = (await query(`SELECT id, check_id, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; ended: number | null; outcome: string | null }[];
   const [verdict] = (await query(`SELECT outcome, requirements, created FROM verdicts WHERE claim_id = '${sql(id)}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as { outcome: string; requirements: string; created: number }[];
   const running = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
@@ -37,7 +40,7 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   const onBase = runs.filter((r) => r.check_id.endsWith(BASE_RUN) && ['passed', 'failed', 'overran'].includes(r.outcome ?? '')).map((r) => r.check_id.slice(0, -BASE_RUN.length));
   const unproved = new Set(fixes.filter((check) => !onBase.includes(check)));
   const own = runs.filter((r) => !r.check_id.endsWith(BASE_RUN));
-  const checks = own.filter((r) => r.ended !== null).map((r) => ({ check: r.check_id, outcome: r.outcome ?? 'unknown' }));
+  const checks = own.filter((r) => r.ended !== null).map((r) => ({ check: r.check_id, outcome: r.outcome ?? 'unknown', ...(stoodIn.has(r.check_id) ? { stand_in: true as const } : {}) }));
   let state: LineState;
   if (verdict) {
     const reqs = (JSON.parse(verdict.requirements) as Obj[]).map((r): LineRequirement => ({ req: String(r.req), outcome: r.outcome as Result, smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));

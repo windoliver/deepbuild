@@ -6,15 +6,21 @@
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
 // check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
 // with its split. Pure rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
+import { dirname } from 'node:path';
 import type { CheckResult } from '@deepbuild/conformance';
-import { baseProof, ownRead, type Checkouts, type TempCheckout } from '@deepbuild/gate';
+import { baseProof, ownRead, type Checkouts, type DeclaredSurface, type TempCheckout } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 
 /** A base run's check, apart from the check's own runs: its failure is the proof and its time isn't the check's. */
 export const BASE_RUN = '@base';
 
-/** A check of a claim, as the definition locks it: its approved bytes, its lane facts and the assertions it names. */
-export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes'; asserts: string[] }
+/** The surface a drafted check declares it enters through (#874): #31's shape, its check the requirement's own. */
+export type Surface = { kind: string } & Record<string, unknown>;
+/**
+ * A check of a claim, as the definition locks it: its approved bytes, its lane facts and the assertions it names, and
+ * with them the requirement it judges and the surface it declares, for a stand-in on a base with nothing to start.
+ */
+export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes'; asserts: string[]; req?: string; surface?: Surface | null }
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
@@ -24,13 +30,16 @@ export interface GateOptions {
    * Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle.
    * `kind`: through its check kind or as an opaque script, as its run on the claim went; unset, as its script reads.
    */
-  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; kind?: boolean }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; kind?: boolean; env?: Record<string, string>; hosts?: string[] }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** What an ended run's check kind reported, handed over once; none for an opaque script's run. */
   report(run: string): CheckResult | undefined;
-  /** The planted wrong program that counts any base run that didn't pass as the fix's proof (#875); tests only. */
-  plant?: 'any-nonzero-base-exit';
+  /**
+   * Planted wrong programs; tests only. #875's counts any base run that didn't pass as the fix's proof; #874's drop a
+   * declared surface, leave a stand-in's hash unrecorded, or take a pass on a stand-in as proof.
+   */
+  plant?: 'any-nonzero-base-exit' | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-pass-proves';
   /** CPU slots free now. */
   slots(): { free: number };
   budget_ms: number;
@@ -41,6 +50,8 @@ export interface GateOptions {
   invalid(claim: string, commit: string, reason: string): Promise<void>;
   /** Whether the hub is stopping: what that cuts short says nothing about the claim. */
   stopping(): boolean;
+  /** Records the stand-in a requirement's check was proven on (#874): the surface it enters through and the stand-in's hash. */
+  stoodIn(r: { task: string; req: string; surface: Surface; hash: string }): Promise<void>;
 }
 
 /** Ignored dependency folders a checkout gets cloned copy-on-write, so a check starts as it would in the worktree. */
@@ -48,7 +59,7 @@ const DEPENDENCIES = ['node_modules', '.venv'];
 
 /** A claim's check on one snapshot: its runs, its lane, and whether a newer claim outdated it. */
 interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; invalid: boolean; running: boolean; stale: boolean }
-interface Claim { claim: string; session: string; worktree: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; entries: Map<string, Entry> }
+interface Claim { claim: string; session: string; task: string | null; worktree: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; entries: Map<string, Entry> }
 
 const RESULT = (outcome: string | null, invalid: boolean): 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'INVALID' | 'pending' =>
   invalid ? 'INVALID' : outcome === null ? 'pending' : outcome === 'passed' ? 'PASS' : outcome === 'failed' || outcome === 'overran' ? 'FAIL' : outcome === 'missing' ? 'BLOCKED' : 'INCONCLUSIVE';
@@ -72,9 +83,9 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; cwd: string; base: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
+  async stop(r: { session: string; claim: string; task?: string; cwd: string; base: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
     const { commit: snapshot } = await this.o.checkouts().snapshot(r.cwd);
-    const claim: Claim = { claim: r.claim, session: r.session, worktree: r.cwd, base: r.base, snapshot, checkout: null, entries: new Map() };
+    const claim: Claim = { claim: r.claim, session: r.session, task: r.task ?? null, worktree: r.cwd, base: r.base, snapshot, checkout: null, entries: new Map() };
     const { dir: checkout } = await this.checkoutOf(claim);
     const readyAt = this.o.now();
     const older = this.claims.get(r.session) ?? [];
@@ -136,25 +147,37 @@ export class GateRunner {
    * stand as passed, and it has no result until then. A check its kind runs proves the fix only by failing at an
    * assertion it names (Failing on an assertion), so any other failure makes the claim INVALID, naming where. An
    * opaque script, which its kind can't read, reports no assertion: its failing exit is all it can show, so it stands.
+   *
+   * On a base with nothing to start, the surface the check declares gets the service's stand-in (#874), a program
+   * that does nothing, which the run reaches at DEEP_SURFACE_URL or on its PATH. Passing there is INVALID too; failing
+   * there records the stand-in's hash in the requirement's `stand_in`.
    */
   private async onBase(c: Claim, e: Entry, head: string): Promise<void> {
     const report = this.o.report(e.runs[e.runs.length - 1]!);
     if (e.check.on_base !== 'fails' || head !== 'passed') { e.outcome = head; return; }
     const check = e.check.check;
+    const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;
     const named = { own: report?.read.filter(ownRead) ?? [], asserts: e.check.asserts };
     try {
       const token = `${e.claim} ${check} base`;
-      const base = await this.o.checkouts().baseCheckout({ worktree: c.worktree, onto: c.base, claim: c.snapshot, own: named.own, dependencies: DEPENDENCIES, runs: [token] });
+      const surfaces = surface ? [{ ...surface, check } as DeclaredSurface] : [];
+      const base = await this.o.checkouts().baseCheckout({ worktree: c.worktree, onto: c.base, claim: c.snapshot, own: named.own, dependencies: DEPENDENCIES, surfaces, runs: [token] });
       try {
-        const run = await this.o.start({ claim: e.claim, check: `${check}${BASE_RUN}`, approved: e.check.approved, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, kind: report !== undefined });
+        const standIn = base.standIns.find((s) => s.check === check);
+        const reach = standIn?.port ? { env: { DEEP_SURFACE_URL: `http://127.0.0.1:${standIn.port}` }, hosts: [`127.0.0.1:${standIn.port}`] }
+          : standIn?.bin ? { env: { PATH: `${dirname(standIn.bin)}:${process.env.PATH ?? '/usr/bin:/bin'}` } } : {};
+        const run = await this.o.start({ claim: e.claim, check: `${check}${BASE_RUN}`, approved: e.check.approved, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, kind: report !== undefined, ...reach });
         e.runs.push(run);
         const outcome = await this.o.ended(run);
         const ran = this.o.report(run);
-        const why = outcome === 'passed' ? 'passes on the merge base, so it can\'t prove the fix'
+        const why = outcome === 'passed'
+          ? standIn ? (this.o.plant === 'stand-in-pass-proves' ? null : 'passes on its stand-in, a program that does nothing, so it can\'t prove the fix') : 'passes on the merge base, so it can\'t prove the fix'
           : ran && !this.o.stopping() && this.o.plant !== 'any-nonzero-base-exit' ? baseProof(ran, named).why : null;
         if (why) {
           e.invalid = true;
           await this.o.invalid(e.claim, c.snapshot, `${check} ${why}`);
+        } else if (standIn && surface && c.task && e.check.req && (outcome === 'failed' || outcome === 'overran') && this.o.plant !== 'stand-in-unrecorded') {
+          await this.o.stoodIn({ task: c.task, req: e.check.req, surface, hash: standIn.hash });
         }
         e.outcome = why || outcome === 'failed' || outcome === 'overran' ? head : outcome;
       } finally {
