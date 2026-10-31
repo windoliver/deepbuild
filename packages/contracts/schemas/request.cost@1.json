@@ -1,6 +1,8 @@
 {
   "title": "request.cost@1",
   "description": "One model request's cost and tokens as the agent itself reported them in its telemetry; a request with no export has none, never $0.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "session_costs",
     "readings"

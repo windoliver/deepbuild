@@ -1,6 +1,8 @@
 {
   "title": "session.activity@1",
   "description": "A lifecycle moment the agent reports, such as a run starting, ending or settling. It shows activity and is never a result: no claim, verdict or stop reads it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

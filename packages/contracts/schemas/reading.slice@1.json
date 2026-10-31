@@ -1,6 +1,8 @@
 {
   "title": "reading.slice@1",
   "description": "One slice of what a handle names (#63), as deep read --json prints it and a reading job's read tool returns it: at most 8,192 characters by default, and a cursor to continue a cut one.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "handle": {

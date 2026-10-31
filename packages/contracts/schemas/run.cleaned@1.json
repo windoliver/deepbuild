@@ -1,6 +1,8 @@
 {
   "title": "run.cleaned@1",
   "description": "A run's cleanup: clean, or unfinished with what is left, each named; an unfinished cleanup holds the next run on what is left.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

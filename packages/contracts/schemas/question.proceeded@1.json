@@ -1,6 +1,8 @@
 {
   "title": "question.proceeded@1",
   "description": "A question the agent ended its turn on was answered \"proceed\", recorded with the rule that sorted it. It is not an ask and never reaches you, and it covers no call that needs authority: in the turn it starts, a push, merge, dispatch, send or delete is held with an authority ask.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

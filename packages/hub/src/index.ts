@@ -24,6 +24,7 @@ export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
+export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';
 export { openWikiBuild } from './wiki-build.js';
 

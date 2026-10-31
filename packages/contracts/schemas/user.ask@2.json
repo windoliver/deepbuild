@@ -1,6 +1,8 @@
 {
   "title": "user.ask@2",
   "description": "A prompt, or a message typed while the agent works.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "tasks",
     "returns"

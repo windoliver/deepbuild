@@ -1,6 +1,8 @@
 {
   "title": "spend.approved@1",
   "description": "You approved a spending budget, on the card or from deep inbox: its scope, its dollar cap and when it ends. The event's ID is the budget's. Only the core appends it, and only from the trusted path.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -2,5 +2,6 @@
   "id": "deepbuild/environment",
   "version": "1.0.0",
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
-  "environments": ["planted"]
+  "environments": ["planted"],
+  "requires": { "preview": ["deep.registerEnvironment"] }
 }

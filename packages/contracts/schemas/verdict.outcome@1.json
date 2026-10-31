@@ -1,6 +1,8 @@
 {
   "title": "verdict.outcome@1",
   "description": "The one source of the five verdict outcomes: the enum every verdict record, verdict.made event and status binding takes its outcome from, and the family deep://codes/<code> documents.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "string",
   "enum": [
     "PASS",

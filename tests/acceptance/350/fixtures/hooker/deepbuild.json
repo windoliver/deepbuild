@@ -7,5 +7,6 @@
     { "name": "ctx", "hook": "tool.before", "text": "{handle} was checked {count} times", "fields": { "handle": { "type": "handle" }, "count": { "type": "number" } } },
     { "name": "why", "hook": "tool.before", "text": "held until {handle} passes", "fields": { "handle": { "type": "handle" } } },
     { "name": "late", "hook": "tool.before", "text": "late reply to call {count}", "fields": { "count": { "type": "number" } } }
-  ]
+  ],
+  "requires": { "preview": ["deep.on"] }
 }
