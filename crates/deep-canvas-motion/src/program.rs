@@ -6,6 +6,8 @@
 
 use serde_json::{Map, Value};
 
+use deep_canvas::schedule::core_ops::Datum;
+
 use crate::doc::{self, Motion, Refused, Target};
 use crate::eval::{Local, Validity};
 
@@ -14,7 +16,7 @@ pub const TRANSFORM: usize = 9;
 
 /// One item's evaluated transform (pos, rot and scale) and the fields a channel writes on it,
 /// each with its path in the item.
-pub type ItemValues = ([f64; TRANSFORM], Vec<(Vec<String>, Value)>);
+pub type ItemValues = ([f64; TRANSFORM], Vec<(Vec<String>, Datum)>);
 
 /// A field outside the transform that a channel writes, with its run of slots.
 #[derive(Clone, Debug, PartialEq)]
@@ -30,11 +32,11 @@ pub struct Field {
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Write {
-    channel: usize,
-    delay: i64,
-    slot: usize,
-    width: usize,
+pub(crate) struct Write {
+    pub(crate) channel: usize,
+    pub(crate) delay: i64,
+    pub(crate) slot: usize,
+    pub(crate) width: usize,
 }
 
 /// The compiled document.
@@ -44,14 +46,14 @@ pub struct Program {
     /// Item IDs in document order; item `i`'s transform is slots `9i..9i + 9`.
     pub items: Vec<String>,
     pub fields: Vec<Field>,
-    base: Vec<f64>,
+    pub(crate) base: Vec<f64>,
     /// Each document channel's slot and width, in channel order.
-    channels: Vec<(usize, usize)>,
+    pub(crate) channels: Vec<(usize, usize)>,
     /// Each channel's run in [`State::values`], and the runs' total length.
-    values: Vec<usize>,
-    values_len: usize,
-    placements: Vec<Vec<Write>>,
-    parents: Vec<(usize, usize)>,
+    pub(crate) values: Vec<usize>,
+    pub(crate) values_len: usize,
+    pub(crate) placements: Vec<Vec<Write>>,
+    pub(crate) parents: Vec<(usize, usize)>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -295,9 +297,9 @@ impl Program {
             .map(|f| {
                 let run = &state.slots[f.slot..f.slot + f.width];
                 let value = match run {
-                    [one] if f.boolean => Value::Bool(*one >= 0.5),
-                    [one] => serde_json::json!(one),
-                    many => serde_json::json!(many),
+                    [one] if f.boolean => Datum::Bool(*one >= 0.5),
+                    [one] => Datum::Num(*one),
+                    many => Datum::Nums(many.to_vec()),
                 };
                 (f.path.clone(), value)
             })

@@ -16,7 +16,6 @@ use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use deep_canvas::cost::Coefficients;
 use deep_canvas::document::{
     canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
 };
@@ -211,6 +210,8 @@ pub struct Startup {
     pub seal_ms: f64,
     /// #387: the planted scheduler that orders steps at one time by canvas-module name.
     pub steps_by_name: bool,
+    /// #855: the planted seal let a frame-phase JSON writer in, so its values run and count.
+    pub admits_frame_json: bool,
     /// A build with a test canvas module: every read every operator makes is logged.
     pub test_build: bool,
     /// #856: the planted hub that shapes a revision's long text on the UI thread at its latch.
@@ -361,6 +362,13 @@ pub struct PatchCall {
 pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
+    /// #855: rekeys the process's content keys under a hash, once.
+    Migrate(deep_canvas::schedule::HashVersion),
+    /// #855: computes every content key of a session's revision afresh, `runs` times, timed.
+    Keys {
+        doc: String,
+        runs: usize,
+    },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -573,6 +581,8 @@ pub struct Eval {
     pub perturb: Option<String>,
     pub pixels: bool,
     pub size: Option<[u16; 2]>,
+    /// #855: each node's Debug text digest beside its result, a diagnostic only.
+    pub debug_text: bool,
 }
 
 pub struct Scenario {
@@ -613,6 +623,8 @@ pub struct Scenario {
     pub epoch_start: u32,
     /// Ties break by a shuffle from this seed instead of by name and order (#387).
     pub shuffle: Option<u32>,
+    /// The hash the process keys with until a `migrate` call (#855).
+    pub hash: deep_canvas::schedule::HashVersion,
     /// The golden store; without it, the repo's committed store (#138).
     pub goldens: Option<PathBuf>,
     /// What every backend reports as its OS and driver for this run (#138).
@@ -750,12 +762,14 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        admits_frame_json: startup.admits_frame_json,
     };
     Options {
         access_log: startup.test_build,
         shuffle: scenario.shuffle,
         planted,
         timing: None,
+        hash: scenario.hash,
     }
 }
 
@@ -1145,6 +1159,8 @@ impl<'a> Hub<'a> {
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
+            Call::Migrate(to) => self.migrate(*to),
+            Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -1478,7 +1494,10 @@ impl<'a> Hub<'a> {
                 let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
-                        let coefficients = Coefficients::reference()
+                        let coefficients = self
+                            .startup
+                            .sealed
+                            .costs
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
