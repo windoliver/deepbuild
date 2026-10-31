@@ -225,6 +225,17 @@ describe('checkouts from where a session sits', () => {
     await s.close();
   }, 60_000);
 
+  it('a command named by a path gets no stand-in: nothing would run one on the PATH', async () => {
+    const { repo, service, git } = world();
+    git('commit', '-q', '--allow-empty', '-m', 'base');
+    const s = await service;
+    const { commit } = await s.snapshot(repo);
+    const c = await s.baseCheckout({ worktree: repo, onto: 'HEAD', claim: commit, own: [], surfaces: [{ kind: 'command', check: 'c', name: 'tools/shop' }], runs: ['r'] });
+    expect(c.standIns).toEqual([]);
+    await s.ended(c, 'r');
+    await s.close();
+  }, 60_000);
+
   it('a service whose form is not JSON gets no stand-in, as its early question said', async () => {
     const { repo, service, git } = world();
     git('commit', '-q', '--allow-empty', '-m', 'base');

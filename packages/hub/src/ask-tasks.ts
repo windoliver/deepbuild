@@ -203,7 +203,7 @@ export class AskTasks {
       kind: 'definition', question, recommended: 'keep', default: outside.length || waived ? 'leave-out' : 'keep', fallback: 'you', provisional: false, owner: 'you',
       options: outside.length || waived
         ? [{ id: 'keep', label: 'Lock it with the outside additions, marked with their author', decision: 'none' }, { id: 'leave-out', label: 'Lock it without them', decision: 'none' }]
-        : [{ id: 'keep', label: 'Lock it as drafted: its check runs on the base with no stand-in', decision: 'none' }, { id: 'leave-out', label: `Lock it without ${formless.map((r) => r.id).join(', ')}`, decision: 'none' }],
+        : [{ id: 'keep', label: 'Lock it as drafted: its check runs on the base with no stand-in', decision: 'none' }, ...(formless.length < requirements.length ? [{ id: 'leave-out', label: `Lock it without ${formless.map((r) => r.id).join(', ')}`, decision: 'none' }] : [])],
       key: sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: t.task_ref, digest })), pinned_to: await this.o.pin(t.cwd, question),
     };
     const ask = await this.o.asks().raise(this.o.connection(t.session, t.agent), 'definition.draft', raised);

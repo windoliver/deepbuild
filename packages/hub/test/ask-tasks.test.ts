@@ -216,6 +216,7 @@ describe('ask-tasks hardening', () => {
         const asks = l.events('ask.created').filter((e) => e.kind === 'definition');
         expect(asks.map((a) => String(a.question)), 'one early question, naming the requirement and its surface').toEqual([expect.stringMatching(new RegExp(`${s.handle(1).replace('#', '\\#')} has R1's check enter through a queue surface, which has no fixed form`))]);
         expect(l.locked(s.handle(1)), 'the formless surface\'s definition waits for your answer').toEqual([]);
+        expect((asks[0]!.options as Obj[]).map((o) => o.id), 'no answer that would leave it nothing to lock').toEqual(['keep']);
         const keep = spawnSync(process.execPath, [CLI, 'inbox', 'answer', `ask:${asks[0]!.id}`, 'keep'], { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 60_000 });
         expect(keep.status, `your answer keep counts: ${keep.stdout}${keep.stderr}`).toBe(0);
         await l.settle(() => l.locked(s.handle(1)).length > 0);

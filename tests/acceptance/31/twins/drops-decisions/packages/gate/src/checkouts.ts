@@ -106,7 +106,7 @@ const COMPOSE = ['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-c
 /** Whether a surface has a fixed form to stand in for: a JSON service, a page, a command, a JavaScript module's exports. */
 export function standsIn(s: { kind: string; format?: unknown; name?: unknown; path?: unknown; exports?: unknown }): boolean {
   if (s.kind === 'service') return (s.format ?? 'json') === 'json';
-  if (s.kind === 'command') return typeof s.name === 'string' && s.name.trim() !== '';
+  if (s.kind === 'command') return typeof s.name === 'string' && /^[\w+@-][\w.+@-]*$/.test(s.name.trim().split(/\s+/)[0]!);
   if (s.kind === 'module') return typeof s.path === 'string' && inside(s.path) && /\.[cm]?[jt]sx?$/.test(s.path) && Array.isArray(s.exports) && s.exports.every((e) => typeof e === 'string' && /^[A-Za-z_$][\w$]*$/.test(e));
   return s.kind === 'page';
 }
