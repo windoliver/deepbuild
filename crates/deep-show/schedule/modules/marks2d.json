@@ -3,6 +3,22 @@
   "phases": {
     "extract": [
       {
+        "operator": "marks2d.item",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "core.world",
+          "text.counter",
+          "look.palette",
+          "view(locale)"
+        ],
+        "writes": [
+          "marks2d.item"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "marks2d.frame",
         "module": "marks2d",
         "version": "1.0.0",
@@ -14,7 +30,8 @@
           "text.counter",
           "text.run",
           "text.animated",
-          "look.palette"
+          "look.palette",
+          "marks2d.item"
         ],
         "writes": [
           "marks2d.frame"

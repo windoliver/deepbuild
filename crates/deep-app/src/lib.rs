@@ -43,6 +43,8 @@ use gpui_shell::{
 
 pub mod trusted_input;
 
+pub mod capture;
+
 pub mod brand;
 
 pub const SESSION_COUNT: usize = 1_000;
