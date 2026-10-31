@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { CLASSIFIED, checkClassifier, decisionOneInputs, freshness, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
+import { baselineMessages, CLASSIFIED, checkClassifier, decisionOneInputs, freshness, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
 import { isStatusQuestion } from './verdict-chat.js';
@@ -76,27 +76,29 @@ export class Numbers {
     return new Map(this.events.filter((e) => e.kind === 'user.ask' && e.data.from === 'person' && typeof e.data.text === 'string').map((e) => [opaque(e.id), e]));
   }
   /**
-   * Your labels, as `<root>/labels/<reading>.json`: `{ threshold, before, labels: [{ message, label }] }`. Each message's
-   * text and period come from the record, never the file, and one the record doesn't hold doesn't count. A file that
-   * can't be read is no check.
+   * Your labels, as `<root>/labels/<reading>.json`: `{ threshold, before, manifest?, labels: [{ message, label }] }`. Each
+   * message's text and period come from the record or the manifest's transcripts, never the file, and one neither holds
+   * doesn't count. A file that can't be read is no check.
    */
-  private checks() {
+  private async checks() {
     const typed = this.typed();
-    return Object.entries(CLASSIFIERS).map(([id, classifier]) => {
+    return Promise.all(Object.entries(CLASSIFIERS).map(async ([id, classifier]) => {
       try {
-        const { threshold, before, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; labels: { message: string; label: boolean }[] };
+        const { threshold, before, manifest, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; manifest?: string; labels: { message: string; label: boolean }[] };
         if (typeof threshold !== 'number') return { id, check: null };
+        const archived = manifest ? await this.archived(manifest) : new Map<string, string>();
         // A message labelled twice is one message.
         const sample = [...new Map(labels.map((l) => [l.message, l])).values()].flatMap((l): LabelledMessage[] => {
           const e = typed.get(l.message);
-          return e ? [{ message: l.message, text: String(e.data.text), label: l.label, period: e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' }] : [];
+          const text = e ? String(e.data.text) : archived.get(l.message);
+          return text === undefined ? [] : [{ message: l.message, text, label: l.label, period: !e || e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' }];
         });
         return { id, check: checkClassifier({ id, classifier, sample, threshold }) };
       } catch { return { id, check: null }; }
-    });
+    }));
   }
-  private checked(readings: Reading[]): Reading[] {
-    const checks = new Map(this.checks().map((c) => [c.id, c.check]));
+  private async checked(readings: Reading[]): Promise<Reading[]> {
+    const checks = new Map((await this.checks()).map((c) => [c.id, c.check]));
     // A baseline's classified count comes from the same pattern as the live is_it_done.
     return readings.map((r) => {
       const id = r.id.endsWith(`rework${CLASSIFIED}`) ? 'rework' : r.id.endsWith(CLASSIFIED) ? 'is_it_done' : r.id;
@@ -105,7 +107,7 @@ export class Numbers {
   }
   async read(): Promise<{ rows: ReturnType<typeof panelRows>; decision_one: ReturnType<typeof decisionOneInputs> }> {
     await this.catchUp();
-    return { rows: panelRows(this.checked(readingsOf(this.state)), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(this.checks()) };
+    return { rows: panelRows(await this.checked(readingsOf(this.state)), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
   }
   /** Readings for deep_search: a call reads its own session's and those of no session, never another session's. */
   async search(query: string, session: string | undefined | { everyone: true }) {
@@ -115,10 +117,10 @@ export class Numbers {
       const named = e.session ?? (typeof e.data.session === 'string' ? e.data.session.slice('session:'.length) : null);
       return named === null || letters(named) === own;
     });
-    return searchReadings(this.checked(readingsOf(recompute(events))), query).map((hit) => ({ ...hit, status: freshness(hit.reading, { now: this.o.now(), fresh_for: FRESH_FOR }) }));
+    return searchReadings(await this.checked(readingsOf(recompute(events))), query).map((hit) => ({ ...hit, status: freshness(hit.reading, { now: this.o.now(), fresh_for: FRESH_FOR }) }));
   }
-  /** Recomputes the pilot baseline a manifest names, keeps its script and output as evidence, and records what it could. */
-  async baseline(manifestPath: string) {
+  /** A manifest and the transcripts it names, by hash. */
+  private async manifest(manifestPath: string) {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { baseline_sha256: string; archive_dir?: string; measures: BaselineMeasure[] };
     const bytes = new Map<string, Uint8Array | null>();
     for (const sha of new Set(manifest.measures.flatMap((m) => m.transcripts.map((t) => t.sha256)))) {
@@ -127,6 +129,16 @@ export class Numbers {
       const path = manifest.archive_dir ? join(resolve(dirname(manifestPath), manifest.archive_dir), sha) : undefined;
       bytes.set(sha, path && existsSync(path) ? readFileSync(path) : await this.o.evidence(sha));
     }
+    return { manifest, bytes };
+  }
+  /** Your messages in a manifest's transcripts, by opaque id: the labels' way into a period the record never saw. */
+  private async archived(manifestPath: string): Promise<Map<string, string>> {
+    const { manifest, bytes } = await this.manifest(manifestPath);
+    return new Map(baselineMessages(manifest.measures, (sha) => bytes.get(sha) ?? null).map((text) => [opaque(text), text]));
+  }
+  /** Recomputes the pilot baseline a manifest names, keeps its script and output as evidence, and records what it could. */
+  async baseline(manifestPath: string) {
+    const { manifest, bytes } = await this.manifest(manifestPath);
     const result = recomputeBaseline({ baseline_sha256: manifest.baseline_sha256, measures: manifest.measures, archive: (sha) => bytes.get(sha) ?? null });
     const evidence = [await this.o.keep(Buffer.from(result.script.text), 'readings:baseline-script'), await this.o.keep(Buffer.from(result.output.text), 'readings:baseline-output')];
     for (const m of result.measures) {
@@ -154,16 +166,18 @@ export class Numbers {
     }
     return { repos: [...repos], unread };
   }
-  /** Your sample to label: your own messages at random, both sides of a date, with no date or period to see, only an opaque id. */
-  async sample(before: number): Promise<{ before: number; label_in: string; warning?: string; messages: { message: string; text: string }[] }> {
+  /** Your sample to label: your own messages at random, both sides of a date, with no date or period to see, only an opaque id. A manifest adds its transcripts' messages to the side before it. */
+  async sample(before: number, manifest?: string): Promise<{ before: number; label_in: string; warning?: string; messages: { message: string; text: string }[] }> {
     await this.catchUp();
     const typed = [...this.typed()];
-    const shuffled = (list: typeof typed) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
+    const toMessage = ([message, e]: (typeof typed)[number]) => ({ message, text: String(e.data.text) });
+    const earlier = [...typed.filter(([, e]) => e.ts < before).map(toMessage), ...[...(manifest ? await this.archived(manifest) : [])].map(([message, text]) => ({ message, text }))];
+    const later = typed.filter(([, e]) => e.ts >= before).map(toMessage);
+    const shuffled = <T>(list: T[]) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
     const half = SAMPLE / 2;
-    const drawn = shuffled([...shuffled(typed.filter(([, e]) => e.ts < before)).slice(0, half), ...shuffled(typed.filter(([, e]) => e.ts >= before)).slice(0, half)]);
-    // The record holds only what the hub saw: a period before it has no messages to label, and the check stays BLOCKED.
-    const oneSided = !typed.some(([, e]) => e.ts < before) || !typed.some(([, e]) => e.ts >= before);
-    return { before, ...(oneSided ? { warning: 'The record holds messages from only one side of that date, so these labels can\'t pass: a check needs both periods.' } : {}), label_in:`${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, labels: [{ message, label }] }`, messages: drawn.map(([message, e]) => ({ message, text: String(e.data.text) })) };
+    // The record holds only what the hub saw: a period before it has no messages to label without a manifest, and the check stays BLOCKED.
+    const oneSided = !earlier.length || !later.length;
+    return { before, ...(oneSided ? { warning: 'There are messages from only one side of that date, so these labels can\'t pass: a check needs both periods.' } : {}), label_in: `${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, ${manifest ? `manifest: ${JSON.stringify(manifest)}, ` : ''}labels: [{ message, label }] }`, messages: shuffled([...shuffled(earlier).slice(0, half), ...shuffled(later).slice(0, half)]) };
   }
 }
 /** `owner/name` of a worktree's origin on GitHub, or undefined. */

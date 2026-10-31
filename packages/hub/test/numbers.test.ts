@@ -1,6 +1,7 @@
 // The hub writes a session's spend off a stop's hook (#45), whether or not the stop names its prompt, and a subagent's stop
 // doesn't count it again.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
@@ -44,6 +45,29 @@ describe('turn.usage at a stop', () => {
       await hook('SubagentStop', { agent_id: 'a1', stop_hook_active: false });
       await new Promise((r) => setTimeout(r, 500));
       expect(usages(), 'a subagent\'s stop adds no row').toHaveLength(1);
+    });
+  }, 60_000);
+});
+
+describe('labelling a period from before the hub', () => {
+  it('draws the sample from the manifest\'s transcripts in their windows, and counts your labels on them', async () => {
+    await withHub(async (root, home) => {
+      const line = (uuid: string, timestamp: string, content: unknown) => JSON.stringify({ type: 'user', uuid, timestamp, message: { role: 'user', content } });
+      const text = [line('u1', '2026-09-02T00:00:00Z', 'is it done yet?'), line('u1', '2026-09-02T00:00:00Z', 'is it done yet?'), line('u2', '2026-09-03T00:00:00Z', 'rename the file'), line('u3', '2026-09-20T00:00:00Z', 'outside the window'), line('u4', '2026-09-03T00:00:01Z', [{ type: 'tool_result', content: 'a tool, not you' }])].join('\n');
+      const sha = createHash('sha256').update(text).digest('hex');
+      mkdirSync(join(home, 'pilot'));
+      writeFileSync(join(home, 'pilot', sha), text);
+      const manifest = join(home, 'manifest.json');
+      writeFileSync(manifest, JSON.stringify({ baseline_sha256: 'a'.repeat(64), archive_dir: 'pilot', measures: [{ id: 'asks', kind: 'is_it_done', window: { from: '2026-09-01', to: '2026-09-10' }, transcripts: [{ sha256: sha }] }] }));
+      const token = readFileSync(join(root, 'control.token'), 'utf8').trim();
+      const socket = join(root, 'hub.sock');
+      const drawn = await call(socket, token, 'numbers.sample', { before: Date.parse('2026-10-01'), manifest }) as { result: { messages: { message: string; text: string }[] } };
+      expect(drawn.result.messages.map((m) => m.text).sort()).toEqual(['is it done yet?', 'rename the file']);
+      expect(JSON.stringify(drawn.result.messages), 'no date to see').not.toContain('2026-09');
+      mkdirSync(join(root, 'labels'));
+      writeFileSync(join(root, 'labels', 'is_it_done.json'), JSON.stringify({ threshold: 0.8, before: Date.parse('2026-10-01'), manifest, labels: drawn.result.messages.map((m) => ({ message: m.message, label: m.text === 'is it done yet?' })) }));
+      const read = await call(socket, token, 'numbers.read', {}) as { result: { decision_one: { refused: { id: string; why: string }[] } } };
+      expect(read.result.decision_one.refused.find((r) => r.id === 'is_it_done')?.why, 'read, and still one-sided and short').toBe('its check is BLOCKED: agreement 1 over 2 messages');
     });
   }, 60_000);
 });

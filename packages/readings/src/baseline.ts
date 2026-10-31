@@ -71,6 +71,17 @@ function count(kind: string, whole: string[], window: { from: number; to: number
   return null;
 }
 
+/** Your messages in a baseline's windows, for labelling a period the record never saw. A transcript that fails its hash gives none. */
+export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: string) => Uint8Array | null): string[] {
+  const ms = (v: number | string): number => (typeof v === 'string' ? Date.parse(v) : v);
+  const seen = new Set<string>();
+  return measures.flatMap((m) => m.transcripts.flatMap(({ sha256: hash }) => {
+    const bytes = archive(hash);
+    if (!bytes || sha256(bytes) !== hash) return [];
+    return typed(inWindow(Buffer.from(bytes).toString('utf8'), { from: ms(m.window.from), to: ms(m.window.to) }), seen);
+  }));
+}
+
 export function recomputeBaseline(input: { baseline_sha256: string; measures: BaselineMeasure[]; archive: (sha256: string) => Uint8Array | null }): BaselineResult {
   const measures = input.measures.map((m): BaselineMeasureResult => {
     const hashes = m.transcripts.map((t) => t.sha256);
