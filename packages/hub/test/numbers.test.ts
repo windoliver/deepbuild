@@ -121,7 +121,7 @@ describe('labelling a period from before the hub', () => {
       for (let i = 0; i < 40; i++) for (const m of (await call(socket, token, 'numbers.sample', { before: Date.now() + 86_400_000, manifest }) as { result: Drawn }).result.messages) later.set(m.message, m.text);
       expect([...later.values()].filter((t) => t === 'typed after the date'), 'the record\'s and the older one').toHaveLength(2);
       expect([...later.values()].filter((t) => t.startsWith('a long prompt')), 'a long prompt the record cut is still one message').toHaveLength(1);
-      write([...all].slice(0, 2).map(([message, t]) => ({ message, label: t === 'is it done yet?' })).concat(Array.from({ length: 100 }, (_, i) => ({ message: `forged${i}`, label: false }))));
+      write([...all].slice(0, 2).map(([message, t]) => ({ message, label: t === 'is it done yet?' })).concat([{ message: 'constructor', label: false }, ...Array.from({ length: 100 }, (_, i) => ({ message: `forged${i}`, label: false }))]));
       expect((await decision()).refused.find((r) => r.id === 'is_it_done')?.why, 'ids nothing holds count for nothing').toMatch(/over 2 messages/);
     });
   }, 120_000);
