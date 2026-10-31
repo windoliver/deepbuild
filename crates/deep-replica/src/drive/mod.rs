@@ -1446,7 +1446,9 @@ fn copy_record(socket: &Path, token: &str) -> Result<Vec<Value>, String> {
 /// An animated PNG of `frames`, PNG files of one size and colour type, each shown for 1/`fps` s: the first frame's
 /// header, then each frame's image data under its frame control, so nothing is compressed twice.
 fn animated_png(frames: &[PathBuf], fps: u16) -> Result<Vec<u8>, String> {
-    fn chunks(png: &[u8]) -> Result<Vec<(&[u8], &[u8])>, String> {
+    /// A PNG's chunks, each its type and its data.
+    type Chunks<'a> = Vec<(&'a [u8], &'a [u8])>;
+    fn chunks(png: &[u8]) -> Result<Chunks<'_>, String> {
         let mut out = Vec::new();
         let mut at = 8;
         while at + 12 <= png.len() {
