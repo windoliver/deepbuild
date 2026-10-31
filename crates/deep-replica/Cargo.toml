@@ -85,3 +85,8 @@ harness = false
 name = "acceptance_327_ac1_redraft"
 path = "../../tests/acceptance/327/ac1_redraft.rs"
 harness = false
+
+[[test]]
+name = "acceptance_327_ac3_redraft"
+path = "../../tests/acceptance/327/ac3_redraft.rs"
+harness = false
