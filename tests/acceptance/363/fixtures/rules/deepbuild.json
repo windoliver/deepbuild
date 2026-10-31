@@ -1,0 +1,9 @@
+{
+  "id": "test/rules",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": [] },
+  "stores": ["ext.rules.alert"],
+  "actions": ["ext.rules.set_alert", "ext.rules.list_alerts", "ext.rules.boom"],
+  "requires": { "preview": ["deep.registerAction", "deep.store", "deep.store.put", "deep.store.get", "deep.store.list"] }
+}

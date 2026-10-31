@@ -1,0 +1,18 @@
+// The reader plug-in (#363 AC2, AC3), sandboxed: one read action that runs deep.record.query for the kinds its input
+// names and returns what crossed into the sandbox, exactly as it arrived (as JSON text), or the refusal's message.
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default function (deep: any): void {
+  deep.registerAction('ext.reader.query', {
+    declares: 'read',
+    input: strict({ kinds: { type: 'array', items: { type: 'string' } } }),
+    output: strict({ rows: { type: ['string', 'null'] }, count: { type: 'integer' }, refusal: { type: ['string', 'null'] } }),
+  }, async (input: { kinds: string[] }) => {
+    try {
+      const rows = await deep.record.query({ kinds: input.kinds });
+      return { rows: JSON.stringify(rows), count: Array.isArray(rows) ? rows.length : -1, refusal: null };
+    } catch (e: any) {
+      return { rows: null, count: 0, refusal: String(e?.message ?? e) };
+    }
+  });
+}
