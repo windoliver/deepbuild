@@ -449,12 +449,30 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })));
         }
         "frames" => {
-            return Some(Call::Frames {
+            let flag = |k: &str| match c.get(k) {
+                None => Some(false),
+                Some(b) => b.as_bool(),
+            };
+            // #856: a whole revision arriving at a frame's latch.
+            let revise = match c.get("revise") {
+                None => None,
+                Some(r) => Some((
+                    r.get("frame")?.as_u64()? as usize,
+                    r.get("document")?.clone(),
+                )),
+            };
+            return Some(Call::Frames(Box::new(crate::hub::Frames {
                 doc: doc()?,
                 count: c.get("count")?.as_u64()?.min(100_000) as usize,
                 from: time("from", 0)?,
                 step: time("step", flicks("1/60s").unwrap_or(11_760_000))?,
-            })
+                paced: flag("paced")?,
+                revise,
+                pixels: flag("pixels")?,
+            })));
+        }
+        "shaped_runs" => {
+            return Some(Call::ShapedRuns(c.get("text")?.as_str()?.to_string()));
         }
         "panel" => {
             return Some(Call::Panel {
@@ -1430,17 +1448,22 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
         seal_ms: started.elapsed().as_secs_f64() * 1000.0,
         steps_by_name: planted == Some(StartPlanted::StepsByName),
         test_build: TEST_BUILD,
+        shapes_on_ui_thread: planted == Some(StartPlanted::ShapesOnUiThread),
+        run_per_document: planted == Some(StartPlanted::RunPerDocument),
     })
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
 /// reads every dependency as required, #387's scheduler that orders steps at one time by
-/// canvas-module name, or #388's seal that lets a build without look start.
+/// canvas-module name, #388's seal that lets a build without look start, or #856's hub that
+/// shapes a long text on the UI thread and its shaped-run cache per document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
     StepsByName,
     StartsWithoutLook,
+    ShapesOnUiThread,
+    RunPerDocument,
 }
 
 #[cfg(test)]
@@ -1465,6 +1488,8 @@ mod tests {
             seal_ms: 0.0,
             steps_by_name: false,
             test_build: false,
+            shapes_on_ui_thread: false,
+            run_per_document: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-305-stamp-{}", std::process::id()));
         let doc = "01JB7D00000000000000000001";
@@ -1609,6 +1634,8 @@ mod tests {
             seal_ms: 0.0,
             steps_by_name: false,
             test_build: false,
+            shapes_on_ui_thread: false,
+            run_per_document: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-383-view-{}", std::process::id()));
         let doc = "01JB383V00000000000000000A";
@@ -1751,6 +1778,12 @@ fn planted_arg(args: &[String]) -> Result<Option<StartPlanted>, ()> {
         }
         [flag, twin] if flag == "--planted" && twin == "starts_without_look" => {
             Ok(Some(StartPlanted::StartsWithoutLook))
+        }
+        [flag, twin] if flag == "--planted" && twin == "shapes_on_ui_thread" => {
+            Ok(Some(StartPlanted::ShapesOnUiThread))
+        }
+        [flag, twin] if flag == "--planted" && twin == "run_per_document" => {
+            Ok(Some(StartPlanted::RunPerDocument))
         }
         _ => Err(()),
     }
