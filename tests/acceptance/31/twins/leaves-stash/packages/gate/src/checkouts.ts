@@ -103,6 +103,13 @@ const FORMS = {
 const moduleForm = (exports: string[]): string => exports.map((name) => `export function ${name}() {}\n`).join('');
 const PACKAGE_FILES = ['package.json', 'go.mod', 'pyproject.toml', 'Cargo.toml'];
 const COMPOSE = ['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml'];
+/** Whether a surface has a fixed form to stand in for: a JSON service, a page, a command, a JavaScript module's exports. */
+export function standsIn(s: { kind: string; format?: unknown; name?: unknown; path?: unknown; exports?: unknown }): boolean {
+  if (s.kind === 'service') return (s.format ?? 'json') === 'json';
+  if (s.kind === 'command') return typeof s.name === 'string' && s.name.trim() !== '';
+  if (s.kind === 'module') return typeof s.path === 'string' && inside(s.path) && /\.[cm]?[jt]sx?$/.test(s.path) && Array.isArray(s.exports) && s.exports.every((e) => typeof e === 'string' && /^[A-Za-z_$][\w$]*$/.test(e));
+  return s.kind === 'page';
+}
 /** Whether the base already has an entry point of the kind a surface enters through; one with no fixed form is no stand-in's. */
 function hasEntry(dir: string, s: DeclaredSurface): boolean {
   let pkg: { scripts?: Record<string, unknown>; bin?: unknown } = {};
@@ -334,7 +341,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   /** Builds the surfaces' stand-ins, each in `built` as soon as it's up, so a later failure still stops it. */
   const buildStandIns = async (dir: string, surfaces: DeclaredSurface[], built: StandIn[]): Promise<void> => {
     for (const s of surfaces) {
-      if (o.plant !== 'stands-in-always' && hasEntry(dir, s)) continue;
+      if (!standsIn(s) || (o.plant !== 'stands-in-always' && hasEntry(dir, s))) continue;
       if (s.kind === 'service' || s.kind === 'page') {
         const form = FORMS[s.kind];
         const file = join(dir, '.deep-stand-in', `${s.check.replace(/[^\w-]/g, '-')}.mjs`);
@@ -353,7 +360,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
         await mkdir(dirname(bin), { recursive: true });
         await writeFile(bin, FORMS.command, { mode: 0o755 });
         built.push({ check: s.check, kind: s.kind, hash: sha256(FORMS.command), bin });
-      } else if (s.kind === 'module' && 'path' in s && inside(s.path) && /\.[cm]?[jt]sx?$/.test(s.path) && s.exports.every((e) => /^[A-Za-z_$][\w$]*$/.test(e))) {
+      } else if (s.kind === 'module' && 'path' in s) {
         // Through a link it would land outside the checkout: no stand-in, so the check can't import it.
         if (linkOn(dir, s.path) || lstatSync(join(dir, s.path), { throwIfNoEntry: false })) continue;
         const form = moduleForm(s.exports);

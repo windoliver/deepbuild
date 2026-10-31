@@ -39,6 +39,8 @@ export interface CommandCheck {
   secrets?: Record<string, string>;
   /** Hosts the run's grant names, "127.0.0.1:<port>". */
   hosts?: string[];
+  /** Folders of programs the run also finds on its PATH, such as a stand-in's. */
+  bins?: string[];
   /** A numeric contract (#28, the verdict engine's NumericContract): the outputs whose counts the report gives. */
   contract?: { tolerances: { output: string; size: number }[] };
   /** The hub going down: the run is stopped and ends stopped. */
@@ -194,11 +196,11 @@ export function unreadable(command: string, checkout: string): string | null {
 }
 
 /** The check.kind@1 fill (#13, kit from #314) for the kind `command`, on `host`. */
-export function commandCheckKind(host: Host): CheckRunnerFill {
+export function commandCheckKind(host: Host, reach: Pick<CommandCheck, 'env' | 'hosts' | 'bins'> = {}): CheckRunnerFill {
   return {
     slot: 'check.kind@1', revision: 1, kind: 'command',
     run: async (spec, ctx) => {
-      const r = await runCommandCheck({ host, run: runHandle(), spec, checkout: ctx.checkout, deadline: ctx.deadline });
+      const r = await runCommandCheck({ ...reach, host, run: runHandle(), spec, checkout: ctx.checkout, deadline: ctx.deadline });
       return { outcome: r.outcome, testsRun: r.testsRun, failures: r.failures, evidence: r.evidence, read: r.read, mask: r.mask };
     },
   };
@@ -234,7 +236,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     mkdirSync(bin);
     for (const [tool, real] of tools()) symlinkSync(real, join(bin, tool));
     const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
-    const PATH = pathOf(bin);
+    const PATH = [...(check.bins ?? []), pathOf(bin)].join(':');
     const go = GO_TEST.test(spec.runner);
     const filters = filtersIn(spec.runner);
     // Vitest reports its pattern's source, in which a `/` the command gave is escaped.

@@ -225,4 +225,36 @@ describe('ask-tasks hardening', () => {
       }
     });
   }, 120_000);
+
+  it('leaving outside text out keeps your own requirement with a formless surface, and a surface no stand-in can be built for is asked about (#874)', async () => {
+    const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    procs.push(claude);
+    await withHub(async (root, home, hub: Hub) => {
+      const queue = { kind: 'queue', name: 'orders' };
+      const python = { kind: 'module', path: 'app/core.py', exports: ['f'] };
+      const w = world(home, [
+        draft(FOLDER, [req('R1', 'an order on the queue is taken', { check: '.deepbuild/checks/ok.sh', surface: queue }), req('R2', 'each order is logged', { source_line: 'item-9#L1' }), req('R3', 'a refresh token is accepted')]),
+        draft(GOOD, [req('R1', 'f answers', { check: '.deepbuild/checks/ok.sh', surface: python })]),
+      ]);
+      await hub.restart(w.env);
+      const s = session(root, w, claude);
+      const l = ledger(root);
+      try {
+        await s.hook('SessionStart', { source: 'startup' });
+        await l.settle(() => l.events('session.start').length > 0);
+        await s.typed(FOLDER);
+        await s.typed(GOOD);
+        const asked = (n: number) => l.events('ask.created').filter((e) => e.kind === 'definition' && String(e.question).includes(s.handle(n)));
+        await l.settle(() => asked(0).length === 1 && (asked(1).length === 1 || l.locked(s.handle(1)).length > 0));
+        expect(l.locked(s.handle(1)), 'a Python module has no stand-in, so its definition waits for your answer').toEqual([]);
+        expect(asked(1).length, 'one early question').toBe(1);
+        const out = spawnSync(process.execPath, [CLI, 'inbox', 'answer', `ask:${asked(0)[0]!.id}`, 'leave-out'], { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 60_000 });
+        expect(out.status, `your answer counts: ${out.stdout}${out.stderr}`).toBe(0);
+        await l.settle(() => l.locked(s.handle(0)).length > 0);
+        expect((l.locked(s.handle(0))[0]?.requirements as Obj[] | undefined)?.map((r) => r.id), 'only the outside requirement drops').toEqual(['R1', 'R3']);
+      } finally {
+        l.db.close();
+      }
+    });
+  }, 120_000);
 });

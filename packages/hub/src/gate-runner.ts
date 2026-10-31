@@ -166,7 +166,7 @@ export class GateRunner {
         const standIn = base.standIns.find((s) => s.check === check);
         const reach = standIn?.port ? { env: { DEEP_SURFACE_URL: `http://127.0.0.1:${standIn.port}` }, hosts: [`127.0.0.1:${standIn.port}`] }
           : standIn?.bin ? { env: { PATH: `${dirname(standIn.bin)}:${process.env.PATH ?? '/usr/bin:/bin'}` } } : {};
-        const run = await this.o.start({ claim: e.claim, check: `${check}${BASE_RUN}`, approved: e.check.approved, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, kind: report !== undefined, ...reach });
+        const run = await this.o.start({ claim: e.claim, check: `${check}${BASE_RUN}`, approved: e.check.approved, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, ...(report ? { kind: true } : {}), ...reach });
         e.runs.push(run);
         const outcome = await this.o.ended(run);
         const ran = this.o.report(run);

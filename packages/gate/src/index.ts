@@ -13,7 +13,7 @@ export { headTrust, pushRecordKit, runPushRecordKit } from './head.js';
 export type { HeadInput, HeadPlan, HeadResult, ProviderPush, PushKit, PushReading, PushRecordReader } from './head.js';
 export { executeClaim, runHeavy, runTiming, slot, verdictMemory } from './exec.js';
 export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, HeavyResult, Load, TimedRun, VerdictMemory } from './exec.js';
-export { baseProof, openCheckouts } from './checkouts.js';
+export { baseProof, openCheckouts, standsIn } from './checkouts.js';
 export type { BaseCheckout, BaseRun, CheckoutPlant, Checkouts, CheckoutsOptions, ClaimCheckInput, ClaimCheckRun, ClaimInput, ClaimRun, Cited, DeclaredSurface, Snapshot, StandIn, TempCheckout } from './checkouts.js';
 export { attributeStack } from './stack.js';
 export type { Served, StackRecords, Trees } from './stack.js';

@@ -4232,7 +4232,10 @@ export class Core {
         name: this.host.name, facts: () => this.host.facts(), wait: () => this.host.wait(run.run), signal: (_, signal) => this.host.signal(run.run, signal),
         start: (s) => this.host.start({ ...s, run: run.run, output: { stdout: (c) => { s.output?.stdout(c); output.stdout(c); }, stderr: (c) => { s.output?.stderr(c); output.stderr(c); } } }),
       };
-      ended = Promise.resolve(commandCheckKind(host).run(run.spec, { checkout: run.cwd, deadline: run.deadline ?? KIND_DEADLINE_MS, now: this.now }))
+      // What a stand-in's run is given (#874): its PATH's first folder is the stand-in's, the kind keeping the rest its own.
+      const { PATH: found, ...env } = run.env;
+      const reach = { env, ...(run.grant.hosts?.length ? { hosts: run.grant.hosts } : {}), ...(found ? { bins: [found.split(':')[0]!] } : {}) };
+      ended = Promise.resolve(commandCheckKind(host, reach).run(run.spec, { checkout: run.cwd, deadline: run.deadline ?? KIND_DEADLINE_MS, now: this.now }))
         .then((report) => ({ code: null, report }), (error: Error) => ({ code: null, failed: error.message }));
       stop = () => void this.host.signal(run.run, 'SIGTERM').catch(() => undefined);
     } else {

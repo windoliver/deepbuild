@@ -20,6 +20,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { standsIn } from '@deepbuild/gate';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { ClaimCheck, Surface } from './gate-runner.js';
 import { headOf } from './session-facts.js';
@@ -69,13 +70,6 @@ function surfaceOf(v: unknown): Surface | null {
   const words = (k: string) => (Array.isArray(s[k]) && (s[k] as unknown[]).every((x) => typeof x === 'string' && x) ? { [k]: s[k] } : {});
   const word = (k: string) => (typeof s[k] === 'string' && s[k] ? { [k]: s[k] } : {});
   return { kind: String(s.kind), ...words('routes'), ...word('format'), ...word('name'), ...word('path'), ...words('exports') };
-}
-/** Whether `deep` has a fixed form to stand in for a surface: a JSON service, a page, a command, a module's exports. */
-function hasForm(s: Surface): boolean {
-  if (s.kind === 'service') return (s.format ?? 'json') === 'json';
-  if (s.kind === 'command') return typeof s.name === 'string';
-  if (s.kind === 'module') return typeof s.path === 'string' && Array.isArray(s.exports);
-  return s.kind === 'page';
 }
 
 export interface AskTaskOptions {
@@ -195,7 +189,7 @@ export class AskTasks {
     const digest = sha256Hex(canonicalize(handed as unknown as JsonValue));
     // The early question (#874): a check whose surface has no fixed form has nothing to stand in for it on a base with
     // nothing to start, so its definition waits for your one answer too, in the same ask.
-    const formless = requirements.filter((r) => r.surface && !hasForm(r.surface));
+    const formless = requirements.filter((r) => r.surface && !standsIn(r.surface));
     if (!outside.length && !waived && !formless.length) return this.record(t.session, t.agent, definition, digest, t.at);
     const who = [...new Set(requirements.filter((r) => outside.includes(r.id)).map((r) => r.author.handle))];
     const said = [
@@ -213,7 +207,7 @@ export class AskTasks {
       key: sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: t.task_ref, digest })), pinned_to: await this.o.pin(t.cwd, question),
     };
     const ask = await this.o.asks().raise(this.o.connection(t.session, t.agent), 'definition.draft', raised);
-    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, held: [...new Set([...outside, ...formless.map((r) => r.id)])], at: t.at });
+    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, held: outside.length || waived ? outside : formless.map((r) => r.id), at: t.at });
   }
   /** Your one answer about outside text or a formless surface: the definition locks, with the requirements it held or without them. */
   answered(delivery: Delivery): void {

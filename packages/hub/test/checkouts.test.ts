@@ -225,6 +225,17 @@ describe('checkouts from where a session sits', () => {
     await s.close();
   }, 60_000);
 
+  it('a service whose form is not JSON gets no stand-in, as its early question said', async () => {
+    const { repo, service, git } = world();
+    git('commit', '-q', '--allow-empty', '-m', 'base');
+    const s = await service;
+    const { commit } = await s.snapshot(repo);
+    const c = await s.baseCheckout({ worktree: repo, onto: 'HEAD', claim: commit, own: [], surfaces: [{ kind: 'service', check: 'c', routes: ['/x'], format: 'xml' } as DeclaredSurface], runs: ['r'] });
+    expect(c.standIns).toEqual([]);
+    await s.ended(c, 'r');
+    await s.close();
+  }, 60_000);
+
   it('in a folder git partly tracks, the base sees the tree\'s bytes, the ignored rest, and nothing else of the worktree\'s', async () => {
     const { repo, service, git } = world();
     writeFileSync(join(repo, 'node_modules/patched.js'), 'broken\n');
