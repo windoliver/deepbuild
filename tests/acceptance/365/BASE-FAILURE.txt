@@ -1,0 +1,931 @@
+# #365 acceptance tests on the base commit f41a5b3e, 2026-10-31T18:43Z, Node v24.22.0, on a reference Mac (Mac15,7, mains power)
+# Expected: every test fails for the missing #365 surface, but four that say why they pass.
+# - The market, brief and tally plug-ins' conformance runs stop at "deep.schedule is not a function": the runtime has
+#   no deep.schedule (nor deep.send), so nothing after install-check-load runs (AC1-AC4, AC6-AC9, AC11-AC13, AC10's
+#   fire test). The brief plug-in with no schedule (AC5's send) loads, and stops at "h.setSendRule is not a function".
+# - AC10: the perf lane has none of the three tasks; the 100,000-row lookups miss the action call's 10 s deadline
+#   (#363's store.get reads the whole kind each call); the store has no quota (100 of 100 puts taken).
+# - Passing, as controls: AC5's schema refusal, its write-then-throw report and the "as did not run" wrong program run
+#   on #363's host, which already does both (regression protection; the criterion fails on its send half); AC10's
+#   source-call timing runs on #364's readSource and passes here (1.21, 0.83, 2.11, 0.71, 0.76 ms against 5 ms,
+#   judgeLimit PASS on this reference Mac), guarding the budget as #365 adds to it.
+# tsc fails on the same missing names (ScheduleRow, ScheduleRun, SendRow, tick, idle, schedules, runs, sends,
+# editSchedule, runNow, resumeSchedule, subscribeNotice, setSendRule) and the implicit anys they cause; no other error.
+# Against a stub declaring that surface (README, The surface under test), tsc reports no error in these files.
+
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/365 --no-file-parallelism
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-365-b1e224/tests/acceptance/365
+
+ ❯ budgets.test.ts (5 tests | 4 failed) 54332ms
+   ❯ AC10 #365.db4ac3e6 Budgets, on the reference Mac in the local preflight, compared with the merge base: a source call adds under 5 ms beyond the network; a store query over 100,000 rows takes under 10 ms at p95; schedules fire within 1 s; each plug-in's store stays within its declared quota (5)
+     × AC10 the perf lane has a task for each timing, and the budgets are valid against the merge base's 487ms
+     × AC10 a store query over 100,000 rows takes under 10 ms at p95 (five runs of 200 lookups after a warm-up) 44376ms
+     × AC10 schedules fire within 1 s: a five-second schedule's job starts within 1 s of its slot (five firings after a warm-up) 2905ms
+     × AC10 a plug-in's store stays within its declared quota: puts past 4,096 bytes are refused, naming the quota, and the store holds no more 793ms
+ ❯ sends.test.ts (7 tests | 7 failed) 10054ms
+   ❯ AC3 #365.f05c3dba A retried send goes out once, also when power is cut right after its key is claimed and its request goes out, under the test VFS that drops writes not yet synced; a hub that claims send keys with `synchronous=NORMAL` loses the claim, sends again and fails this test, naming the key (3)
+     × AC3 the Monday brief run again by Run now the same day doesn't send again 1878ms
+     × AC3 power cut right after the key is claimed and the request went out: after the restart, run again, the brief went out once 1057ms
+     × AC3 (wrong program) a hub that claims send keys with synchronous=NORMAL loses the claim at the cut and sends again, named by the key 558ms
+   ❯ AC11 #365.7d93d1de Under the standing rule "my weekly summary, to me", the weekly brief's runs on two Mondays with different content each go out with no ask, each recording its plan's digest; the same plug-in sending to you and a second address, or on a daily schedule, raises one authority ask naming what changed; a rule matched by recipient kind alone lets the second address through and fails this test (4)
+     × AC11 the weekly brief to you on 2026-11-02 and 2026-11-09 goes out each Monday with no ask, each send recording its own plan digest 831ms
+     × AC11 the weekly brief to you and a second address raises one authority ask naming the second address, and nothing goes out 1432ms
+     × AC11 the brief to you on a daily schedule raises one authority ask naming the daily schedule, and nothing goes out 1081ms
+     × AC11 (wrong program) a rule matched by recipient kind alone lets the brief to the second address go out, and fails 1399ms
+ ❯ outcomes.test.ts (9 tests | 9 failed) 19255ms
+   ❯ AC6 #365.84ae7874 A five-minute price schedule on a controlled clock, its market key removed at 00:00 and not added back, gives in 24 hours one BLOCKED claim naming the key and no runs after the first; a schedule that keeps running records 288 FAILs and fails this test, naming the count. In a second run, adding the key back at 12:02 starts a run at 12:02, and the claim passes on the reading it records (3)
+     × AC6 the key removed at 00:00 and never added back: in 24 hours one BLOCKED claim naming market_key, and no run after it 2930ms
+     × AC6 (wrong program) a schedule that keeps running records 288 FAILs in the 24 hours, named by the count 1369ms
+     × AC6 the key removed at 00:00 and added back at 12:02: one BLOCKED claim before, then a run at 12:02 that passes on the reading it records 1620ms
+   ❯ AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run (6)
+     × AC7 429 to the 10:00 run and the next two calls: the 10:00 run is INCONCLUSIVE, calls at 10:05, 10:15 and 10:35, then the schedule resumes, and no run is FAIL 1190ms
+     × AC7 400 to every call: runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, then the schedule pauses with you as the claim's owner and runs nothing until you resume it 1179ms
+     × AC7 (wrong program) a schedule that keeps its five-minute cadence through the 429s fails, naming the run at 10:10 778ms
+     × AC7 (wrong program) a schedule that keeps its five-minute cadence through the 400s fails, naming the run at 10:05 1066ms
+     × AC7 (wrong program) a schedule that records the 429s as FAIL fails, naming the 10:00 run 2293ms
+     × AC7 (wrong program) a schedule that pauses before the fifth FAIL fails, naming the run at 12:30 1653ms
+ ❯ actions.test.ts (5 tests | 2 failed) 4248ms
+   ❯ AC5 #365.5e6c187d A `set-alert` call its schema refuses records no `action.entered` and reaches the agent as did not run; a handler that writes the alert and then throws records `action.reported` with that write in `changed`, `verified: unverified` and the error; and a send whose test provider never answers before the hub is stopped reads unknown after the restart, with no second request reaching the provider. A hub that reports the throwing call as did not run, or sends again, fails, naming the call (5)
+     × AC5 a send whose provider never answers before the hub is stopped reads unknown after the restart, and no second request reaches the provider 763ms
+     × AC5 (wrong program) a hub that sends the unanswered send again at its next start fails, naming the call 779ms
+ ❯ killed.test.ts (5 tests | 5 failed) 3023ms
+   ❯ AC8 #365.40d6759a A schedule run whose plug-in host process is killed before its send's request, after the request and before the provider answers, and after the answer is recorded is INVALID each time and reads not sent, unknown and sent; a hub that records a killed run as FAIL, or reads a send as sent with no recorded answer, fails, naming the send's key (5)
+     × AC8 killed before its send's request: INVALID, and the send reads not sent 1059ms
+     × AC8 killed after the request, before the provider answers: INVALID, and the send reads unknown 305ms
+     × AC8 killed after the answer is recorded: INVALID, and the send reads sent 475ms
+     × AC8 (wrong program) a hub that records the killed run as FAIL fails, naming the send's key 517ms
+     × AC8 (wrong program) a hub that reads the unanswered send as sent fails, naming the send's key 406ms
+ ❯ schedules.test.ts (4 tests | 4 failed) 3451ms
+   ❯ AC2 #365.97c8a041 A schedule never overlaps itself and catches up once after sleep (2)
+     × AC2 a five-minute run held from 10:00 to 10:20 has no second run beside it, and at most one follows it for the slots it covered 1247ms
+     × AC2 after an hour asleep from 10:01 to 11:02, the five-minute schedule runs once on waking, then keeps its cadence 948ms
+   ❯ AC12 #365.3ca5abe2 A schedule last run at 08:00 and edited at 09:00 shows its last result from 08:00; a list that shows 09:00 as the last run fails this test (2)
+     × AC12 edited at 09:00, the row's last result is the 08:00 run's 413ms
+     × AC12 (wrong program) a list that takes the last run from when the schedule was saved fails, showing 09:00 460ms
+ ❯ stopped.test.ts (2 tests | 2 failed) 2871ms
+   ❯ AC13 #365.6d5ba1fd Stopping the hub with one run accepted and one queued resumes the first once and records the second as stopped before dispatch; a hub that sends both again fails this test, naming the run (2)
+     × AC13 after the restart the accepted run resumes once, its send not made again, and the queued run is recorded as stopped before dispatch 1252ms
+     × AC13 (wrong program) a hub that sends both runs again fails, naming each run 1398ms
+ ❯ removal.test.ts (3 tests | 3 failed) 2844ms
+   ❯ AC9 #365.faeb616a With the market key used by the price source, the five-minute schedule and a check the plug-in registers, removing it on the trusted path first lists exactly those three as going BLOCKED and changes nothing until you confirm, and cancelling leaves the key in the OS secret store; a remove that deletes at once, or a list that leaves one out, fails, naming what's missing (3)
+     × AC9 the remove lists exactly the source, the schedule and the check; until your yes nothing changes, and cancelling leaves the key; your yes to that list removes it 1282ms
+     × AC9 (wrong program) a remove that deletes the key at once fails, naming the key leaving the store before your yes 666ms
+     × AC9 (wrong program) a list that leaves the check out fails, naming the check 636ms
+ ❯ notices.test.ts (2 tests | 2 failed) 1654ms
+   ❯ AC1 #365.e88a0414 A notice on a stale reading is refused (1)
+     × AC1 a notice citing the run's own fresh reading is sent; one citing a reading past its freshness is refused, and nothing records it 573ms
+   ❯ AC4 #365.77db7849 A plug-in can't send a notice nobody subscribed to (1)
+     × AC4 with you subscribed to NVDA>200 only, the plug-in's notice for NVDA>200 is sent and its notice for AAPL>100 is refused, and nothing records it 701ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 38 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  actions.test.ts > AC5 #365.5e6c187d A `set-alert` call its schema refuses records no `action.entered` and reaches the agent as did not run; a handler that writes the alert and then throws records `action.reported` with that write in `changed`, `verified: unverified` and the error; and a send whose test provider never answers before the hub is stopped reads unknown after the restart, with no second request reaching the provider. A hub that reports the throwing call as did not run, or sends again, fails, naming the call > AC5 a send whose provider never answers before the hub is stopped reads unknown after the restart, and no second request reaches the provider
+TypeError: h.setSendRule is not a function
+ ❯ unanswered actions.test.ts:66:13
+     64|     const h = await openHost(w, seams);
+     65|     await installAndLoad(h, await briefPackage({ schedules: [], to: [M…
+     66|     await h.setSendRule(YOU, { sentence: 'my digest, to me', piece: BR…
+       |             ^
+     67|     const key = 'digest-2026-11-03';
+     68|     void h.callAction({ action: 'ext.brief.send_digest', target: { han…
+ ❯ actions.test.ts:87:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/38]⎯
+
+ FAIL  actions.test.ts > AC5 #365.5e6c187d A `set-alert` call its schema refuses records no `action.entered` and reaches the agent as did not run; a handler that writes the alert and then throws records `action.reported` with that write in `changed`, `verified: unverified` and the error; and a send whose test provider never answers before the hub is stopped reads unknown after the restart, with no second request reaching the provider. A hub that reports the throwing call as did not run, or sends again, fails, naming the call > AC5 (wrong program) a hub that sends the unanswered send again at its next start fails, naming the call
+TypeError: h.setSendRule is not a function
+ ❯ unanswered actions.test.ts:66:13
+     64|     const h = await openHost(w, seams);
+     65|     await installAndLoad(h, await briefPackage({ schedules: [], to: [M…
+     66|     await h.setSendRule(YOU, { sentence: 'my digest, to me', piece: BR…
+       |             ^
+     67|     const key = 'digest-2026-11-03';
+     68|     void h.callAction({ action: 'ext.brief.send_digest', target: { han…
+ ❯ actions.test.ts:92:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/38]⎯
+
+ FAIL  budgets.test.ts > AC10 #365.db4ac3e6 Budgets, on the reference Mac in the local preflight, compared with the merge base: a source call adds under 5 ms beyond the network; a store query over 100,000 rows takes under 10 ms at p95; schedules fire within 1 s; each plug-in's store stays within its declared quota > AC10 the perf lane has a task for each timing, and the budgets are valid against the merge base's
+AssertionError: timings with no perf-lane task to compare with the merge base: expected [ 'extension-source-call', …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "extension-source-call",
++   "extension-store-query",
++   "extension-schedule-fire",
++ ]
+
+ ❯ budgets.test.ts:86:138
+     84|     }
+     85|     validateBudgets(current, baseBudgets);
+     86|     expect(TASKS.filter((t) => !current.tasks.some((x) => x.id === t))…
+       |                                                                                                                                          ^
+     87|   });
+     88|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/38]⎯
+
+ FAIL  budgets.test.ts > AC10 #365.db4ac3e6 Budgets, on the reference Mac in the local preflight, compared with the merge base: a source call adds under 5 ms beyond the network; a store query over 100,000 rows takes under 10 ms at p95; schedules fire within 1 s; each plug-in's store stays within its declared quota > AC10 a store query over 100,000 rows takes under 10 ms at p95 (five runs of 200 lookups after a warm-up)
+Error: ext.tally.lookup: {"status":"refused","reason":"test/tally's ext.tally.lookup failed","started":true}
+ ❯ callTally budgets.test.ts:70:34
+     68| const callTally = async (h: ExtensionHost, action: string, input: unkn…
+     69|   const r = await h.callAction({ action, target: { handle: `ext:${TALL…
+     70|   if (r.status !== 'done') throw Error(`${action}: ${JSON.stringify(r)…
+       |                                  ^
+     71|   return r.output as Record<string, unknown>;
+     72| };
+ ❯ once budgets.test.ts:129:19
+ ❯ budgets.test.ts:133:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/38]⎯
+
+ FAIL  budgets.test.ts > AC10 #365.db4ac3e6 Budgets, on the reference Mac in the local preflight, compared with the merge base: a source call adds under 5 ms beyond the network; a store query over 100,000 rows takes under 10 ms at p95; schedules fire within 1 s; each plug-in's store stays within its declared quota > AC10 schedules fire within 1 s: a five-second schedule's job starts within 1 s of its slot (five firings after a warm-up)
+AssertionError: test/tally@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ tally budgets.test.ts:65:3
+ ❯ budgets.test.ts:141:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/38]⎯
+
+ FAIL  budgets.test.ts > AC10 #365.db4ac3e6 Budgets, on the reference Mac in the local preflight, compared with the merge base: a source call adds under 5 ms beyond the network; a store query over 100,000 rows takes under 10 ms at p95; schedules fire within 1 s; each plug-in's store stays within its declared quota > AC10 a plug-in's store stays within its declared quota: puts past 4,096 bytes are refused, naming the quota, and the store holds no more
+AssertionError: items the store took against a 4,096-byte quota (each at least 117 bytes): {"taken":100,"refusal":""}: expected 100 to be less than or equal to 35
+ ❯ budgets.test.ts:157:129
+    155|     const taken = out.taken as number;
+    156|     const itemBytes = JSON.stringify({ n: 99, pad: 'x'.repeat(100) }).…
+    157|     expect(taken, `items the store took against a 4,096-byte quota (ea…
+       |                                                                                                                                 ^
+    158|     expect(taken, 'the store took items up to its quota').toBeGreaterT…
+    159|     expect(String(out.refusal), 'the refusal of a put past the quota')…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/38]⎯
+
+ FAIL  killed.test.ts > AC8 #365.40d6759a A schedule run whose plug-in host process is killed before its send's request, after the request and before the provider answers, and after the answer is recorded is INVALID each time and reads not sent, unknown and sent; a hub that records a killed run as FAIL, or reads a send as sent with no recorded answer, fails, naming the send's key > AC8 killed before its send's request: INVALID, and the send reads not sent
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ killedAt killed.test.ts:35:3
+ ❯ killed.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/38]⎯
+
+ FAIL  killed.test.ts > AC8 #365.40d6759a A schedule run whose plug-in host process is killed before its send's request, after the request and before the provider answers, and after the answer is recorded is INVALID each time and reads not sent, unknown and sent; a hub that records a killed run as FAIL, or reads a send as sent with no recorded answer, fails, naming the send's key > AC8 killed after the request, before the provider answers: INVALID, and the send reads unknown
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ killedAt killed.test.ts:35:3
+ ❯ killed.test.ts:62:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/38]⎯
+
+ FAIL  killed.test.ts > AC8 #365.40d6759a A schedule run whose plug-in host process is killed before its send's request, after the request and before the provider answers, and after the answer is recorded is INVALID each time and reads not sent, unknown and sent; a hub that records a killed run as FAIL, or reads a send as sent with no recorded answer, fails, naming the send's key > AC8 killed after the answer is recorded: INVALID, and the send reads sent
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ killedAt killed.test.ts:35:3
+ ❯ killed.test.ts:68:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/38]⎯
+
+ FAIL  killed.test.ts > AC8 #365.40d6759a A schedule run whose plug-in host process is killed before its send's request, after the request and before the provider answers, and after the answer is recorded is INVALID each time and reads not sent, unknown and sent; a hub that records a killed run as FAIL, or reads a send as sent with no recorded answer, fails, naming the send's key > AC8 (wrong program) a hub that records the killed run as FAIL fails, naming the send's key
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ killedAt killed.test.ts:35:3
+ ❯ killed.test.ts:74:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/38]⎯
+
+ FAIL  killed.test.ts > AC8 #365.40d6759a A schedule run whose plug-in host process is killed before its send's request, after the request and before the provider answers, and after the answer is recorded is INVALID each time and reads not sent, unknown and sent; a hub that records a killed run as FAIL, or reads a send as sent with no recorded answer, fails, naming the send's key > AC8 (wrong program) a hub that reads the unanswered send as sent fails, naming the send's key
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ killedAt killed.test.ts:35:3
+ ❯ killed.test.ts:80:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/38]⎯
+
+ FAIL  notices.test.ts > AC1 #365.e88a0414 A notice on a stale reading is refused > AC1 a notice citing the run's own fresh reading is sent; one citing a reading past its freshness is refused, and nothing records it
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ notices.test.ts:15:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/38]⎯
+
+ FAIL  notices.test.ts > AC4 #365.77db7849 A plug-in can't send a notice nobody subscribed to > AC4 with you subscribed to NVDA>200 only, the plug-in's notice for NVDA>200 is sent and its notice for AAPL>100 is refused, and nothing records it
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ notices.test.ts:33:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/38]⎯
+
+ FAIL  outcomes.test.ts > AC6 #365.84ae7874 A five-minute price schedule on a controlled clock, its market key removed at 00:00 and not added back, gives in 24 hours one BLOCKED claim naming the key and no runs after the first; a schedule that keeps running records 288 FAILs and fails this test, naming the count. In a second run, adding the key back at 12:02 starts a run at 12:02, and the claim passes on the reading it records > AC6 the key removed at 00:00 and never added back: in 24 hours one BLOCKED claim naming market_key, and no run after it
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ outcomes.test.ts:28:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/38]⎯
+
+ FAIL  outcomes.test.ts > AC6 #365.84ae7874 A five-minute price schedule on a controlled clock, its market key removed at 00:00 and not added back, gives in 24 hours one BLOCKED claim naming the key and no runs after the first; a schedule that keeps running records 288 FAILs and fails this test, naming the count. In a second run, adding the key back at 12:02 starts a run at 12:02, and the claim passes on the reading it records > AC6 (wrong program) a schedule that keeps running records 288 FAILs in the 24 hours, named by the count
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ outcomes.test.ts:39:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/38]⎯
+
+ FAIL  outcomes.test.ts > AC6 #365.84ae7874 A five-minute price schedule on a controlled clock, its market key removed at 00:00 and not added back, gives in 24 hours one BLOCKED claim naming the key and no runs after the first; a schedule that keeps running records 288 FAILs and fails this test, naming the count. In a second run, adding the key back at 12:02 starts a run at 12:02, and the claim passes on the reading it records > AC6 the key removed at 00:00 and added back at 12:02: one BLOCKED claim before, then a run at 12:02 that passes on the reading it records
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ outcomes.test.ts:48:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/38]⎯
+
+ FAIL  outcomes.test.ts > AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run > AC7 429 to the 10:00 run and the next two calls: the 10:00 run is INCONCLUSIVE, calls at 10:05, 10:15 and 10:35, then the schedule resumes, and no run is FAIL
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ outcomes.test.ts:83:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/38]⎯
+
+ FAIL  outcomes.test.ts > AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run > AC7 400 to every call: runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, then the schedule pauses with you as the claim's owner and runs nothing until you resume it
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ outcomes.test.ts:89:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/38]⎯
+
+ FAIL  outcomes.test.ts > AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run > AC7 (wrong program) a schedule that keeps its five-minute cadence through the 429s fails, naming the run at 10:10
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ wrong outcomes.test.ts:100:35
+ ❯ outcomes.test.ts:106:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/38]⎯
+
+ FAIL  outcomes.test.ts > AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run > AC7 (wrong program) a schedule that keeps its five-minute cadence through the 400s fails, naming the run at 10:05
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ wrong outcomes.test.ts:100:35
+ ❯ outcomes.test.ts:111:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/38]⎯
+
+ FAIL  outcomes.test.ts > AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run > AC7 (wrong program) a schedule that records the 429s as FAIL fails, naming the 10:00 run
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ wrong outcomes.test.ts:100:35
+ ❯ outcomes.test.ts:116:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/38]⎯
+
+ FAIL  outcomes.test.ts > AC7 #365.fe146d14 With the recorded source answering 429 to the 10:00 run and to the next two calls, then answering, the 10:00 run is INCONCLUSIVE, calls go to the source at 10:05, 10:15 and 10:35, the schedule resumes after the third, and no run is FAIL; with it answering 400 to every call, runs end FAIL at 10:00, 10:10, 10:30, 11:10 and 12:30, and the schedule then pauses with you as the claim's owner and makes no run until you resume it. A schedule that keeps its five-minute cadence through either, records the 429s as FAIL, or pauses before the fifth FAIL fails, naming the run > AC7 (wrong program) a schedule that pauses before the fifth FAIL fails, naming the run at 12:30
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ wrong outcomes.test.ts:100:35
+ ❯ outcomes.test.ts:121:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/38]⎯
+
+ FAIL  removal.test.ts > AC9 #365.faeb616a With the market key used by the price source, the five-minute schedule and a check the plug-in registers, removing it on the trusted path first lists exactly those three as going BLOCKED and changes nothing until you confirm, and cancelling leaves the key in the OS secret store; a remove that deletes at once, or a list that leaves one out, fails, naming what's missing > AC9 the remove lists exactly the source, the schedule and the check; until your yes nothing changes, and cancelling leaves the key; your yes to that list removes it
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ listed removal.test.ts:19:27
+ ❯ removal.test.ts:28:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/38]⎯
+
+ FAIL  removal.test.ts > AC9 #365.faeb616a With the market key used by the price source, the five-minute schedule and a check the plug-in registers, removing it on the trusted path first lists exactly those three as going BLOCKED and changes nothing until you confirm, and cancelling leaves the key in the OS secret store; a remove that deletes at once, or a list that leaves one out, fails, naming what's missing > AC9 (wrong program) a remove that deletes the key at once fails, naming the key leaving the store before your yes
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ listed removal.test.ts:19:27
+ ❯ removal.test.ts:49:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/38]⎯
+
+ FAIL  removal.test.ts > AC9 #365.faeb616a With the market key used by the price source, the five-minute schedule and a check the plug-in registers, removing it on the trusted path first lists exactly those three as going BLOCKED and changes nothing until you confirm, and cancelling leaves the key in the OS secret store; a remove that deletes at once, or a list that leaves one out, fails, naming what's missing > AC9 (wrong program) a list that leaves the check out fails, naming the check
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ listed removal.test.ts:19:27
+ ❯ removal.test.ts:54:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/38]⎯
+
+ FAIL  schedules.test.ts > AC2 #365.97c8a041 A schedule never overlaps itself and catches up once after sleep > AC2 a five-minute run held from 10:00 to 10:20 has no second run beside it, and at most one follows it for the slots it covered
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ schedules.test.ts:15:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/38]⎯
+
+ FAIL  schedules.test.ts > AC2 #365.97c8a041 A schedule never overlaps itself and catches up once after sleep > AC2 after an hour asleep from 10:01 to 11:02, the five-minute schedule runs once on waking, then keeps its cadence
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ schedules.test.ts:44:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/38]⎯
+
+ FAIL  schedules.test.ts > AC12 #365.3ca5abe2 A schedule last run at 08:00 and edited at 09:00 shows its last result from 08:00; a list that shows 09:00 as the last run fails this test > AC12 edited at 09:00, the row's last result is the 08:00 run's
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ scenario schedules.test.ts:60:22
+ ❯ schedules.test.ts:72:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/38]⎯
+
+ FAIL  schedules.test.ts > AC12 #365.3ca5abe2 A schedule last run at 08:00 and edited at 09:00 shows its last result from 08:00; a list that shows 09:00 as the last run fails this test > AC12 (wrong program) a list that takes the last run from when the schedule was saved fails, showing 09:00
+AssertionError: test/market@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ marketWorld helpers.ts:377:3
+ ❯ scenario schedules.test.ts:60:22
+ ❯ schedules.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/38]⎯
+
+ FAIL  sends.test.ts > AC3 #365.f05c3dba A retried send goes out once, also when power is cut right after its key is claimed and its request goes out, under the test VFS that drops writes not yet synced; a hub that claims send keys with `synchronous=NORMAL` loses the claim, sends again and fails this test, naming the key > AC3 the Monday brief run again by Run now the same day doesn't send again
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ sends.test.ts:40:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/38]⎯
+
+ FAIL  sends.test.ts > AC3 #365.f05c3dba A retried send goes out once, also when power is cut right after its key is claimed and its request goes out, under the test VFS that drops writes not yet synced; a hub that claims send keys with `synchronous=NORMAL` loses the claim, sends again and fails this test, naming the key > AC3 power cut right after the key is claimed and the request went out: after the restart, run again, the brief went out once
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ cut sends.test.ts:65:29
+ ❯ sends.test.ts:91:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/38]⎯
+
+ FAIL  sends.test.ts > AC3 #365.f05c3dba A retried send goes out once, also when power is cut right after its key is claimed and its request goes out, under the test VFS that drops writes not yet synced; a hub that claims send keys with `synchronous=NORMAL` loses the claim, sends again and fails this test, naming the key > AC3 (wrong program) a hub that claims send keys with synchronous=NORMAL loses the claim at the cut and sends again, named by the key
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ cut sends.test.ts:65:29
+ ❯ sends.test.ts:95:47
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/38]⎯
+
+ FAIL  sends.test.ts > AC11 #365.7d93d1de Under the standing rule "my weekly summary, to me", the weekly brief's runs on two Mondays with different content each go out with no ask, each recording its plan's digest; the same plug-in sending to you and a second address, or on a daily schedule, raises one authority ask naming what changed; a rule matched by recipient kind alone lets the second address through and fails this test > AC11 the weekly brief to you on 2026-11-02 and 2026-11-09 goes out each Monday with no ask, each send recording its own plan digest
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ sends.test.ts:104:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/38]⎯
+
+ FAIL  sends.test.ts > AC11 #365.7d93d1de Under the standing rule "my weekly summary, to me", the weekly brief's runs on two Mondays with different content each go out with no ask, each recording its plan's digest; the same plug-in sending to you and a second address, or on a daily schedule, raises one authority ask naming what changed; a rule matched by recipient kind alone lets the second address through and fails this test > AC11 the weekly brief to you and a second address raises one authority ask naming the second address, and nothing goes out
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ changed sends.test.ts:120:22
+ ❯ sends.test.ts:135:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/38]⎯
+
+ FAIL  sends.test.ts > AC11 #365.7d93d1de Under the standing rule "my weekly summary, to me", the weekly brief's runs on two Mondays with different content each go out with no ask, each recording its plan's digest; the same plug-in sending to you and a second address, or on a daily schedule, raises one authority ask naming what changed; a rule matched by recipient kind alone lets the second address through and fails this test > AC11 the brief to you on a daily schedule raises one authority ask naming the daily schedule, and nothing goes out
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ changed sends.test.ts:120:22
+ ❯ sends.test.ts:140:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/38]⎯
+
+ FAIL  sends.test.ts > AC11 #365.7d93d1de Under the standing rule "my weekly summary, to me", the weekly brief's runs on two Mondays with different content each go out with no ask, each recording its plan's digest; the same plug-in sending to you and a second address, or on a daily schedule, raises one authority ask naming what changed; a rule matched by recipient kind alone lets the second address through and fails this test > AC11 (wrong program) a rule matched by recipient kind alone lets the brief to the second address go out, and fails
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ briefWorld sends.test.ts:30:3
+ ❯ changed sends.test.ts:120:22
+ ❯ sends.test.ts:145:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/38]⎯
+
+ FAIL  stopped.test.ts > AC13 #365.6d5ba1fd Stopping the hub with one run accepted and one queued resumes the first once and records the second as stopped before dispatch; a hub that sends both again fails this test, naming the run > AC13 after the restart the accepted run resumes once, its send not made again, and the queued run is recorded as stopped before dispatch
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ stopped stopped.test.ts:33:3
+ ❯ stopped.test.ts:75:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/38]⎯
+
+ FAIL  stopped.test.ts > AC13 #365.6d5ba1fd Stopping the hub with one run accepted and one queued resumes the first once and records the second as stopped before dispatch; a hub that sends both again fails this test, naming the run > AC13 (wrong program) a hub that sends both runs again fails, naming each run
+AssertionError: test/brief@1.0.0's conformance: its code didn't register in the platform sandbox: deep.schedule is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:336:95
+    334|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    335|   const checked = await h.check(p);
+    336|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    337|   const load = await h.load(p);
+    338|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ stopped stopped.test.ts:33:3
+ ❯ stopped.test.ts:79:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/38]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  38 failed | 4 passed (42)
+   Start at  11:40:55
+   Duration  121.84s (tests 89%, import 10%, transform 1%)
+
+    Isolate  9 workers spawned · ~829ms startup each (spawn + environment, per file)
+             at least ~6.63s faster with isolate: false — reuses workers across files instead of one per file
+
+(vitest exit 1)
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/365/tsconfig.json
+
+tests/acceptance/365/actions.test.ts(66,13): error TS2339: Property 'setSendRule' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/actions.test.ts(80,19): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(25,93): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRow'.
+tests/acceptance/365/helpers.ts(25,106): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRun'.
+tests/acceptance/365/helpers.ts(25,132): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'SendRow'.
+tests/acceptance/365/helpers.ts(420,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(421,13): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(433,102): error TS2339: Property 'runs' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(433,132): error TS7006: Parameter 'a' implicitly has an 'any' type.
+tests/acceptance/365/helpers.ts(433,135): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/365/helpers.ts(435,24): error TS2339: Property 'schedules' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(435,43): error TS7006: Parameter 'r' implicitly has an 'any' type.
+tests/acceptance/365/helpers.ts(436,94): error TS2339: Property 'schedules' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(439,103): error TS2339: Property 'sends' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/helpers.ts(439,118): error TS7006: Parameter 's' implicitly has an 'any' type.
+tests/acceptance/365/judges.ts(5,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRow'.
+tests/acceptance/365/judges.ts(5,28): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRun'.
+tests/acceptance/365/judges.ts(5,41): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'SendRow'.
+tests/acceptance/365/judges.ts(150,32): error TS7006: Parameter 's' implicitly has an 'any' type.
+tests/acceptance/365/killed.test.ts(12,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRun'.
+tests/acceptance/365/killed.test.ts(36,47): error TS2339: Property 'setSendRule' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/killed.test.ts(42,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/notices.test.ts(18,13): error TS2339: Property 'subscribeNotice' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/notices.test.ts(36,13): error TS2339: Property 'subscribeNotice' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/outcomes.test.ts(56,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/outcomes.test.ts(57,13): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/outcomes.test.ts(65,41): error TS7006: Parameter 'ch' implicitly has an 'any' type.
+tests/acceptance/365/outcomes.test.ts(92,13): error TS2339: Property 'resumeSchedule' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(21,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(26,15): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(33,13): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(65,13): error TS2339: Property 'editSchedule' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(66,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(67,13): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/schedules.test.ts(80,39): error TS2339: Property 'schedules' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(31,37): error TS2339: Property 'setSendRule' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(43,13): error TS2339: Property 'runNow' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(44,13): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(71,12): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(80,19): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(81,19): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(82,19): error TS2339: Property 'runNow' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(83,19): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/sends.test.ts(124,12): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/stopped.test.ts(34,11): error TS2339: Property 'setSendRule' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/stopped.test.ts(37,11): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/stopped.test.ts(42,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/stopped.test.ts(50,13): error TS2339: Property 'tick' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/stopped.test.ts(61,17): error TS2339: Property 'idle' does not exist on type 'ExtensionHost'.
+tests/acceptance/365/twins.ts(6,69): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRow'.
+tests/acceptance/365/twins.ts(6,82): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ScheduleRun'.
+tests/acceptance/365/twins.ts(125,119): error TS7006: Parameter 's' implicitly has an 'any' type.
+(tsc exit 2)

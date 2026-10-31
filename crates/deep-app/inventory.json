@@ -1,0 +1,59 @@
+{
+  "panels": [
+    {
+      "panel": "deepbuild/extension",
+      "entry": "crates/deep-app/src/views.rs Slot",
+      "roles": [],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/home",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Home",
+      "roles": [
+        "ink_primary"
+      ],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/line",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Line",
+      "roles": [
+        "ink_primary",
+        "raised"
+      ],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/needs-you",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::NeedsYou",
+      "roles": [
+        "ink_primary",
+        "ink_secondary",
+        "ink_tertiary"
+      ],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/session",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Session",
+      "roles": [
+        "divider",
+        "ink_primary",
+        "ink_secondary",
+        "session_line",
+        "session_readout"
+      ],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/sidebar",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Sidebar",
+      "roles": [
+        "hover",
+        "ink_primary",
+        "raised"
+      ],
+      "literals": []
+    }
+  ]
+}

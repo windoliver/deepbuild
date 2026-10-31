@@ -42,6 +42,11 @@ export const API = Object.freeze([
   { method: 'deep.store.list', needs: null },
   // #44: a lease from the kernel's one table, held by the package itself.
   { method: 'deep.lease', needs: null },
+  // #365: a job on the hub's timer, whose run reads sources through `deep.schedule.read` (its context's `read`), and a
+  // send that leaves your machine for a person, through a host the grant names.
+  { method: 'deep.schedule', needs: null },
+  { method: 'deep.schedule.read', needs: null },
+  { method: 'deep.send', needs: 'hosts' },
   // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
   // only from the panel you focused, through the app.
   { method: 'deep.terminal.open', needs: 'run_as_you' },
@@ -75,6 +80,8 @@ export function extensionSide(call, load) {
   const indexes = new Map();
   // Its sources by name (#364): a polled one's parse and a stream one's read stay here; the host sends the rest.
   const sources = new Map();
+  // Its scheduled jobs by name (#365), asked by the host for each run.
+  const schedules = new Map();
   // Each returns how to drop what it kept.
   const keep = {
     'deep.registerCheck': keeper(checks),
@@ -87,6 +94,7 @@ export function extensionSide(call, load) {
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.registerEnvironment': keeper(environments),
     'deep.registerSource': keeper(sources),
+    'deep.schedule': (name, _declared, job) => keeper(schedules)(name, job),
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
@@ -186,6 +194,13 @@ export function extensionSide(call, load) {
         const source = sources.get(params?.name);
         if (!source) throw Error(`no source ${params?.name} is registered here`);
         return method === 'source.parse' ? await source.parse(params.answer) : await source.read(params.stream, params.cursor, params.limit);
+      }
+      // A run of a scheduled job: its calls carry the run's scope, and its context reads sources through the hub.
+      if (method === 'schedule.run') {
+        const job = schedules.get(params?.name);
+        if (!job) throw Error(`no schedule ${params?.name} is registered here`);
+        const ctx = { run: params.run, at: params.at, read: (source) => call('deep.schedule.read', [source], params.scope) };
+        return (await scope.run(params.scope, () => job(ctx))) ?? null;
       }
       if (method === 'output') {
         const fn = outputs.get(params?.name);
