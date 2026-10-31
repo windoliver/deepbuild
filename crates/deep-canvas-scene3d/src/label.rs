@@ -56,7 +56,7 @@ pub struct Labels {
     atlas: Atlas,
     /// The pages as frames last took them, copied again only at a new generation.
     pages: Vec<AtlasPage>,
-    runs: BTreeMap<(String, Role, u32), Shaped>,
+    runs: BTreeMap<(String, Role, u32), Arc<Shaped>>,
     /// #381 AC1's wrong program (`deep-gpu run --planted label_mask`): the base's path, each label
     /// shaped at a fixed em for a mask of its own, with nothing placed in the atlas.
     pub fixed_em: bool,
