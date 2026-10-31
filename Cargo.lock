@@ -1901,6 +1901,7 @@ dependencies = [
  "gpui-pre-apple",
  "gpui-shell",
  "image",
+ "libc",
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
@@ -1937,6 +1938,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-apple",
  "image",
+ "libc",
  "serde_json",
  "vello_cpu",
 ]
@@ -1995,6 +1997,7 @@ dependencies = [
  "deep-text",
  "deep-text-gpui",
  "gpui-kit",
+ "gpui-pre-apple",
  "image",
  "libc",
  "serde_json",

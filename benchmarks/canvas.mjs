@@ -1,4 +1,4 @@
-// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379 and #383): node
+// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379, #383 and #854): node
 // benchmarks/canvas.mjs <task>. Each drives a built binary over JSON lines, as the acceptance tests do: `deep-show run`
 // for patches and the seal, `deep-canvas merge` for a merge, `deep-gpu run` for the deepest level of a 3D city.
 import { spawnSync } from 'node:child_process';
@@ -410,6 +410,7 @@ workloads['panel-pop-out'] = () => {
 
 workloads.judge = () => {
   const { current, base } = JSON.parse(readFileSync(0, 'utf8'));
+  if (EFFICIENCY[current.task]) return judgeEfficiency(current);
   const cls = current.class;
   const limits = CLASS_LIMITS[cls];
   if (!limits) throw Error(`Unknown class ${cls}`);
@@ -456,6 +457,195 @@ const terminal = (repaint) => () => {
 workloads['terminal-60hz'] = terminal(false);
 workloads['cell-grid-60hz'] = terminal(true);
 
+// #854, the efficiency bar for agent work: four tasks that time what an agent's work costs, each on a release build
+// of the binaries it times (`fingerprint.build` names the profile and toolchain), one warm-up run and five runs, each
+// run a fresh process; `--planted <name>` runs the task's wrong program. Each prints its report; `judge` holds it to
+// the task's targets in benchmarks/budgets.json, refusing a reading of any other build. The perf lane compares each
+// command with the merge base as it does every task.
+const RUNS = 5;
+const runs = (once) => {
+  once(true);
+  return Array.from({ length: RUNS }, () => once(false));
+};
+const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+function release(pkg, bin) {
+  const built = spawnSync('cargo', ['build', '--locked', '--release', '-p', pkg, '--bin', bin], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+  if (built.status !== 0) throw Error(`cargo build --release -p ${pkg} --bin ${bin} exited ${built.status}`);
+  return { ...fingerprint(), build: { profile: 'release', toolchain: toolchain() } };
+}
+/** One line of `bin args` from target/release: its parsed answer. */
+function once(bin, args, line) {
+  const out = spawnSync(join(root, 'target', 'release', bin), args, { input: `${JSON.stringify(line)}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
+  if (out.status !== 0) throw Error(`${bin} ${args.join(' ')} exited ${out.status}: ${out.stderr.slice(-2000)}`);
+  return JSON.parse(out.stdout.trim().split('\n').at(-1));
+}
+
+// The board the patch and read tasks share: 10,000 rects of one agent's layer, 100 to a row.
+const BOARD_ITEMS = 10_000;
+const boardItem = (i) => `r${String(i).padStart(5, '0')}`;
+function board() {
+  const document = { format: 1, profile: 'board', title: 'Bench board', description: 'The #854 board: 10,000 rects of one agent.', size: [1280, 800],
+    layers: { 'alpha-main': { writer: 'agent:thread-alpha', title: 'Alpha', order: 'a1' } }, items: {} };
+  for (let i = 0; i < BOARD_ITEMS; i++) {
+    const id = boardItem(i);
+    document.items[id] = { id, kind: 'rect@1', layer: 'alpha-main', name: id, order: `b${String(i).padStart(5, '0')}`,
+      params: { box: [0, 0, 8, 6], paint: { fill: { role: 'muted' } } }, at: { pos: [(i % 100) * 12, Math.floor(i / 100) * 8, 0] } };
+  }
+  return document;
+}
+/** `deep-show run` on the board as a shared document, with `calls`: the replies. */
+function onBoard(calls) {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const sessions = { 'sess-alpha': { thread: 'thread-alpha', name: 'Alpha', process: { pid: 4100, start: 1000 } } };
+    const scenario = { evidence, sessions, panels: { main: { rect: [0, 0, 1280, 800] } }, docs: { [DOC]: { panel: 'main', document: board() } }, calls,
+      ...(planted() ? { planted: planted() } : {}) };
+    const answer = once('deep-show', ['run'], scenario);
+    if (answer.ok !== true) throw Error(`deep-show answered ${JSON.stringify(answer).slice(0, 1500)}`);
+    return answer.replies;
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+}
+
+// Patch to settled frame: 200 patches a run, each moving one item of the board, each timed from its arrival to the
+// settled frame it causes, the process's CPU plus the frame's GPU time, with the nodes that frame ran by operator.
+workloads['patch-settled'] = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  const patches = Array.from({ length: 200 }, (_, k) => {
+    const id = boardItem((k * 53) % BOARD_ITEMS);
+    return { patch: ulid(k + 1), doc: DOC, base: k, reason: 'bench', ops: [{ op: 'set', id, path: `items/${id}/at/pos`, value: [k * 6, 790, 0] }] };
+  });
+  const measured = runs(() => {
+    const [settled] = onBoard([{ call: 'settle', session: 'sess-alpha', doc: DOC, patches }]);
+    if (settled.outcome !== 'settled') throw Error(`the patches didn't settle: ${JSON.stringify(settled).slice(0, 1500)}`);
+    return { p95_ms: p95(settled.samples.map((s) => s.ms)), samples: settled.samples };
+  });
+  console.log(JSON.stringify({ task: 'canvas-patch-settled', fingerprint, items: BOARD_ITEMS, patches: patches.length, runs: measured }));
+};
+
+// A scene read: deep_query's summary of the board and one paged read of 1,000 rows, each timed in the binary, each
+// reply counted in tokens by the tokenizer the codex adapter's facts pin.
+workloads['scene-read'] = async () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  const pinned = JSON.parse(readFileSync(join(root, 'adapters', 'codex.facts.json'), 'utf8')).tokenizer;
+  const installed = JSON.parse(readFileSync(join(root, 'node_modules', pinned.package, 'package.json'), 'utf8')).version;
+  if (installed !== pinned.version) throw Error(`the facts pin ${pinned.package}@${pinned.version}; ${installed} is installed`);
+  const { countTokens } = await import(`${pinned.package}/encoding/${pinned.name}`);
+  const read = (reply, rows) => {
+    if (reply.outcome !== 'answered') throw Error(`deep_query answered ${JSON.stringify(reply).slice(0, 1500)}`);
+    const text = JSON.stringify(reply.result);
+    return { ms: reply.ms, tokens: countTokens(text), bytes: Buffer.byteLength(text), rows };
+  };
+  const measured = runs(() => {
+    const [summary, page] = onBoard([{ call: 'deep_query', doc: DOC }, { call: 'deep_query', doc: DOC, page: { limit: 1000 } }]);
+    return { summary: read(summary, 0), page: { ...read(page, page.result?.rows?.length ?? 0), next: page.result?.next ?? null } };
+  });
+  console.log(JSON.stringify({ task: 'canvas-scene-read', fingerprint, items: BOARD_ITEMS,
+    tokenizer: { adapter: 'codex', name: pinned.name, version: pinned.version }, runs: measured }));
+};
+
+// Idle: a still board held in a window for 60 s of the real clock, its frames, wakeups and CPU read from the process
+// that draws it. The warm-up run holds it 5 s.
+workloads.idle = () => {
+  const fingerprint = release('deep-marks-render', 'deep-canvas-render');
+  const fixture = join('benchmarks', 'canvas', 'still.json');
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const look = { light: { ground: [250, 250, 248], ink: [28, 28, 30], muted: [120, 120, 128], accent: [40, 90, 200] } };
+  const measured = runs((warm) => {
+    const answer = once('deep-canvas-render', ['idle'], { doc, look, view: { zoom: 1, theme: 'light' }, seconds: warm ? 5 : 60, ...(planted() ? { planted: planted() } : {}) });
+    if (answer.ok !== true) throw Error(`deep-canvas-render idle answered ${JSON.stringify(answer).slice(0, 1500)}`);
+    const { ok: _, ...run } = answer;
+    return run;
+  });
+  console.log(JSON.stringify({ task: 'canvas-idle', fingerprint, fixture, seconds: 60, runs: measured }));
+};
+
+// A replica's cold start: a fresh process opens a fixture document in the app's headless window, timed from its spawn
+// (as the kernel records it) to its first settled frame, with the pipelines it compiled and whether that frame did.
+workloads['replica-cold-start'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = join('benchmarks', 'canvas', 'figure.json');
+  const look = JSON.parse(readFileSync(LOOK, 'utf8'));
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const measured = runs(() => {
+      const call = { call: 'view3d', doc: join(root, fixture), look, size: [1280, 800], frames: 1, fps: 60, cold: true };
+      const answer = once('deep-gpu', ['run', ...(planted() ? ['--planted', planted()] : [])], { out: dir, calls: [call] });
+      const cold = answer.replies?.[0]?.cold;
+      if (answer.ok !== true || !Number.isFinite(cold?.since_spawn_ms)) throw Error(`deep-gpu view3d answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      return { ms: cold.since_spawn_ms, pipelines: cold.pipelines };
+    });
+    console.log(JSON.stringify({ task: 'replica-cold-start', fingerprint, fixture, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// Each task's targets: where `judge` reads each from a run, and whether it is a count, judged on any machine.
+const EFFICIENCY = {
+  'canvas-patch-settled': { settled_p95_ms: (r) => r.p95_ms },
+  'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
+  'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
+  'replica-cold-start': { first_settled_ms: (r) => r.ms },
+};
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames']);
+
+/** What a failed target names, run by run: the frame and the nodes it ran, a reply's size, the frames drawn, the pipelines. */
+const named = {
+  settled_p95_ms: (runs) => runs.map((r, i) => {
+    const worst = r.samples.reduce((a, s) => (s.ms > a.ms ? s : a));
+    const ran = Object.entries(worst.ran).map(([op, n]) => `${op} ${n}`).join(', ');
+    return `run ${i + 1}: patch ${worst.patch} settled in frame ${worst.frame} after ${worst.ms.toFixed(3)} ms, a frame that ran ${ran}`;
+  }),
+  summary_tokens: (runs, limit) => runs.filter((r) => r.summary.tokens > limit).map((r) => `summary: ${r.summary.tokens} tokens, ${r.summary.bytes} bytes, ${r.summary.rows} rows`),
+  page_rows: (runs, limit) => runs.filter((r) => r.page.rows > limit).map((r) => `page: ${r.page.rows} rows, ${r.page.tokens} tokens, ${r.page.bytes} bytes${r.page.next === null ? ', unpaged' : ''}`),
+  frames: (runs, limit) => runs.map((r, i) => [r, i]).filter(([r]) => r.frames > limit)
+    .map(([r, i]) => `run ${i + 1} drew ${r.frames} frames while still: ${r.drawn.slice(0, 5).map((d) => `frame ${d.frame} at ${Math.round(d.at_ms)} ms`).join(', ')}${r.frames > 5 ? ', …' : ''}`),
+  first_settled_ms: (runs) => {
+    const first = [...new Set(runs.flatMap((r) => r.pipelines.filter((p) => p.on_first_frame).map((p) => p.name)))];
+    return [first.length ? `pipelines compiled on the first frame: ${first.join(', ')}` : 'no pipeline compiled on the first frame'];
+  },
+};
+
+function judgeEfficiency(current) {
+  const task = current.task;
+  const profile = current.fingerprint?.build?.profile ?? null;
+  if (profile !== 'release') {
+    console.log(JSON.stringify({ task, status: 'INVALID', profile, targets: {},
+      reason: profile === null ? 'the reading names no build profile; only a release build is timed' : `the reading comes from a ${profile} build, not release; only a release build is timed` }));
+    return;
+  }
+  const { targets } = JSON.parse(readFileSync(join(root, 'benchmarks', 'budgets.json'), 'utf8')).tasks.find((t) => t.id === task);
+  const judged = {};
+  const reasons = [];
+  for (const [name, limit] of Object.entries(targets)) {
+    const values = (current.runs ?? []).map(EFFICIENCY[task][name]);
+    let verdict;
+    // A pipeline compiled on the first frame stalls it, whatever the time (Meter and degrade ladder: pipelines
+    // compile off-screen), so it fails a cold start on any machine.
+    if (name === 'first_settled_ms' && current.runs.some((r) => r.pipelines.some((p) => p.on_first_frame))) {
+      verdict = { status: 'FAIL', limit, runs: values };
+    } else if (COUNTS.has(name)) {
+      verdict = values.length === RUNS && values.every(Number.isFinite)
+        ? (values.some((v) => v > limit) ? { status: 'FAIL', limit, runs: values } : { status: 'PASS', limit, runs: values })
+        : { status: 'BLOCKED', limit, runs: values, reason: `a count is judged on five runs, got ${JSON.stringify(values)}` };
+    } else {
+      verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint });
+    }
+    if (verdict.status === 'FAIL') {
+      verdict.reason = [`${name} over ${limit}`, ...(named[name]?.(current.runs, limit) ?? [verdict.reason])].join('; ');
+      reasons.push(verdict.reason);
+    } else if (verdict.reason) {
+      reasons.push(`${name}: ${verdict.reason}`);
+    }
+    judged[name] = verdict;
+  }
+  const statuses = Object.values(judged).map((v) => v.status);
+  const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+}
+
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
-workloads[task]();
+await workloads[task]();

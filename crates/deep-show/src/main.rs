@@ -10,6 +10,7 @@
 mod access;
 mod ask;
 mod costs;
+mod efficiency;
 mod evidence;
 mod frames;
 mod host;
@@ -471,6 +472,30 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 revise,
                 pixels: flag("pixels")?,
             })));
+        }
+        "settle" => {
+            let via = match c.get("session")? {
+                Value::String(s) => Via::Mcp(Some(s.clone())),
+                _ => return None,
+            };
+            return Some(Call::Settle(Box::new(efficiency::Settle {
+                via,
+                doc: doc()?,
+                patches: c.get("patches")?.as_array()?.clone(),
+            })));
+        }
+        "deep_query" => {
+            let page = match c.get("page") {
+                None => None,
+                Some(p) => Some((
+                    p.get("limit")?.as_u64()? as usize,
+                    match p.get("after") {
+                        None | Some(Value::Null) => None,
+                        Some(a) => Some(a.as_str()?.to_string()),
+                    },
+                )),
+            };
+            return Some(Call::Query(efficiency::Query { doc: doc()?, page }));
         }
         "shaped_runs" => {
             return Some(Call::ShapedRuns(c.get("text")?.as_str()?.to_string()));
@@ -987,6 +1012,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "packs_keyed_by_name" => Planted::PacksKeyedByName,
             "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
             "merges_in_finish_order" => Planted::MergesInFinishOrder,
+            "runs_every_node" => Planted::RunsEveryNode,
+            "unpaged" => Planted::Unpaged,
             "background_at_live_priority" => Planted::BackgroundAtLivePriority,
             "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
             "frame_index_i64_product" => Planted::FrameIndexI64Product,
