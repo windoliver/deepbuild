@@ -14,6 +14,8 @@ export const API = Object.freeze([
   { method: 'deep.registerCheck', needs: null },
   { method: 'deep.registerResolver', needs: null },
   { method: 'deep.registerSource', needs: null },
+  // #364: a handle for a secret the manifest names, never its value.
+  { method: 'deep.secret', needs: null },
   { method: 'deep.registerEnvironment', needs: null },
   { method: 'deep.registerView', needs: null },
   { method: 'deep.registerAdapter', needs: null },
@@ -32,8 +34,19 @@ export const API = Object.freeze([
   { method: 'deep.provide', needs: null },
   { method: 'deep.use', needs: null },
   { method: 'deep.read', needs: null },
+  // #363: the piece's store, its items kept in the record under kinds its manifest declares. `deep.store` comes before
+  // its methods, which hang off it.
+  { method: 'deep.store', needs: null },
+  { method: 'deep.store.put', needs: null },
+  { method: 'deep.store.get', needs: null },
+  { method: 'deep.store.list', needs: null },
   // #44: a lease from the kernel's one table, held by the package itself.
   { method: 'deep.lease', needs: null },
+  // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
+  // only from the panel you focused, through the app.
+  { method: 'deep.terminal.open', needs: 'run_as_you' },
+  { method: 'deep.terminal.list', needs: 'run_as_you' },
+  { method: 'deep.terminal.read', needs: 'run_as_you' },
 ].map((m) => Object.freeze(m)));
 
 /**
@@ -49,6 +62,8 @@ export function extensionSide(call, load) {
   const routes = new Map();
   const actions = new Map();
   const outputs = new Map();
+  // Each store's migration to the generation it declares (#363), asked by the host at its load.
+  const migrations = new Map();
   // Its environments by name (#331): their up and down stay here, asked by the host at the kit and at a stack's start.
   const environments = new Map();
   const scope = new AsyncLocalStorage();
@@ -58,23 +73,27 @@ export function extensionSide(call, load) {
   const adapters = new Map();
   // Its index's methods stay here too (#355); the host asks for each call by name.
   const indexes = new Map();
+  // Its sources by name (#364): a polled one's parse and a stream one's read stay here; the host sends the rest.
+  const sources = new Map();
   // Each returns how to drop what it kept.
   const keep = {
     'deep.registerCheck': keeper(checks),
     'deep.registerRoute': keeper(routes),
     'deep.registerAction': (name, _declared, fn) => keeper(actions)(name, fn),
     'deep.provide': (name, _kind, _schema, fn) => keeper(outputs)(name, fn),
+    'deep.store': (kind, _declared, migrate) => (typeof migrate === 'function' ? keeper(migrations)(kind, migrate) : undefined),
     'deep.registerResolver': (resolver) => { resolvers = [...resolvers, resolver]; return () => { resolvers = resolvers.filter((r) => r !== resolver); }; },
     'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.registerEnvironment': keeper(environments),
+    'deep.registerSource': keeper(sources),
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
     },
   };
   const deep = {};
-  for (const { method } of API) {
+  const add = (method) => {
     const path = method.split('.').slice(1);
     let owner = deep;
     for (const key of path.slice(0, -1)) owner = owner[key] ??= {};
@@ -82,7 +101,9 @@ export function extensionSide(call, load) {
       // Kept before the host hears of it, so the host never asks for what isn't here yet; dropped if it refuses.
       const drop = keep[method]?.(...args);
       const within = scope.getStore();
-      const made = Promise.resolve().then(() => call(method, args.filter((a) => typeof a !== 'function'), within)).catch((error) => {
+      // A source's functions stay here: the host gets its declaration only.
+      const sent = method === 'deep.registerSource' ? args.map((a) => (typeof a === 'object' && a !== null ? Object.fromEntries(Object.entries(a).filter(([, v]) => typeof v !== 'function')) : a)) : args;
+      const made = Promise.resolve().then(() => call(method, sent.filter((a) => typeof a !== 'function'), within)).catch((error) => {
         drop?.();
         throw error;
       });
@@ -90,10 +111,16 @@ export function extensionSide(call, load) {
       made.catch(() => undefined);
       return made;
     };
-  }
+  };
+  for (const { method } of API) add(method);
   return {
     async serve(method, params) {
-      if (method === 'load') return void (await load(deep, params));
+      // A planted host's methods beyond the schema (tests only), before the package's code runs. What the package's
+      // code returned at its load comes back as JSON: a release's fixture package returns its calls' results (#139).
+      if (method === 'load') {
+        for (const planted of params?.planted ?? []) add(planted);
+        return (await load(deep, params)) ?? null;
+      }
       if (method === 'run') {
         const runner = checks.get(params?.type);
         if (!runner) throw Error(`no check kind ${params?.type} is registered here`);
@@ -149,6 +176,16 @@ export function extensionSide(call, load) {
         const fn = actions.get(params?.name);
         if (!fn) throw Error(`no action ${params?.name} is registered here`);
         return (await scope.run(params.scope, () => fn(params.input, params.ctx))) ?? null;
+      }
+      if (method === 'migrate') {
+        const fn = migrations.get(params?.kind);
+        if (!fn) throw Error(`no migration of ${params?.kind} is declared here`);
+        return (await fn(params.from, params.value)) ?? null;
+      }
+      if (method === 'source.parse' || method === 'source.read') {
+        const source = sources.get(params?.name);
+        if (!source) throw Error(`no source ${params?.name} is registered here`);
+        return method === 'source.parse' ? await source.parse(params.answer) : await source.read(params.stream, params.cursor, params.limit);
       }
       if (method === 'output') {
         const fn = outputs.get(params?.name);

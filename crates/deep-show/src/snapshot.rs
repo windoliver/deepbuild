@@ -361,7 +361,12 @@ impl Renderer {
         let at = Affine::scale(drawn.scale(size));
         // The scopes each mark draws inside (#373): scissors, soft masks and group opacity.
         let mut scopes = Scopes::new(false);
-        let marks: Vec<&scene::Drawn> = drawn.frame.layers.iter().flat_map(|l| &l.marks).collect();
+        let marks: Vec<&scene::Drawn> = drawn
+            .frame
+            .layers
+            .iter()
+            .flat_map(|l| l.marks.iter().map(|m| &**m))
+            .collect();
         let key_of =
             |d: &scene::Drawn| instanced.get(item_of(&d.mark)).filter(|_| d.clip.is_none());
         let mut batches = Vec::new();
@@ -796,6 +801,11 @@ pub fn entry(sha: &str, drawn: &Drawn, size: [u16; 2]) -> Value {
         })
         .collect();
     json!({"sha256": sha, "w": size[0], "h": size[1], "marks": marks, "legend": legend})
+}
+
+/// A size as a snapshot's px: rounded, 1 to 8192 each way.
+pub fn px(size: [f64; 2]) -> [u16; 2] {
+    size.map(|v| v.round().clamp(1.0, 8192.0) as u16)
 }
 
 /// An RGBA raster as an 8-bit RGBA PNG, its bytes the same for the same pixels.

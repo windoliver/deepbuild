@@ -1,6 +1,8 @@
 {
   "title": "suggestion.settled@1",
   "description": "A suggestion was settled: accepted by your gesture in the app, or superseded by a later change, which the core records.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "suggestions"
   ],

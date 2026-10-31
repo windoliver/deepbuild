@@ -21,12 +21,11 @@ import type { About } from './standing.js';
 import { AUTHORITY, type Gated, type HookMeta, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const sql = (s: string) => s.replace(/'/g, "''");
 const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
 
 
 export interface HoldOptions {
-  raw(query: string): Promise<unknown[]>;
+  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   now: () => number;
   plant: Plant | undefined;
@@ -73,7 +72,7 @@ export class Holds {
     const question = meta.fields?.last_assistant_message?.trim() ?? '';
     const rule = this.sorted(question);
     if (!rule) return undefined;
-    while (Date.now() < until && !(await this.o.raw(`SELECT 1 FROM events WHERE id = '${sql(meta.id)}'`)).length) await new Promise((done) => setTimeout(done, 20));
+    while (Date.now() < until && !(await this.o.raw(`SELECT 1 FROM events WHERE id = ?`, [meta.id])).length) await new Promise((done) => setTimeout(done, 20));
     const ts = this.o.now();
     await this.o.append(this.o.connection(meta.session, meta.agent), { v: 1, id: ulid(ts), kind: 'question.proceeded', ts, data: { question, rule } });
     return `DeepBuild: proceed ("${question}", by rule ${rule}). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask.`;
@@ -81,7 +80,7 @@ export class Holds {
 
   /** The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed. */
   private async proceeding(session: string): Promise<{ id: string; question: string; rule: string } | undefined> {
-    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = '${sql(session)}' AND kind IN ('question.proceeded', 'agent.stop', 'user.ask') ORDER BY log_pos DESC LIMIT 1`)) as { id: string; kind: string; data: string }[];
+    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask') ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
     if (last?.kind !== 'question.proceeded') return undefined;
     const d = JSON.parse(last.data) as { question: string; rule: string };
     return { id: last.id, question: d.question, rule: d.rule };
@@ -89,7 +88,7 @@ export class Holds {
 
   /** The ask with this key, newest first: its handle, status and decision. */
   private async askOf(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
-    const [row] = (await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = '${k}' ORDER BY created DESC LIMIT 1`)) as { id: string; status: string; decision: string | null }[];
+    const [row] = (await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[];
     return row;
   }
   /** Raises one authority ask from `source` (a choice that approves, for the hold-as-choice plant); its handle. */
@@ -125,7 +124,7 @@ export class Holds {
   }
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
   async waiting(handle: string, label: string): Promise<string> {
-    const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = '${sql(handle.slice(4))}'`) as { key: string }[])[0]?.key ?? '');
+    const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = ?`, [handle.slice(4)]) as { key: string }[])[0]?.key ?? '');
     return row && row.status !== 'open' && row.status !== 'later'
       ? `DeepBuild held this: you said no to \`${label}\` (${handle}, ${row.status}); it doesn't run.`
       : `DeepBuild is holding this: \`${label}\` needs your authority and waits for ${handle}. Once you say yes, run the same call again.`;
@@ -160,7 +159,7 @@ export class Holds {
    * raised from its subject so a saved decision that covers it answers it at once, as decided for you. Its handle,
    * and the decision that answered it with its option, if one did.
    */
-  async asked(meta: HookMeta, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
+  async asked(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
     const pinned_to = await this.o.pin(meta.cwd, about.question);
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
@@ -170,9 +169,9 @@ export class Holds {
   }
   /** The decision that answered an ask for you, with the option it chose; nothing when none did. */
   async applied(ask: string): Promise<{ decision?: string; option?: string }> {
-    const [applied] = (await this.o.raw(`SELECT json_extract(data, '$.decision') AS decision FROM events WHERE kind = 'decision.applied' AND json_extract(data, '$.ask') = '${sql(ask)}' ORDER BY log_pos LIMIT 1`)) as { decision: string }[];
+    const [applied] = (await this.o.raw(`SELECT json_extract(data, '$.decision') AS decision FROM events WHERE kind = 'decision.applied' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [ask])) as { decision: string }[];
     if (!applied) return {};
-    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND id = '${sql(applied.decision.slice('decision:'.length))}'`)) as { answer: string }[];
+    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string }[];
     return saved ? { decision: applied.decision, option: saved.answer } : {};
   }
 
@@ -187,7 +186,7 @@ export class Holds {
 
   /** Every list recorded for `server`, oldest first. */
   private async lists(server: string): Promise<(Listed & { held?: { ask: string; tools: string[] } })[]> {
-    const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'mcp.tools_listed' AND json_extract(data, '$.server') = '${sql(server)}' ORDER BY log_pos`)) as { data: string }[];
+    const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'mcp.tools_listed' AND json_extract(data, '$.server') = ? ORDER BY log_pos`, [server])) as { data: string }[];
     return rows.map((r) => JSON.parse(r.data) as Listed & { held?: { ask: string; tools: string[] } });
   }
   /** Whether `tool` at `digest` runs without you: it was on the server's first list as it is, or you approved it so. */
@@ -195,7 +194,7 @@ export class Holds {
     if (lists[0]?.tools.some((t) => t.name === tool && t.digest === digest)) return true;
     for (const l of lists) {
       if (!l.held?.tools.includes(tool) || !l.tools.some((t) => t.name === tool && t.digest === digest)) continue;
-      const [row] = (await this.o.raw(`SELECT decision FROM asks WHERE id = '${sql(l.held.ask.slice(4))}'`)) as { decision: string | null }[];
+      const [row] = (await this.o.raw(`SELECT decision FROM asks WHERE id = ?`, [l.held.ask.slice(4)])) as { decision: string | null }[];
       if (row?.decision === 'allow') return true;
     }
     return false;
@@ -218,8 +217,7 @@ export class Holds {
       let held: { ask: string; tools: string[] } | undefined;
       if (before.length && watched) {
         // Held by an earlier update's ask already, a tool waits on that one: one ask per server update.
-        const changed = list.tools.filter((t) => !this.reads(list.server, t.name, t.hints, cwd)
-          && !before.some((l) => l.held?.tools.includes(t.name) && l.tools.some((u) => u.name === t.name && u.digest === t.digest)));
+        const changed = list.tools.filter((t) => !this.reads(list.server, t.name, t.hints, cwd) && !this.coveredBy(before, t.name, t.digest));
         const fresh = [];
         for (const t of changed) if (!await this.trusted(before, t.name, t.digest)) fresh.push(t);
         if (fresh.length) {

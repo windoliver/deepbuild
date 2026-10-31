@@ -1,0 +1,49 @@
+#882 proof: the look's guard on the shipped clean look, light and dark (crates/deep-canvas-marks/src/look.rs, asked through deep-canvas-render look).
+
+== The shipped look passes; its resolved roles per appearance
+{
+  "ok": true,
+  "roles": {
+    "light": {
+      "accent": "#1aa3c8",
+      "divider": "#e3e4e6",
+      "ground": "#ffffff",
+      "ink": "#1b1d22",
+      "ink_primary": "#1b1d22",
+      "muted": "#8b8f97",
+      "raised": "#f5f5f6",
+      "session_line": "#4f46e5",
+      "session_readout": "#b0207f",
+      "hover": "#1b1d220f",
+      "ink_disabled": "#1b1d2233",
+      "ink_secondary": "#1b1d22d6",
+      "ink_tertiary": "#1b1d2285",
+      "selected": "#1b1d221a"
+    },
+    "dark": {
+      "accent": "#1aa3c8",
+      "divider": "#2a2c30",
+      "ground": "#0b0c0e",
+      "ink": "#f2f3f5",
+      "ink_primary": "#f2f3f5",
+      "muted": "#8b8f97",
+      "raised": "#16171a",
+      "session_line": "#6366f1",
+      "session_readout": "#e879f9",
+      "hover": "#f2f3f50f",
+      "ink_disabled": "#f2f3f533",
+      "ink_secondary": "#f2f3f5d6",
+      "ink_tertiary": "#f2f3f585",
+      "selected": "#f2f3f51a"
+    }
+  }
+}
+
+== The session readout's role set to #b45309 in light: refused, naming the role, blocked and the distance
+{"ok":false,"code":"status_distance","theme":"light","role":"session_readout","state":"blocked","distance":0.04380430675876797}
+
+== The same color for the readout in dark alone: refused, naming dark
+{"ok":false,"code":"status_distance","theme":"dark","role":"session_readout","state":"blocked","distance":0.04380430675876797}
+
+== A light tertiary ink in the ground's color: refused under its 3:1 floor
+{"ok":false,"code":"ink_contrast","theme":"light","role":"ink_tertiary","on":"ground","ratio":1.0}

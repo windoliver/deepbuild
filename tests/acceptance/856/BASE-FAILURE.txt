@@ -1,0 +1,292 @@
+Base commit: 0b35e68e2341a0e70685083239d4e5da55af732c
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/856 --no-file-parallelism
+Run in the worktree at the base commit with only these test files untracked, and the repo's node_modules from npm ci. Both release binaries build there (deep-text, deep-show). All 12 tests fail, each because the surface it reads is missing at the base: deep-text answers bad_command to `shape` (AC1, AC2, AC4 bound, and their planted twins, since --planted is ignored there and `shape` is refused alike); deep-show run refuses the scenario as bad_input for the unknown `shaped_runs` call (AC4 sharing) and exits 2 for the unknown --planted run_per_document; the AC3 figure with one 10,000-glyph text is refused over_budget by the check, whose text.shape term charges 32.5 µs a glyph every frame (CPU 325.288 ms past the figure's 4 ms), so no frame is drawn, and the base's `frames` reports no ui_ms, settling or pixel_hash. The base's `fit` (read by AC2) and the two AC4 label boards (both presented) work at the base, checked outside the suite.
+Machine: Mac15,7, load average about 130 on 12 cores during the run.
+Date: 2026-10-30T22:36:31Z  Node v23.9.0  vitest vitest/5.0.5 darwin-arm64 node-v23.9.0  cargo 1.99.1
+Exit code: 1
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/856
+
+ ❯ ac3.test.ts (3 tests | 3 failed) 297916ms
+   ❯ AC3 a 10,000-glyph text changed in a figure shapes on the worker: the UI thread stays under its 4 ms frame CPU and the frame is settling until the new run draws (3)
+     × AC3 the frames after the change draw the last shaped run, marked settling, until the new run draws, and the settled frame equals the new text shaped on the UI thread by pixel hash 1398ms
+     × AC3 the UI thread stays under the figure's 4 ms frame CPU in every frame from the change on, while the text shapes on the worker (five runs after a warm-up) 30ms
+     × AC3 the planted program that shapes the changed text on the UI thread fails, naming the frame that drew it unsettled 34ms
+ ❯ ac1.test.ts (3 tests | 3 failed) 72992ms
+   ❯ AC1 text is shaped once and reused: a warm 300-glyph label under 2 µs a glyph, and a counter that reuses every repeated text (3)
+     × AC1 on an optimized build, shaping a 300-glyph label already shaped once takes under 2 µs per glyph (five runs after a warm-up) 255ms
+     × AC1 a counter that ticks 60 times reuses every run whose text repeats: each of its 12 texts is shaped once, the 48 repeats shape nothing 6ms
+     × AC1 the planted shaper with no cache shapes each tick and fails, naming the glyphs it shaped 7ms
+ ❯ ac2.test.ts (2 tests | 2 failed) 47669ms
+   ❯ AC2 an ellipsis fit shapes each candidate prefix at most once (2)
+     × AC2 an ellipsis fit over a 2,000-character string shapes each candidate prefix at most once, and shows the longest prefix that fits 4794ms
+     × AC2 the planted fit that shapes again per step fails, naming the count 6ms
+ ❯ ac4.test.ts (4 tests | 4 failed) 110250ms
+   ❯ AC4 the cache stays inside its byte bound, evicts the least recently used, and is shared by every document (4)
+     × AC4 over a run of 100,000 distinct strings the cache stays inside its byte bound and evicts the least recently used 803ms
+     × AC4 the planted cache that evicts the oldest run fails, naming the run it dropped though it was used recently 342ms
+     × AC4 two documents showing the same label share one run, shaped once 1202ms
+     × AC4 the planted cache per document fails, naming the runs and the times the label was shaped 18ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1.test.ts > AC1 text is shaped once and reused: a warm 300-glyph label under 2 µs a glyph, and a counter that reuses every repeated text > AC1 on an optimized build, shaping a 300-glyph label already shaped once takes under 2 µs per glyph (five runs after a warm-up)
+AssertionError: the first shape of the label is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ pair ac1.test.ts:17:20
+ ❯ ac1.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  ac1.test.ts > AC1 text is shaped once and reused: a warm 300-glyph label under 2 µs a glyph, and a counter that reuses every repeated text > AC1 a counter that ticks 60 times reuses every run whose text repeats: each of its 12 texts is shaped once, the 48 repeats shape nothing
+AssertionError: shape line 1 ("1,000") is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ helpers.ts:177:48
+ ❯ shape helpers.ts:177:31
+ ❯ ac1.test.ts:35:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  ac1.test.ts > AC1 text is shaped once and reused: a warm 300-glyph label under 2 µs a glyph, and a counter that reuses every repeated text > AC1 the planted shaper with no cache shapes each tick and fails, naming the glyphs it shaped
+AssertionError: shape line 1 ("1,000") is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ helpers.ts:177:48
+ ❯ shape helpers.ts:177:31
+ ❯ ac1.test.ts:40:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  ac2.test.ts > AC2 an ellipsis fit shapes each candidate prefix at most once > AC2 an ellipsis fit over a 2,000-character string shapes each candidate prefix at most once, and shows the longest prefix that fits
+AssertionError: shape line 1 ("bright ember juniper meadow pebble summi"… (2000 chars)) is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ helpers.ts:177:48
+ ❯ shape helpers.ts:177:31
+ ❯ ac2.test.ts:12:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  ac2.test.ts > AC2 an ellipsis fit shapes each candidate prefix at most once > AC2 the planted fit that shapes again per step fails, naming the count
+AssertionError: shape line 1 ("bright ember juniper meadow pebble summi"… (2000 chars)) is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ helpers.ts:177:48
+ ❯ shape helpers.ts:177:31
+ ❯ ac2.test.ts:32:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  ac3.test.ts > AC3 a 10,000-glyph text changed in a figure shapes on the worker: the UI thread stays under its 4 ms frame CPU and the frame is settling until the new run draws > AC3 the frames after the change draw the last shaped run, marked settling, until the new run draws, and the settled frame equals the new text shaped on the UI thread by pixel hash
+AssertionError: the changed figure, shown on its own is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["big"],"path":"items/big/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"over_budget","severity":"error","ids":["big"],"path":"budget","actual":{"cpu_ms":325.28767772000003,"gpu_ms":0,"gpu_mb":0,"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}},"what":"the document's estimate per frame passes its figure class: CPU 325.288 ms past 4 ms","fix":"Make the items cheaper, or fewer, so the frame fits its CPU budget."}],"issues_evidence":"88230db38d0b485fb2277740c698d1c4c6beef52b23bdd32cea6a350a294aa24","snapshots":[],"outcome":"refused","core":"core@0.0.0","set_digest":"a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:330:93
+    328|
+    329| export function presented(reply: JsonObject, what: string): void {
+    330|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+       |                                                                                             ^
+    331| }
+    332|
+ ❯ reference ac3.test.ts:16:3
+ ❯ ac3.test.ts:33:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  ac3.test.ts > AC3 a 10,000-glyph text changed in a figure shapes on the worker: the UI thread stays under its 4 ms frame CPU and the frame is settling until the new run draws > AC3 the UI thread stays under the figure's 4 ms frame CPU in every frame from the change on, while the text shapes on the worker (five runs after a warm-up)
+AssertionError: the figure with its 10,000-glyph text is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["big"],"path":"items/big/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"over_budget","severity":"error","ids":["big"],"path":"budget","actual":{"cpu_ms":325.28767772000003,"gpu_ms":0,"gpu_mb":0,"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}},"what":"the document's estimate per frame passes its figure class: CPU 325.288 ms past 4 ms","fix":"Make the items cheaper, or fewer, so the frame fits its CPU budget."}],"issues_evidence":"88230db38d0b485fb2277740c698d1c4c6beef52b23bdd32cea6a350a294aa24","snapshots":[],"outcome":"refused","core":"core@0.0.0","set_digest":"a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:330:93
+    328|
+    329| export function presented(reply: JsonObject, what: string): void {
+    330|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+       |                                                                                             ^
+    331| }
+    332|
+ ❯ changed ac3.test.ts:27:3
+ ❯ worst ac3.test.ts:39:20
+ ❯ ac3.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  ac3.test.ts > AC3 a 10,000-glyph text changed in a figure shapes on the worker: the UI thread stays under its 4 ms frame CPU and the frame is settling until the new run draws > AC3 the planted program that shapes the changed text on the UI thread fails, naming the frame that drew it unsettled
+AssertionError: the changed figure, shown on its own is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["big"],"path":"items/big/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"over_budget","severity":"error","ids":["big"],"path":"budget","actual":{"cpu_ms":325.28767772000003,"gpu_ms":0,"gpu_mb":0,"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}},"what":"the document's estimate per frame passes its figure class: CPU 325.288 ms past 4 ms","fix":"Make the items cheaper, or fewer, so the frame fits its CPU budget."}],"issues_evidence":"88230db38d0b485fb2277740c698d1c4c6beef52b23bdd32cea6a350a294aa24","snapshots":[],"outcome":"refused","core":"core@0.0.0","set_digest":"a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:330:93
+    328|
+    329| export function presented(reply: JsonObject, what: string): void {
+    330|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+       |                                                                                             ^
+    331| }
+    332|
+ ❯ reference ac3.test.ts:16:3
+ ❯ ac3.test.ts:51:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  ac4.test.ts > AC4 the cache stays inside its byte bound, evicts the least recently used, and is shared by every document > AC4 over a run of 100,000 distinct strings the cache stays inside its byte bound and evicts the least recently used
+AssertionError: shape line 1 ("Anchor cobalt juniper orchard timber zep"… (100 chars)) is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ helpers.ts:177:48
+ ❯ shape helpers.ts:177:31
+ ❯ ac4.test.ts:25:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  ac4.test.ts > AC4 the cache stays inside its byte bound, evicts the least recently used, and is shared by every document > AC4 the planted cache that evicts the oldest run fails, naming the run it dropped though it was used recently
+AssertionError: shape line 1 ("Anchor cobalt juniper orchard timber zep"… (100 chars)) is accepted: {"ok":false,"code":"bad_command"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ shapeReply helpers.ts:159:78
+    157| export function shapeReply(value: JsonValue | undefined, what: string)…
+    158|   const o = obj(value, what);
+    159|   expect(o['ok'], `${what} is accepted: ${JSON.stringify(o).slice(0, 6…
+       |                                                                              ^
+    160|   const cache = obj(o['cache'], `${what}: cache`);
+    161|   return {
+ ❯ helpers.ts:177:48
+ ❯ shape helpers.ts:177:31
+ ❯ ac4.test.ts:31:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  ac4.test.ts > AC4 the cache stays inside its byte bound, evicts the least recently used, and is shared by every document > AC4 two documents showing the same label share one run, shaped once
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ showRun helpers.ts:323:112
+    321|   const ran = runLines(SHOW_BIN, args, [sc]);
+    322|   const out = obj(ran.lines[0], 'deep-show run: the answer');
+    323|   expect(out['ok'], `deep-show ${args.join(' ')} refused the scenario:…
+       |                                                                                                                ^
+    324|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    325|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ shared ac4.test.ts:12:19
+ ❯ ac4.test.ts:38:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  ac4.test.ts > AC4 the cache stays inside its byte bound, evicts the least recently used, and is shared by every document > AC4 the planted cache per document fails, naming the runs and the times the label was shaped
+AssertionError: deep-show run --planted run_per_document exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runLines helpers.ts:90:114
+     88|   const ms = performance.now() - began;
+     89|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     90|   expect(run.status, `${name} exits 0; stdout: ${run.stdout.slice(0, 6…
+       |                                                                                                                  ^
+     91|   const lines = run.stdout.split('\n').filter((line) => line !== '').m…
+     92|     try { return JSON.parse(line) as JsonValue; } catch { return line;…
+ ❯ showRun helpers.ts:321:15
+ ❯ shared ac4.test.ts:12:19
+ ❯ ac4.test.ts:42:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  12 failed (12)
+   Start at  15:37:15
+   Duration  530.80s (tests 100%)
+

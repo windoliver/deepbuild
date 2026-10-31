@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
 
+use crate::refused;
 use crate::shared::FLICKS;
 
 /// Question card: `arm_after` is 500 ms.
@@ -31,6 +32,8 @@ pub struct Display {
     pub bounds: [f64; 4],
     pub refresh_hz: i64,
     pub next_vsync: i64,
+    /// The token every frame it presents carries, for captures of it (#105).
+    pub feed: Option<String>,
 }
 
 /// A display's vsync grid: `next_vsync + k × period`, k ≥ 0.
@@ -143,13 +146,6 @@ pub struct Layout {
     displays: BTreeMap<String, [f64; 4]>,
 }
 
-fn rect_of(v: &Value) -> Option<[f64; 4]> {
-    let a = v.as_array().filter(|a| a.len() == 4)?;
-    let r: Vec<f64> = a.iter().map(Value::as_f64).collect::<Option<_>>()?;
-    let r = [r[0], r[1], r[2], r[3]];
-    (r.iter().all(|v| v.is_finite()) && r[2] > 0.0 && r[3] > 0.0).then_some(r)
-}
-
 impl Layout {
     /// A layout as a `layout` call returned it: one main window at most, and no window ID or
     /// view twice. `None` when it isn't one.
@@ -167,7 +163,7 @@ impl Layout {
                         Some(s) => Some(s.as_str()?.to_string()),
                     },
                     display: w.get("display")?.as_str()?.to_string(),
-                    rect: rect_of(w.get("rect")?)?,
+                    rect: crate::rect(w.get("rect"))?,
                 })
             })
             .collect::<Option<Vec<_>>>()?;
@@ -189,7 +185,7 @@ impl Layout {
             Some(d) => d
                 .as_object()?
                 .iter()
-                .map(|(k, b)| Some((k.clone(), rect_of(b)?)))
+                .map(|(k, b)| Some((k.clone(), crate::rect(Some(b))?)))
                 .collect::<Option<_>>()?,
         };
         Some(Layout { windows, displays })
@@ -304,11 +300,6 @@ const TOKEN_LIFE: i64 = 30 * FLICKS;
 /// Whether a gesture at `when` is still fresh at `now` (#401).
 fn fresh(when: i64, now: i64) -> bool {
     when <= now && now - when < TOKEN_LIFE
-}
-
-/// A refusal's code.
-fn refused(code: &str) -> Value {
-    json!({"code": code})
 }
 
 impl Placement {

@@ -121,6 +121,14 @@ export const claudeParts: AdapterParts = {
   },
 };
 
+export const piParts: AdapterParts = {
+  // pi's package runs in-process: a tool_call handler can block, sendUserMessage starts a turn or steers in, and only
+  // agent_before_settle may continue a run. It has no permission hook, and no hook rewrites a call for the hub.
+  caps: { holdStop: false, wakeIdle: true, steer: true, followUp: true, answerPermission: false, nativeTools: true, mcp: false, rewrite: false, editInput: false, errorTurnHook: true, startTurn: true },
+  unsupported: { terminal: ['interrupt', 'respond', 'history'] },
+  doctor: () => notChecked('pi'),
+};
+
 export const codexParts: AdapterParts = {
   // Codex's hooks: a Stop hook can hold the turn and a PermissionRequest hook decides; no hook rewrites or
   // edits a call's input, and a turn that ends in an error fires no hook.
