@@ -1280,6 +1280,24 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn a_script_whose_interpreter_the_mac_finds_is_read() {
+        let folder = std::env::temp_dir().join(format!("dh863-script-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        for (name, first) in [("upper", "#!/BIN/BASH"), ("fold", "#!/bin/baſh")] {
+            let script = folder.join(name);
+            fs::write(&script, format!("{first}\npkill x\n")).unwrap();
+            assert!(
+                bash(&script.to_string_lossy())
+                    .matches("run:pkill")
+                    .is_some(),
+                "{first}"
+            );
+        }
+        fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn a_link_a_program_and_its_arguments_read_as_the_mac_reads_them() {
         assert!(bash("ln -s ~/.deepbuild/config.json l; echo x > L")
             .matches("write:.deepbuild/config.json")
