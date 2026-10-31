@@ -158,10 +158,8 @@ class Tools {
   }
 }
 
-const here = (): string => fileURLToPath(new URL('.', import.meta.url));
-
 export default function deepbuild(pi: Pi): void {
-  const tools = JSON.parse(readFileSync(join(here(), 'tools.json'), 'utf8')) as { name: string; description: string; inputSchema: Obj }[];
+  const tools = JSON.parse(readFileSync(fileURLToPath(new URL('tools.json', import.meta.url)), 'utf8')) as { name: string; description: string; inputSchema: Obj }[];
   const own = new Set(tools.map((tool) => tool.name));
   // One runtime's session: pi replaces the whole extension runtime on /new, /resume, /fork and reload.
   let ctx: Ctx | undefined;
@@ -384,19 +382,19 @@ export default function deepbuild(pi: Pi): void {
     // pi writes its record of nested calls after this event: what the call's context holds so far is what a handler can
     // see, and message_end brings the record pi kept. The call's after waits for it.
     if (event.parentToolCallId) {
-      void hook('tool_result', after(event, name, undefined));
+      void hook('tool_result', after(event, name));
       return undefined;
     }
-    results.set(String(event.toolCallId), () => after(event, name, undefined));
+    results.set(String(event.toolCallId), () => after(event, name));
     return undefined;
   });
   const results = new Map<string, () => Obj>();
-  function after(event: Obj, name: string, nested: Obj | undefined): Obj {
+  function after(event: Obj, name: string): Obj {
     const failed = event.isError === true;
     const text = failed && Array.isArray(event.content) ? (event.content as { text?: string }[]).map((part) => part.text ?? '').join('') : '';
     return {
       tool_name: own.has(name) ? `mcp__deep__${name}` : name, tool_use_id: String(event.toolCallId), tool_input: (event.input ?? {}) as Obj, outcome: failed ? 'failed' : 'ok',
-      ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}), ...(text ? { error: text.slice(0, 4096) } : {}), ...(nested ? { nested_calls: nested } : {}),
+      ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}), ...(text ? { error: text.slice(0, 4096) } : {}),
     };
   }
   on('message_end', (event) => {
