@@ -160,8 +160,8 @@ export function events(hub: Hub, kind: string, session?: string): Ev[] {
 export const stripHandle = (handle: unknown) => String(handle).replace(/^ask:/, '');
 /** The asks that were raised as tasks only you can do. */
 export const tasks = (hub: Hub) => events(hub, 'ask.created').filter((e) => e.data.kind === 'unblock');
-/** What's open in Needs you, each row as `inbox.read` gives it. */
-export const inbox = async (hub: Hub) => (await rpc(hub, 'inbox.read')).asks as Obj[];
+/** What's open in Needs you: `inbox.read` gives every ask's row, open or closed, and these are the ones its own `status` and `outcome` read as open. */
+export const inbox = async (hub: Hub) => ((await rpc(hub, 'inbox.read')).asks as Obj[]).filter((row) => row.status !== 'closed' && row.outcome === 'unanswered');
 /** The sessions' rows, as `sessions.read` gives them. */
 export const sessionRows = async (hub: Hub) => (await rpc(hub, 'sessions.read')).sessions as Obj[];
 
