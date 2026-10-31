@@ -1,0 +1,25 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "tool.after",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "seq": "1760013451123456789",
+  "data": {
+    "kind": "shell",
+    "paths": [],
+    "command": "npm test",
+    "call": "toolu_01A9cE3Kq7mZ",
+    "outcome": "failed",
+    "exit_code": 1,
+    "signature": "sig:9c41e07a2b5d8f13",
+    "cause": "command_failed",
+    "owner": "agent",
+    "nested": {
+      "complete": false,
+      "calls": 256
+    }
+  }
+}

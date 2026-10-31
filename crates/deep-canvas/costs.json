@@ -41,7 +41,8 @@
     },
     "text.shape": {
       "ns_per_item": 1,
-      "ns_per_glyph": 32503.37
+      "ns_per_glyph": 32503.37,
+      "ns_per_glyph_warm": 59.57
     },
     "text.animate": {
       "ns_per_item": 14458
