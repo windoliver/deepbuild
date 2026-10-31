@@ -10,11 +10,12 @@
     "codex": {
       "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2"],
       "windows": { "limit": "codex", "weeklyMinutes": 10080, "ignoredOtherwise": "a token event's rate_limits with another limit_id, such as image_gen, says nothing of these windows" },
-      "billing": { "plan": "plan_type" },
+      "billing": { "plan": ["plan", "plan_type"] },
       "goals": {
         "record": "a goal tool's output in the rollout, {\"goal\":{\"threadId\",\"status\"}}, as the corpus's goal sessions hold it",
         "statuses": ["active", "paused", "blocked", "usage_limited", "budget_limited", "complete"],
-        "continuing": ["active"]
+        "continuing": ["active"],
+        "store": { "file": "goals_1.sqlite", "table": "thread_goals" }
       },
       "heartbeats": { "folder": "automations", "file": "automation.toml", "kind": "heartbeat", "active": "ACTIVE", "target": "target_thread_id", "schedule": "rrule", "lastRun": "last_run_at" }
     }

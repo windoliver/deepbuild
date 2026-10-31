@@ -242,7 +242,8 @@ class LocalRunner implements Runner {
   private cursor = 0;
   private closed = false;
   /** Opened with the first job that launches. */
-  private forwarder: Promise<Forwarder> | undefined;
+  /** Each agent's forwarder, so a job reaches its own model API and never another agent's. */
+  private readonly forwarders = new Map<string, Promise<Forwarder>>();
   private readonly timer: NodeJS.Timeout;
 
   constructor(private readonly o: RunnerOptions) {
@@ -800,9 +801,13 @@ class LocalRunner implements Runner {
     const temp = mkdtempSync(join(realpathSync(tmpdir()), `deep-job-${job.rec.job.slice(job.rec.job.indexOf(':') + 1)}-`));
     job.temp = temp;
     // One that failed to open is tried again with the next job.
-    this.forwarder ??= openForwarder(new Set(Object.values(AGENTS).flatMap((a) => a!.hosts)), this.o.env.HTTPS_PROXY ?? this.o.env.https_proxy)
-      .catch((error: unknown) => { this.forwarder = undefined; throw error; });
-    const { port } = await this.forwarder;
+    let forwarder = this.forwarders.get(facts.agent);
+    if (!forwarder) {
+      const opening = openForwarder(new Set(parts.hosts), this.o.env.HTTPS_PROXY ?? this.o.env.https_proxy)
+        .catch((error: unknown) => { this.forwarders.delete(facts.agent); throw error; });
+      this.forwarders.set(facts.agent, forwarder = opening);
+    }
+    const { port } = await forwarder;
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
@@ -1075,7 +1080,7 @@ class LocalRunner implements Runner {
     clearInterval(this.timer);
     for (const job of this.jobs.values()) for (const t of job.timers) clearTimeout(t);
     await this.chain;
-    await (await this.forwarder?.catch(() => undefined))?.close();
+    for (const forwarder of this.forwarders.values()) await (await forwarder.catch(() => undefined))?.close();
   }
 }
 
