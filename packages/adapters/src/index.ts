@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { ContractError, validate } from '@deepbuild/contracts';
 import type { ContractIssue, JsonValue, Schema } from '@deepbuild/contracts';
 import { mapHook as mapByFacts } from '../../../adapters/index.mjs';
-import { claudeParts, codexParts } from './shipped.js';
+import { claudeParts, codexParts, piParts } from './shipped.js';
 import type { Adapter, AdapterParts, AdapterRegistry, Drift, JsonObject } from './types.js';
 
 export type {
@@ -19,7 +19,7 @@ export type {
  * run the hooks in Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts
  * read their payloads, but their events are recorded under their own agent, never as Claude Code's.
  */
-export const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude' };
+export const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude', pi: 'pi' };
 
 const NAME = /^[a-z][a-z0-9-]*$/;
 const OPERATIONS = ['readUsage', 'classifyStop', 'skills'] as const;
@@ -82,7 +82,7 @@ export function registry(): AdapterRegistry {
       if (name === 'deep') throw refuse('enum', '/name', name, "deep is the hub's own writer; register the adapter under its agent's name.");
       if (adapters.has(name)) throw refuse('enum', '/name', name, 'One adapter fills a name once; register the second under another name.');
       if (!isObject(adapter) || !('facts' in adapter)) throw refuse('required', '/facts', undefined, 'Give the adapter its adapter.facts@1 data.');
-      const failed = held('adapter.facts@1', adapter.facts, '/facts') ?? held('adapter.caps@1', adapter.caps, '/caps') ?? held('adapter.unsupported@1', adapter.unsupported, '/unsupported');
+      const failed = held(isObject(adapter.facts) && adapter.facts.schema === 'adapter.facts@2' ? 'adapter.facts@2' : 'adapter.facts@1', adapter.facts, '/facts') ?? held('adapter.caps@1', adapter.caps, '/caps') ?? held('adapter.unsupported@1', adapter.unsupported, '/unsupported');
       if (failed) throw failed;
       if (typeof adapter.doctor !== 'function') throw refuse('required', '/doctor', undefined, 'Give the adapter a doctor() that lists its checks, each ok, warn, fail or skip.');
       if (typeof adapter.mapHook !== 'function') throw refuse('required', '/mapHook', undefined, 'Give the adapter a mapHook(); factsAdapter() builds one from its facts.');
@@ -116,7 +116,7 @@ const readFacts = (file: string): JsonValue => JSON.parse(readFileSync(new URL(`
 /** The shipped adapters, each its facts file plus the parts that aren't data, named by the facts' agent field. */
 export function shipped(): AdapterRegistry {
   const reg = registry();
-  for (const [file, parts] of [['claude-code.facts.json', claudeParts], ['codex.facts.json', codexParts]] as const) {
+  for (const [file, parts] of [['claude-code.facts.json', claudeParts], ['codex.facts.json', codexParts], ['pi.facts.json', piParts]] as const) {
     const facts = readFacts(file);
     reg.register(String((facts as JsonObject).agent), factsAdapter(facts, parts));
   }

@@ -1,0 +1,150 @@
+{
+  "schema": "adapter.facts@2",
+  "versions": ["1.4.0"],
+  "agent": "pi",
+  "hookTimeouts": {
+    "readBy": "a hold waits no longer than the agent lets a hook run",
+    "conformance": "pi/hookTimeouts/no-limit",
+    "defaultMs": null
+  },
+  "continuation": {
+    "readBy": "only the pre-settle hook may continue a run: agent_end can be followed by a retry, and settled is too late",
+    "conformance": "pi/continuation/pre-settle-only",
+    "hook": "agent_before_settle"
+  },
+  "launch": {
+    "readBy": "how DeepBuild starts the agent headless: a read-only job on stdin, its tool list read tools only, no extensions or project files",
+    "conformance": "pi/launch/flags",
+    "readOnlyJob": {
+      "readBy": "DeepBuild's own jobs: read tools only, none of the user's extensions, skills or project files, no session file, prompt on stdin",
+      "args": ["--mode", "json", "-p", "--tools", "read,grep,find,ls", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-approve", "--no-context-files", "--no-session", "--offline"],
+      "prompt": "stdin"
+    }
+  },
+  "install": {
+    "readBy": "setup installs the package through pi's own manager, at the one version these facts cover",
+    "conformance": "pi/install/pinned",
+    "source": "npm:@deepbuild/pi@0.1.0"
+  },
+  "modelFamily": {
+    "readBy": "which rate card and context window a model name belongs to",
+    "conformance": "pi/modelFamily/known-names",
+    "families": {}
+  },
+  "billing": {
+    "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
+    "conformance": "pi/billing/api-key-variables",
+    "apiKeyVariables": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]
+  },
+  "usage": {
+    "readBy": "every run prints its cost and is held to its cap",
+    "conformance": "pi/usage/counting",
+    "cost": "reported",
+    "costFrom": "each assistant message's usage.cost.total, in pi's own json output and session file",
+    "tokens": "each assistant message's usage: input, cacheRead as cached, output, summed over a run's messages"
+  },
+  "questionTools": {
+    "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
+    "conformance": "pi/questionTools/none",
+    "tools": []
+  },
+  "transcripts": {
+    "readBy": "a run keeps its session's own file",
+    "conformance": "pi/transcripts/folder",
+    "home": ["PI_CODING_AGENT_DIR", "~/.pi/agent"],
+    "path": "sessions/--{cwd}--/{time}_{session}.jsonl"
+  },
+  "appLinks": {
+    "readBy": "Open on a session's row",
+    "conformance": "pi/appLinks/open",
+    "open": "none: pi has no app that opens a session by link"
+  },
+  "errorTexts": {
+    "readBy": "a stop's cause from the error the agent reports, never from its words; a stop that matches none is unknown, never a pass",
+    "conformance": "pi/errorTexts/unknown-otherwise",
+    "causes": {
+      "401": "sign_in_required",
+      "403": "sign_in_required",
+      "authentication": "sign_in_required",
+      "unauthorized": "sign_in_required",
+      "invalid api key": "sign_in_required",
+      "no api key": "sign_in_required",
+      "429": "rate_limited",
+      "rate limit": "rate_limited",
+      "overloaded": "rate_limited",
+      "context length": "context_overflow",
+      "context window": "context_overflow"
+    }
+  },
+  "events": {
+    "readBy": "a payload is held to its version's strict schema: a missing or retyped field marks the session unverified",
+    "conformance": "pi/events/corpus",
+    "versions": {
+      "1.4.0": {
+        "session_start": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "source": "string" },
+          "optional": { "parent": "string", "transcript_path": "string", "agent_version": "string" }
+        },
+        "session_shutdown": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "reason": "string" },
+          "optional": { "transcript_path": "string", "agent_version": "string" }
+        },
+        "input": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "prompt": "string", "source": "string" },
+          "optional": { "disposition": "string", "transcript_path": "string", "agent_version": "string" }
+        },
+        "tool_call": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "tool_name": "string", "tool_input": "object", "tool_use_id": "string" },
+          "optional": { "parent_tool_use_id": "string", "transcript_path": "string", "agent_version": "string" }
+        },
+        "tool_result": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "tool_name": "string", "tool_use_id": "string", "outcome": "string" },
+          "optional": { "tool_input": "object", "parent_tool_use_id": "string", "nested_calls": "object", "error": "string", "transcript_path": "string", "agent_version": "string" }
+        },
+        "agent_start": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string" },
+          "optional": { "transcript_path": "string", "agent_version": "string" }
+        },
+        "agent_end": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string" },
+          "optional": { "transcript_path": "string", "agent_version": "string" }
+        },
+        "agent_before_settle": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string", "outcome": "string" },
+          "optional": { "error": "string", "transcript_path": "string", "agent_version": "string", "last_assistant_message": "string" }
+        },
+        "agent_settled": {
+          "required": { "hook_event_name": "string", "session_id": "string", "cwd": "string" },
+          "optional": { "transcript_path": "string", "agent_version": "string" }
+        }
+      }
+    }
+  },
+  "mapping": {
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event; a value names a payload field, or =text a constant",
+    "conformance": "pi/mapping/explain",
+    "common": { "session": "session_id" },
+    "session_start": { "kind": "session.start", "data": { "source": "source", "parent": "parent" } },
+    "session_shutdown": { "kind": "session.end", "data": { "reason": "reason" } },
+    "input": { "kind": "user.ask", "data": { "text": "prompt", "disposition": "disposition" }, "origin": { "rules": [{ "prompt": "DeepBuild delivers your answers", "from": "continuation" }], "otherwise": "person" } },
+    "tool_call": { "kind": "tool.before", "data": { "call": "tool_use_id", "tool": "tool_name" }, "call": "kind" },
+    "tool_result": { "kind": "tool.after", "data": { "call": "tool_use_id", "tool": "tool_name", "outcome": "outcome", "nested": "nested_calls" } },
+    "agent_start": { "kind": "session.activity", "data": { "activity": "=agent_start" } },
+    "agent_end": { "kind": "session.activity", "data": { "activity": "=agent_end" } },
+    "agent_before_settle": { "kind": "agent.stop", "data": { "outcome": "outcome" } },
+    "agent_settled": { "kind": "session.activity", "data": { "activity": "=agent_settled" } }
+  },
+  "toolKinds": {
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "conformance": "pi/toolKinds/unknown-otherwise",
+    "tools": { "bash": "shell", "read": "read", "edit": "write", "write": "write", "grep": "search", "find": "search", "ls": "search" },
+    "prefixes": { "mcp__": "mcp" },
+    "otherwise": "unknown"
+  },
+  "toolDetail": {
+    "readBy": "what a call of each kind carries: a shell call's command, a file call's absolute paths",
+    "conformance": "pi/toolDetail/paths",
+    "command": { "shell": "tool_input.command" },
+    "paths": { "read": "tool_input.path", "edit": "tool_input.path", "write": "tool_input.path" }
+  }
+}
