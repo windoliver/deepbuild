@@ -50,6 +50,7 @@ import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromi
 import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
@@ -466,6 +467,10 @@ export class Core {
     // cpu.slot, and the supervisor takes every run's keys through it.
     const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
+    // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
+    // so a replica lease an earlier hub left is released.
+    await leases.declare('core', REPLICA_LEASE);
+    for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
@@ -747,6 +752,8 @@ export class Core {
       if (meta.event === 'SessionEnd') {
         session.ended = true;
         this.endStacks(session.id);
+        // Its replicas end with it, and their leases with them (#124).
+        for (const held of this.replicas.values()) if (held.session === session.id) void held.replica.end();
         this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
       }
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
@@ -3313,6 +3320,7 @@ export class Core {
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
         case 'deep_env': return await this.deepEnv(session!, String(args.action));
+        case 'deep_drive': return await this.drive(session!, args);
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3354,6 +3362,71 @@ export class Core {
     this.stamps.splice(this.stamps.indexOf(bound), 1);
     return bound.session;
   }
+  // ---- deep_drive (#124): a session's replicas, each its own deep-drive process under the replica lease.
+
+  /** Each replica process a launch started, by the handle the hub gave it: the binary's own handle, its session, and its end. */
+  private readonly replicas = new Map<string, { replica: Replica; own: string; session: string; gone: Promise<void> }>();
+
+  /**
+   * One deep_drive call. A launch takes the replica lease, refused naming it when the machine runs its two, then
+   * starts a deep-drive process for the session; every other call goes to the process the session's launch started,
+   * and close ends it. Its lease is released once the process has exited, however it ends.
+   */
+  private async drive(session: string, args: Obj): Promise<Obj> {
+    const call = driveCall(args) as Obj;
+    if (call.call === 'launch') return this.launchReplica(session, call);
+    const handle = String(args.replica);
+    const held = this.replicas.get(handle);
+    if (!held?.own || held.session !== session) throw refuse('not_found', '/params/arguments/replica', 'Name a replica your session launched and hasn\'t closed; deep_drive\'s launch starts one.', args.replica);
+    const reply = await held.replica.call({ ...call, replica: held.own });
+    if (call.call === 'close') {
+      await held.replica.end();
+      await held.gone;
+    }
+    return reply.replica === undefined ? reply : { ...reply, replica: handle };
+  }
+  private async launchReplica(session: string, call: Obj): Promise<Obj> {
+    const id = ulid(this.now());
+    const handle = `replica:${id}`;
+    let lease: string | undefined;
+    // The planted hub launches without the lease (#124's wrong program).
+    if (this.options.plant !== 'deep-drive-no-lease') {
+      const got = await this.leases.lease({ holder: `mcp:${session}` }, { host: 'local', kind: REPLICA_LEASE.name, key: handle }, 'exclusive');
+      if (got.status !== 'granted') {
+        return { ok: false, error: { code: 'blocked', lease: REPLICA_LEASE.name, message: `No replica was launched: the ${REPLICA_LEASE.name} lease allows ${REPLICA_LEASE.cap} per machine, and ${got.message}.` } };
+      }
+      lease = got.lease.id;
+    }
+    const out = join(this.root.dir, 'replicas', id);
+    let replica: Replica;
+    try {
+      mkdirSync(out, { recursive: true });
+      replica = new Replica(out);
+    } catch (error) {
+      if (lease) await this.leases.release(lease, []);
+      throw error;
+    }
+    const gone = replica.exited.then(async () => {
+      this.replicas.delete(handle);
+      if (lease) await this.leases.release(lease, []);
+    }).catch(() => undefined);
+    const entry = { replica, own: '', session, gone };
+    this.replicas.set(handle, entry);
+    let reply: Obj;
+    try {
+      reply = await replica.call(call);
+    } catch (error) {
+      await replica.end();
+      throw error;
+    }
+    if (reply.ok !== true || typeof reply.replica !== 'string') {
+      await replica.end();
+      return reply;
+    }
+    entry.own = reply.replica;
+    return { ...reply, replica: handle };
+  }
+
   // ---- The canvas side (#806): deep_show, `deep show`, render-back, and what the app draws.
 
   /** The canvas core, started at the first canvas call; the world file a test gives it; the app's presentations. */
@@ -4513,6 +4586,7 @@ export class Core {
     await this.chain;
     this.writeCursors();
     this.canvasCore?.close();
+    await Promise.allSettled([...this.replicas.values()].map(async (r) => { await r.replica.end(); await r.gone; }));
     for (const { stop } of this.runs.values()) stop();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);
