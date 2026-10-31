@@ -11,20 +11,30 @@
 //   helper devices <file>       what the policy this process runs under says about each device, from sandbox_check()
 //                               on itself without reporting: one line each for the camera, the microphone, the audio
 //                               output (the audio server's mach-lookup) and a screen capture (the window server's).
+//   helper pty <dir> <cols> <rows> <program> [<arg>...]
+//                               a hosted terminal's host process (#104): runs the program on a pseudo-terminal it
+//                               holds, appends everything the program writes to <dir>/out, writes what comes through
+//                               the FIFO <dir>/in to the program's terminal, and notes the program's PID in <dir>/pid
+//                               once it runs. It needs nobody attached: it outlives the hub, and ends with the program.
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libproc.h>
+#include <limits.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/proc_info.h>
+#include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <util.h>
 
 extern char **environ;
 extern int sandbox_check(pid_t pid, const char *operation, int type, ...);
@@ -130,9 +140,76 @@ static int devices(void) {
   return 0;
 }
 
+static int write_all(int fd, const char *buf, ssize_t n) {
+  for (ssize_t done = 0; done < n;) {
+    ssize_t w = write(fd, buf + done, (size_t)(n - done));
+    if (w < 0 && errno == EINTR) continue;
+    if (w < 0) return -1;
+    done += w;
+  }
+  return 0;
+}
+
+static int pty(const char *dir, int cols, int rows, char **argv) {
+  char path[PATH_MAX], note[PATH_MAX];
+  // Nobody may be reading what it was started with: the hub that started it can be gone.
+  signal(SIGPIPE, SIG_IGN);
+  signal(SIGHUP, SIG_IGN);
+  snprintf(path, sizeof path, "%s/in", dir);
+  if (mkfifo(path, 0600) != 0 && errno != EEXIST) { perror(path); return 2; }
+  // Opened for reading and writing, so the FIFO never reads as ended between the writers that come and go.
+  int in = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+  snprintf(path, sizeof path, "%s/out", dir);
+  int log = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+  if (in < 0 || log < 0) { perror(dir); return 2; }
+  struct winsize size = { .ws_row = (unsigned short)rows, .ws_col = (unsigned short)cols };
+  int master;
+  pid_t child = forkpty(&master, NULL, NULL, &size);
+  if (child < 0) { perror("forkpty"); return 2; }
+  if (child == 0) {
+    signal(SIGPIPE, SIG_DFL);
+    signal(SIGHUP, SIG_DFL);
+    execvp(argv[0], argv);
+    perror(argv[0]);
+    _exit(127);
+  }
+  fcntl(master, F_SETFD, FD_CLOEXEC);
+  snprintf(note, sizeof note, "%s/pid.tmp", dir);
+  snprintf(path, sizeof path, "%s/pid", dir);
+  FILE *pid = fopen(note, "w");
+  if (!pid || fprintf(pid, "%d", child) < 0 || fclose(pid) != 0 || rename(note, path) != 0) { perror(note); return 2; }
+  static char buf[65536];
+  // select, not poll: macOS's poll doesn't take a terminal device.
+  for (;;) {
+    fd_set ready;
+    FD_ZERO(&ready);
+    FD_SET(master, &ready);
+    FD_SET(in, &ready);
+    if (select((master > in ? master : in) + 1, &ready, NULL, NULL, NULL) < 0) {
+      if (errno == EINTR) continue;
+      break;
+    }
+    if (FD_ISSET(master, &ready)) {
+      ssize_t n = read(master, buf, sizeof buf);
+      if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue;
+      // The program and everything holding its terminal are gone.
+      if (n <= 0) break;
+      if (write_all(log, buf, n) != 0) break;
+    }
+    if (FD_ISSET(in, &ready)) {
+      ssize_t n = read(in, buf, sizeof buf);
+      if (n > 0 && write_all(master, buf, n) != 0) break;
+    }
+  }
+  int status = 0;
+  waitpid(child, &status, 0);
+  return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+}
+
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | probe <file> <op> <arg>... | devices <file>\n"); return 2; }
+  if (argc >= 6 && strcmp(argv[1], "pty") == 0) return pty(argv[2], atoi(argv[3]), atoi(argv[4]), argv + 5);
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();

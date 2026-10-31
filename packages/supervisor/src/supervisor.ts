@@ -32,7 +32,7 @@ const RUN = /^run:[0-9A-Za-z]+$/;
 /** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
 const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 /** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
-const FOLDED = ['process.starting', 'process.tracked', 'process.ended', 'lease.acquired', 'lease.stale', 'lease.released', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'ask.superseded', 'ask.moot', 'ask.cancelled'] as const;
+const FOLDED = ['process.starting', 'run.kept', 'process.tracked', 'process.ended', 'lease.acquired', 'lease.stale', 'lease.released', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'ask.superseded', 'ask.moot', 'ask.cancelled'] as const;
 type Folded = (typeof FOLDED)[number];
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -65,6 +65,8 @@ interface Run {
   cleaned?: Cleanup;
   /** Its cleanup while it runs: a second call shares it. */
   cleaning?: Promise<Cleanup>;
+  /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
+  kept?: boolean;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
@@ -97,6 +99,8 @@ class LocalSupervisor implements Supervisor {
   private scanning: Promise<void> = Promise.resolve();
   private pumping: Promise<void> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
+  /** The timer's scan while it is queued or runs. */
+  private timed: Promise<void> | undefined;
   private log: ChildProcess | undefined;
   /** The canary run whose report shows the denial stream is live, and when it last came through. */
   private canary = '';
@@ -199,6 +203,9 @@ class LocalSupervisor implements Supervisor {
           this.runs.set(run, { ...blank(run, String(d.cwd), 'running'), leases: this.early.get(run) ?? [] });
           this.early.delete(run);
           break;
+        case 'run.kept':
+          if (r) r.kept = true;
+          break;
         case 'process.tracked':
           if (!r) break;
           if (r.pid === undefined) Object.assign(r, { pid: d.pid, pgid: d.pgid, token: d.token });
@@ -281,13 +288,18 @@ class LocalSupervisor implements Supervisor {
       }
     }
     this.early.clear();
-    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker.
-    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned')) {
+    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker. A kept run
+    // was meant to outlive the hub: it stays the run's, scanned and stoppable as before.
+    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned' && !r.kept)) {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
     if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials();
-    this.timer = setInterval(() => void this.scanOnce().catch(() => undefined), SCAN_MS);
+    // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
+    // without end in front of a cleanup's own scan.
+    this.timer = setInterval(() => {
+      this.timed ??= this.scanOnce().catch(() => undefined).finally(() => { this.timed = undefined; });
+    }, SCAN_MS);
     this.timer.unref();
   }
 
@@ -507,6 +519,10 @@ class LocalSupervisor implements Supervisor {
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
+    if (spec.keep) {
+      r.kept = true;
+      await this.append('run.kept', { run: spec.run }, spec.run);
+    }
     if (!this.options.leases) for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
     if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
     const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
