@@ -1,0 +1,83 @@
+#882: the run at the base commit 0f7fb686 (origin/main), October 31, 2026, on macOS (Darwin 25.6.0), Node 23.9.0
+(the only Node on this machine; the repo asks for 24.22.0), trimmed to each failure's reason. Every tagged test fails
+for a missing surface or for the base's literals; the wrong-program tests pass, since they test the tests.
+
+== node --test tests/acceptance/882/look.test.mjs  (exit 1; 2 tests, 0 pass, 2 fail)
+
+✖ #882.98cbaa26 the shipped look passes its guard with the chrome roles in light and dark; the session readout at #b45309 fails it, naming the role, blocked and 0.044
+  + `the shipped look's roles: the shipped look's answer carries no roles: {"ok":true,"look":"(the definition)"}`,
+  + 'the session readout at #b45309 names distance undefined, not 0.044: {"ok":false,"code":"status_distance","theme":"light","role":"session_readout","state":"blocked"}'
+
+  (The base's guard already refuses a planted session_readout role in the look's `roles` map, naming light, the role
+  and blocked; what's missing is the resolved roles in the answer, the chrome roles in the shipped look, and the
+  distance. The control (readout in the one ink) and the dark-only plant already behave at the base.)
+
+✖ #882.98cbaa26 (scope) the guard holds each ink tier to its contrast floor: a light tertiary ink in the ground's color is refused, naming it
+  + `a light tertiary ink in the ground's color (1:1) isn't refused naming ink_tertiary and light: {"ok":true,"look":"(the definition)"}`
+
+== node --test tests/acceptance/882/lint.test.mjs  (exit 1; 4 tests, 0 pass, 4 fail)
+
+✖ #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line
+  24 lines: canvas.rs:111; lib.rs:407, 434, 435, 451, 471; show.rs:201, 202 (hsla); trusted_input.rs:515, 516, 519;
+  views.rs:312, 315, 329, 346, 349, 391, 403, 409 (rgb(0xb45309), the readout), 414 (rgb(0x2563eb), the session
+  line), 429, 514, 515; card.rs:185 (rgb(if focused { 0x2563EB } ...)).
+
+✖ #882.f3bc7068 the guard passes the app, and fails each planted literal naming its file and line (the views.rs one with the role to use); an exception at its place with a reason and a review date passes
+  + 'no guard at <checkout>/scripts/color-literal-guard.mjs'
+
+✖ #882.f3bc7068 the lint lane runs the guard: a planted rgb(0x2563eb) in views.rs fails the lane, naming views.rs and the line
+  + "the lint lane doesn't run scripts/color-literal-guard.mjs"
+
+✖ #882.f3bc7068 the merge base's app has the issue's 21 rgb(0x lines and fails the guard, naming each one and its two hsla( lines
+  + 'no guard at <checkout>/scripts/color-literal-guard.mjs'
+
+  (The count itself holds at the base: judgeBase finds exactly 21 rgb(0x lines in 0f7fb686's crates/deep-app/src
+  before it runs the guard; wrong.test.mjs runs the same judge with the control guard and passes.)
+
+== node --test tests/acceptance/882/inventory.test.mjs  (exit 1; 2 tests, 0 pass, 2 fail)
+
+✖ #882.c60566b1 the inventory's check passes on this branch, and the committed inventory has a row per shipped panel with its entry, roles and literals
+  AssertionError [ERR_ASSERTION]: no inventory script at scripts/app-inventory.mjs
+
+✖ #882.c60566b1 adding a panel without regenerating the inventory fails its check, naming the panel; regenerating passes it
+  + 'no inventory script at <checkout>/scripts/app-inventory.mjs'
+
+== node --test tests/acceptance/882/replica.test.mjs  (exit 1; 4 tests, 0 pass, 4 fail)
+
+The binaries build at the base (cargo build --locked -p deep-replica --bin deep-replica, and -p deep-marks-render
+--bin deep-canvas-render; a cold build takes several minutes, after waiting on other sessions' cargo locks).
+
+✖ #882.218503b6 with macOS set to dark, the replica's Needs you and session page draw every chrome color from the dark roles
+  + `the look's answer has no roles per appearance: {"ok":true,"look":"(the definition)"}`,
+  + 'needs-you (dark): deep-replica --view needs-you --out /tmp/da882-screens-*/dark --appearance dark exited 2: deep-replica: unknown argument --appearance',
+  + 'session (dark): deep-replica --view session --out /tmp/da882-screens-*/dark --appearance dark exited 2: deep-replica: unknown argument --appearance'
+
+✖ #882.218503b6 (proof) in light, the same views draw every chrome color from the light roles
+  + `the look's answer has no roles per appearance: ...`,
+  + 'needs-you (light): ... --appearance light exited 2: deep-replica: unknown argument --appearance',
+  + 'session (light): ... --appearance light exited 2: deep-replica: unknown argument --appearance'
+
+✖ #882.218503b6 every ink tier passes its contrast floor on ground, raised and hover, in dark and in light
+  + `the look's answer has no roles per appearance: {"ok":true,"look":"(the definition)"}`
+
+✖ #882.218503b6 a build that keeps the light ground in dark fails the dark judge, naming the view
+  + `the look's answer has no roles per appearance: {"ok":true,"look":"(the definition)"}`
+
+== The wrong programs, passing at the base
+
+node --test tests/acceptance/882/wrong.test.mjs  (exit 0; 35 tests, 35 pass)
+  AC1: the control guard passes; noRoles, dataOnly, lightOnly, noDistance, refuseAll and noContrast guards each fail.
+  AC2: the control guard passes the lint judge on fixtures/app and the base judge on 0f7fb686; always-pass,
+       views-only, rgb-only, top-level, no-line, no-role, ignores-root, exception-anywhere and no-date guards each
+       fail; views-only also fails the base judge ("names 12 of the base's 23 literal lines; not
+       crates/deep-app/src/canvas.rs:111"); the control lane table passes the wiring judge; lanes-none,
+       lanes-release, lanes-other-lane, lanes-paths, lanes-elsewhere and a lint lane whose guard never fails each fail.
+  AC3: a made-up dark screen in the dark roles passes; a light-ground screen judged as dark fails naming the view
+       and "the other appearance's ground"; a dark ground with the light ink fails naming the view; the ink judge
+       fails a tertiary ink under 3:1 on hover.
+  AC4: the control inventory passes; always-pass, fixed-list, unnamed, ignores-root and count-only each fail.
+
+Calibration on real pixels (by hand, not a test): the base's light replica screens of needs-you and session, judged
+with the base's own literal colors as stand-in light roles, pass the screen judge except for one fill the stand-in
+roles lacked (#6b7280, the folded row's text, 75 device px); judged as dark, both fail naming the view and
+"#ffffff ... the other appearance's ground". So text interiors count as fills at 2x, and the judge reads them.

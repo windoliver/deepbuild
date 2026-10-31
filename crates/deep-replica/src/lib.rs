@@ -3,6 +3,7 @@
 //! would see, plus a screenshot. The checks that run in it live beside it: the Needs you kit, the
 //! panel registry against the app's slots, and the snapshot against the live tree.
 
+pub mod drive;
 pub mod kit;
 mod replica;
 pub mod shell;
@@ -64,15 +65,28 @@ pub fn panel_dir(name: &str) -> PathBuf {
     repo_root().join("crates/deep-app/panels").join(name)
 }
 
-/// `--view <id> --out <out>` from the command line, the view a shipped one; else the usage error
+/// `--view <id> --out <out>` from the command line, the view a shipped one, and where `appearance`
+/// takes it, `--appearance <light|dark>` as whether macOS is set to dark (#882); else the usage error
 /// is printed under `bin`'s name and the exit code is 2.
-pub fn view_args(bin: &str, out: &str) -> Result<(String, PathBuf), i32> {
-    let (mut view, mut path) = (None, None);
+pub fn view_args(
+    bin: &str,
+    out: &str,
+    appearance: bool,
+) -> Result<(String, PathBuf, Option<bool>), i32> {
+    let (mut view, mut path, mut dark) = (None, None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--view" => view = args.next(),
             "--out" => path = args.next().map(PathBuf::from),
+            "--appearance" if appearance => match args.next().as_deref() {
+                Some("light") => dark = Some(false),
+                Some("dark") => dark = Some(true),
+                other => {
+                    eprintln!("{bin}: --appearance is light or dark, not {other:?}");
+                    return Err(2);
+                }
+            },
             other => {
                 eprintln!("{bin}: unknown argument {other}");
                 return Err(2);
@@ -88,7 +102,7 @@ pub fn view_args(bin: &str, out: &str) -> Result<(String, PathBuf), i32> {
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);
     }
-    Ok((view, path))
+    Ok((view, path, dark))
 }
 
 /// The fixture record's inbox as of its last event, on the virtual clock.

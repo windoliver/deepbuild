@@ -793,6 +793,17 @@
       "initialReason": "Issue #402 first measurement: the merge base has no cell grid. One process feeds a terminal's cell grid 600 full-screen repaints of 36 rows, one every 1/60 s, through `deep-show run` on the virtual clock, failing unless every patch is presented in a frame of its own; p50 includes Node's and the binary's start. The cell grid's cost (under 5% of a core at 60 patches a second) stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "capture-save",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "capture-save"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #105 first measurement: the merge base has no screen capture. One process starts a bug capture, picks the second display and holds the capture chord for 119.5 s through `deep-show run` on the virtual clock, then releases it, failing unless the saved asset holds every frame of the hold; p50 includes Node's and the binary's start. The issue's save within 1 s stays in tests/acceptance/105/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "hosted-terminal-60hz",
       "command": [
         "node",
@@ -813,6 +824,87 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #104 first measurement: the merge base hosts no terminal for a piece. One process installs a package that asks for run-as-you, approves it on the trusted path, opens 10 hosted terminals whose programs each write 10,000 lines of scrollback, and fails unless each terminal's output holds them all, in order; then it revokes run-as-you. The issue's 300 MB for 10 terminals stays in tests/acceptance/104/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-launch",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "launch"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "p50Ms": 2000
+      },
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process spawns target/debug/deep-drive, launches a replica on #124's fixture panel, waits for launch's answer, then ends the replica's stdin and waits for it to exit. The issue's 2 s launch caps p50; the run also holds Node's start and the replica's exit, so the cap is no looser than the issue's, which tests/acceptance/124/ac5-budgets.live.test.ts times from spawn to launch's answer. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-action",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "action"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process launches a replica on #124's fixture panel and clicks its Email field 101 times, each once it is visible, enabled and still. The issue's 50 ms round trip less its wait stays in tests/acceptance/124/ac5-budgets.live.test.ts, since this lane times whole processes, launch included. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-snapshot-2000",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "snapshot-2000"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process launches a replica on #124's 2,000-button panel and takes 101 text snapshots of its window. The issue's 20 ms snapshot stays in tests/acceptance/124/ac5-budgets.live.test.ts, since this lane times whole processes, launch included. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-memory",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "memory"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "peakBytes": 500000000
+      },
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process replays #124's recorded Claude Code run in a replica on the fixture panel, its launch to its close. The issue's 500 MB per replica caps the peak resident memory /usr/bin/time reads, the larger of Node's and the replica's. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-source-call",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "source-call"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then reads a polled source 200 times against a server on 127.0.0.1, each read a call. The issue's 5 ms beyond the network stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-store-query",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "store-query"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then puts 10,000 items in the package's store and looks up 1,000 random keys from inside the package. The issue's 10 ms at p95 over 100,000 rows stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-schedule-fire",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "schedule-fire"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then runs a schedule every second on the real clock until its job ran three times. The issue's 1 s from slot to start stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
