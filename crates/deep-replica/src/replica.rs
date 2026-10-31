@@ -15,7 +15,7 @@ use deep_app::{
     arming,
     card::{self, Card},
     events::{Fixture, Inbox},
-    notify::{self, Notifier, Sound, NOTIFY_AFTER},
+    notify::{self, Notification, Notifier, Sound, NOTIFY_AFTER},
     question::{Controller, Did, Faults, Target},
     record, states,
     views::{set_state, AppState, Layout},
@@ -40,6 +40,8 @@ pub struct Posted {
     pub session: String,
     /// When it was posted, ms since the epoch on the virtual clock.
     pub at: u64,
+    pub title: String,
+    /// Its title and body.
     pub text: String,
     pub sound: Option<Sound>,
 }
@@ -144,7 +146,9 @@ pub struct Killed {
     events: Vec<Value>,
     log_pos: u64,
     now: u64,
-    faults: Faults,
+    planted: Option<Planted>,
+    /// What Notification Center on the first device holds: the OS keeps it.
+    center: Vec<Posted>,
 }
 
 /// The wrong programs the criteria name, built into the app for planted.rs.
@@ -161,6 +165,10 @@ pub enum Planted {
     RecordsOnlyAnswers,
     AnswersSecondFromWords,
     TypedYesAllows,
+    /// Issue #883: the notifier on main, which posts and never withdraws or replaces a notification.
+    NeverWithdraws,
+    /// Issue #883: a notifier that queues every open ask in the record on start.
+    QueuesOpenAsksOnStart,
 }
 
 impl Planted {
@@ -178,6 +186,7 @@ impl Planted {
             Planted::RecordsOnlyAnswers => faults.records_only_answers = true,
             Planted::AnswersSecondFromWords => faults.answers_second_from_words = true,
             Planted::TypedYesAllows => faults.typed_yes_allows = true,
+            Planted::NeverWithdraws | Planted::QueuesOpenAsksOnStart => {}
         }
         faults
     }
@@ -187,6 +196,8 @@ struct Device {
     cx: HeadlessAppContext,
     window: AnyWindowHandle,
     notifier: Notifier,
+    /// What Notification Center holds from the app, oldest first.
+    center: Vec<Posted>,
     /// The session whose page is open in this device's focused window.
     looking_at: Option<String>,
     /// Whether the window is hidden: then nothing is being looked at.
@@ -208,6 +219,7 @@ pub struct Replica {
     /// Each focus change: `(at, device, session)`.
     pub(crate) focus: Vec<(u64, usize, Option<String>)>,
     faults: Faults,
+    planted: Option<Planted>,
     confirmations: Vec<Confirmation>,
     /// Every `ask.answer` the app sent, as its params, and every usage row it wrote, in order.
     sent: Vec<Value>,
@@ -216,42 +228,48 @@ pub struct Replica {
 
 impl Replica {
     pub fn open(fixture: &Path) -> Replica {
-        Replica::build(fixture, 1, Notifier::new(NOTIFY_AFTER), Faults::default())
+        Replica::build(fixture, 1, Notifier::new(NOTIFY_AFTER), None)
     }
 
     pub fn open_devices(fixture: &Path, devices: usize) -> Replica {
-        Replica::build(
-            fixture,
-            devices,
-            Notifier::new(NOTIFY_AFTER),
-            Faults::default(),
-        )
+        Replica::build(fixture, devices, Notifier::new(NOTIFY_AFTER), None)
     }
 
     pub fn with_notifier(fixture: &Path, notifier: Notifier) -> Replica {
-        Replica::build(fixture, 1, notifier, Faults::default())
+        Replica::build(fixture, 1, notifier, None)
     }
 
     /// The app built with one of the wrong programs the criteria name.
     pub fn planted(fixture: &Path, planted: Planted) -> Replica {
-        Replica::build(fixture, 1, Notifier::new(NOTIFY_AFTER), planted.faults())
+        Replica::build(fixture, 1, Notifier::new(NOTIFY_AFTER), Some(planted))
     }
 
-    fn build(fixture: &Path, devices: usize, first: Notifier, faults: Faults) -> Replica {
+    fn build(fixture: &Path, devices: usize, first: Notifier, planted: Option<Planted>) -> Replica {
         let fixture = Fixture::load(fixture).unwrap_or_else(|error| panic!("the fixture: {error}"));
         let log_pos = fixture.last_log_pos();
-        Replica::build_from(fixture.events(), log_pos, NOW, devices, first, faults)
+        Replica::build_from(
+            fixture.events(),
+            log_pos,
+            NOW,
+            devices,
+            first,
+            planted,
+            Vec::new(),
+        )
     }
 
+    /// The app starts on the record with what Notification Center still holds from it.
     fn build_from(
         events: Vec<Value>,
         log_pos: u64,
         now: u64,
         devices: usize,
         first: Notifier,
-        faults: Faults,
+        planted: Option<Planted>,
+        mut center: Vec<Posted>,
     ) -> Replica {
-        record::install_local(events);
+        let faults = planted.map(Planted::faults).unwrap_or_default();
+        record::install_local(events.clone());
         let mut replica = Replica {
             devices: Vec::new(),
             now,
@@ -261,6 +279,7 @@ impl Replica {
             asks: Vec::new(),
             focus: Vec::new(),
             faults,
+            planted,
             confirmations: Vec::new(),
             sent: Vec::new(),
             usage: Vec::new(),
@@ -271,11 +290,20 @@ impl Replica {
             let mut cx = crate::headless_context();
             let (window, _) =
                 cx.update(|cx| open_shell(&Layout::shipped("session"), cx, |_, _| {}));
-            let notifier = first.take().unwrap_or_else(|| Notifier::new(NOTIFY_AFTER));
+            let mut notifier = first.take().unwrap_or_else(|| Notifier::new(NOTIFY_AFTER));
+            let center = std::mem::take(&mut center);
+            if planted == Some(Planted::QueuesOpenAsksOnStart) {
+                for ask in states::open_asks(&events, None) {
+                    notifier.saw(ask, now);
+                }
+            } else {
+                notifier.start(&events, center.iter().map(notification).collect());
+            }
             replica.devices.push(Device {
                 cx,
                 window,
                 notifier,
+                center,
                 looking_at: None,
                 hidden: false,
                 card: None,
@@ -381,16 +409,66 @@ impl Replica {
             let due = device
                 .notifier
                 .due(&events, self.now, looking_at, index == self.last_used);
-            self.posted
-                .extend(due.into_iter().map(|notification| Posted {
+            let posts: Vec<Posted> = due
+                .into_iter()
+                .map(|notification| Posted {
                     device: index,
                     ask: notification.ask,
                     session: notification.session,
                     at: self.now,
+                    title: notification.title,
                     text: notification.text,
                     sound: notification.sound,
-                }));
+                })
+                .collect();
+            if self.planted == Some(Planted::NeverWithdraws) {
+                device.center.extend(posts.iter().cloned());
+            } else {
+                // Notification Center holds what the notifier left delivered, each as it was posted.
+                device.center = device
+                    .notifier
+                    .delivered()
+                    .iter()
+                    .filter_map(|delivered| {
+                        posts
+                            .iter()
+                            .chain(&device.center)
+                            .find(|post| {
+                                post.session == delivered.session
+                                    && post.ask == delivered.ask
+                                    && post.text == delivered.text
+                            })
+                            .cloned()
+                    })
+                    .collect();
+            }
+            self.posted.extend(posts);
         }
+    }
+
+    /// What Notification Center on a device holds now, oldest first.
+    pub fn delivered(&self, device: usize) -> Vec<Posted> {
+        self.devices[device].center.clone()
+    }
+
+    /// The hub restarts: every device's record reader redoes its reads of the whole record.
+    pub fn restart_hub(&mut self) {
+        self.reread();
+    }
+
+    /// A channel reconnects: the record's events reach every device again.
+    pub fn reconnect(&mut self) {
+        self.reread();
+    }
+
+    fn reread(&mut self) {
+        let events = Replica::events();
+        for device in &mut self.devices {
+            for event in &events {
+                device.notifier.saw(event, self.now);
+            }
+        }
+        self.run_due();
     }
 
     pub fn now(&self) -> u64 {
@@ -726,7 +804,8 @@ impl Replica {
             events,
             log_pos: self.log_pos,
             now,
-            faults: self.faults,
+            planted: self.planted,
+            center: self.devices[0].center.clone(),
         }
     }
 
@@ -738,7 +817,8 @@ impl Replica {
             killed.now,
             1,
             Notifier::new(NOTIFY_AFTER),
-            killed.faults,
+            killed.planted,
+            killed.center,
         )
     }
 
@@ -803,6 +883,17 @@ impl Replica {
                 from_observed(window)
             })
             .expect("the window draws")
+    }
+}
+
+/// A notification Notification Center holds, as the app reads it back on start.
+fn notification(posted: &Posted) -> Notification {
+    Notification {
+        ask: posted.ask.clone(),
+        session: posted.session.clone(),
+        title: posted.title.clone(),
+        text: posted.text.clone(),
+        sound: posted.sound,
     }
 }
 

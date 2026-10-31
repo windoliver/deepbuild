@@ -1,0 +1,31 @@
+#327.f53f09db (AC3), blind redraft tests/acceptance/327/ac3_redraft.rs, run on the base 0f7fb686 (2026-10-31).
+It passes there: the base already meets this criterion as the redraft reads it.
+
+The test fixes the process's time zone (TZ=UTC) at the top of main, so its result doesn't depend on the machine's
+zone. Run on a machine set to PDT (below), and again with TZ=Asia/Tokyo in the environment: both 2 passed, 0 failed.
+
+$ cargo test -p deep-replica --test acceptance_327_ac3_redraft
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling deep-replica v0.0.0 (~/dev/claude-worktrees/github-issue-883-fd1dd4/agent-aff09eb1b1ed0cb1d/crates/deep-replica)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 58s
+    Blocking waiting for file lock on package cache
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running ../../tests/acceptance/327/ac3_redraft.rs (target/debug/deps/acceptance_327_ac3_redraft-cb74585c69393530)
+
+running 2 tests
+test ac3_redraft_every_ask_notifies_and_its_click_opens_its_card_and_answers_nothing ... ok
+test ac3_redraft_planted_a_notification_action_that_answers_fails ... ok
+
+test result: ok. 2 passed; 0 failed; 0 blocked
+exit=0
+
+$ TZ=Asia/Tokyo cargo test -p deep-replica --test acceptance_327_ac3_redraft
+running 2 tests
+test ac3_redraft_every_ask_notifies_and_its_click_opens_its_card_and_answers_nothing ... ok
+test ac3_redraft_planted_a_notification_action_that_answers_fails ... ok
+
+test result: ok. 2 passed; 0 failed; 0 blocked
