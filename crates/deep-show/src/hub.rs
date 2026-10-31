@@ -255,6 +255,21 @@ pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
     reply.insert("removed".into(), json!(diff.removed));
 }
 
+/// A refused revision's reply. A check that needs a canvas module or a pack version the build
+/// lacks, or that an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
+/// design: Canvas modules; #305; #306).
+pub(crate) fn refused_reply(mut reply: Map<String, Value>, issues: &[Issue], check: bool) -> Value {
+    reply.insert("outcome".into(), json!("refused"));
+    if check {
+        let blocked = crate::packs::blocked(issues) || reply.contains_key("blocked");
+        reply.insert(
+            "result".into(),
+            json!(if blocked { "BLOCKED" } else { "FAIL" }),
+        );
+    }
+    Value::Object(reply)
+}
+
 /// What keeps a frame from settling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hold {
@@ -1691,18 +1706,7 @@ impl<'a> Hub<'a> {
             });
         }
         if error {
-            reply.insert("outcome".into(), json!("refused"));
-            if show.check {
-                // A check that needs a canvas module or a pack version the build lacks, or that
-                // an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
-                // design: Canvas modules; #305; #306).
-                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
-                reply.insert(
-                    "result".into(),
-                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
-                );
-            }
-            return Value::Object(reply);
+            return refused_reply(reply, &issues, show.check);
         }
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);

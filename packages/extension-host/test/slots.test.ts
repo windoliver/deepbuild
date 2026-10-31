@@ -3,8 +3,7 @@
 // gates a session no answer is delivered; steer is a route into a running turn only; an answer whose delivery
 // failed stays waiting; a stuck runner can't hang an install; a sandboxed replacement of a shipped kind is BLOCKED
 // at install; and a session whose owner was unloaded has no owner. Each runs a real package through a real host.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
@@ -13,34 +12,10 @@ import { fixtures } from '@deepbuild/contracts';
 import { openRecord, type Connection, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ReleaseEntry } from '../src/index.js';
+import { cleanup, closing, pkgOf, temp } from './package.js';
 
-/** The preview methods a package's code calls, which its manifest lists by name since #139 (requires.preview). */
-const PREVIEW = /\bdeep\.(on|registerResolver|registerSource|registerEnvironment|lease|registerView|readNow|registerAdapter|registerRoute|registerIndex|record\.append|record\.query|evidence\.put|asks\.create|config\.get|notices\.send|store|schedule|secret|send|provide|use|read|fetch|registerAction)\(/g;
-const previewOf = (code: string): { requires?: { preview: string[] } } => {
-  const used = [...new Set([...code.matchAll(PREVIEW)].map((m) => `deep.${m[1]}`))].sort();
-  return used.length ? { requires: { preview: used } } : {};
-};
+afterAll(cleanup);
 
-const dirs: string[] = [];
-const closing: { close(): Promise<void> }[] = [];
-afterAll(async () => {
-  for (const c of closing.reverse()) await c.close();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
-const temp = (): string => {
-  const d = realpathSync(mkdtempSync(join(tmpdir(), 'deep-slots-test-')));
-  dirs.push(d);
-  return d;
-};
-function pkgOf(id: string, code: string, fields: Record<string, unknown> = {}): string {
-  const folder = temp();
-  writeFileSync(join(folder, 'index.ts'), code);
-  const manifest = { id, version: '1.0.0', digest: '', ...previewOf(code), ...fields };
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  manifest.digest = packageDigest(folder);
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  return folder;
-}
 const release = (...folders: string[]): ReleaseEntry[] => folders.map((folder) => {
   const m = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as { id: string; version: string };
   return { id: m.id, version: m.version, digest: packageDigest(folder) };
