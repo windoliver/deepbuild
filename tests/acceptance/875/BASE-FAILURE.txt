@@ -1,0 +1,159 @@
+Base-commit run of tests/acceptance/875 (issue #875), written blind.
+
+Base: 0d97024f (main 6f637e33 with #31's branch merged), nothing of #875 applied. Node 24.22.0 (fnm), after npm ci,
+npm run build --workspaces and cargo build -p deep-hook, all under that Node. Command:
+
+  npx vitest run --root tests/acceptance/875
+
+The Mac was shared and heavily loaded the whole time (load average 40 to 150 on 12 cores). Under that load some runs of
+AC1, AC2 and AC3 never reached their judgement (the prompt's task didn't lock within the wait, deep-hook dropped a Stop
+it couldn't spool in 50 ms, or the snapshot outlasted the stop's 60 s hold so the base hub never started the check; README,
+Load). Those are BLOCKED or setup failures, not the behaviour under test. So each test's block below is taken verbatim
+from a run where it reached its judgement, and the run is named. The judgement code is the same in all three runs; the
+08:42 run predates two diagnostics-only changes (the 180 s lock wait, up from 60 s, and the "held" field in messages).
+
+Expected failure per test:
+- AC1, AC2: the base hub ran the one-line check file through /bin/sh, the check passed on the snapshot, failed on the
+  merge base, and the base hub took that non-zero exit as proof: no INVALID verdict; the claim reads "says done 1/1".
+  This is the issue's bug ("any non-zero base exit counts as proof").
+- AC3: the claim reads PASS (says done 1/1), but the base run records tests_run 0 (the base hub records 0 for every run,
+  and its base checkout had no own files, so the test file wasn't there): the AC3 judgement fails at "on the merge base
+  the check's test must run".
+- AC4 (three tests): the base hub refuses DEEP_HUB_PLANT=any-nonzero-base-exit, so each is BLOCKED (the hub doesn't
+  start), never a pass. The base hub itself is the wrong program AC4 names, and AC1 and AC2 fail on it above.
+
+
+==== Full run, 09:10 (final code): summary
+ ❯ hub.test.ts (6 tests | 6 failed) 622095ms
+   ❯ AC1 #875.15f7a4ab through a real hub, a fix claim whose test imports a helper only the fix adds is INVALID naming 'failed on the base before its tests ran' (1)
+     × AC1 test/cart.test.ts imports src/discount.ts, which only the fix adds: INVALID naming 'failed on the base before its tests ran' 57784ms
+   ❯ AC2 #875.b3b1e7e3 through a real hub, a fix claim whose base run fails with a TypeError from a function the fix adds is INVALID naming 'failed on the base only elsewhere' (1)
+     × AC2 test/cart.test.ts's named expect calls discountedTotal, which only the fix adds: INVALID naming 'failed on the base only elsewhere' 290491ms
+   ❯ AC3 #875.efd89fb9 through a real hub, the sample repo's real fix, whose test fails its assertion on the base, is PASS (1)
+     × AC3 the real fix, whose test/cart.test.ts:5 expect fails on the base (100, not 90), is PASS 226857ms
+   ❯ AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests (3)
+     × AC4 (wrong program any-nonzero-base-exit) the helper the fix adds reads as proof, and AC1's judgement fails 23838ms
+     × AC4 (wrong program any-nonzero-base-exit) the TypeError from the function the fix adds reads as proof, and AC2's judgement fails 10791ms
+     × AC4 (wrong program any-nonzero-base-exit) the real fix stays PASS: the plant changes only what a base exit proves 12323ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ ❯ hub.test.ts:21:5
+ ❯ hub.test.ts:27:19
+ ❯ hub.test.ts:33:12
+ ❯ hub.test.ts:39:15
+ ❯ hub.test.ts:45:15
+ ❯ hub.test.ts:51:12
+ Test Files  1 failed (1)
+      Tests  6 failed (6)
+   Start at  09:10:42
+   Duration  622.82s (tests 100%)
+
+==== AC1, from the full run at 09:10 (final code)
+ FAIL  hub.test.ts > AC1 #875.15f7a4ab through a real hub, a fix claim whose test imports a helper only the fix adds is INVALID naming 'failed on the base before its tests ran' > AC1 test/cart.test.ts imports src/discount.ts, which only the fix adds: INVALID naming 'failed on the base before its tests ran'
+Error: the fix claim must be INVALID, a verdict.made with outcome INVALID about claim:01M69BMPDC0JC3GY7EVG6W5Y2H: verdicts []; runs [{"check":".deepbuild/checks/cart-discount.sh","on":"snapshot","outcome":"passed","tests_run":0},{"check":".deepbuild/checks/cart-discount.sh@base","on":"merge base","outcome":"failed","tests_run":0}]; line "says done 1/1 · next: DeepBuild · receipt"; reply {"systemMessage":"says done 1/1 · next: DeepBuild · receipt"}; held {"total":45862,"snapshot_start":4620,"fast":41240,"slow":2}
+ ❯ must ../29/h-d.ts:84:18
+     82| }
+     83| export function must(ok: boolean, message: string): asserts ok {
+     84|   if (!ok) throw Error(message);
+       |                  ^
+     85| }
+     86|
+ ❯ invalidNaming helpers.ts:289:3
+ ❯ hub.test.ts:21:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+==== AC2, from a run of AC2 alone at 09:09:57 (final code)
+ FAIL  hub.test.ts > AC2 #875.b3b1e7e3 through a real hub, a fix claim whose base run fails with a TypeError from a function the fix adds is INVALID naming 'failed on the base only elsewhere' > AC2 test/cart.test.ts's named expect calls discountedTotal, which only the fix adds: INVALID naming 'failed on the base only elsewhere'
+Error: the fix claim must be INVALID, a verdict.made with outcome INVALID about claim:01M69BKQE1ZXR5PBRFEHGEFDN9: verdicts []; runs [{"check":".deepbuild/checks/cart-discount.sh","on":"snapshot","outcome":"passed","tests_run":0},{"check":".deepbuild/checks/cart-discount.sh@base","on":"merge base","outcome":"failed","tests_run":0}]; line "says done 1/1 · next: DeepBuild · receipt"; reply {"systemMessage":"says done 1/1 · next: DeepBuild · receipt"}; held {"total":17104,"snapshot_start":6178,"fast":10925,"slow":1}
+ ❯ must ../29/h-d.ts:84:18
+     82| }
+     83| export function must(ok: boolean, message: string): asserts ok {
+     84|   if (!ok) throw Error(message);
+       |                  ^
+     85| }
+     86|
+ ❯ invalidNaming helpers.ts:289:3
+ ❯ hub.test.ts:27:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+==== AC3, from the full run at 08:42 (same judgement code; before the 180 s lock wait and the "held" field)
+ FAIL  hub.test.ts > AC3 #875.efd89fb9 through a real hub, the sample repo's real fix, whose test fails its assertion on the base, is PASS > AC3 the real fix, whose test/cart.test.ts:5 expect fails on the base (100, not 90), is PASS
+Error: on the merge base the check's test must run, and fail there on its assertion: the base run records [0] tests run; verdicts []; runs [{"check":".deepbuild/checks/cart-discount.sh","on":"snapshot","outcome":"passed","tests_run":0},{"check":".deepbuild/checks/cart-discount.sh@base","on":"merge base","outcome":"failed","tests_run":0}]; line "says done 1/1 · next: DeepBuild · receipt"; reply {"systemMessage":"says done · next: DeepBuild · receipt"}
+ ❯ must ../29/h-d.ts:84:18
+     82| }
+     83| export function must(ok: boolean, message: string): asserts ok {
+     84|   if (!ok) throw Error(message);
+       |                  ^
+     85| }
+     86|
+ ❯ passes helpers.ts:303:3
+ ❯ hub.test.ts:33:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+==== AC4, from the full run at 09:10 (final code)
+ FAIL  hub.test.ts > AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests > AC4 (wrong program any-nonzero-base-exit) the helper the fix adds reads as proof, and AC1's judgement fails
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+Error: DEEP_HUB_PLANT=any-nonzero-base-exit names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/cli/dist/main.js:178:30
+Node.js v24.22.0
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimFix helpers.ts:243:20
+ ❯ hub.test.ts:39:15
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+ FAIL  hub.test.ts > AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests > AC4 (wrong program any-nonzero-base-exit) the TypeError from the function the fix adds reads as proof, and AC2's judgement fails
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+Error: DEEP_HUB_PLANT=any-nonzero-base-exit names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/cli/dist/main.js:178:30
+Node.js v24.22.0
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimFix helpers.ts:243:20
+ ❯ hub.test.ts:45:15
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+ FAIL  hub.test.ts > AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests > AC4 (wrong program any-nonzero-base-exit) the real fix stays PASS: the plant changes only what a base exit proves
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+Error: DEEP_HUB_PLANT=any-nonzero-base-exit names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/cli/dist/main.js:178:30
+Node.js v24.22.0
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimFix helpers.ts:243:20
+ ❯ hub.test.ts:51:12
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+==== Runs where a test did not reach its judgement, for the record (load):
+- 09:10 full run: AC2 and AC3 "BLOCKED: the prompt opened no task with a locked definition" (load ~146).
+- 09:21 AC3 alone: no run and no stop.held after 10 minutes (load ~150).
+- 08:42 full run: AC1 runs [] (the snapshot outlasted the hold; no slow run started), AC2 BLOCKED (deep-hook could not spool the Stop within 50 ms).
+- 07:51 full run (60 s lock wait, 240 s settle, the whole install cloned): AC1 timed out, AC2 runs []; AC3 failed as above; AC4 BLOCKED as above.
+
