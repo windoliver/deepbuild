@@ -1,0 +1,133 @@
+Base commit: 0f7fb686 (Merge pull request #873; no implementation of #883)
+Command:     cargo test --locked -p deep-replica --test acceptance_883
+             (from the checkout; Rust 1.99.1 from rust-toolchain.toml; darwin-arm64; with the one [[test]] entry
+             this suite adds to crates/deep-replica/Cargo.toml)
+Date:        2026-10-31
+Exit code:   101
+Result:      the target doesn't compile, so none of its 19 cases runs. Every error names a missing piece of the
+             surface the README pins, and nothing else in the file fails. Trimmed: Compiling lines and rustc's
+             caret drawings are cut.
+
+== 1. The real run at the base: a missing surface, never the file's own setup
+
+error[E0599]: no variant, associated function, or constant named `NeverWithdraws` found for enum `Planted`
+  --> tests/acceptance/883/notifications.rs   (Wrong::NeverWithdraws => Planted::NeverWithdraws)
+error[E0599]: no variant, associated function, or constant named `QueuesOpenAsksOnStart` found for enum `Planted`
+  --> tests/acceptance/883/notifications.rs   (Wrong::QueuesOpenAsksOnStart => Planted::QueuesOpenAsksOnStart)
+error[E0599]: no method named `delivered` found for reference `&Replica` in the current scope
+error[E0609]: no field `title` on type `&Posted`
+   = note: available fields are: `device`, `ask`, `session`, `at`, `text`, `sound`
+error[E0599]: no method named `restart_hub` found for mutable reference `&mut Replica` in the current scope
+error[E0599]: no method named `reconnect` found for mutable reference `&mut Replica` in the current scope
+error: could not compile `deep-replica` (test "acceptance_883") due to 6 previous errors
+
+All six are in the file's `mod surface` block, the one place the new surface is used. `Replica`, `Posted`,
+`Planted`, `Killed`, `NOW`, `repo_root`, `open`, `open_devices`, `append`, `advance`, `focus`, `notifications`,
+`kill`, `relaunch` and `open_asks` resolve: they are the base's.
+
+== 2. The same file on main's notifier, with its surface shimmed (kept outside the checkout)
+
+To show where each case fails at a named assertion on the base, the file was copied to the job's scratch folder
+with only its `mod surface` block replaced by a shim over the base's own surface (make_shim.py), and registered
+for the run by a temporary [[test]] entry that was then removed. The shim:
+  delivered(device)  every post on that device: main's notifier never withdraws or replaces anything
+  title(posted)      the post's text: the base has no title apart from it
+  Planted::NeverWithdraws         the base's own Replica::open (that is main's notifier)
+  Planted::QueuesOpenAsksOnStart  the base's Notifier handed every open ask's ask.created again at relaunch, hub
+                                  restart and reconnect (Notifier::saw queues every ask.created it is given)
+  relaunch / restart_hub / reconnect  the base's relaunch; restart and reconnect do nothing (the base has neither)
+The shim runs were made on the file before its final rustfmt pass, which changed only line breaks.
+
+SHIM883=base cargo test --locked -p deep-replica --test shim883                           exit 101 (test failed)
+
+running 19 tests
+test ac1_an_ask_answered_in_the_cli_leaves_notification_center_within_2_s ... FAILED
+    ask:01MD8839000000000000000002: answered in the CLI, yet Notification Center on device 0 still holds it 2 s
+    later: [Posted { device: 0, ask: Some("ask:01MD8839000000000000000002"), session: "01MD883SESS000000000000S01",
+    at: 1800000001000, text: "! Cart totals · needs you — Open port 8080 to the network? If you don't answer: No,
+    in 2 d.", sound: Some(Question) }]
+test ac2_two_asks_from_one_session_30_s_apart_leave_one_the_seconds ... FAILED
+    two asks from one session 30 s apart (ask:…0005, then ask:…0007) should leave one notification, the second's;
+    Notification Center holds [Some("ask:01MD8839000000000000000005"), Some("ask:01MD8839000000000000000007")]
+test ac2_two_asks_from_two_sessions_leave_two ... ok
+test ac3_a_default_at_16_40_today_reads_at_16_40 ... FAILED
+    the default's time reads "in 2 h", not "at 16:40": "! Cart totals · needs you — Delete the stale preview
+    deploy? If you don't answer: No, in 2 h."
+test ac3_a_default_at_16_40_tomorrow_reads_tomorrow_at_16_40 ... FAILED
+    the default's time should read "tomorrow at 16:40": "… If you don't answer: No, in 1 d."
+test ac4_quitting_and_reopening_the_app_then_restarting_the_hub_posts_nothing_again ... ok
+test scope_withdrawn_when_superseded ... FAILED
+    ask:01MD8839000000000000000021: superseded, yet Notification Center on device 0 still holds it 2 s later: […]
+test scope_withdrawn_when_moot ... FAILED
+    ask:01MD8839000000000000000026: moot, yet Notification Center on device 0 still holds it 2 s later: […]
+test scope_withdrawn_when_its_deadline_passes ... FAILED
+    ask:01MD8839000000000000000030: past its deadline, defaulted, yet Notification Center on device 0 still holds
+    it 2 s later: […]
+test scope_withdrawn_from_every_device ... FAILED
+    ask:01MD8839000000000000000033: answered in the CLI, still on device 0 2 s later: […]
+test scope_an_ask_you_saw_on_screen_posts_nothing_after_restarts_or_a_reconnect ... ok
+test scope_an_ask_that_notified_posts_nothing_after_a_channel_reconnect ... ok
+test scope_the_title_names_deepbuild_and_the_sessions_task ... FAILED
+    ask:01MD8839000000000000000044: the title doesn't name DeepBuild: "! Cart totals · needs you — Open port 8080
+    to the network? If you don't answer: No, in 2 d."
+test planted_ac1_the_notifier_on_main_leaves_it_and_fails_naming_the_ask ... ok
+test planted_ac2_the_notifier_on_main_leaves_both_of_one_sessions_asks ... ok
+test planted_ac3_a_text_with_in_2_h_fails ... ok
+test planted_ac4_a_notifier_that_queues_every_open_ask_on_start_fails_naming_the_ask ... ok
+test planted_scope_the_notifier_on_main_fails_each_withdrawal ... ok
+test planted_scope_queueing_on_start_fails_an_ask_you_saw_on_screen ... ok
+
+test result: FAILED. 10 passed; 9 failed
+
+Reading it:
+- AC1, AC2 (one session) and AC3 fail at their named assertions on main's notifier, AC1 naming the ask, AC3
+  showing the base's own "in 2 h".
+- AC2's two-session case passes on main: main leaves both, which is what that case asks; its one-session twin is
+  the one main fails.
+- AC4 and the two restart scope cases PASS on the base shim. They are not failing on the merge base at an
+  assertion: the base replica's relaunch builds a notifier that is never shown the record, and the base has no
+  hub restart or reconnect at all. At the base they fail only because the surface is missing (section 1). Their
+  wrong program is the one the issue names, a notifier that queues every open ask on start, and both planted cases
+  show the judges fail it, naming the ask. The issue's Proof asks for "the restart case failing on the merge base";
+  in the replica that is a compile failure, not an assertion.
+- Every planted case passes: each judge fails its wrong program, naming the ask where the criterion says so.
+
+== 3. The same file against a test-side model of a right Notification Center
+
+SHIM883=right: as above, but delivered(device) holds the latest post of each session, and only while its ask is
+open in the record (planted programs keep main's semantics). This checks that the judges pass a right program and
+aren't over-constrained. The notification's text and title are the app's and aren't modelled, so AC3 and the title
+case still fail here, on the base's text.
+
+SHIM883=right cargo test --locked -p deep-replica --test shim883                          exit 101 (test failed)
+
+test ac1_an_ask_answered_in_the_cli_leaves_notification_center_within_2_s ... ok
+test ac2_two_asks_from_one_session_30_s_apart_leave_one_the_seconds ... ok
+test ac2_two_asks_from_two_sessions_leave_two ... ok
+test ac3_a_default_at_16_40_today_reads_at_16_40 ... FAILED        (the base's text: "… No, in 2 h.")
+test ac3_a_default_at_16_40_tomorrow_reads_tomorrow_at_16_40 ... FAILED   (the base's text: "… No, in 1 d.")
+test ac4_quitting_and_reopening_the_app_then_restarting_the_hub_posts_nothing_again ... ok
+test scope_withdrawn_when_superseded ... ok
+test scope_withdrawn_when_moot ... ok
+test scope_withdrawn_when_its_deadline_passes ... ok
+test scope_withdrawn_from_every_device ... ok
+test scope_an_ask_you_saw_on_screen_posts_nothing_after_restarts_or_a_reconnect ... ok
+test scope_an_ask_that_notified_posts_nothing_after_a_channel_reconnect ... ok
+test scope_the_title_names_deepbuild_and_the_sessions_task ... FAILED   (the base's text names no DeepBuild)
+test planted_* (6 cases) ... ok
+
+test result: FAILED. 16 passed; 3 failed
+
+This proves the file is type-correct against the pinned surface where the base has it, and that the record-driven
+judges pass a right model and fail main's notifier. It proves nothing about the real app, which only the run after
+#883 lands does.
+
+== The fixtures against their published schemas
+
+packages/contracts built with tsc into the job's scratch folder (dist next to copies of schemas/, fixtures/ and
+digests.json), then each fixture event validated with its `validate(kind@v, event)`:
+
+  node validate883.mjs <scratch>/contracts/dist tests/acceptance/883/fixtures
+  9 events, 0 invalid
+
+rustfmt --edition 2021 --check tests/acceptance/883/notifications.rs   clean
