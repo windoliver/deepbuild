@@ -19,7 +19,7 @@ import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
-import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { headTrust, slot, validityGate, type SessionLog } from '@deepbuild/gate';
@@ -34,6 +34,7 @@ import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
+import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
@@ -42,7 +43,7 @@ import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { GateRunner } from './gate-runner.js';
 import { argsOf, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
-import { openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
+import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
@@ -271,7 +272,10 @@ export class Core {
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
   /** Setup's wiki build (#356). */
-  private wikiBuild!: { build(): Promise<WikiBuilt> };
+  private wikiBuild!: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string> };
+  /** The taste calls each session was given since it started, and the sessions whose first prompt was read for its screen (#111). */
+  private tasted = new Map<string, Set<string>>();
+  private firstPrompted = new Set<string>();
   /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
   private readonly parked = new Map<string, Promise<void>>();
   /** Each session a reading named a job for, once. */
@@ -558,7 +562,7 @@ export class Core {
     const env: Record<string, string | undefined> = { ...process.env };
     const repos: string[] = [];
     const archive = await openArchive({
-      record: this.record, evidence: this.store, asks, adapters: shipped(), env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
+      record: this.record, evidence: this.store, asks, adapters: shipped(), transcripts: MEMORY_TRANSCRIPTS, env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
       held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
       // A session's copy is recorded under the repo its folder is in, so what it says reaches that repo's page (#356).
       projectOf: (cwd, agent) => projectOf(cwd, agent, this.options.plant),
@@ -577,7 +581,7 @@ export class Core {
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
-      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant,
+      core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
@@ -611,6 +615,7 @@ export class Core {
       await this.asks.judged(this.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: judge(e.rule, e.yours, margin) });
     }
     await this.syncStanding();
+    await syncRejected((q) => this.record.raw(q), this.root.dir);
   }
 
   private writeState(state: 'running' | 'stopped'): void {
@@ -2041,6 +2046,40 @@ export class Core {
     return { offer: handle, ask: asked.ask, decision: saved ? `decision:${saved.id}` : asked.decision ?? null, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : offer.scope };
   }
 
+  /** The past taste decisions `said` names a screen for that this session wasn't given since it started (#111). */
+  private async tasteAt(session: string, cwd: string, said: string, starting: boolean): Promise<string | undefined> {
+    const given = starting ? new Set<string>() : this.tasted.get(session) ?? new Set<string>();
+    this.tasted.set(session, given);
+    const fresh = (await tastesFor((q) => this.record.raw(q), repoOf(cwd), said)).filter((t) => !given.has(t.ask));
+    for (const t of fresh) given.add(t.ask);
+    return tasteBlock(fresh);
+  }
+  /** `deep memory`'s list (#111). */
+  private async lessons() {
+    return lessonsOf((q) => this.record.raw(q), await repoFolders(this.record, this.store));
+  }
+  /**
+   * `deep memory keep` and `remove` (#111): yours alone, from your own terminal, once the OS confirms you. Keeping a
+   * proposed guard installs it through the guard engine, checked on its planted call and twin, before the decision is saved.
+   */
+  private async memoryAct(params: Obj, context: CallContext): Promise<Obj> {
+    const verb = params.verb;
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A lesson is kept or removed from the CLI, once the OS confirms you.', 'memory.act'));
+    const lesson = (await this.lessons()).find((l) => l.id === params.lesson);
+    if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
+    // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
+    const agent = await this.agentAbove(context.peer);
+    const why = await confirmYou(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, this.options.confirm);
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
+    if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
+    const guard = guardOf(lesson);
+    if (guard) {
+      const added = await addGuards(this.root.dir, guard, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant });
+      if (added.status === 'refused') return added;
+    }
+    return { decision: await keepLesson(this.record, this.connection('cli'), this.now, lesson) };
+  }
+
   /** Copies your standing rules for cloud resources into rules.json, so deep-hook honours them with the hub down (#23). */
   private async syncStanding(): Promise<void> {
     if (this.options.plant === 'copies-no-standing-rules') return;
@@ -2072,7 +2111,8 @@ export class Core {
       const source = meta.fields?.source;
       const open = own && !(this.options.plant === 'brief-at-startup-only' && source !== 'startup') ? await this.tasks.brief(meta.session, this.sessions.get(meta.session)?.thread) : undefined;
       if (this.options.plant === 'slow-brief' && (source === 'compact' || source === 'resume')) await new Promise((done) => setTimeout(done, 25));
-      const context = [brief, open, answers].filter(Boolean).join('\n\n');
+      const taste = own ? await this.tasteAt(meta.session, meta.cwd, (await headOf(meta.cwd))?.branch ?? '', true) : undefined;
+      const context = [brief, open, answers, taste].filter(Boolean).join('\n\n');
       return context ? { context } : {};
     }
     if (!own) return {};
@@ -2119,7 +2159,17 @@ export class Core {
         this.carried.delete(meta.session);
         const ack = this.acknowledge(meta.session);
         const promised = await this.promiseCarried(meta.session, 'next_prompt', prompt);
-        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context].filter(Boolean).join('\n\n');
+        // What you reject while a session runs stops it now, not at the next wiki build (#111).
+        if (prompt.includes('rejected:')) {
+          const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
+          await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }], true);
+          await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+        }
+        // A branch's name may not say which screen a session works on, so its first prompt is read too.
+        const first = !this.firstPrompted.has(meta.session);
+        this.firstPrompted.add(meta.session);
+        const taste = first ? await this.tasteAt(meta.session, meta.cwd, prompt, false) : undefined;
+        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context, taste].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -2909,7 +2959,13 @@ export class Core {
       case 'record.backup': return this.backup(params);
       case 'env.up': return this.envUp(params, context);
       case 'env.down': return this.envDown(params, context);
-      case 'wiki.build': return this.wikiBuild.build();
+      case 'wiki.build': {
+        const built = await this.wikiBuild.build();
+        await syncRejected((q) => this.record.raw(q), this.root.dir);
+        return built;
+      }
+      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections((q) => this.record.raw(q)) };
+      case 'memory.act': return this.memoryAct(params, context);
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
@@ -2989,8 +3045,9 @@ export class Core {
    * A page of the log as each event's JSON text, the record's own JSON with `verified` for its unverified mark,
    * built from the stored text without parsing it again: the reads and the stream page through many events.
    */
-  private async page(after: number, limit: number): Promise<{ log_pos: number; json: string }[]> {
-    const rows = (await this.record.raw(`SELECT v, id, kind, writer, actor, scope, ts, log_pos, data, evidence, subject, CAST(seq AS TEXT) AS seq, session_id, project_id, agent, unverified FROM events WHERE log_pos > ${after} ORDER BY log_pos LIMIT ${limit}`)) as Row[];
+  private async page(after: number, limit: number, kinds?: string[]): Promise<{ log_pos: number; json: string }[]> {
+    const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
+    const rows = (await this.record.raw(`SELECT v, id, kind, writer, actor, scope, ts, log_pos, data, evidence, subject, CAST(seq AS TEXT) AS seq, session_id, project_id, agent, unverified FROM events WHERE log_pos > ${after}${only} ORDER BY log_pos LIMIT ${limit}`)) as Row[];
     return rows.map((r) => ({ log_pos: r.log_pos, json: eventText(r) }));
   }
   /**
@@ -3011,20 +3068,21 @@ export class Core {
   private async read(params: Obj): Promise<Obj> {
     const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
     const limit = Number.isSafeInteger(params.limit) && (params.limit as number) > 0 ? Math.min(params.limit as number, 1000) : 1000;
-    const ahead = this.ahead?.after === after && this.ahead.limit === limit ? this.ahead : undefined;
+    const kinds = Array.isArray(params.kinds) && params.kinds.every((k) => typeof k === 'string') ? (params.kinds as string[]) : undefined;
+    const ahead = !kinds && this.ahead?.after === after && this.ahead.limit === limit ? this.ahead : undefined;
     this.ahead = undefined;
     let out: { log_pos: number; events: string };
     if (ahead) {
       await Promise.allSettled([...this.inflight]);
       out = { log_pos: ahead.log_pos, events: ahead.events };
     } else {
-      const read = await this.reflecting(async () => ({ events: await this.page(after, limit) }));
+      const read = await this.reflecting(async () => ({ events: await this.page(after, limit, kinds) }));
       const events = read.events as { log_pos: number; json: string }[];
       out = { log_pos: events.length === limit ? events[limit - 1]!.log_pos : Math.max(after, read.log_pos as number), events: `[${events.map((e) => e.json).join(',')}]` };
     }
     // History is paged in order: the next full page is built while the reader takes this one. A full page never
     // changes once committed, since log positions only grow and a gap never fills.
-    if (out.events !== '[]') {
+    if (!kinds && out.events !== '[]') {
       setImmediate(() => void this.page(out.log_pos, limit).then((next) => {
         if (next.length === limit) this.ahead = { after: out.log_pos, limit, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
       }));
@@ -3158,6 +3216,7 @@ export class Core {
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [handle])) as { data: string }[];
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
+    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
@@ -3179,12 +3238,15 @@ export class Core {
   private async overrule(params: Obj, context: CallContext): Promise<Obj> {
     const id = typeof params.decision === 'string' && /^decision:[0-9A-Za-z]+$/.test(params.decision) ? params.decision : undefined;
     if (!id) throw new Refused(refusal('pattern', '/params/decision', 'Name the decision as decision:<id>.', params.decision));
-    const [row] = (await this.record.raw(`SELECT answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { answer: string; state: string }[];
+    const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
     await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
+    // First: a retry finds a revoked decision done, so a guard left behind would never go.
+    dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
     await this.syncStanding().catch(() => undefined);
+    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
     return { overruled: id };
   }
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
@@ -3722,6 +3784,9 @@ export class Core {
   private async propose(session: string, args: Obj): Promise<Obj> {
     const target = scrubText(String(args.target), { held: this.options.held }).slice(0, 1000);
     const change = scrubText(String(args.change), { held: this.options.held }).slice(0, 4000);
+    // A direction you rejected isn't asked about again: the agent hears your decision, and you hear nothing (#111).
+    const revived = await revives((q) => this.record.raw(q), change, repoOf(this.sessions.get(session)!.cwd), session);
+    if (revived) throw refuse('rejected', '/params/arguments/change', `You can't propose \`${revived.direction}\`: the person rejected it (${revived.decision}). Take another direction; only they can overrule that decision.`, revived.decision);
     const question = `Apply this change an agent proposed to ${target}? ${change}`;
     const pinned = await this.pinOf(this.sessions.get(session)!.cwd, question);
     const options = [{ id: 'apply', label: 'Apply it', decision: 'none' }, { id: 'keep', label: 'Keep it as it is', decision: 'none' }];

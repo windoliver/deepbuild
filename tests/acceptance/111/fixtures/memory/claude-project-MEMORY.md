@@ -1,0 +1,2 @@
+- Deploy with `scripts/gone-deploy.sh`
+- Release with `scripts/live.sh`
