@@ -1,0 +1,10 @@
+{
+  "id": "test/agent-terminals",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["run_as_you"] },
+  "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] },
+  "panels": [{ "name": "terminals", "area": "tab" }],
+  "actions": ["ext.agent-terminals.open", "ext.agent-terminals.tabs", "ext.agent-terminals.read"],
+  "checks": ["ext.agent-terminals.hosts", "ext.agent-terminals.shows_again"]
+}
