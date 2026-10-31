@@ -23,12 +23,12 @@
     "readBy": "how DeepBuild starts the agent headless: a scripted session in a pseudo-terminal, a read-only job on stdin",
     "conformance": "codex/launch/flags",
     "readOnlyJob": {
-      "readBy": "DeepBuild's own jobs: read-only sandbox, none of the user's config or MCP servers, no bypass flag, prompt on stdin",
+      "readBy": "DeepBuild's own jobs: Codex's sandbox off because macOS can't nest Seatbelt (exit 71, every command, reads too), so the supervisor's sandbox is what confines it; none of the user's config or MCP servers, prompt on stdin",
       "args": [
         "exec",
         "--json",
         "-s",
-        "read-only",
+        "danger-full-access",
         "--skip-git-repo-check",
         "--ignore-user-config",
         "-m",
