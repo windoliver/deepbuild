@@ -52,9 +52,9 @@ The skill is `skills/deepbuild/SKILL.md` in the checkout (beside the design's `s
 
 - every listed tool is named in the "Agents, through MCP" cell of at least one row, and its description contains each such row's **Never** cell;
 - the skill contains, for every row naming a listed tool, the row's **Block** and its **Never** cell; names every listed tool; names no `deep_*` tool the list lacks;
-- the skill names no tool parameter: no property name of any tool's input schema in a code span, before `:` or `=`, or in double quotes, and none containing `_`, a digit or a capital at all.
+- the skill names no tool parameter: no property name of any tool's input schema in a code span, before `:` or `=`, or in double quotes, and none containing `_`, a digit or a capital at all. The keys of the skill's YAML frontmatter (the skill format's own `name:`, `description:`) are not read as naming a parameter; their values and the body are.
 
-The same test feeds `drift()` a table whose Never cells changed and a skill naming `deep_frobnicate`, and expects each reported, so the check can fail.
+The same test feeds `drift()` a table whose Never cells changed and a skill naming `deep_frobnicate`, and expects each reported, so the check can fail. It also feeds it a skill whose body names a live tool's parameter in a code span and before `:`, expecting each reported, and one with that parameter only as a frontmatter key, expecting nothing.
 
 ### Strict schemas ("Done when")
 
