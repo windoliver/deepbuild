@@ -213,13 +213,21 @@ impl Datum {
     }
 }
 
-crate::canonical_fields!(Edit { add, path, value });
+impl crate::schedule::Canonical for Edit {
+    fn encode(&self, out: &mut Vec<u8>) {
+        crate::schedule::Canonical::encode(&(&self.add, &self.path, &self.value), out);
+    }
+}
 
 /// What a contribution writes: its edits, in order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Edits(pub Vec<Edit>);
 
-crate::canonical_fields!(Edits { 0 });
+impl crate::schedule::Canonical for Edits {
+    fn encode(&self, out: &mut Vec<u8>) {
+        crate::schedule::Canonical::encode(&self.0, out);
+    }
+}
 
 impl Edits {
     /// One `set` of `value` at `path`.
@@ -277,13 +285,14 @@ pub struct Transform {
     pub shear: Option<f64>,
 }
 
-crate::canonical_fields!(Transform {
-    pos,
-    rot,
-    scale,
-    pivot,
-    shear
-});
+impl crate::schedule::Canonical for Transform {
+    fn encode(&self, out: &mut Vec<u8>) {
+        crate::schedule::Canonical::encode(
+            &(&self.pos, &self.rot, &self.scale, &self.pivot, &self.shear),
+            out,
+        );
+    }
+}
 
 impl Transform {
     /// The transform an item's `at` writes.

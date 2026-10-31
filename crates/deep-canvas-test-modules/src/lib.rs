@@ -484,7 +484,11 @@ pub fn steps_cycle() -> [Module; 2] {
 #[derive(Debug)]
 pub struct Points(pub Vec<[f64; 2]>);
 
-deep_canvas::canonical_fields!(Points { 0 });
+impl deep_canvas::schedule::Canonical for Points {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&self.0, out);
+    }
+}
 
 fn points_val(points: Vec<[f64; 2]>) -> Val {
     Val::typed(Points(points))

@@ -109,6 +109,8 @@ impl HashVersion {
 /// call over them costs less than a streaming hasher's state per key.
 const GATHER: usize = 512;
 
+// The gathered bytes stay inline: boxing them would allocate once per key.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum State {
     V1(Sha256),
@@ -246,16 +248,6 @@ impl<T: Canonical + std::fmt::Debug + Any + Send + Sync> Typed for T {
     }
 }
 
-/// A value's Debug text, as a diagnostic shows it; never a digest's input. A test build with
-/// `test-debug-alt` prints every value another way, as another compiler might.
-pub fn debug_text(value: &dyn std::fmt::Debug) -> String {
-    if cfg!(feature = "test-debug-alt") {
-        format!("{value:#?} (alt)")
-    } else {
-        format!("{value:?}")
-    }
-}
-
 /// One value an operator wrote: JSON, which only a check phase writes, or a typed value.
 #[derive(Clone)]
 pub enum Val {
@@ -269,7 +261,7 @@ impl std::fmt::Debug for Val {
         match self {
             Val::None => write!(f, "None"),
             Val::Json(v) => write!(f, "Json({v})"),
-            Val::Typed(v) => write!(f, "Typed({})", debug_text(v)),
+            Val::Typed(v) => write!(f, "Typed({v:?})"),
         }
     }
 }
@@ -301,10 +293,10 @@ impl Val {
         }
     }
 
-    /// The Debug text of a typed value, for diagnostics; `None` for any other.
-    pub fn debug(&self) -> Option<String> {
+    /// A typed value as Debug sees it, for a diagnostic of its text; `None` for any other.
+    pub fn debug(&self) -> Option<&dyn std::fmt::Debug> {
         match self {
-            Val::Typed(v) => Some(debug_text(v)),
+            Val::Typed(v) => Some(v.as_ref() as &dyn std::fmt::Debug),
             _ => None,
         }
     }

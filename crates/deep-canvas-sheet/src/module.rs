@@ -18,7 +18,11 @@ pub struct Sheet {
     pub captions: Vec<String>,
 }
 
-deep_canvas::canonical_fields!(Sheet { placed, captions });
+impl deep_canvas::schedule::Canonical for Sheet {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.placed, &self.captions), out);
+    }
+}
 
 /// The sheet module: its manifest and its one register call.
 pub fn module() -> Module {

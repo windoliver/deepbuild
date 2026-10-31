@@ -1,7 +1,8 @@
 //! Canonical bytes for typed results (issue #855; canvas primitives: Content key). Every typed
 //! value an operator writes encodes itself through [`Canonical`]: fields in declared order,
 //! integers little-endian at their width, floats by their bits, strings as length-prefixed UTF-8
-//! and lists by their length then each element. Debug formatting is never a digest's input, so a
+//! and lists by their length then each element; a struct encodes its fields in declared order as
+//! a tuple of them. Debug formatting is never a digest's input, so a
 //! compiler that prints a type another way changes no digest.
 
 use std::collections::BTreeMap;
@@ -19,16 +20,41 @@ pub trait Canonical {
     }
 }
 
-macro_rules! le {
-    ($($t:ty),*) => {$(
-        impl Canonical for $t {
-            fn encode(&self, out: &mut Vec<u8>) {
-                out.extend_from_slice(&self.to_le_bytes());
-            }
-        }
-    )*};
+impl Canonical for u8 {
+    fn encode(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
 }
-le!(u8, u16, u32, u64, i32, i64);
+
+impl Canonical for u16 {
+    fn encode(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
+}
+
+impl Canonical for u32 {
+    fn encode(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
+}
+
+impl Canonical for u64 {
+    fn encode(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
+}
+
+impl Canonical for i32 {
+    fn encode(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
+}
+
+impl Canonical for i64 {
+    fn encode(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
+}
 
 impl Canonical for usize {
     fn encode(&self, out: &mut Vec<u8>) {
@@ -124,32 +150,53 @@ impl<K: Canonical, V: Canonical> Canonical for BTreeMap<K, V> {
     }
 }
 
-macro_rules! tuple {
-    ($($n:tt $t:ident),*) => {
-        impl<$($t: Canonical),*> Canonical for ($($t,)*) {
-            fn encode(&self, out: &mut Vec<u8>) {
-                $(self.$n.encode(out);)*
-            }
-        }
-    };
+impl<A: Canonical, B: Canonical> Canonical for (A, B) {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.encode(out);
+        self.1.encode(out);
+    }
 }
-tuple!(0 A, 1 B);
-tuple!(0 A, 1 B, 2 C);
-tuple!(0 A, 1 B, 2 C, 3 D);
-tuple!(0 A, 1 B, 2 C, 3 D, 4 E);
-tuple!(0 A, 1 B, 2 C, 3 D, 4 E, 5 F);
 
-/// Implements [`Canonical`] for a struct by its fields in the order listed, which is the order
-/// it declares them.
-#[macro_export]
-macro_rules! canonical_fields {
-    ($t:ty { $($f:tt),* $(,)? }) => {
-        impl $crate::schedule::Canonical for $t {
-            fn encode(&self, out: &mut Vec<u8>) {
-                $($crate::schedule::Canonical::encode(&self.$f, out);)*
-            }
-        }
-    };
+impl<A: Canonical, B: Canonical, C: Canonical> Canonical for (A, B, C) {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.encode(out);
+        self.1.encode(out);
+        self.2.encode(out);
+    }
+}
+
+impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical> Canonical for (A, B, C, D) {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.encode(out);
+        self.1.encode(out);
+        self.2.encode(out);
+        self.3.encode(out);
+    }
+}
+
+impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical, E: Canonical> Canonical
+    for (A, B, C, D, E)
+{
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.encode(out);
+        self.1.encode(out);
+        self.2.encode(out);
+        self.3.encode(out);
+        self.4.encode(out);
+    }
+}
+
+impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical, E: Canonical, F: Canonical> Canonical
+    for (A, B, C, D, E, F)
+{
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.encode(out);
+        self.1.encode(out);
+        self.2.encode(out);
+        self.3.encode(out);
+        self.4.encode(out);
+        self.5.encode(out);
+    }
 }
 
 #[cfg(test)]
@@ -160,7 +207,12 @@ mod tests {
         name: String,
         at: [f64; 2],
     }
-    canonical_fields!(Pair { name, at });
+
+    impl Canonical for Pair {
+        fn encode(&self, out: &mut Vec<u8>) {
+            (&self.name, self.at).encode(out);
+        }
+    }
 
     #[test]
     fn fields_encode_in_order_with_strings_length_prefixed_and_floats_by_bits() {

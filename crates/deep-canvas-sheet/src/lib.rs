@@ -242,12 +242,14 @@ pub struct Placed {
     pub marks: Vec<Vec<[Rect; 2]>>,
 }
 
-deep_canvas::canonical_fields!(Placed {
-    card,
-    sheet,
-    cells,
-    marks
-});
+impl deep_canvas::schedule::Canonical for Placed {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.card, &self.sheet, &self.cells, &self.marks),
+            out,
+        );
+    }
+}
 
 /// The card's slot at the view's top left, the sheet to its right at the same top, its cells in
 /// rows of `columns` (or as many as fit, for auto), each at its exact size, with room beside and
