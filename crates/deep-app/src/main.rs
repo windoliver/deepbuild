@@ -62,6 +62,18 @@ enum Mode {
 }
 
 fn main() {
+    // The signed app has no allow-jit entitlement (#358), so no panel in it may ask for native code.
+    rquickjs_jit::deny_native_code();
+    #[cfg(feature = "panel-check")]
+    {
+        let all: Vec<String> = std::env::args().skip(1).collect();
+        match all.first().map(String::as_str) {
+            Some("panel-check") => std::process::exit(deep_app::panel_check::check(&all[1..])),
+            Some("panel-bench") => std::process::exit(deep_app::panel_check::bench(&all[1..])),
+            Some("panel-keys") => std::process::exit(deep_app::panel_keys::keys(&all[1..])),
+            _ => {}
+        }
+    }
     let started = Instant::now();
     let (panel_dir, mode) = args();
     if let Mode::PostForged { chords } = mode {

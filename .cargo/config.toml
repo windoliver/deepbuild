@@ -17,3 +17,9 @@ gpui-pre = { path = "vendor/gpui-pre" }
 # Issue #377 adds the GPU layer's handoff to it: BGRA surfaces composited premultiplied, and
 # `gpu_surfaces`, which reports the surfaces each frame command buffer samples and its completion.
 gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
+
+# Issue #358: the panel host's JIT switch (technical design: Decided, "Where agent-built panels run").
+# vendor/quickjs-jit-runtime is that crate at the commit gpui-shell pins with `deny_native_code` added,
+# marked "DeepBuild patch". It replaces this one crate; gpui-kit and gpui-shell stay upstream, unforked.
+[patch."https://github.com/longbridge/quickjs-jit"]
+quickjs-jit-runtime = { path = "vendor/quickjs-jit-runtime" }
