@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::{Tokens, Val};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// The look the scheduler evaluated last: the static the planted operator reads.
 static LOOK: Mutex<Option<Tokens>> = Mutex::new(None);
@@ -69,7 +69,7 @@ fn register(r: &mut Registrar) {
                         * b.get(3).and_then(Value::as_f64).unwrap_or(0.0)
                 })
                 .unwrap_or(0.0);
-            v.write("test.accent.base", Val::json(json!(area)))
+            v.write("test.accent.base", Val::typed(area))
         });
     r.operator(
         "tint",
@@ -80,13 +80,10 @@ fn register(r: &mut Registrar) {
     .applies(|_, _, item| item.get("kind").and_then(Value::as_str) == Some("test.accent@1"))
     .run(|v| {
         let _ = v.item()?;
-        let base = v.json("test.accent.base")?.map(|b| (*b).clone());
+        let base = v.typed::<f64>("test.accent.base")?.map(|b| *b);
         // The planted read: the look's accent role, from a static, outside the read set.
-        let accent = accent_role();
-        v.write(
-            "test.accent.tint",
-            Val::json(json!({"base": base, "accent": accent})),
-        )
+        let accent = accent_role().to_string();
+        v.write("test.accent.tint", Val::typed((base, accent)))
     });
 }
 
