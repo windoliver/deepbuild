@@ -2144,15 +2144,6 @@ struct ItemCtx<'a> {
 
 /// What `item` draws; `None` for an item that draws nothing.
 fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>, Refused> {
-    let ItemCtx {
-        items,
-        palette,
-        paints,
-        scopes,
-        bound,
-        row_readings,
-        planted,
-    } = *ctx;
     let path = format!("items/{id}");
     if item.get("visible") == Some(&Value::Bool(false)) {
         return Ok(None);
@@ -2177,7 +2168,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
     let r1 = place.moves() && r1_paint(paint);
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-    let adjust = Adjust::read(item, palette, id)?;
+    let adjust = Adjust::read(item, ctx.palette, id)?;
     let mut marks: Vec<Mark> = match kind {
         // A scale, a mask and a group draw nothing themselves, and a camera is the view a
         // document is seen through, not a mark (#378: a 3D figure's camera). A graph, a
@@ -2201,7 +2192,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 polygon: params.get("polygon") == Some(&Value::Bool(true)),
             };
             let verbs = star.verbs(&format!("{path}/params"))?;
-            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
         }
         "frame@1" => {
             // A frame draws its background; its overflow mask scopes its children.
@@ -2211,7 +2202,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 item: id.clone(),
                 bounds,
                 radius: num(params.get("radius")).unwrap_or(0.0),
-                fill: paints.paint(
+                fill: ctx.paints.paint(
                     id,
                     fill,
                     &format!("{paint_path}/fill"),
@@ -2233,7 +2224,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             ) else {
                 return refuse("bad_doc", format!("{path}/params/arc"));
             };
-            let close = match (fill.is_some(), planted) {
+            let close = match (fill.is_some(), ctx.planted) {
                 (false, _) => outline::Close::Open,
                 (true, Planted::ArcClosedAlongChord) => outline::Close::Chord,
                 (true, Planted::None) => outline::Close::Filled,
@@ -2246,7 +2237,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 to,
                 close,
             );
-            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
         }
         "path@1"
             if !r1
@@ -2262,7 +2253,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 code: "bad_path_data",
                 path: format!("{path}/params/d"),
             })?;
-            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
         }
         "rect@1" | "circle@1"
             if !r1
@@ -2288,19 +2279,19 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             if fill.is_none() && stroke.is_none() {
                 return Ok(None);
             }
-            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
         }
         "marks@1" => data::mark_set(
             id,
             item,
-            items,
-            palette,
+            ctx.items,
+            ctx.palette,
             pos,
-            row_readings
+            ctx.row_readings
                 .get(id.as_str())
                 .unwrap_or(&data::BoundRows::new()),
         )?,
-        "axis@1" => data::axis(id, item, items, palette, pos)?,
+        "axis@1" => data::axis(id, item, ctx.items, ctx.palette, pos)?,
         "image@1" => {
             let Some(Value::String(asset)) = params.get("asset") else {
                 return refuse("bad_doc", format!("{path}/params/asset"));
@@ -2359,7 +2350,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     item: id.clone(),
                     bounds,
                     radius: num(params.get("radius")).unwrap_or(0.0),
-                    fill: paints.paint(
+                    fill: ctx.paints.paint(
                         id,
                         fill,
                         &format!("{paint_path}/fill"),
@@ -2381,7 +2372,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     r: num(params.get("r")).unwrap_or(0.0),
                     inner_r: num(params.get("inner_r")).unwrap_or(0.0),
                     color: role(
-                        palette,
+                        ctx.palette,
                         fill.get("role"),
                         &format!("{path}/params/paint/fill/role"),
                     )?,
@@ -2399,7 +2390,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 let color_role = stroke
                     .and_then(|s| s.get("role"))
                     .or(fill.and_then(|f| f.get("role")));
-                let color = role(palette, color_role, &format!("{path}/params/paint"))?;
+                let color = role(ctx.palette, color_role, &format!("{path}/params/paint"))?;
                 Mark::Path {
                     item: id.clone(),
                     d: d.clone(),
@@ -2413,7 +2404,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 }
             }
             "text@1" => {
-                let shown = bound.get(id);
+                let shown = ctx.bound.get(id);
                 // A stale value greys out (Bound value).
                 let color_role = if shown.is_some_and(|s| s.stale) {
                     Value::String("muted".into())
@@ -2427,19 +2418,19 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     spec: text_spec(id, params, shown)?,
                     origin: pos,
                     color: role(
-                        palette,
+                        ctx.palette,
                         Some(&color_role),
                         &format!("{path}/params/paint/fill/role"),
                     )?,
                     role: color_role.as_str().map(str::to_string),
-                    runs: text_runs(palette, params, &path)?,
+                    runs: text_runs(ctx.palette, params, &path)?,
                 }
             }
             _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
         }],
     };
     let order = item.get("order").and_then(Value::as_str).unwrap_or("");
-    let mut scopes = scopes.get(id).cloned().unwrap_or_default();
+    let mut scopes = ctx.scopes.get(id).cloned().unwrap_or_default();
     if adjust.opacity < 1.0 {
         scopes.push(Scope::Opacity {
             item: format!("{id}#adjust"),
@@ -2620,8 +2611,8 @@ fn build(
         }
         built.push((id, placed));
     }
-    let prebuilt = prebuilt.iter().map(|(id, p)| (*id, *p));
-    for (id, placed) in built.iter().map(|(id, p)| (*id, p)).chain(prebuilt) {
+    let built = built.iter().map(|(id, p)| (*id, p));
+    for (id, placed) in built.chain(prebuilt.iter().copied()) {
         let Some(slot) = layers.iter_mut().find(|l| l.1 == placed.layer) else {
             return refuse("ref_unresolved", format!("items/{id}/layer"));
         };

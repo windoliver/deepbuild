@@ -885,34 +885,34 @@ class Host implements ExtensionHost {
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
     const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
-    if (hub && streams.length && !this.isReady) {
+    const blocked = (why: string): never => {
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
-    }
+      throw Error(`BLOCKED: ${entry.id} ${why}`);
+    };
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
-    if (hub && indexed && !this.isReady) {
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} replaces ${INDEX}, whose kit runs its code in the hub, and the hub isn't ready; install it once it is`);
-    }
-    if (hub && (kitted.length || environments.length) && !this.isReady) {
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, and the hub isn't ready; install it once it is`);
-    }
-    if (!hub && (kitted.length || environments.length)) {
-      // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
-    }
+    const later = 'and the hub isn\'t ready; install it once it is';
+    if (hub && streams.length && !this.isReady) blocked(`registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, ${later}`);
+    if (hub && indexed && !this.isReady) blocked(`replaces ${INDEX}, whose kit runs its code in the hub, ${later}`);
+    if (hub && (kitted.length || environments.length) && !this.isReady) blocked(`${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, ${later}`);
+    // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
+    if (!hub && (kitted.length || environments.length)) blocked(`${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     if (!kitted.length && !environments.length && !indexed && !streams.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
     const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'conformance');
     const runs: KitRun[] = [];
+    // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
+    const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
+      if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
+      const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
+      runs.push({ slot, fill: name, verdict: report.verdict });
+      const failed = report.cases.find((c) => c.outcome !== 'PASS');
+      if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${what} reads ${report.verdict} on ${slot}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+    };
     try {
       await this.start(ext);
-      const kit = slotKits().find((k) => k.slot === CHECK_KIND) as SlotKit<CheckRunnerFill> | undefined;
-      if (!kit) throw Error(`the conformance package ships no ${CHECK_KIND} kit`);
       for (const kind of [...ext.kinds, ...declared.filter((k) => !ext.kinds.includes(k))]) {
         if (!replaces.includes(kind) || !ext.kinds.includes(kind)) { runs.push({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' }); continue; }
         // A runner that never answers can't hang the install: past a case's deadline and a grace its run is refused,
@@ -927,55 +927,34 @@ class Host implements ExtensionHost {
             throw e;
           }
         };
-        const fill: CheckRunnerFill = { slot: CHECK_KIND, revision: kit.revision, kind, run };
-        const report = await runKit(kit, fill, { parts: ['fixed'] });
-        runs.push({ slot: CHECK_KIND, fill: kind, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${kind} reads ${report.verdict} on ${CHECK_KIND}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge<CheckRunnerFill>(CHECK_KIND, kind, kind, (revision) => ({ slot: CHECK_KIND, revision, kind, run }));
       }
       // Each environment the manifest declares: the kit brings it up on a lease and a checkout of the kit's own and
       // takes it down, through the package's up and down. One the package didn't register by the time its load
       // returned is BLOCKED, unrun, and refuses the install: a registration that came later would fill the slot unkitted.
-      const envKit = environments.length ? slotKits().find((k) => k.slot === ENVIRONMENT) as SlotKit<EnvironmentFill> | undefined : undefined;
-      if (environments.length && !envKit) throw Error(`the conformance package ships no ${ENVIRONMENT} kit`);
       for (const name of environments) {
         if (!ext.environments.includes(name)) throw Error(`BLOCKED: ${entry.id} declares the environment ${name} and didn't register it at install, so ${ENVIRONMENT}'s kit couldn't run; it isn't installed`);
         // The kit takes a promise from either step and bounds it; a handle is what the package's up answered with.
         const up = (spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string): Promise<unknown> => ext.ask!('env.up', { name, spec, lease, checkout });
         const down = (handle: EnvironmentHandle): Promise<unknown> => ext.ask!('env.down', { name, handle });
-        const fill = { slot: ENVIRONMENT, revision: envKit!.revision, up, down } as unknown as EnvironmentFill;
-        const report = await runKit(envKit!, fill, { parts: ['fixed'] });
-        runs.push({ slot: ENVIRONMENT, fill: name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s environment ${name} reads ${report.verdict} on ${ENVIRONMENT}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge(ENVIRONMENT, name, `environment ${name}`, (revision) => ({ slot: ENVIRONMENT, revision, up, down }) as unknown as EnvironmentFill);
       }
       if (indexed) {
-        const kit = slotKits().find((k) => k.slot === INDEX) as SlotKit<IndexFill> | undefined;
-        if (!kit) throw Error(`the conformance package ships no ${INDEX} kit`);
         if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
-        const report = await runKit(kit, this.indexFill(ext), { parts: ['fixed'] });
-        runs.push({ slot: INDEX, fill: ext.index.name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge(INDEX, ext.index.name, `index ${ext.index.name}`, () => this.indexFill(ext));
       }
-      const sourceKit = streams.length ? slotKits().find((k) => k.slot === SOURCE) as SlotKit<SlotFill> | undefined : undefined;
-      if (streams.length && !sourceKit) throw Error(`the conformance package ships no ${SOURCE} kit`);
       for (const name of streams) {
         if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
         // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
-        const fill = {
-          slot: SOURCE, revision: sourceKit!.revision, variant: 'stream',
+        await judge(SOURCE, name, `source ${name}`, (revision) => ({
+          slot: SOURCE, revision, variant: 'stream',
           read: (stream: unknown, cursor: unknown, limit: unknown) => within(CALL_MS, `${entry.id}'s ${name}`, ext.ask!('source.read', { name, stream, cursor, limit })),
           restart: async () => {
             await ext.stop?.();
             if (ext.run) ext.run = `run:${ulid(this.options.now())}`;
             await this.start(ext);
           },
-        } as unknown as SlotFill;
-        const report = await runKit(sourceKit!, fill, { parts: ['fixed'] });
-        runs.push({ slot: SOURCE, fill: name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s source ${name} reads ${report.verdict} on ${SOURCE}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        }));
       }
     } finally {
       await ext.stop?.();
