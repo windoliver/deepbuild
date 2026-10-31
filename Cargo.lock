@@ -1737,6 +1737,7 @@ name = "deep-app"
 version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
+ "chrono",
  "deep-canvas-cells",
  "deep-canvas-marks",
  "deep-gpu",
@@ -1751,6 +1752,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
+ "objc2-user-notifications",
  "raw-window-handle",
  "serde",
  "serde_json",

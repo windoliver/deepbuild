@@ -90,3 +90,11 @@ harness = false
 name = "acceptance_327_ac3_redraft"
 path = "../../tests/acceptance/327/ac3_redraft.rs"
 harness = false
+
+# Issue #883: notifications leave once their ask closes, give the default as a clock time and never
+# repeat after a restart, written blind in tests/acceptance/883, the wrong programs the criteria name
+# planted beside them. No harness, as above.
+[[test]]
+name = "acceptance_883"
+path = "../../tests/acceptance/883/notifications.rs"
+harness = false
