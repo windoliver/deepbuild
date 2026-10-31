@@ -29,7 +29,7 @@ import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
-import { codexRelations, holdsFor, modified, stopTimeoutS } from './codex-settings.js';
+import { codexRelations, holdsFor, modified, readTrust, saveTrust, stopTimeoutS } from './codex-settings.js';
 import { codexReadings, loopsCovered, uncoveredLoops } from './codex-loops.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
@@ -162,7 +162,7 @@ interface Session {
  */
 interface Live {
   agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined;
-  calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; reading?: Promise<void>;
+  calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
   from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: number; looping: boolean;
   /**
    * Its turns as the verdict line judges them (#83): the turn's count and whether the stop rule reads its stop as a
@@ -1479,11 +1479,13 @@ export class Core {
   private async commits(meta: HookMeta, live: Live, made: boolean): Promise<void> {
     const head = await headOf(meta.cwd).catch(() => undefined);
     // A folder with no commit yet: the first one a call makes is a commit too.
-    if (!head) { live.head ??= ''; return; }
+    if (!head) { live.unborn = true; return; }
     const before = live.head;
+    const first = before === undefined && live.unborn === true;
     live.head = head.sha;
-    if (before === undefined || before === head.sha || !made) return;
-    for (const sha of before === '' ? [head.sha] : await commitsBetween(meta.cwd, before, head.sha)) {
+    live.unborn = false;
+    if ((before === undefined && !first) || before === head.sha || !made) return;
+    for (const sha of first ? [head.sha] : await commitsBetween(meta.cwd, before!, head.sha)) {
       if (this.committed.has(sha)) continue;
       this.committed.add(sha);
       const ts = this.now();
@@ -1971,6 +1973,8 @@ export class Core {
     const own = !FOREIGN.has(meta.agent) && meta.session;
     if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) return this.queue(async () => this.acknowledge(meta.session));
     if (meta.event === 'SessionStart') {
+      // What Codex says of our entries' trust, off this reply's path.
+      if (meta.agent === 'codex') void this.readCodexTrust(meta.cwd);
       const brief = await briefing(meta.cwd);
       const answers = own && this.options.plant !== 'ended-answer-at-next-prompt'
         // The planted wrong program gives a new session the answers of every session that worked in its folder.
@@ -2130,6 +2134,11 @@ export class Core {
     await this.gate.slowEnded(claim, until);
     const failed = this.gate.standing(claim).filter((c) => c.lane === 'slow' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
     return failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
+  }
+  private async readCodexTrust(cwd: string): Promise<void> {
+    const dirs = [...(process.env.PATH ?? '').split(':'), ...this.config().loginPath.split(':')].filter(Boolean);
+    const codex = dirs.map((d) => join(d, 'codex')).find((p) => existsSync(p));
+    if (codex) await saveTrust(this.root.dir, codex, cwd, process.env).catch(() => undefined);
   }
   /** The verdicts of the slow checks no stop was held for, once each has ended: what a prompt carries, or nothing. */
   private slowVerdicts(r: Routes): string | undefined {
@@ -2785,7 +2794,7 @@ export class Core {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
-    const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: modified(this.root.dir) };
+    const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: modified(this.root.dir), trust: readTrust(this.root.dir) ?? null };
     return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude, codex };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
