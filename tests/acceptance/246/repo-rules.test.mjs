@@ -232,18 +232,8 @@ test("with #12's three devDependencies listed, an unlisted, re-specified or unde
   }
 });
 
-test('a new packages/x/package.json with a dependencies entry fails, and one with none passes', (t) => {
-  const cwd = npmRepo(t);
-  write(cwd, { 'packages/x/package.json': json({ name: 'x', private: true, dependencies: { 'left-pad': '1.3.0' } }) });
-  const result = rules(cwd);
-  assert.equal(result.status, 1, show(result));
-  assertLine(result, 'FAIL deps: packages/x/package.json dependencies left-pad 1.3.0 is not in scripts/repo-rules.json', FIX.deps);
-
-  write(cwd, { 'packages/x/package.json': json({ name: 'x', private: true }) });
-  const none = rules(cwd);
-  assert.equal(none.status, 0, show(none));
-  assert.match(none.stdout, /^PASS deps: 2 package\.json files and 0 crates? match scripts\/repo-rules\.json$/m, show(none));
-});
+// ---- 'a new packages/x/package.json with a dependencies entry fails, and one with none passes': redrafted blind
+// after a dispute (#879's cards rule fails its uncarded packages/x); see redraft/deps.test.mjs.
 
 for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'overrides']) {
   test(`package.json ${section} is read`, (t) => {
@@ -257,57 +247,9 @@ for (const section of ['dependencies', 'devDependencies', 'optionalDependencies'
 
 // --- deps: Rust --------------------------------------------------------------------------------
 
-const crate = (tables) => `[package]\nname = "fx"\nversion = "0.0.0"\nedition = "2021"\n\n${tables}`;
-
-test('a Rust dependency fails in each section that declares it, and passes once listed with spec ^1', (t) => {
-  const cwd = repo(t, { tracked: { 'crates/fx/Cargo.toml': crate('[dependencies]\nserde = "1"\n'), 'crates/fx/src/lib.rs': '' } });
-  const plain = rules(cwd);
-  assert.equal(plain.status, 1, show(plain));
-  assertLine(plain, 'FAIL deps: crates/fx/Cargo.toml dependencies serde ^1 is not in scripts/repo-rules.json', FIX.deps);
-
-  const sectionOf = (tables) => {
-    writeFileSync(join(cwd, 'crates/fx/Cargo.toml'), crate(tables));
-    const result = rules(cwd);
-    assert.equal(result.status, 1, show(result));
-    const match = result.stdout.match(/^FAIL deps: crates\/fx\/Cargo\.toml (.+) serde \^1 is not in scripts\/repo-rules\.json$/m);
-    assert.ok(match, show(result));
-    nextIsFix(result, match[0]);
-    return match[1];
-  };
-  assert.match(sectionOf('[dev-dependencies]\nserde = "1"\n'), /dev-dependencies/);
-  assert.match(sectionOf("[target.'cfg(unix)'.dependencies]\nserde = \"1\"\n"), /cfg\(unix\)/);
-
-  write(cwd, {
-    'crates/fx/Cargo.toml': crate('[dependencies]\nserde = "1"\n'),
-    'scripts/repo-rules.json': rulesFile({ deps: { 'crates/fx/Cargo.toml': { dependencies: { serde: '^1' } } } }),
-  });
-  const listedSerde = rules(cwd);
-  assert.equal(listedSerde.status, 0, show(listedSerde));
-  assert.match(listedSerde.stdout, /^PASS deps: \d+ package\.json files? and 1 crate match scripts\/repo-rules\.json$/m, show(listedSerde));
-});
-
-test('a path dependency is listed relative to its manifest, and no absolute path is printed or listed', (t) => {
-  const cwd = repo(t, { tracked: {
-    'crates/fx/Cargo.toml': crate('[dependencies]\nhelper = { path = "../helper" }\n'),
-    'crates/fx/src/lib.rs': '',
-    'crates/helper/Cargo.toml': '[package]\nname = "helper"\nversion = "0.0.0"\nedition = "2021"\n',
-    'crates/helper/src/lib.rs': '',
-  } });
-  const result = rules(cwd);
-  assert.equal(result.status, 1, show(result));
-  const match = result.stdout.match(/^FAIL deps: crates\/fx\/Cargo\.toml dependencies helper (.+) is not in scripts\/repo-rules\.json$/m);
-  assert.ok(match, show(result));
-  const spec = match[1];
-  assert.match(spec, /\.\.\/helper/);
-  assert.doesNotMatch(spec, /(?:^|[\s"'=:])\/[A-Za-z]/, `the spec holds an absolute path: ${spec}`);
-  // Neither the real path nor macOS's /var alias of the scratch folder may be printed.
-  for (const absolute of [cwd, cwd.replace(/^\/private\//, '/')]) assert.ok(!result.out.includes(absolute), show(result));
-
-  write(cwd, { 'scripts/repo-rules.json': rulesFile({ deps: { 'crates/fx/Cargo.toml': { dependencies: { helper: spec } } } }) });
-  const listedHelper = rules(cwd);
-  assert.equal(listedHelper.status, 0, show(listedHelper));
-  assert.match(listedHelper.stdout, /^PASS deps: \d+ package\.json files? and 2 crates match scripts\/repo-rules\.json$/m, show(listedHelper));
-});
+// ---- 'a Rust dependency fails in each section that declares it, and passes once listed with spec ^1' and 'a path
+// dependency is listed relative to its manifest, and no absolute path is printed or listed': redrafted blind after a
+// dispute (#879's cards rule fails their uncarded crates/fx and crates/helper); see redraft/deps.test.mjs.
 
 // --- INVALID and BLOCKED -----------------------------------------------------------------------
 
