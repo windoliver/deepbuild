@@ -103,11 +103,12 @@ pub fn text() -> Module {
     }
 }
 
-/// A text's shaped run, with the spec it was shaped from.
+/// A text's shaped run, with the spec it was shaped from. The run is the shaped-run cache's
+/// (#856), shared by every document that shows the same text.
 #[derive(Debug)]
 pub struct Run {
     pub spec: TextSpec,
-    pub shaped: Shaped,
+    pub shaped: Arc<Shaped>,
 }
 
 fn fonts() -> TableValue {

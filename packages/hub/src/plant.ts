@@ -140,3 +140,6 @@ export function plantedStop(): void {
   for (const timer of leftTimers.splice(0)) clearInterval(timer);
   for (const child of leftChildren.splice(0)) child.kill();
 }
+
+/** #40's wrong program on the hub's side: an answer of a replaced session handed to the session that replaced it. Only tests set it. */
+export const piAcceptsReplaced = (): boolean => process.env.DEEP_PI_PLANT === 'accepts-replaced';

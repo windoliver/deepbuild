@@ -72,6 +72,10 @@ interface AgentParts {
   hosts: string[];
   /** What a real agent needs in its job's environment: its own temp folder, the forwarder, and your sign-in token if the hub read one. */
   reach(o: { temp: string; proxy: string; token?: string }): Record<string, string>;
+  /** It installs by npm, so it reads its dependencies around its own folder, and its version check reads what its job's grant names. */
+  packaged?: boolean;
+  /** It reports no plan window: its job waits for no reading of one. */
+  windowless?: boolean;
   /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
   token(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<string | undefined>;
   /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
@@ -123,10 +127,29 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
     },
   },
 };
+AGENTS.pi = {
+  facts: new URL('../../../adapters/pi.facts.json', import.meta.url),
+  // pi has no MCP and no sub-agents: a job that names them is refused, never run without them.
+  confine: (mcp, subagents) => {
+    if (Object.keys(mcp).length || Object.keys(subagents).length) throw Error('a pi job takes no MCP server and no sub-agent');
+    return [];
+  },
+  account: () => null,
+  // pi locks and writes its agent folder even to read it, and a read-only job gets no write to your sign-in or settings:
+  // its agent folder is its own, so it signs in by the API key its facts bill, never by a login pi stored.
+  signIn: () => [],
+  windows: () => new Map(),
+  windowless: true,
+  packaged: true,
+  hosts: ['api.anthropic.com:443'],
+  reach: ({ temp, proxy }) => ({ TMPDIR: temp, PI_CODING_AGENT_DIR: temp, HTTPS_PROXY: proxy, https_proxy: proxy, PI_OFFLINE: '1', PI_TELEMETRY: '0' }),
+  token: async () => undefined,
+  expires: async () => undefined,
+};
 /** Codex's launch, `codex exec --json` with `-s read-only`, comes with its adapter. */
 const CODEX_LATER = "Codex's headless launch comes with its adapter (#39); no Codex job runs before it";
 
-interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
+interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; errorTexts: { causes?: Record<string, string> }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
 interface Verified { path: string; real: string; digest: string; version: string; id: string }
 const identity = (st: Stats): string => `${st.dev}:${st.ino}:${st.size}:${st.mtimeMs}:${st.ctimeMs}`;
@@ -154,6 +177,8 @@ interface Job {
   ended: Promise<JobRecord>;
   end(rec: JobRecord): void;
   stopCause?: StopCause;
+  /** The end of a pi job's stderr. */
+  failure?: string;
   /** Its result was marked an error: no answer. */
   errored?: boolean;
   settling?: Promise<void>;
@@ -171,6 +196,8 @@ interface Job {
   timers: (() => void)[];
   /** Its own temp folder, removed when it ends. */
   temp?: string;
+  /** The text of a pi job's last answer: its result once it has settled. */
+  said?: string;
 }
 interface Account { windows: Map<string, { used: number; resets: number | null; at: number }> }
 interface Asked { handle: string; answer?: string }
@@ -472,7 +499,7 @@ class LocalRunner implements Runner {
       if (approval === 'deny') return { refused: `you declined smoke tests of ${facts.agent} versions its facts don't cover` };
       if (approval !== 'allow') return this.blocked(job, 'standing approval', { ...(approval ? { ask: approval } : {}), why: `${facts.agent} ${binary.version} is outside what its facts cover; its smoke test waits for your standing approval` });
     }
-    const window = await this.window(job);
+    const window = AGENTS[job.spec.agent]!.windowless ? undefined : await this.window(job);
     if (window) return window;
     const budget = await this.budget(job, facts);
     if (budget) return budget;
@@ -528,11 +555,11 @@ class LocalRunner implements Runner {
       try { real = realpathSync(path); } catch { return { refused: `${path} is gone` }; }
       const before = identity(statSync(real));
       const digest = await fileDigest(real);
-      const shown = await this.step([path, '--version'], job.rec.folder, { read: this.programs(real) }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
+      const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
       const version = /(\d+\.\d+\.\d+)/.exec(shown.stdout.toString('utf8'))?.[1];
-      if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version` };
+      if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
       return verified;
@@ -547,8 +574,9 @@ class LocalRunner implements Runner {
     }
   }
   /** What a job's programs may read and run: the binary's folder and the login shell's PATH. */
-  private programs(real: string): string[] {
-    const dirs = new Set([dirname(real)]);
+  private programs(real: string, parts: AgentParts | undefined): string[] {
+    const installed = parts?.packaged ? real.indexOf('/node_modules/') : -1;
+    const dirs = new Set([installed >= 0 ? real.slice(0, installed + '/node_modules'.length) : dirname(real)]);
     for (const dir of this.o.loginPath.split(delimiter)) if (dir && isAbsolute(dir) && existsSync(dir)) dirs.add(realpathSync(dir));
     return [...dirs];
   }
@@ -741,9 +769,9 @@ class LocalRunner implements Runner {
 
   // ---- Running it.
 
-  private env(): Record<string, string> {
+  private env(agent: Agent): Record<string, string> {
     const env: Record<string, string> = {};
-    const facts = this.facts('claude-code');
+    const facts = this.facts(agent);
     for (const name of [...ALLOWED_ENV, ...facts.billing.apiKeyVariables]) {
       const v = this.o.env[name];
       if (typeof v === 'string') env[name] = v;
@@ -773,9 +801,9 @@ class LocalRunner implements Runner {
     const { port } = await this.forwarder;
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
-    const env = { ...this.env(), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, ...(token ? { token } : {}) }) };
+    const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, ...(token ? { token } : {}) }) };
     const grant: Grant = {
-      read: [...this.programs(binary.real), ...(home ? parts.signIn(home) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
+      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
       ...(job.spec.grant?.sockets?.length ? { sockets: job.spec.grant.sockets } : {}),
     };
     const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {})];
@@ -794,7 +822,10 @@ class LocalRunner implements Runner {
       // The prompt goes only to the bytes it verified: swapped during the start, its process reads nothing and is stopped.
       input: () => (this.unchanged(binary) && !job.cancelled ? Buffer.from(job.spec.prompt, 'utf8') : undefined),
       ...(job.spec.leases ? { leases: job.spec.leases } : {}),
-      output: { stdout: (chunk) => this.read(job, chunk), stderr: () => { job.outputAt = Date.now(); } },
+      output: { stdout: (chunk) => this.read(job, chunk), stderr: (chunk) => {
+        job.outputAt = Date.now();
+        if (job.spec.agent === 'pi') job.failure = `${job.failure ?? ''}${chunk.toString()}`.slice(-4096);
+      } },
     });
     if (started.status !== 'started') {
       if (job.cancelled) {
@@ -840,7 +871,47 @@ class LocalRunner implements Runner {
       this.event(job, e);
     }
   }
+  /** A pi job's own stream: its session line, each message once as it ends, and its settling as its result. */
+  private piEvent(job: Job, e: Obj): void {
+    if (e.type === 'session' && typeof e.id === 'string') job.rec.session ??= e.id;
+    if (e.type === 'message_end' && isObj(e.message) && e.message.role === 'assistant') {
+      const msg = e.message;
+      if (typeof msg.model === 'string') job.answered = msg.model;
+      if (isObj(msg.usage)) {
+        const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
+        u.input += num(msg.usage.input) + num(msg.usage.cacheWrite);
+        u.cached += num(msg.usage.cacheRead);
+        u.output += num(msg.usage.output);
+        job.rec.usage = u;
+        const cost = isObj(msg.usage.cost) ? msg.usage.cost.total : undefined;
+        if (typeof cost === 'number') job.rec.cost_usd = (job.rec.cost_usd ?? 0) + cost;
+      }
+      // pi retries some errors itself: only the last message says how the run ended.
+      const failed = msg.stopReason === 'error' || msg.stopReason === 'aborted' || msg.stopReason === 'length';
+      job.errored = failed;
+      delete job.stopCause;
+      delete job.said;
+      if (failed) {
+        job.stopCause = this.piCause(String(msg.errorMessage ?? ''));
+      } else if (Array.isArray(msg.content)) {
+        job.said = msg.content.flatMap((part) => (isObj(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('');
+      }
+    }
+    if (e.type === 'agent_settled') {
+      job.resultAt ??= Date.now();
+      for (const cancel of job.timers) cancel();
+      if (!job.errored && job.said !== undefined) job.rec.result = job.said;
+      void this.settle(job, job.resultAt);
+    }
+  }
+  /** The cause the facts name for an error's words: a status code only as a word of its own, so no token count reads as one. */
+  private piCause(error: string): StopCause {
+    const text = error.toLowerCase();
+    const causes = this.facts('pi').errorTexts.causes ?? {};
+    return (Object.entries(causes).find(([needle]) => (/^\d+$/.test(needle) ? new RegExp(`\\b${needle}\\b`).test(text) : text.includes(needle.toLowerCase())))?.[1] ?? 'unknown') as StopCause;
+  }
   private event(job: Job, e: Obj): void {
+    if (job.spec.agent === 'pi') return this.piEvent(job, e);
     if (typeof e.session_id === 'string' && !job.rec.session) job.rec.session = e.session_id;
     if (e.type === 'assistant' && isObj(e.message)) {
       const msg = e.message;
@@ -948,7 +1019,9 @@ class LocalRunner implements Runner {
     job.rec.model = job.answered ?? 'unknown';
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
-    const cause = job.stopCause ?? (finished ? undefined : 'agent_crashed');
+    // pi says on stderr what stops a run before its first message, as a missing key does.
+    const said = job.failure && !finished && !job.stopCause ? this.piCause(job.failure) : 'unknown';
+    const cause = job.stopCause ?? (finished ? undefined : said !== 'unknown' ? said : 'agent_crashed');
     if (cause) job.rec.stop = { cause };
     if (this.o.plant === 'widens-range-on-smoke' && job.spec.kind === 'smoke' && job.rec.binary) this.widened.add(job.rec.binary.version);
     // Charged what its output said it cost; with no cost read, its reservation stays held, never charged as zero.
