@@ -958,14 +958,7 @@ impl<'a> Hub<'a> {
         size: Option<[u16; 2]>,
     ) -> Result<Raster, ()> {
         let size = size.unwrap_or_else(|| {
-            let s = |i: usize| {
-                doc["size"][i]
-                    .as_f64()
-                    .unwrap_or(1.0)
-                    .round()
-                    .clamp(1.0, 8192.0) as u16
-            };
-            [s(0), s(1)]
+            snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
         let gpu = self.gpu3().ok_or(())?;
@@ -1304,10 +1297,7 @@ impl<'a> Hub<'a> {
         let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
         let panel = self.scenario.docs.get(doc)?;
         let rect = self.slot(panel)?;
-        let size = [
-            rect[2].round().clamp(1., 8192.) as u16,
-            rect[3].round().clamp(1., 8192.) as u16,
-        ];
+        let size = snapshot::px([rect[2], rect[3]]);
         let record = self.record();
         let layers: Vec<Value> = self
             .bands()
@@ -1450,7 +1440,7 @@ impl<'a> Hub<'a> {
         let Some((writer, name)) = self.writer(&show.via) else {
             return refused("no_session");
         };
-        let Some(panel) = self
+        let Some(_) = self
             .scenario
             .docs
             .get(&show.doc)
@@ -1658,7 +1648,6 @@ impl<'a> Hub<'a> {
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);
         }
-        let _ = panel;
         // The checked revision becomes the session's current one; a snapshot is the session's
         // own frame at `t`.
         let doc = stamped.unwrap_or(Value::Null);
@@ -1754,13 +1743,7 @@ impl<'a> Hub<'a> {
                         Some(drawn3d) => drawn3d.ok(),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
-                            let size = show.size.unwrap_or_else(|| {
-                                let [w, h] = drawn.frame.size;
-                                [
-                                    w.round().clamp(1.0, 8192.0) as u16,
-                                    h.round().clamp(1.0, 8192.0) as u16,
-                                ]
-                            });
+                            let size = show.size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
                             let instanced = crate::packs::instanced(
                                 self.expansions

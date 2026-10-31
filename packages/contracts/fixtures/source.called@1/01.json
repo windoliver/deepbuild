@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "source.called",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "source": "ext.market.price",
+    "host": "api.market.example",
+    "outcome": "answered",
+    "status": 200,
+    "ms": 84,
+    "bytes": 27
+  }
+}
