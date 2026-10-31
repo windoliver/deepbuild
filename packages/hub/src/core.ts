@@ -195,6 +195,8 @@ interface Routes {
   cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number;
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
+  /** The claims whose slow checks a stop wasn't held for (#39): each one's verdict goes with the next prompt after it ends. */
+  slowClaims?: string[];
 }
 /** An answered ask, as a route delivers it. */
 interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
@@ -607,7 +609,7 @@ export class Core {
       this.inflight.delete(appended);
     }
   }
-  private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[] } = {}): Promise<void> {
+  private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[]; v?: number } = {}): Promise<void> {
     const ts = this.now();
     return this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...extra });
   }
@@ -917,7 +919,7 @@ export class Core {
         else if ('cron' in fact) live.crons.set(fact.cron, { due: fact.due, recurring: fact.recurring });
         else if ('cancelled' in fact) live.crons.delete(fact.cancelled);
         else live.background += 1;
-      } else if (draft.kind === 'agent.stop') {
+      } else if (draft.kind === 'agent.stop' && !draft.data.subagent) {
         await this.stopRecords(draft, meta, session);
         const loop = this.loopAt(live);
         if (loop) data.loop = loop;
@@ -1401,12 +1403,15 @@ export class Core {
         if (state !== 'finished' && state !== 'failed') state = 'working';
         if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
-      } else if (draft.kind === 'agent.stop') {
+      } else if (draft.kind === 'agent.stop' && !draft.data.subagent) {
         // A turn that ended on a block only you or a service can clear (a sign-in, a rate limit) leaves the session stuck.
         state = draft.data.outcome !== 'failed' ? 'finished' : draft.data.owner === 'you' || draft.data.owner === 'service' ? 'stuck' : 'failed';
       }
     }
     for (const [call, c] of live.calls) if (c.ended !== undefined && now - c.ended > CALL_GRACE) live.calls.delete(call);
+    // A turn you interrupted (#39) has no stop to say so: it ends here, with no claim.
+    if (meta.event === 'Interrupt') { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
+    if (meta.reading) void this.appendReading(meta.session, meta.agent, meta.reading).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
     // A person's status question changes none: answered from the record it runs no model, and let through (an
     // answer waiting, or DeepBuild off) it shows its state at its next hook, as the record's row does.
@@ -1640,8 +1645,13 @@ export class Core {
     });
     return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
   }
-  private outcome(ask: string, via: string, outcome: 'delivered' | 'stalled'): Promise<void> {
-    return this.appendCore('delivery.outcome', { delivery: `ask:${ask}`, via, outcome }, { subject: `ask:${ask}` }).catch(() => undefined);
+  private outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'waiting'): Promise<void> {
+    return this.appendCore('delivery.outcome', { delivery: `ask:${ask}`, via, outcome }, { subject: `ask:${ask}`, ...(outcome === 'waiting' ? { v: 2 } : {}) }).catch(() => undefined);
+  }
+  /** An answer to a Codex session that ended waits on its task, and only the same thread's resume hears it (#39). */
+  private async waitsOnTask(delivery: Delivery): Promise<void> {
+    const [last] = (await this.record.raw(`SELECT e.kind, s.agent FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.session_id = '${sql(delivery.session)}' AND e.kind IN ('session.start', 'session.end') ORDER BY e.log_pos DESC LIMIT 1`)) as { kind: string; agent: string }[];
+    if (last?.kind === 'session.end' && last.agent === 'codex') await this.outcome(delivery.ask.replace(/^ask:/, ''), 'on_task', 'waiting');
   }
   /** Each answer delivered once: recorded delivered `via` before the agent reads it. */
   private async deliver(rows: Answer[], via: 'next_prompt' | 'stop_hold'): Promise<string | undefined> {
@@ -1655,6 +1665,7 @@ export class Core {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
+    void this.waitsOnTask(delivery).catch(() => undefined);
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
     else this.offer(delivery.session);
   }
@@ -2004,12 +2015,13 @@ export class Core {
         const answers = leaves ? undefined : await this.deliver(waiting, 'next_prompt');
         // A verdict that landed after the stop's reply goes with the next prompt (#83).
         const landed = await this.landedLine(meta.session);
+        const slow = this.slowVerdicts(r);
         // Notes this prompt's hook recorded go as its context, once; a prompt typed mid-turn is acknowledged in its reply (#340).
         const notes = this.carried.get(meta.session);
         this.carried.delete(meta.session);
         const ack = this.acknowledge(meta.session);
         const promised = await this.promiseCarried(meta.session, 'next_prompt', prompt);
-        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context].filter(Boolean).join('\n\n');
+        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, slow, ack.context].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -2110,6 +2122,7 @@ export class Core {
     const late = this.gate.slowDeadlines(claim).find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
     await this.gate.turnEnded(claim);
     if (late) {
+      (this.routesOf(meta.session).slowClaims ??= []).push(claim);
       const deadline = late.deadline_ms === null ? 'has no deadline' : `has a deadline of ${words(late.deadline_ms)}`;
       await this.appendReading(meta.session, meta.agent, `This stop isn't held: ${late.check} ${deadline}, which must end at least 5 s before Codex's Stop hook timeout, ${timeoutS} s. Its verdict comes with your next message.`).catch(() => undefined);
       return undefined;
@@ -2117,6 +2130,18 @@ export class Core {
     await this.gate.slowEnded(claim, until);
     const failed = this.gate.standing(claim).filter((c) => c.lane === 'slow' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
     return failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
+  }
+  /** The verdicts of the slow checks no stop was held for, once each has ended: what a prompt carries, or nothing. */
+  private slowVerdicts(r: Routes): string | undefined {
+    const told: string[] = [];
+    r.slowClaims = (r.slowClaims ?? []).filter((claim) => {
+      const slow = this.gate.standing(claim).filter((c) => c.lane === 'slow');
+      if (slow.some((c) => c.result === 'pending')) return true;
+      const failed = slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED');
+      if (failed.length) told.push(`DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.`);
+      return false;
+    });
+    return told.join('\n') || undefined;
   }
   /** A stop held while the agent left a question: what it is sent back with, or nothing. */
   private async stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined> {
@@ -3332,7 +3357,7 @@ export class Core {
       if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
       if (row.status !== 'open' && row.status !== 'later') return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
       if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
-      if (Date.now() >= until) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+      if (Date.now() >= until) return { ask: handle, status: 'waiting', ...(this.sessions.get(session)?.agent === 'codex' ? { note: 'Still waiting for your answer; wait on it again with deep_wait.' } : {}), answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
       await new Promise((done) => setTimeout(done, 100));
     }
   }
