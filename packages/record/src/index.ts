@@ -159,10 +159,18 @@ const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked',
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
 const LEARN_CHECK = 'learn_check.made';
+/** A plug-in's own kind, ext.<plugin>.<name> (#363): an item of its store, held to store.item@1, written only by that plug-in. */
+const PLUGIN_KIND = /^ext\.([a-z0-9_-]+)\.[a-z][a-z0-9_]*$/;
+const STORE_ITEM = 'store.item@1';
 /** The text field each kind keeps of a hook payload: scrubbed, then cut. */
 const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
 /** What content-free mode keeps of each text field: nothing its schema allows. */
 const BLANK: Readonly<Record<string, string | null>> = { command: null, text: '', title: '-' };
+/** An event's content-free fields only: its text field kept as content-free mode keeps it (#363, a record grant without text). */
+export function contentFree(event: Event): Event {
+  const field = TEXT_FIELD[event.kind];
+  return field && isObj(event.data) ? { ...event, data: { ...event.data, [field]: BLANK[field] ?? null } } : event;
+}
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -412,7 +420,9 @@ class SqliteRecord implements RecordStore {
     }
     const kind = typeof input.kind === 'string' ? input.kind : '';
     if ((CORE_ONLY.has(kind) || STORE_ONLY.has(kind) || kind === LEARN_CHECK) && connection.writer !== 'core') throw new RecordError('writer', `${kind} is appended only by the core, not by ${connection.writer}`, { kind });
-    const versions = this.versions.get(kind);
+    const plugin = this.versions.has(kind) ? undefined : PLUGIN_KIND.exec(kind)?.[1];
+    if (plugin !== undefined && /^ext:[^/]+\/(.+)$/.exec(connection.writer)?.[1] !== plugin) throw new RecordError('writer', `${kind} is appended only by the plug-in ${plugin}, not by ${connection.writer}`, { kind });
+    const versions = plugin === undefined ? this.versions.get(kind) : [1];
     if (!versions) throw new RecordError('schema', `no event kind ${kind} is catalogued`, { path: '/kind' });
     if (!versions.includes(input.v)) throw new RecordError('schema', `${kind} has no schema at version ${String(input.v)}`, { path: '/v' });
     // The text field is scrubbed, then cut, before the schema sees it: the bound is on what the record keeps.
@@ -429,7 +439,7 @@ class SqliteRecord implements RecordStore {
     }
     const { writer: _ignored, ...payload } = input as EventInput & { writer?: unknown };
     const event: Obj = { ...(payload as unknown as Obj), data, writer: connection.writer, actor: connection.actor, scope: connection.scope };
-    const result = this.registry.validate(`${kind}@${input.v}`, event);
+    const result = this.registry.validate(plugin === undefined ? `${kind}@${input.v}` : STORE_ITEM, event);
     if (!result.ok) {
       const issue = result.issues[0]!;
       throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation}`, { path: issue.path });
