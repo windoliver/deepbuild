@@ -406,6 +406,10 @@
           "spec": "0.0.0",
           "why": "Issue #318: ask.created@1 and plan.proposed@1, which every raised ask and plan must pass, and the canonical hash of a plan's digest."
         },
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #85: whether a stopped session's agent has a hook for a turn that ends in an error (its adapter's errorTurnHook); without one no automatic continue starts."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."

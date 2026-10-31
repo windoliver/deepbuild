@@ -1,0 +1,50 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "ask.created",
+  "writer": "mcp:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "unblock",
+    "question": "Ask the weather bot for Oslo in the team thread?",
+    "options": [
+      {
+        "id": "done",
+        "label": "I did it",
+        "decision": "none"
+      },
+      {
+        "id": "wait",
+        "label": "Leave it blocked",
+        "decision": "none"
+      }
+    ],
+    "recommended": "done",
+    "deadline": 1760186251123,
+    "fallback": "you",
+    "default": "wait",
+    "provisional": false,
+    "owner": "you",
+    "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bbb",
+    "pinned_to": {
+      "kind": "evidence",
+      "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfcb"
+    },
+    "steps": [
+      "Post \"weather Oslo\" in the team thread",
+      "The task closes by itself when the bot's reply in that thread contains what it expects"
+    ],
+    "where": "the team thread in your chat app",
+    "why": "the test needs the weather bot's reply, which only a person in the thread can ask for",
+    "unblocks": [
+      "session:01K74G4B6D8F0H2K4M6P8R0T2V"
+    ],
+    "proves": "qa.bot_reply",
+    "thread": {
+      "link": "https://chat.example.test/t/weather-bot/1234",
+      "expect": "Oslo: 4°C, light rain"
+    }
+  }
+}
