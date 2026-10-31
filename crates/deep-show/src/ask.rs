@@ -12,6 +12,7 @@ use deep_canvas::show::Writer;
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Hub, Planted};
+use crate::refused;
 
 /// One message an ask sent to a session, as sent.
 pub struct Asked {
@@ -20,10 +21,6 @@ pub struct Asked {
     /// The doc ID the attachment's handles name, if any.
     pub doc: Option<String>,
     pub task: String,
-}
-
-fn refused(code: &str) -> Value {
-    json!({"code": code})
 }
 
 fn region_json(r: [f64; 4]) -> Value {
