@@ -1,6 +1,6 @@
 // `#85.e12ca936` on the real hub: deep_ask with `thread`, read through slack.json's `api`. See README.
 import { afterEach, describe, expect, it } from 'vitest';
-import { askingAgent, BOT, CHANNEL, endAgents, events, fakeSlack, FAKE_TOKEN, filesHolding, inbox, LINK, SECOND, sleep, stripHandle, THREAD_TS, until, withHub, writeSlackJson, YOU, type FakeSlack, type Hub } from './helpers.ts';
+import { askingAgent, BOT, CHANNEL, endAgents, events, fakeSlack, FAKE_TOKEN, filesHolding, inbox, LINK, SECOND, sleep, slackTime, stripHandle, THREAD_TS, until, withHub, writeSlackJson, YOU, type FakeSlack, type Hub } from './helpers.ts';
 
 const TAG = '#85.e12ca936';
 const EXPECT = 'pong-85';
@@ -39,20 +39,20 @@ describe('a chat-app task on the real hub', () => {
 
           // You post, and your own words, even holding what's expected, aren't a reply: no reply is what's missing.
           let at = Date.now();
-          slack.messages.push({ user: YOU, text: `Do you answer ${EXPECT}?`, ts: '1700000001.000100', thread_ts: THREAD_TS });
+          slack.messages.push({ user: YOU, text: `Do you answer ${EXPECT}?`, ts: slackTime(), thread_ts: THREAD_TS });
           const noReply = await cardShowing(hub, slack, raised.handle, at, () => true);
           expect(noReply?.missing, 'no reply since your post sends it back with the thread link').toMatchObject({ link: LINK });
           expect(moots(hub, raised.handle), 'your own message never closes it').toEqual([]);
 
           // The bot answers wrong: still open, and what's missing names the link.
           at = Date.now();
-          slack.messages.push({ user: BOT, bot_id: 'B0BOT85', text: 'I cannot help with that.', ts: '1700000002.000100', thread_ts: THREAD_TS });
+          slack.messages.push({ user: BOT, bot_id: 'B0BOT85', text: 'I cannot help with that.', ts: slackTime(), thread_ts: THREAD_TS });
           const wrong = await cardShowing(hub, slack, raised.handle, at, (missing) => missing.includes('cannot help'));
           expect(wrong?.missing, 'a wrong reply sends it back with the thread link, saying why').toMatchObject({ link: LINK });
           expect(moots(hub, raised.handle), 'a wrong reply never closes it').toEqual([]);
 
           // The right reply closes it, with nothing typed.
-          slack.messages.push({ user: BOT, bot_id: 'B0BOT85', text: `${EXPECT} from the bot`, ts: '1700000003.000100', thread_ts: THREAD_TS });
+          slack.messages.push({ user: BOT, bot_id: 'B0BOT85', text: `${EXPECT} from the bot`, ts: slackTime(), thread_ts: THREAD_TS });
           expect(await until(() => moots(hub, raised.handle)[0], NEXT_READ), 'the right reply closes the task as ask.moot').toBeDefined();
           expect(events(hub, 'ask.answered').filter((e) => stripHandle(e.subject) === stripHandle(raised.handle)), 'nothing typed').toEqual([]);
           expect(await cardOf(hub, raised.handle), 'it left Needs you').toBeUndefined();
@@ -77,6 +77,54 @@ describe('a chat-app task on the real hub', () => {
         expect(filesHolding(hub.root, LINK).length, 'the scan below reads the record: the link is in it').toBeGreaterThan(0);
         expect(filesHolding(hub.home, FAKE_TOKEN), 'the token is in no file of the record or a log').toEqual([]);
         expect(hub.output().includes(FAKE_TOKEN), "and not in the hub's output").toBe(false);
+      });
+    } finally {
+      await slack.close();
+    }
+  }, 120_000);
+
+  it(`${TAG} leaves the task open past an old exchange already in the thread, until a new post and reply`, async () => {
+    const slack = await fakeSlack();
+    // Your post and the very reply the task expects, a minute before it's raised.
+    slack.messages.push(
+      { user: YOU, text: 'Do you answer?', ts: slackTime(60 * SECOND) },
+      { user: BOT, bot_id: 'B0BOT85', text: EXPECT, ts: slackTime(59 * SECOND), thread_ts: THREAD_TS },
+    );
+    try {
+      await withHub((_home, root) => writeSlackJson(root, slack.api), async (hub) => {
+        const agent = await askingAgent(hub);
+        try {
+          const raised = await agent.ask({ link: LINK, expect: EXPECT });
+          expect(raised, 'raised').toMatchObject({ refused: false });
+          if (raised.refused) return;
+          // Two reads past the raise find the old exchange, and it doesn't count.
+          const asked = Date.now();
+          expect(await until(() => slack.requests.filter((r) => r.at >= asked).length >= 2, 2 * NEXT_READ), 'the hub reads the open thread').toBe(true);
+          await sleep(SECOND);
+          expect(moots(hub, raised.handle), 'an old exchange never closes a new task').toEqual([]);
+          expect(await cardOf(hub, raised.handle), 'it stays in Needs you').toBeDefined();
+
+          // The bot's reply alone, with no post of yours since the raise, doesn't count either.
+          let at = Date.now();
+          slack.messages.push({ user: BOT, bot_id: 'B0BOT85', text: EXPECT, ts: slackTime(), thread_ts: THREAD_TS });
+          await until(() => slack.requests.some((r) => r.at > at), NEXT_READ);
+          await sleep(SECOND);
+          expect(moots(hub, raised.handle), 'only your post since the raise counts').toEqual([]);
+
+          // You post anew: replies before it aren't replies to it.
+          at = Date.now();
+          slack.messages.push({ user: YOU, text: 'Do you answer now?', ts: slackTime(), thread_ts: THREAD_TS });
+          const noReply = await cardShowing(hub, slack, raised.handle, at, () => true);
+          expect(noReply?.missing, 'no reply since your new post sends it back with the thread link').toMatchObject({ link: LINK });
+          expect(moots(hub, raised.handle), 'still open').toEqual([]);
+
+          // And the new reply closes it, with nothing typed.
+          slack.messages.push({ user: BOT, bot_id: 'B0BOT85', text: EXPECT, ts: slackTime(), thread_ts: THREAD_TS });
+          expect(await until(() => moots(hub, raised.handle)[0], NEXT_READ), 'a new post and reply close the task').toBeDefined();
+          expect(events(hub, 'ask.answered'), 'nothing typed').toEqual([]);
+        } finally {
+          agent.close();
+        }
       });
     } finally {
       await slack.close();
@@ -171,7 +219,7 @@ describe('a chat-app task on the real hub', () => {
           expect(events(hub, 'ask.moot'), 'a failing read leaves the task open').toEqual([]);
 
           // Slack comes back: the check reads again.
-          slack.messages.push({ user: YOU, text: 'Are you there?', ts: THREAD_TS }, { user: BOT, bot_id: 'B0BOT85', text: EXPECT, ts: '1700000001.000100', thread_ts: THREAD_TS });
+          slack.messages.push({ user: YOU, text: 'Are you there?', ts: slackTime() }, { user: BOT, bot_id: 'B0BOT85', text: EXPECT, ts: slackTime(), thread_ts: THREAD_TS });
           slack.failure = undefined;
           expect(await until(() => events(hub, 'ask.moot')[0], NEXT_READ), 'the task closes once a read finds the reply').toBeDefined();
         } finally {
