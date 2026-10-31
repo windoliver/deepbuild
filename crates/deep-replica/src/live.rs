@@ -33,7 +33,7 @@ mod live {
     const FRAMES: usize = 8;
 
     pub fn run() -> i32 {
-        let (view, out) = match deep_replica::view_args("deep-live", "file") {
+        let (view, out, _) = match deep_replica::view_args("deep-live", "file", false) {
             Ok(args) => args,
             Err(code) => return code,
         };
