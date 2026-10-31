@@ -57,11 +57,23 @@ pub struct Shown {
     pub reasons: Vec<&'static str>,
 }
 
+impl deep_canvas::schedule::Canonical for Shown {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.id, &self.rank, &self.reasons), out);
+    }
+}
+
 /// The one count item the rest fold into.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fold {
     pub items: Vec<String>,
     pub line: String,
+}
+
+impl deep_canvas::schedule::Canonical for Fold {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.items, &self.line), out);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -70,6 +82,12 @@ pub struct Level {
     pub fold: Option<Fold>,
     /// Arrivals that would change a held set, waiting until the next hold.
     pub new: usize,
+}
+
+impl deep_canvas::schedule::Canonical for Level {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.shown, &self.fold, &self.new), out);
+    }
 }
 
 fn reasons(item: &Item) -> Vec<&'static str> {
