@@ -275,17 +275,13 @@ fn text_extent(text: &str, frame: Size<Pixels>, window: &Window) -> Option<Size<
 }
 
 /// A `:` call that is behavior and stays in the host: exactly a callback's text. A state style prints the same way and
-/// isn't one, and an action's id prints unescaped, so an id that could open a quote could hide the styles after it.
+/// isn't one. Neither is any call that prints a script's string unescaped, `on_action` and `transition`: a newline in
+/// one forges the lines this reads, so the tree here wouldn't be the panel's, and no later look at the args can tell.
 fn behavior(op: &crate::panel_tree::Op) -> bool {
     match op.name.as_str() {
         "track_focus" => number(&op.args).is_some(),
-        "on_action" => op.args.strip_suffix(", fn").is_some_and(|id| {
-            !id.is_empty()
-                && id
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'))
-        }),
-        _ => op.args == "fn" || op.args == "registered",
+        "on_action" => false,
+        name => name.starts_with("on_") && op.args == "fn" || op.args == "registered",
     }
 }
 
