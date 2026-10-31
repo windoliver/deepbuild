@@ -5,7 +5,7 @@
 // in <root>/codex-hooks.json, and reads trust from Codex's own hook list. Identity is always the payload's, never this
 // process's environment: the shared daemon keeps the environment of the terminal that started it.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { strictObject, target, writeThrough } from './agent-files.js';
@@ -203,6 +203,17 @@ export function codexRelations(root: string): CodexRelation[] {
 }
 
 export interface Listed { command: string; eventName: string; trustStatus: string; enabled: boolean }
+/** Where the hub keeps DeepBuild's entries as Codex's hook list last reported them. */
+const trustFile = (root: string): string => join(root, 'codex-trust.json');
+/** Reads Codex's hook list and keeps DeepBuild's entries of it, for health and doctor; a list it can't get changes nothing. */
+export async function saveTrust(root: string, codex: string, cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const listed = await hookList(codex, cwd, env);
+  if (listed) writeFileSync(trustFile(root), `${JSON.stringify(listed.filter((h) => /deep-hook'? codex /.test(String(h.command))))}\n`);
+}
+export const readTrust = (root: string): Listed[] | undefined => {
+  const kept = existsSync(trustFile(root)) ? (JSON.parse(readFileSync(trustFile(root), 'utf8')) as unknown) : undefined;
+  return Array.isArray(kept) ? (kept as Listed[]) : undefined;
+};
 /** Codex's own hook list, from `codex app-server`'s hooks/list; undefined when it gives none in time. */
 export function hookList(codex: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs = 10_000): Promise<Listed[] | undefined> {
   return new Promise((resolve) => {
