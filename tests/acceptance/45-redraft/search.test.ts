@@ -57,7 +57,7 @@ function valuesAt(value: unknown, key: RegExp, into: unknown[] = []): unknown[] 
 /** A time as a hit may give it: ms since the epoch, or a date string. */
 const asTime = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 'string' ? Date.parse(v) : NaN);
 
-test('#45.d2b85f36 AC11 a session\'s deep_search for spend returns its task\'s spend, summed over the task\'s turns only, with its source and an as-of time', async () => {
+test('#45.eb25cf40 AC11 a session\'s deep_search for spend returns its task\'s spend, summed over the task\'s turns only, with its source and an as-of time', async () => {
   const { tmp, home } = makeHome();
   const wt = makeWorktree(join(tmp, 'work'));
   const id = sessionId();
