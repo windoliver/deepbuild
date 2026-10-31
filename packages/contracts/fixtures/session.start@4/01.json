@@ -1,0 +1,34 @@
+{
+  "v": 4,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "session.start",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "seq": "1760013451123456789",
+  "data": {
+    "agent": "claude-code",
+    "worktree": "/work/repo",
+    "branch": null,
+    "thread": "abc",
+    "billing": {
+      "ANTHROPIC_API_KEY": true
+    },
+    "loads": [
+      {
+        "kind": "skill",
+        "name": "release-notes",
+        "source": "~/.claude/skills/release-notes/SKILL.md",
+        "digest": "sha256:3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b"
+      },
+      {
+        "kind": "mcp",
+        "name": "github",
+        "source": "~/.claude.json (user)",
+        "digest": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+      }
+    ],
+    "parent": "session-replaced"
+  }
+}
