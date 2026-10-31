@@ -1,6 +1,8 @@
 {
   "title": "check.held@1",
   "description": "A slow check took its held place at a looping session's stop (#45).",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

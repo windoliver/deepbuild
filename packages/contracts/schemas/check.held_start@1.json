@@ -1,6 +1,8 @@
 {
   "title": "check.held_start@1",
   "description": "A held check started (#45), and what started it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

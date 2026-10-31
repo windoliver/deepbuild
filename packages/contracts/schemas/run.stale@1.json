@@ -1,6 +1,8 @@
 {
   "title": "run.stale@1",
   "description": "A slow-lane run ended (#45) after a newer claim had changed its check's inputs: what outdated it is read from the first user.ask after the reply of the stop that made its claim.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {
