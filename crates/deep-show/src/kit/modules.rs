@@ -110,7 +110,7 @@ fn crash_out(v: &mut View<'_>) -> Result<(), OpError> {
     if n > 90.0 {
         panic!("test.kit.crash: n is {n}");
     }
-    v.write("test.kit.crash.out", Val::json(json!(n)))
+    v.write("test.kit.crash.out", Val::typed(n))
 }
 
 fn register_crash(r: &mut Registrar) {
@@ -723,7 +723,7 @@ fn cover_draw(params: &Value) -> Value {
 fn cover_width(v: &mut View<'_>) -> Result<(), OpError> {
     let item = v.item()?;
     let w = item["params"]["w"].as_f64().unwrap_or(10.0);
-    v.write("test.kit.cover.width", Val::json(json!(w)))
+    v.write("test.kit.cover.width", Val::typed(w))
 }
 
 fn cover_with(r: &mut Registrar, fields: Value) {
@@ -838,8 +838,17 @@ pub fn snap_off() -> Module {
 
 fn glyph_boxes(v: &mut View<'_>) -> Result<(), OpError> {
     let item = v.item()?;
-    let b = item["params"]["box"].clone();
-    v.write("test.kit.glyphs.boxes", Val::json(json!([b])))
+    let mut b = [0.0; 4];
+    for (k, x) in item["params"]["box"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .take(4)
+    {
+        b[k] = x.as_f64().unwrap_or(0.0);
+    }
+    v.write("test.kit.glyphs.boxes", Val::typed(vec![b]))
 }
 
 fn glyphs_with(r: &mut Registrar, contributes: bool) {
@@ -938,7 +947,7 @@ fn keys_value(v: &mut View<'_>) -> Result<(), OpError> {
     let item = v.item()?;
     let t = v.t()? as f64 / 705_600_000.0;
     let (value, _) = value_at(&keys_of(item), t, 0);
-    v.write("test.kit.keys.value", Val::json(json!(value)))
+    v.write("test.kit.keys.value", Val::typed(value))
 }
 
 thread_local! {
@@ -953,7 +962,7 @@ fn keys_value_kept(v: &mut View<'_>) -> Result<(), OpError> {
     let from = KEPT.with(|k| k.borrow().get(&id).copied().unwrap_or(0));
     let (value, at) = value_at(&keys_of(item), t, from);
     KEPT.with(|k| k.borrow_mut().insert(id, at));
-    v.write("test.kit.keys.value", Val::json(json!(value)))
+    v.write("test.kit.keys.value", Val::typed(value))
 }
 
 fn keys_with(r: &mut Registrar, run: deep_canvas::registry::Run) {
@@ -1139,20 +1148,20 @@ pub fn gpu_cpu_ref_fails() -> Module {
 // test.kit.sneak: `out` reads, through a static, the array `src` writes, declaring only its item.
 
 thread_local! {
-    static SNEAKED: std::cell::RefCell<Value> = const { std::cell::RefCell::new(Value::Null) };
+    static SNEAKED: std::cell::RefCell<Option<f64>> = const { std::cell::RefCell::new(None) };
 }
 
 fn sneak_src(v: &mut View<'_>) -> Result<(), OpError> {
     let item = v.item()?;
     let x = item["params"]["box"][0].as_f64().unwrap_or(0.0) * 2.0;
-    SNEAKED.with(|s| *s.borrow_mut() = json!(x));
-    v.write("test.kit.sneak.src", Val::json(json!(x)))
+    SNEAKED.with(|s| *s.borrow_mut() = Some(x));
+    v.write("test.kit.sneak.src", Val::typed(x))
 }
 
 fn sneak_out(v: &mut View<'_>) -> Result<(), OpError> {
     let _ = v.item()?;
-    let seen = SNEAKED.with(|s| s.borrow().clone());
-    v.write("test.kit.sneak.out", Val::json(seen))
+    let seen = SNEAKED.with(|s| *s.borrow());
+    v.write("test.kit.sneak.out", Val::typed(seen))
 }
 
 fn register_sneak(r: &mut Registrar) {
@@ -1195,13 +1204,13 @@ fn order_a(v: &mut View<'_>) -> Result<(), OpError> {
     let _ = v.item()?;
     let id = v.id().unwrap_or("").to_string();
     LAST_A.with(|s| *s.borrow_mut() = id.clone());
-    v.write("test.kit.order.a", Val::json(json!(id)))
+    v.write("test.kit.order.a", Val::typed(id))
 }
 
 fn order_b(v: &mut View<'_>) -> Result<(), OpError> {
     let _ = v.item()?;
     let seen = LAST_A.with(|s| s.borrow().clone());
-    v.write("test.kit.order.b", Val::json(json!(seen)))
+    v.write("test.kit.order.b", Val::typed(seen))
 }
 
 fn register_order(r: &mut Registrar) {
