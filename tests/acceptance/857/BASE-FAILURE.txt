@@ -1,0 +1,310 @@
+Base commit: 0466575b (the worktree's HEAD; nothing under crates/deep-canvas or crates/deep-show differs from 0b35e68e)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/857 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci.
+Every test fails for the expected reason: eval and frames replies carry no threads (nor frame_ms or a node's thread), the
+planted name background_at_live_priority is answered {"ok":false,"code":"bad_input"}, and the test-threads Cargo feature
+doesn't exist, so cargo refuses that build. The reference-Mac gate was open (Mac15,7, on battery, load average near 100):
+the timing tests built the release binary, ran, and failed on the missing fields rather than skipping.
+Date: 2026-10-30  Node v23.9.0  vitest 5.0.5 darwin-arm64
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/857
+
+ ❯ background.test.ts (3 tests | 3 failed) 305991ms
+   ❯ #857.4 with a 4-replica playtest batch and a light bake running, a work-product view on the reference Mac keeps its p95 frame CPU inside its 4 ms class; a planted batch at the live view's priority pushes it past, naming the frames (3)
+     × #857.4 the work-product view runs on its class's pool of 4 threads while the playtest batch's four replicas and the bake each evaluate frames 5369ms
+     × #857.4 under the load, the view's p95 frame CPU over 300 frames stays within 4 ms (five runs on a release build) 1128ms
+     × #857.4 a planted batch at the live view's priority pushes the view's p95 frame CPU past 4 ms in all five runs, each run naming its frames over it 25ms
+ ❯ serial.test.ts (4 tests | 4 failed) 77160ms
+   ❯ #857.3 an operator that declares itself not thread-safe runs only on the scheduler's thread, and a planted operator that touches shared state without declaring it is caught by the shuffle test at 8 threads, naming it (4)
+     × #857.3 the registry says of every operator whether it is thread-safe: test.serial.out declares itself not thread-safe, test.racy.out declares nothing and so is thread-safe 24ms
+     × #857.3 at 8 threads every test.serial.out node runs on the scheduler's own thread, while the frame's other nodes run on the pool 23ms
+     × #857.3 the shuffle test with thread counts on the shipped build: under shuffle seeds 1 to 8 at 1, 2, 4 and 8 threads, and unshuffled at each count, every node's key and write, the issues and the pixel hash equal the unshuffled frame at 1 thread 1925ms
+     × #857.3 a planted operator that reads and bumps a process-wide counter without declaring it is caught by the shuffle test at 8 threads, and the failure names test.racy.out alone 8ms
+ ❯ threads.test.ts (3 tests | 3 failed) 61770ms
+   ❯ #857.1 a 10,000-item board's frame with every item changed gives the same keys, writes and pixel hash at 1, 2, 4 and 8 threads; a planted merge in finish order differs at some count and fails, naming the first node whose write differs (3)
+     × #857.1 at each count the frame runs on a pool of that many threads, runs a node for every one of the 10,000 changed items, and from 2 threads up spreads its nodes over more than one thread 10160ms
+     × #857.1 at 2, 4 and 8 threads every node has the key and the write it has at 1 thread, the frame raises the same issues, and the pixel hash is the same 9449ms
+     × #857.1 a planted scheduler that merges a phase's results in the order its workers finished differs from the frame at 1 thread at some count, and the failure names the first node whose write differs 8343ms
+ ❯ speedup.test.ts (2 tests | 2 failed) 81293ms
+   ❯ #857.2 on the reference Mac the 10,000-item frame with every item changed runs at least 2.5 times faster at 4 threads than at 1 on an optimized build, and a frame with one item changed is no slower at 4 than at 1 (2)
+     × #857.2 the frame with every item changed: at 4 threads it takes at most 1/2.5 of its time at 1 thread (five paired runs on a release build) 19728ms
+     × #857.2 the frame with one item changed: at 4 threads it takes no longer than at 1 thread (five paired runs on a release build) 16209ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  background.test.ts > #857.4 with a 4-replica playtest batch and a light bake running, a work-product view on the reference Mac keeps its p95 frame CPU inside its 4 ms class; a planted batch at the live view's priority pushes it past, naming the frames > #857.4 the work-product view runs on its class's pool of 4 threads while the playtest batch's four replicas and the bake each evaluate frames
+AssertionError: the view's frames: threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ framesOf helpers.ts:131:19
+ ❯ background.test.ts:70:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  background.test.ts > #857.4 with a 4-replica playtest batch and a light bake running, a work-product view on the reference Mac keeps its p95 frame CPU inside its 4 ms class; a planted batch at the live view's priority pushes it past, naming the frames > #857.4 under the load, the view's p95 frame CPU over 300 frames stays within 4 ms (five runs on a release build)
+AssertionError: the view's timed frames: threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ framesOf helpers.ts:131:19
+ ❯ viewRun background.test.ts:57:17
+ ❯ background.test.ts:80:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  background.test.ts > #857.4 with a 4-replica playtest batch and a light bake running, a work-product view on the reference Mac keeps its p95 frame CPU inside its 4 ms class; a planted batch at the live view's priority pushes it past, naming the frames > #857.4 a planted batch at the live view's priority pushes the view's p95 frame CPU past 4 ms in all five runs, each run naming its frames over it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run ../387/helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ viewRun background.test.ts:54:19
+ ❯ background.test.ts:93:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  serial.test.ts > #857.3 an operator that declares itself not thread-safe runs only on the scheduler's thread, and a planted operator that touches shared state without declaring it is caught by the shuffle test at 8 threads, naming it > #857.3 the registry says of every operator whether it is thread-safe: test.serial.out declares itself not thread-safe, test.racy.out declares nothing and so is thread-safe
+AssertionError: the binary builds: deep-show with features full,test-threads: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-threads failed:
++ error: none of the selected packages contains this feature: test-threads
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:76:143
+     74|       const entry = made.get(buildName(build));
+     75|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+     76|       expect(entry.error, `the binary builds: ${SHOW_NAME} ${build.rel…
+       |                                                                                                                                               ^
+     77|       return entry.bin;
+     78|     },
+ ❯ serial.test.ts:37:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  serial.test.ts > #857.3 an operator that declares itself not thread-safe runs only on the scheduler's thread, and a planted operator that touches shared state without declaring it is caught by the shuffle test at 8 threads, naming it > #857.3 at 8 threads every test.serial.out node runs on the scheduler's own thread, while the frame's other nodes run on the pool
+AssertionError: the binary builds: deep-show with features full,test-threads: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-threads failed:
++ error: none of the selected packages contains this feature: test-threads
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:76:143
+     74|       const entry = made.get(buildName(build));
+     75|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+     76|       expect(entry.error, `the binary builds: ${SHOW_NAME} ${build.rel…
+       |                                                                                                                                               ^
+     77|       return entry.bin;
+     78|     },
+ ❯ serial.test.ts:48:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  serial.test.ts > #857.3 an operator that declares itself not thread-safe runs only on the scheduler's thread, and a planted operator that touches shared state without declaring it is caught by the shuffle test at 8 threads, naming it > #857.3 the shuffle test with thread counts on the shipped build: under shuffle seeds 1 to 8 at 1, 2, 4 and 8 threads, and unshuffled at each count, every node's key and write, the issues and the pixel hash equal the unshuffled frame at 1 thread
+AssertionError: the frame at 1 thread(s): threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ threaded helpers.ts:108:19
+ ❯ frameOf serial.test.ts:32:19
+ ❯ serial.test.ts:61:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  serial.test.ts > #857.3 an operator that declares itself not thread-safe runs only on the scheduler's thread, and a planted operator that touches shared state without declaring it is caught by the shuffle test at 8 threads, naming it > #857.3 a planted operator that reads and bumps a process-wide counter without declaring it is caught by the shuffle test at 8 threads, and the failure names test.racy.out alone
+AssertionError: the binary builds: deep-show with features full,test-threads: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-threads failed:
++ error: none of the selected packages contains this feature: test-threads
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:76:143
+     74|       const entry = made.get(buildName(build));
+     75|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+     76|       expect(entry.error, `the binary builds: ${SHOW_NAME} ${build.rel…
+       |                                                                                                                                               ^
+     77|       return entry.bin;
+     78|     },
+ ❯ frameOf serial.test.ts:29:30
+ ❯ serial.test.ts:76:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  speedup.test.ts > #857.2 on the reference Mac the 10,000-item frame with every item changed runs at least 2.5 times faster at 4 threads than at 1 on an optimized build, and a frame with one item changed is no slower at 4 than at 1 > #857.2 the frame with every item changed: at 4 threads it takes at most 1/2.5 of its time at 1 thread (five paired runs on a release build)
+AssertionError: the frame after revision 0 at 1 thread(s): threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ threaded helpers.ts:108:19
+ ❯ timedRun speedup.test.ts:37:19
+ ❯ ratios speedup.test.ts:48:17
+ ❯ speedup.test.ts:60:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  speedup.test.ts > #857.2 on the reference Mac the 10,000-item frame with every item changed runs at least 2.5 times faster at 4 threads than at 1 on an optimized build, and a frame with one item changed is no slower at 4 than at 1 > #857.2 the frame with one item changed: at 4 threads it takes no longer than at 1 thread (five paired runs on a release build)
+AssertionError: the frame after revision 0 at 1 thread(s): threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ threaded helpers.ts:108:19
+ ❯ timedRun speedup.test.ts:37:19
+ ❯ ratios speedup.test.ts:48:17
+ ❯ speedup.test.ts:67:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  threads.test.ts > #857.1 a 10,000-item board's frame with every item changed gives the same keys, writes and pixel hash at 1, 2, 4 and 8 threads; a planted merge in finish order differs at some count and fails, naming the first node whose write differs > #857.1 at each count the frame runs on a pool of that many threads, runs a node for every one of the 10,000 changed items, and from 2 threads up spreads its nodes over more than one thread
+AssertionError: the frame with every item changed at 1 thread(s): threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ threaded helpers.ts:108:19
+ ❯ changedFrame threads.test.ts:30:19
+ ❯ at threads.test.ts:36:53
+ ❯ threads.test.ts:42:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  threads.test.ts > #857.1 a 10,000-item board's frame with every item changed gives the same keys, writes and pixel hash at 1, 2, 4 and 8 threads; a planted merge in finish order differs at some count and fails, naming the first node whose write differs > #857.1 at 2, 4 and 8 threads every node has the key and the write it has at 1 thread, the frame raises the same issues, and the pixel hash is the same
+AssertionError: the frame with every item changed at 1 thread(s): threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ threaded helpers.ts:108:19
+ ❯ changedFrame threads.test.ts:30:19
+ ❯ at threads.test.ts:36:53
+ ❯ threads.test.ts:53:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  threads.test.ts > #857.1 a 10,000-item board's frame with every item changed gives the same keys, writes and pixel hash at 1, 2, 4 and 8 threads; a planted merge in finish order differs at some count and fails, naming the first node whose write differs > #857.1 a planted scheduler that merges a phase's results in the order its workers finished differs from the frame at 1 thread at some count, and the failure names the first node whose write differs
+AssertionError: the frame with every item changed at 1 thread(s): threads is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num ../387/helpers.ts:55:123
+     53| }
+     54| export function num(value: JsonValue | undefined, what: string): numbe…
+     55|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     56|   return value as number;
+     57| }
+ ❯ threaded helpers.ts:108:19
+ ❯ changedFrame threads.test.ts:30:19
+ ❯ at threads.test.ts:36:53
+ ❯ threads.test.ts:62:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  12 failed (12)
+   Start at  15:39:26
+   Duration  528.42s (tests 100%)
+
