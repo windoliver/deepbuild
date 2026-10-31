@@ -270,6 +270,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   const materialize = async (worktree: string, env: NodeJS.ProcessEnv, tree: string, dir: string): Promise<void> => {
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, '.copied-bytes'), randomBytes(200 * 1024 * 1024));
+      await new Promise((resolve) => setTimeout(resolve, 15_000));
     const holder = await mkdtemp(join(o.store, 'index-'));
     try {
       const indexed = { ...env, GIT_INDEX_FILE: join(holder, 'index') };
