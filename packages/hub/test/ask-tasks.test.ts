@@ -192,4 +192,37 @@ describe('ask-tasks hardening', () => {
       }
     });
   }, 240_000);
+
+  it('a requirement whose surface has no fixed form waits for one early question, and one with a fixed form locks with its surface (#874)', async () => {
+    const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    procs.push(claude);
+    await withHub(async (root, home, hub: Hub) => {
+      const service = { kind: 'service', routes: ['/health'], format: 'json' };
+      const queue = { kind: 'queue', name: 'orders' };
+      const w = world(home, [
+        draft(FOLDER, [req('R1', 'GET /health answers 200', { check: '.deepbuild/checks/ok.sh', surface: service })]),
+        draft(GOOD, [req('R1', 'an order on the queue is taken', { check: '.deepbuild/checks/ok.sh', surface: queue })]),
+      ]);
+      await hub.restart(w.env);
+      const s = session(root, w, claude);
+      const l = ledger(root);
+      try {
+        await s.hook('SessionStart', { source: 'startup' });
+        await l.settle(() => l.events('session.start').length > 0);
+        await s.typed(FOLDER);
+        await s.typed(GOOD);
+        await l.settle(() => l.locked(s.handle(0)).length > 0 && l.events('ask.created').some((e) => e.kind === 'definition'));
+        expect((l.locked(s.handle(0))[0]?.requirements as Obj[] | undefined)?.[0], 'a surface with a fixed form locks with the requirement').toMatchObject({ id: 'R1', surface: service });
+        const asks = l.events('ask.created').filter((e) => e.kind === 'definition');
+        expect(asks.map((a) => String(a.question)), 'one early question, naming the requirement and its surface').toEqual([expect.stringMatching(new RegExp(`${s.handle(1).replace('#', '\\#')} has R1's check enter through a queue surface, which has no fixed form`))]);
+        expect(l.locked(s.handle(1)), 'the formless surface\'s definition waits for your answer').toEqual([]);
+        const keep = spawnSync(process.execPath, [CLI, 'inbox', 'answer', `ask:${asks[0]!.id}`, 'keep'], { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 60_000 });
+        expect(keep.status, `your answer keep counts: ${keep.stdout}${keep.stderr}`).toBe(0);
+        await l.settle(() => l.locked(s.handle(1)).length > 0);
+        expect((l.locked(s.handle(1))[0]?.requirements as Obj[] | undefined)?.[0], 'your answer locks it as drafted').toMatchObject({ id: 'R1', surface: queue });
+      } finally {
+        l.db.close();
+      }
+    });
+  }, 120_000);
 });

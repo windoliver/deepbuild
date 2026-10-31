@@ -13,11 +13,15 @@
 //   definition that carries such text locks only after one ask about it.
 // - At each claim the hash is recomputed from the stored definition and the checks' bytes on disk; a check changed
 //   since the lock is a proposal naming its file, never a new definition.
+// - A requirement may declare the surface its check enters through (#874), carried to the gate runner's base run for
+//   a stand-in on a base with nothing to start; the stand-in's hash is recorded in its `stand_in`, which the hash
+//   leaves out. A surface with no fixed form goes to the early question before the definition locks.
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
+import type { ClaimCheck, Surface } from './gate-runner.js';
 import { headOf } from './session-facts.js';
 import { derivedId, type Plant } from './wire.js';
 
@@ -46,17 +50,33 @@ export function asksForChange(text: string): boolean {
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author }
+interface Requirement { id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string } }
 interface Author { handle: string; role: string }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[] }
 /** A work source's work.item@1 reading: the test source's carries its body as text. */
 export interface WorkItem { source_id: string; link: string; title: string; body: string; authors: { handle: string; role: string }[]; updated: string }
 /** A definition as locked, without its hash: what the hash covers. */
 interface Definition { task_ref: string; requirements: Requirement[]; deliverables: string[]; issue_rev: string; base_commit: string; budget: JsonValue }
-interface Pending { session: string; agent: string; definition: Definition; handed: string; outside: string[]; at: number }
+/** The requirements your one answer can leave out: those outside text added, and those whose surface has no fixed form. */
+interface Pending { session: string; agent: string; definition: Definition; handed: string; held: string[]; at: number }
 
 /** The roles whose text can remove or waive a requirement. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
+/** A declared surface: #31's shape, without the check, which is the requirement's own; only the fields the lock records. */
+function surfaceOf(v: unknown): Surface | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v) || typeof (v as Obj).kind !== 'string' || !(v as Obj).kind) return null;
+  const s = v as Obj;
+  const words = (k: string) => (Array.isArray(s[k]) && (s[k] as unknown[]).every((x) => typeof x === 'string' && x) ? { [k]: s[k] } : {});
+  const word = (k: string) => (typeof s[k] === 'string' && s[k] ? { [k]: s[k] } : {});
+  return { kind: String(s.kind), ...words('routes'), ...word('format'), ...word('name'), ...word('path'), ...words('exports') };
+}
+/** Whether `deep` has a fixed form to stand in for a surface: a JSON service, a page, a command, a module's exports. */
+function hasForm(s: Surface): boolean {
+  if (s.kind === 'service') return (s.format ?? 'json') === 'json';
+  if (s.kind === 'command') return typeof s.name === 'string';
+  if (s.kind === 'module') return typeof s.path === 'string' && Array.isArray(s.exports);
+  return s.kind === 'page';
+}
 
 export interface AskTaskOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
@@ -77,7 +97,7 @@ export interface AskTaskOptions {
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
    * it takes the claim's snapshot and checkout, and starts the fast lane's checks.
    */
-  run(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes'; asserts: string[] }[] }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: ClaimCheck[] }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
@@ -152,7 +172,7 @@ export class AskTasks {
         id: String(r.id), text: String(r.text), source_line: String(r.source_line), refuted_by: String(r.refuted_by), check,
         check_sha256: check ? await this.approve(t.cwd, check) : null, on_base: String(r.on_base ?? 'fails'),
         asserts: (r.asserts as string[] | undefined) ?? [], depth: String(r.depth), oracle: String(r.oracle), near_misses: (r.near_misses as string[] | undefined) ?? [],
-        author: authorOf(String(r.source_line)),
+        author: authorOf(String(r.source_line)), surface: surfaceOf(r.surface),
       });
     }
     // A waiver counts only from you or a repo collaborator; any other's leaves the requirement in, and makes the
@@ -173,23 +193,33 @@ export class AskTasks {
       issue_rev: revision ?? sha256Hex(new TextEncoder().encode(t.text)), base_commit: head.sha, budget: handed.budget ?? null,
     };
     const digest = sha256Hex(canonicalize(handed as unknown as JsonValue));
-    if (!outside.length && !waived) return this.record(t.session, t.agent, definition, digest, t.at);
+    // The early question (#874): a check whose surface has no fixed form has nothing to stand in for it on a base with
+    // nothing to start, so its definition waits for your one answer too, in the same ask.
+    const formless = requirements.filter((r) => r.surface && !hasForm(r.surface));
+    if (!outside.length && !waived && !formless.length) return this.record(t.session, t.agent, definition, digest, t.at);
     const who = [...new Set(requirements.filter((r) => outside.includes(r.id)).map((r) => r.author.handle))];
-    const question = `The definition of ${t.task_ref} carries text from outside the repo${who.length ? ` (${who.join(', ')})` : ''}: ${outside.length ? `it adds ${outside.join(', ')}` : 'it asks to waive a requirement, which it can\'t'}. Lock it with what the outside text added?`;
+    const said = [
+      ...(outside.length || waived ? [`carries text from outside the repo${who.length ? ` (${who.join(', ')})` : ''}: ${outside.length ? `it adds ${outside.join(', ')}` : 'it asks to waive a requirement, which it can\'t'}`] : []),
+      ...formless.map((r) => `has ${r.id}'s check enter through a ${r.surface!.kind} surface, which has no fixed form to stand in for it where the base has nothing to start`),
+    ];
+    const question = `The definition of ${t.task_ref} ${said.join('; it ')}. ${outside.length ? 'Lock it with what the outside text added?' : 'Lock it as drafted?'}`;
     const raised = {
       // At its deadline it takes your settings' definition default, leave-out: what the outside text added stays out.
-      kind: 'definition', question, recommended: 'keep', default: 'leave-out', fallback: 'you', provisional: false, owner: 'you',
-      options: [{ id: 'keep', label: 'Lock it with the outside additions, marked with their author', decision: 'none' }, { id: 'leave-out', label: 'Lock it without them', decision: 'none' }],
+      // With no outside text the default locks it as drafted, so no requirement drops out unanswered.
+      kind: 'definition', question, recommended: 'keep', default: outside.length || waived ? 'leave-out' : 'keep', fallback: 'you', provisional: false, owner: 'you',
+      options: outside.length || waived
+        ? [{ id: 'keep', label: 'Lock it with the outside additions, marked with their author', decision: 'none' }, { id: 'leave-out', label: 'Lock it without them', decision: 'none' }]
+        : [{ id: 'keep', label: 'Lock it as drafted: its check runs on the base with no stand-in', decision: 'none' }, { id: 'leave-out', label: `Lock it without ${formless.map((r) => r.id).join(', ')}`, decision: 'none' }],
       key: sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: t.task_ref, digest })), pinned_to: await this.o.pin(t.cwd, question),
     };
     const ask = await this.o.asks().raise(this.o.connection(t.session, t.agent), 'definition.draft', raised);
-    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, outside, at: t.at });
+    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, held: [...new Set([...outside, ...formless.map((r) => r.id)])], at: t.at });
   }
-  /** Your one answer about outside text: the definition locks, with the outside additions or without them. */
+  /** Your one answer about outside text or a formless surface: the definition locks, with the requirements it held or without them. */
   answered(delivery: Delivery): void {
     const p = this.pending.get(delivery.ask);
     if (!p) return;
-    const definition = delivery.option === 'leave-out' ? { ...p.definition, requirements: p.definition.requirements.filter((r) => !p.outside.includes(r.id)) } : p.definition;
+    const definition = delivery.option === 'leave-out' ? { ...p.definition, requirements: p.definition.requirements.filter((r) => !p.held.includes(r.id)) } : p.definition;
     // An answer that leaves nothing to lock locks nothing, and the draft keeps waiting: the default undone, your next answer can still lock it.
     if (!definition.requirements.length) return this.unlocked(definition.task_ref, Error('leaving the outside text out leaves it no requirement; undo the default to lock it with that text'));
     this.pending.delete(delivery.ask);
@@ -208,7 +238,7 @@ export class AskTasks {
     const ts = this.o.now();
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 2, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 3, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
@@ -264,7 +294,8 @@ export class AskTasks {
       const stored = JSON.parse(String(row.requirements)) as Requirement[];
       const requirements: Requirement[] = [];
       const changed: { check: string; approved: string | null; now: string | null }[] = [];
-      for (const r of stored) {
+      // A stand-in recorded since the lock is the base run's finding, not the definition: the hash leaves it out.
+      for (const { stand_in: _found, ...r } of stored) {
         const bytes = r.check ? await this.bytesOf(cwd, r.check) : undefined;
         const now = bytes ? sha256Hex(bytes) : null;
         if (r.check && now !== r.check_sha256) changed.push({ check: r.check, approved: r.check_sha256, now });
@@ -302,13 +333,29 @@ export class AskTasks {
         });
       }
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
-      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' as const : 'fails' as const, asserts: r.asserts }] : []));
-      await this.o.run({ claim: `claim:${id}`, session, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, checks });
+      const checks = stored.flatMap((r): ClaimCheck[] => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' : 'fails', asserts: r.asserts, req: r.id, surface: r.surface ?? null }] : []));
+      await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, checks });
       } catch (error) {
         process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
       }
     }
     return made;
+  }
+
+  /**
+   * Records the stand-in a requirement's check was proven on (#874): the surface it enters through and the stand-in's
+   * hash, as the requirement's `stand_in`, once for each hash.
+   */
+  async stoodIn(connection: Connection, r: { task: string; req: string; surface: Surface; hash: string }): Promise<void> {
+    const [row] = (await this.o.raw('SELECT id, requirements FROM definitions WHERE task_ref = ?', [r.task])) as { id: string; requirements: string }[];
+    if (!row) return;
+    const was = (JSON.parse(row.requirements) as Requirement[]).find((q) => q.id === r.req)?.stand_in;
+    if (was?.hash === r.hash) return;
+    const ts = this.o.now();
+    await this.o.append(connection, {
+      v: 1, id: ulid(ts), kind: 'definition.stood_in', ts,
+      data: { definition: row.id, task_ref: r.task, requirements: [{ id: r.req, stand_in: { surface: r.surface, hash: r.hash } }] } as unknown as JsonValue,
+    });
   }
 
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */

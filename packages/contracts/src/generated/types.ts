@@ -2477,6 +2477,58 @@ export interface DefinitionLockedV2 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@3 */
+export interface DefinitionLockedV3 {
+  v: 3;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -2506,6 +2558,39 @@ export interface DefinitionRevised {
       cap_usd: number;
     } | null;
     dispute_ask: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.stood_in@1 */
+export interface DefinitionStoodIn {
+  v: 1;
+  id: string;
+  kind: "definition.stood_in";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      stand_in: {
+        surface: {
+          kind: string;
+          routes?: Array<string>;
+          format?: string;
+          name?: string;
+          path?: string;
+          exports?: Array<string>;
+        };
+        hash: string;
+      };
+    }>;
   };
   evidence?: Array<string>;
 }

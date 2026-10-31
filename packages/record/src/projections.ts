@@ -384,6 +384,15 @@ export class Projector {
       case 'definition.revised':
         this.up('definitions', { ...this.definition(d, 'revised', e.ts), dispute_ask: str(d.dispute_ask) });
         break;
+      case 'definition.stood_in': {
+        // A stand-in a requirement's check was proven on (#874): kept on the requirement as its `stand_in`.
+        const row = this.stmt('SELECT requirements FROM definitions WHERE task_ref = ?').get(str(d.task_ref)) as { requirements: string } | undefined;
+        if (!row) break;
+        const found = new Map((d.requirements as Obj[]).map((r) => [r.id, r.stand_in]));
+        const requirements = (JSON.parse(row.requirements) as Obj[]).map((r) => (found.has(r.id) ? { ...r, stand_in: found.get(r.id) } : r));
+        this.stmt('UPDATE definitions SET requirements = ? WHERE task_ref = ?').run(JSON.stringify(requirements), str(d.task_ref));
+        break;
+      }
       case 'run.started':
       {
         // A run's claim, check and commit are the core's start, whenever it lands; until then the first start's.

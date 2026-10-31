@@ -57,7 +57,10 @@ export type Plant =
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
   // #875's: a fix check's base run counted as its proof whatever way it failed, as an opaque script's is.
-  | 'any-nonzero-base-exit';
+  | 'any-nonzero-base-exit'
+  // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
+  // where the part already starts, and a pass on a stand-in taken as proof.
+  | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -94,6 +97,7 @@ const PLANTS: readonly string[] = [
   'silent-deprecated',
   'deep-drive-no-lease',
   'any-nonzero-base-exit',
+  'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
