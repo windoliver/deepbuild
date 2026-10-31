@@ -1,0 +1,7 @@
+---
+description: How this person works
+alwaysApply: true
+---
+
+- Keep pull requests small and reviewable
+- Name test files after the behaviour they prove

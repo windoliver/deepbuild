@@ -839,7 +839,7 @@ impl Renderer {
             if !session.layers.contains_key(&key) {
                 let marks: Vec<&Drawn> = frame.layers[..=top]
                     .iter()
-                    .flat_map(|l| l.marks.iter())
+                    .flat_map(|l| l.marks.iter().map(|m| &**m))
                     .collect();
                 let mut list: Vec<Placed> = vec![(Draw::Quad(ground.clone()), None)];
                 list.extend(Self::draws(
@@ -896,7 +896,7 @@ impl Renderer {
         };
         let live: Vec<&Drawn> = frame.layers[first_live..]
             .iter()
-            .flat_map(|l| l.marks.iter())
+            .flat_map(|l| l.marks.iter().map(|m| &**m))
             .collect();
         list.extend(Self::draws(
             session, &live, bucket, view.zoom, gpui_oklab, &mut used,

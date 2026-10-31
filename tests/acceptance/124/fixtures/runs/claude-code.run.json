@@ -1,0 +1,20 @@
+{
+  "format": "deep_drive.run@1",
+  "agent": { "name": "claude-code", "version": "2.1.308" },
+  "session": "session:01KB124CLAVDECODE0000000001",
+  "panel": "/work/save-form",
+  "calls": [
+    { "call": "launch", "launch": { "from": "fixture", "panel": "/work/save-form", "theme": "light", "locale": "en-US", "clock": "virtual" } },
+    { "call": "see", "replica": "replica:R1", "see": { "scope": "window", "include": ["roles", "names", "values", "bounds"] } },
+    { "call": "expect", "replica": "replica:R1", "locator": { "role": "button", "name": "Save" }, "expect": { "name": "save-disabled-while-empty", "assert": "state", "state": "disabled" } },
+    { "call": "act", "replica": "replica:R1", "locator": { "label": "Email" }, "act": { "kind": "click" } },
+    { "call": "act", "replica": "replica:R1", "locator": { "label": "Email" }, "act": { "kind": "type", "text": "ada@example.com" } },
+    { "call": "expect", "replica": "replica:R1", "locator": { "label": "Email" }, "expect": { "name": "email-holds-the-address", "assert": "value", "value": "ada@example.com" } },
+    { "call": "expect", "replica": "replica:R1", "locator": { "role": "button", "name": "Save" }, "expect": { "name": "save-enabled", "assert": "state", "state": "enabled" } },
+    { "call": "act", "replica": "replica:R1", "locator": { "role": "button", "name": "Save" }, "act": { "kind": "click" } },
+    { "call": "wait_for", "replica": "replica:R1", "locator": { "text": "Saved ada@example.com" }, "wait_for": { "state": "visible" } },
+    { "call": "expect", "replica": "replica:R1", "locator": { "text": "Saved ada@example.com" }, "expect": { "name": "saved-shows-the-address", "assert": "visible" } },
+    { "call": "screenshot", "replica": "replica:R1", "screenshot": { "target": "window", "highlight": [{ "role": "button", "name": "Save" }] } },
+    { "call": "close", "replica": "replica:R1" }
+  ]
+}

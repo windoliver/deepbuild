@@ -9,12 +9,14 @@
 
 mod access;
 mod ask;
+mod capture;
 mod costs;
 mod evidence;
 mod frames;
 mod host;
 mod hub;
 mod input;
+mod jobs;
 mod kit;
 mod packs;
 mod placement;
@@ -26,10 +28,13 @@ mod serve;
 mod shared;
 mod snapshot;
 mod terminal;
+#[cfg(feature = "test-threads")]
+mod test_threads;
 mod time;
 #[cfg(any(feature = "test-json", feature = "test-debug-digest"))]
 mod twins;
 mod verdict;
+mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
 /// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
@@ -585,6 +590,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(t) = terminal::parse_call(name, c) {
         return Some(Call::Term(Box::new(t)));
     }
+    if let Some(t) = capture::parse_call(name, c) {
+        return Some(Call::Capture(Box::new(t)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -732,6 +740,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                             .as_i64()
                             .filter(|n| (1..=shared::FLICKS).contains(n))?,
                         next_vsync: d.get("next_vsync")?.as_i64().filter(|n| *n >= 0)?,
+                        feed: match d.get("feed") {
+                            None => None,
+                            Some(f) => Some(f.as_str()?.to_string()),
+                        },
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -860,9 +872,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         )),
         _ => None,
     };
+    // #105: the hub ends at this time as SIGKILL would.
+    let kill_at = match input.get("fault").and_then(|f| f.get("kill_at")) {
+        None => None,
+        Some(t) => Some(t.as_i64().filter(|t| *t >= 0)?),
+    };
     let fault = match input.get("fault") {
         None => None,
-        Some(_) if commit_fault.is_some() => None,
+        Some(_) if commit_fault.is_some() || kill_at.is_some() => None,
         Some(f) => Some(HoldFault {
             holds: match f.get("holds")?.as_str()? {
                 "fallback_pipeline" => Hold::FallbackPipeline,
@@ -982,6 +999,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
             "packs_keyed_by_name" => Planted::PacksKeyedByName,
             "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
+            "merges_in_finish_order" => Planted::MergesInFinishOrder,
+            "background_at_live_priority" => Planted::BackgroundAtLivePriority,
             "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
             "frame_index_i64_product" => Planted::FrameIndexI64Product,
             "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
@@ -1003,6 +1022,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "tab_draws_text" => Planted::TabDrawsText,
             "tab_redraws_at_30hz" => Planted::TabRedrawsAt30hz,
             "tab_draws_capture" => Planted::TabDrawsCapture,
+            "records_without_hold" => Planted::RecordsWithoutHold,
+            "records_past_max" => Planted::RecordsPastMax,
+            "drafts_no_check" => Planted::DraftsNoCheck,
+            "frames_to_record" => Planted::FramesToRecord,
+            "keeps_asset_after_crash" => Planted::KeepsAssetAfterCrash,
+            "labels_redaction_complete" => Planted::LabelsRedactionComplete,
+            "sends_without_approval" => Planted::SendsWithoutApproval,
             _ => return None,
         }),
     };
@@ -1012,6 +1038,36 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let epoch_start = u32_field("epoch_start")?;
     let shuffle = u32_field("shuffle")?;
+    let threads = match u32_field("threads")? {
+        Some(n @ 1..=64) => Some(n as usize),
+        Some(_) => return None,
+        None => None,
+    };
+    let background = match input.get("background") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|j| {
+                let (kind, replicas) = match j.get("job")?.as_str()? {
+                    "playtest" => (
+                        "playtest",
+                        usize::try_from(j.get("replicas")?.as_u64()?)
+                            .ok()
+                            .filter(|n| *n >= 1)?,
+                    ),
+                    "bake" => ("bake", 1),
+                    _ => return None,
+                };
+                let document = j.get("document")?.clone();
+                document.is_object().then_some(hub::Job {
+                    kind,
+                    replicas,
+                    document,
+                })
+            })
+            .collect::<Option<_>>()?,
+    };
     // #855: a process keys with `hash@2` unless the scenario keys as before its migration.
     let hash = match input.get("hash") {
         None => HashVersion::V2,
@@ -1088,8 +1144,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         quotas,
         clock,
         commit_fault,
+        kill_at,
         epoch_start: epoch_start.unwrap_or(0),
         shuffle,
+        threads,
+        background,
         hash,
         goldens: match input.get("goldens") {
             None => None,
@@ -1122,7 +1181,11 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     };
     match command {
         "run" => {
-            let replies = hub::Hub::new(&scenario, startup).run_calls();
+            let replies = jobs::around(&scenario, startup, |background| {
+                let mut hub = hub::Hub::new(&scenario, startup);
+                hub.background = background;
+                hub.run_calls()
+            });
             json!({"ok": true, "replies": replies})
         }
         "screen" => {
@@ -1314,6 +1377,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-text",
     feature = "test-check-kind",
     feature = "test-leave-out-logic",
+    feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
 ));
@@ -1351,6 +1415,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.retain(|m| m.manifest.name != "text");
     #[cfg(feature = "test-accent")]
     out.push(planted::accent());
+    #[cfg(feature = "test-threads")]
+    out.extend(test_threads::modules());
     #[cfg(feature = "test-json")]
     out.push(twins::json_writer());
     #[cfg(feature = "test-debug-digest")]

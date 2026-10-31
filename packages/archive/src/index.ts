@@ -8,6 +8,7 @@
 import { isUtf8 } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
@@ -20,6 +21,11 @@ export interface ArchiveOptions {
   asks: Asks;
   /** The sources: each adapter's facts name its transcript folder (`transcripts.home` and `transcripts.path`). */
   adapters: AdapterRegistry;
+  /**
+   * Agents read before they have an adapter (#111), each named as a facts file names its folder; `folderNames` is the
+   * path segment, from the file's end, whose name stands for the folder its sessions worked in, when a line names none.
+   */
+  transcripts?: readonly { agent: string; transcripts: { home: readonly string[]; path: string }; folderNames?: number }[];
   /** What the facts' homes resolve in: HOME and the agents' own variables, such as CLAUDE_CONFIG_DIR. */
   env: Readonly<Record<string, string | undefined>>;
   connection: Connection;
@@ -47,7 +53,7 @@ type Obj = { [key: string]: unknown };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** One transcript file: its agent, its session as the file names it, and where it is. */
-interface Source { agent: string; session: string; path: string }
+interface Source { agent: string; session: string; path: string; folderNames?: number }
 /** The last copy of a session: its source's size and hash, which the record keeps on transcript.archived@2. */
 interface Copied { size: number; sha256: string }
 
@@ -81,9 +87,11 @@ function homeOf(home: unknown, env: ArchiveOptions['env']): string | undefined {
 /** Every transcript the adapters' facts name, walked one path segment at a time. */
 async function sources(options: ArchiveOptions): Promise<Source[]> {
   const found: Source[] = [];
-  for (const agent of options.adapters.names()) {
+  const places: { agent: string; transcripts: unknown; folderNames?: number }[] = [...options.adapters.names().map((agent) => {
     const facts = options.adapters.get(agent).facts;
-    const transcripts = isObj(facts) ? facts.transcripts : undefined;
+    return { agent, transcripts: isObj(facts) ? facts.transcripts : undefined };
+  }), ...(options.transcripts ?? [])];
+  for (const { agent, transcripts, folderNames } of places) {
     if (!isObj(transcripts) || typeof transcripts.path !== 'string') continue;
     const home = homeOf(transcripts.home, options.env);
     if (!home) continue;
@@ -95,7 +103,7 @@ async function sources(options: ArchiveOptions): Promise<Source[]> {
         const m = segments[depth]!.exec(entry.name);
         if (!m || (last ? !entry.isFile() : !entry.isDirectory())) continue;
         const id = m[1] ?? session;
-        if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name) }); }
+        if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name), ...(folderNames === undefined ? {} : { folderNames }) }); }
         else await walk(join(dir, entry.name), depth + 1, id);
       }
     };
@@ -133,6 +141,24 @@ export function cwdOf(text: string): string | undefined {
     if (!isObj(entry)) continue;
     const cwd = typeof entry.cwd === 'string' ? entry.cwd : entry.type === 'session_meta' && isObj(entry.payload) && typeof entry.payload.cwd === 'string' ? entry.payload.cwd : undefined;
     if (cwd) return cwd;
+  }
+  return undefined;
+}
+/**
+ * The folder an agent's folder name stands for, each character but a letter or digit written `-` and no leading one
+ * (Cursor's `projects/<folder>`, #111): found by walking down from the root through the folders that fit. Undefined
+ * when none does, as when the folder is gone.
+ */
+export function folderNamed(name: string, dir = '/'): string | undefined {
+  let entries: string[];
+  try { entries = readdirSync(dir); } catch { return undefined; }
+  for (const entry of entries) {
+    const coded = entry.replace(/[^0-9A-Za-z]/g, '-');
+    if (name !== coded && !name.startsWith(`${coded}-`)) continue;
+    const path = join(dir, entry);
+    if (name === coded) return path;
+    const under = folderNamed(name.slice(coded.length + 1), path);
+    if (under) return under;
   }
   return undefined;
 }
@@ -207,7 +233,8 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     const text = raw.toString('utf8');
     const redacted = Buffer.from(scrubText(text, { held: [...(options.held?.() ?? [])] }), 'utf8');
     const evidence = await keep('transcript-copy', `archive:${source.agent}`, redacted, isUtf8(raw));
-    const cwd = options.projectOf ? cwdOf(text) : undefined;
+    const named = source.folderNames === undefined ? undefined : source.path.split('/').at(source.folderNames);
+    const cwd = options.projectOf ? cwdOf(text) ?? (named ? folderNamed(named) : undefined) : undefined;
     const project = cwd ? options.projectOf!(cwd, source.agent) : undefined;
     await append(source.agent, 'transcript.archived', 2, { session, evidence, source: { size: raw.length, sha256: sourceSha } }, [evidence], undefined, project);
     seen.set(source.path, mark);
