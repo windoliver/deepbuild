@@ -1,0 +1,230 @@
+[
+  {
+    "method": "hub.health",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep hub status"
+  },
+  {
+    "method": "events.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "the app"
+  },
+  {
+    "method": "stream.subscribe",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "the app"
+  },
+  {
+    "method": "ask.answer",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep inbox answer"
+  },
+  {
+    "method": "inbox.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep inbox"
+  },
+  {
+    "method": "sessions.read",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#329"
+  },
+  {
+    "method": "changes.read",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#578"
+  },
+  {
+    "method": "evidence.read",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#395"
+  },
+  {
+    "method": "numbers.read",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#330"
+  },
+  {
+    "method": "decision.overrule",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#328"
+  },
+  {
+    "method": "ask.undo",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep inbox undo"
+  },
+  {
+    "method": "device.pair",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#65"
+  },
+  {
+    "method": "offer.save",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep inbox save"
+  },
+  {
+    "method": "staged.undo",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep undo"
+  },
+  {
+    "method": "gates.off",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep off"
+  },
+  {
+    "method": "gates.on",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep on"
+  },
+  {
+    "method": "you.confirm",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep setup --undo"
+  },
+  {
+    "method": "status.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep status"
+  },
+  {
+    "method": "hub.stop",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep hub stop"
+  },
+  {
+    "method": "run.start",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#322"
+  },
+  {
+    "method": "test.load",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#570"
+  },
+  {
+    "method": "env.up",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep env up"
+  },
+  {
+    "method": "env.down",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep env down"
+  },
+  {
+    "method": "extension.install",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep install"
+  },
+  {
+    "method": "guard.add",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep guard add"
+  },
+  {
+    "method": "record.backup",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep backup"
+  },
+  {
+    "method": "test.verdict",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#570"
+  },
+  {
+    "method": "mcp.call",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep mcp"
+  },
+  {
+    "method": "evidence.paste",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#38"
+  },
+  {
+    "method": "wiki.build",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep setup"
+  },
+  {
+    "method": "job.submit",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366"
+  },
+  {
+    "method": "job.status",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366"
+  },
+  {
+    "method": "job.list",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366"
+  },
+  {
+    "method": "job.output",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366"
+  },
+  {
+    "method": "windows.report",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-hook statusline"
+  },
+  {
+    "method": "session.wait",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep waiter"
+  },
+  {
+    "method": "session.note",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#578"
+  },
+  {
+    "method": "test.send_back",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#570"
+  }
+]

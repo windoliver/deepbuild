@@ -1,6 +1,8 @@
 {
   "title": "agent.stop@4",
   "description": "The agent stopped a turn: why, from the stop's closed set of causes, and what the turn used. With the stop rule's reading: whether the stop is a claim.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

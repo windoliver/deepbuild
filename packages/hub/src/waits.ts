@@ -270,12 +270,6 @@ export class Waits {
     }
     return { ...(overran ? { overran } : {}), ...this.take(s, now) };
   }
-  /** The call a session's lines name as its step: the latest still running. */
-  private latest(s: SessionWaits): OpenCall | undefined {
-    let last: OpenCall | undefined;
-    for (const o of s.open.values()) last = o;
-    return last;
-  }
 
   /** The ten-minute line at a hook: once the turn has run that long since a line you could read. */
   private progressAt(s: SessionWaits, now: number): void {
@@ -283,7 +277,8 @@ export class Waits {
     s.message.push(this.progressLine(s, now));
   }
   private progressLine(s: SessionWaits, now: number): string {
-    const open = this.latest(s);
+    // The call the line names as its step: the latest still running.
+    const open = [...s.open.values()].at(-1);
     const step = open ? `waiting on \`${open.what}\`` : 'between calls';
     const left = open ? Math.max(0, open.started + open.expected - now) : null;
     return lines.progress(s.ask ?? 'your prompt', step, now - (s.turnStart ?? now), open && left === 0 ? null : left);

@@ -350,7 +350,14 @@ async function recordCodex(out, bin, facts) {
 
 async function recordCommand(options) {
   const agent = options.agent, out = resolve(options.out);
-  if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code or codex');
+  if (agent === 'pi') {
+    await (await import('./corpus-pi.mjs')).recordPi(out, redactor());
+    const scan = spawnSync('gitleaks', ['detect', '--no-git', '--source', join(out, 'pi'), '--config', join(root, 'packages/evidence/gitleaks/gitleaks.toml'), '--redact', '--no-banner', '--exit-code', '3'], { encoding: 'utf8' });
+    const verdict = scan.error ? 'BLOCKED' : scan.status === 0 ? 'PASS' : 'FAIL';
+    say({ type: 'summary', verdict, set: join(out, 'pi'), secretScan: scan.error ? `gitleaks did not run: ${scan.error.message}` : scan.status === 0 ? 'clean' : 'findings; the set must not join the corpus' });
+    return verdict === 'PASS' ? 0 : 1;
+  }
+  if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code, codex or pi');
   const bin = binaryPath(agent === 'codex' ? 'codex' : 'claude');
   const factsFile = join(root, 'adapters', `${agent}.facts.json`);
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
@@ -391,7 +398,7 @@ for (let index = 0; index < rest.length; index += 2) {
 }
 const commands = { replay: replayCommand, check: checkCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
 if (!commands[command] || (command === 'record' && !(options.agent && options.out))) {
-  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex --out <dir>');
+  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir>');
   process.exit(2);
 }
 process.exitCode = await commands[command](options);

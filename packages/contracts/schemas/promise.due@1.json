@@ -1,6 +1,8 @@
 {
   "title": "promise.due@1",
   "description": "A promised check's wake-up came due (#120), and which route carries it: a wake of the idle session, or the session's row and its next prompt or stop, where no route wakes it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

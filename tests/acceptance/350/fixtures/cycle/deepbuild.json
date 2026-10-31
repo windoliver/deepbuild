@@ -6,5 +6,6 @@
   "actions": ["ext.cycle.ping"],
   "templates": [
     { "name": "calls", "hook": "tool.before", "text": "cycle handler call {count}", "fields": { "count": { "type": "number" } } }
-  ]
+  ],
+  "requires": { "preview": ["deep.on", "deep.registerAction"] }
 }

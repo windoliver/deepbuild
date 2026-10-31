@@ -1,6 +1,8 @@
 {
   "title": "ask.created@4",
   "description": "An ask was created. It always ends: it has a deadline, a fallback and a default. A taste call over candidates names the ones dropped before the ask as near copies of a candidate it keeps. An unblock task has at least one step and unblocks at least one thing, and a task with a cost you pay names its price. An authority ask, a taste call, a choice or a definition may name its subject in structured fields, and the core then sets its key from the subject alone, never from the question's words.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "pinned_to": {
       "oneOf": [

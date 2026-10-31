@@ -26,13 +26,14 @@ import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
-import { canonicalize, checkManifest, frozenDigests, hubSlots, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
+import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
+import { Terminals, type OpenSpec } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
 /** A package inside DeepBuild's signed release, as the release's signed manifest lists it. */
@@ -41,7 +42,12 @@ export interface ReleaseEntry { id: string; version: string; digest: string }
 export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | 'first-party-appends-every-kind'
   | 'context-as-text' | 'writer-from-arguments' | JoinPlant | 'stop-provider-first'
   | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest'
-  | 'skips-kind-declare' | 'drops-mode' | 'holder-from-arguments' | 'declares-kind-on-first-lease';
+  | 'skips-kind-declare' | 'drops-mode' | 'holder-from-arguments' | 'declares-kind-on-first-lease'
+  | 'close-stops-every-host' | 'narrower-grant-implies-run-as-you' | 'revoke-keeps-running' | 'revoke-stops-programs-only'
+  | 'input-from-any-writer' | 'piece-writes-input'
+  // #139's: a host that lets a stable package call a preview method, and an installer that wires a use to the newest
+  // interface its provider has.
+  | 'stable-may-call-preview' | 'rewires-to-newest';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -86,6 +92,10 @@ export interface ExtensionHostOptions {
   asks?: Asks;
   /** The kernel's one lease table (#237): a manifest's lease kinds are declared in it, and `deep.lease` leases from it. */
   leases?: LeaseTable;
+  /** The published extension API installs are held to (#139): each method's stability. Default: extensionApi(). */
+  api?: readonly ApiEntry[];
+  /** Methods this host answers `unsupported` to, as a shim that dropped them would: the contract step's planted twin (#139). */
+  unsupported?: readonly string[];
   plant?: Plant;
 }
 export interface InstallFrom {
@@ -118,6 +128,18 @@ export interface ExtensionHost {
    * an update of `id` signed by `key` installs from now on.
    */
   trustKey(connection: Connection, id: string, key: string): Promise<void>;
+  /**
+   * Your yes on the trusted path (the app, or the CLI once the OS confirms you, never from an agent's session): the
+   * package may run any command you could, which its manifest asks for with run_as_you. Kept across a restart.
+   */
+  approve(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
+  /**
+   * Takes run-as-you back at once, on the trusted path: resolves once every process the package started through it,
+   * whenever it started, is stopped. The package stays loaded, and its terminal calls are refused naming run_as_you.
+   */
+  revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
+  /** Raw input for a hosted terminal, written to its program: only from the app, which sends the panel you focused. */
+  rawInput(connection: Connection, terminal: string, text: string): Promise<void>;
   /** Runs its conformance on its files now; the result is kept for that digest. */
   check(pkg: Installed): Promise<Conformance>;
   /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
@@ -151,7 +173,11 @@ export interface ExtensionHost {
   owner(session: string): Promise<{ adapter: string } | null>;
   /** An answer for a session: the owning adapter delivers it by a route its flags allow now, or it waits for one. */
   deliverAnswer(answer: Delivery): Promise<Delivered>;
-  /** Stops every process it started. */
+  /** What each loaded package's code returned at its load, by package: a release's fixture returns its calls' results (#139). */
+  loadResult(id: string): Record<string, unknown> | undefined;
+  /** Each use of a loaded package: the interface its manifest names, the one it is wired to and the provider (#139). */
+  edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]>;
+  /** Stops every process it started, but the terminals of a piece whose manifest's host lives past the app. */
   close(): Promise<void>;
 }
 
@@ -208,8 +234,11 @@ export interface IndexFill extends SlotFill {
 
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
-  provides?: { interface: string; kind: string }[]; uses?: { interface: string }[]; templates?: Template[];
+  provides?: { interface: string; kind: string; adapter?: { from: string } }[]; uses?: { interface: string }[]; templates?: Template[];
   conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string; leases?: LeaseKind[];
+  /** extension.contract@1's (#139): whether it declares itself stable, and the preview entries it uses by name. */
+  stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
+  host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] }; holds: string[] }
@@ -266,6 +295,8 @@ interface Ext {
   cleaned?: Cleanup | undefined;
   /** The leases granted to this load of it: its unload ends these, never another load's under the same holder. */
   leased: string[];
+  /** The calls the host refused it for using a preview method other than by name (#139): each refuses its install. */
+  refusals: string[];
   /** Set once its unload ends its leases: one granted after, to a call already under way, ends at its grant. */
   leasesEnded?: boolean;
   server?: HttpServer;
@@ -343,6 +374,8 @@ function declaredPath(schema: unknown, path: string): string {
   return kept;
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
+/** A package's manifest, as its folder holds it. */
+const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
 async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
   let disarm = (): void => undefined;
   try {
@@ -369,6 +402,8 @@ const isResult = (r: unknown): r is CheckResult => {
   return typeof x === 'object' && x !== null && OUTCOMES.includes(x.outcome as string) && Number.isInteger(x.testsRun) && (x.testsRun as number) >= 0
     && Array.isArray(x.failures) && x.failures.every(isFailure) && strings(x.evidence) && strings(x.read) && (x.mask === null || typeof x.mask === 'string');
 };
+/** The one permission a piece that hosts shells asks for: run any command you could (#104). */
+const RUN_AS_YOU = 'run_as_you';
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
 /** The interpreters a `main` may name, each only as the program of that name on the hub's own PATH. */
@@ -396,6 +431,9 @@ class Host implements ExtensionHost {
   /** The publisher key trusted for each package ID: its first signed install's, or one you trusted since. */
   private keys: Record<string, string>;
   private readonly exts = new Map<string, Ext>();
+  /** The packages you approved run-as-you for, by ID. */
+  private runAsYou: Record<string, boolean>;
+  private readonly terminals: Terminals;
   private readonly loading = new Map<string, Promise<void>>();
   /** The last package's lease kinds being declared (#44): each package's are read and declared after it. */
   private declaring: Promise<void> = Promise.resolve();
@@ -408,6 +446,12 @@ class Host implements ExtensionHost {
   /** The agent sessions adapters bound, by session ID. */
   private readonly sessions = new Map<string, Bound>();
   private isReady = false;
+  /** What each loaded package's code returned at its load (#139). */
+  private readonly loadResults = new Map<string, Record<string, unknown>>();
+  /** The published API by method, whose stability each call is held to (#139). */
+  private readonly published: ReadonlyMap<string, ApiEntry>;
+  /** The edges wired at load: user → (the interface its manifest uses → the interface it reads from its provider). */
+  private readonly wired = new Map<string, Map<string, string>>();
   /** The starts of the packages loaded before ready, once ready runs. */
   private starting: Promise<void> = Promise.resolve();
   private closed = false;
@@ -415,9 +459,12 @@ class Host implements ExtensionHost {
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
     // An install recorded before #351 holds the check kinds its manifest declares.
-    for (const e of Object.values(this.entries)) e.holds ??= (JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest).checks ?? [];
+    for (const e of Object.values(this.entries)) e.holds ??= manifestOf(e.folder).checks ?? [];
     this.results = this.read('checked.json');
     this.keys = this.read('keys.json');
+    this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
+    this.runAsYou = this.read('run-as-you.json');
+    this.terminals = new Terminals(options.home, options.supervisor);
   }
 
   private read<T>(name: string): Record<string, T> {
@@ -445,6 +492,8 @@ class Host implements ExtensionHost {
     const project = from.project === undefined ? null : realpathSync(from.project);
     // Read as data before any of its code runs; a symlink anywhere refuses the install.
     this.admit(manifest as Manifest, packageDigest(from.from), project);
+    // An update that drops an interface an installed piece uses, with no adapter for it, asks you first (#139).
+    await this.updateHeld(manifest as Manifest);
     // A quota that counts nothing would never refuse: each is a whole number of calls per a whole number of ms.
     for (const h of from.grant?.hosts ?? []) {
       const whole = (n: unknown): boolean => Number.isSafeInteger(n) && (n as number) > 0;
@@ -473,6 +522,17 @@ class Host implements ExtensionHost {
       throw e;
     }
     this.entries[id] = entry;
+    // AC10's wrong program (#139): each use of an interface of this provider is wired to the newest major it provides.
+    if (this.options.plant === 'rewires-to-newest') {
+      const provided = (manifest.provides ?? []).map((p) => p.interface);
+      for (const e of Object.values(this.entries).filter((x) => x.id !== id)) {
+        for (const u of manifestOf(e.folder).uses ?? []) {
+          const base = u.interface.slice(0, u.interface.lastIndexOf('@'));
+          const newest = provided.filter((i) => i.startsWith(`${base}@`)).sort((a, b) => Number(b.split('@')[1]) - Number(a.split('@')[1]))[0];
+          if (newest && newest !== u.interface) this.wired.set(e.id, new Map([...(this.wired.get(e.id) ?? []), [u.interface, newest]]));
+        }
+      }
+    }
     // A signed package's key is trusted on first use.
     if (manifest.publisher_key !== undefined && this.keys[id] === undefined) {
       this.keys = { ...this.keys, [id]: manifest.publisher_key };
@@ -513,10 +573,7 @@ class Host implements ExtensionHost {
       throw Error(`${id} declares it replaces the done gate, or provides a second one beside it (${GATE}); no package does until a second gate exists and ${GATE} opens with its kit`);
     }
     const others = Object.values(this.entries).filter((e) => e.id !== id);
-    for (const e of others) {
-      const theirs = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
-      if (m.conflicts?.includes(e.id) || theirs.conflicts?.includes(id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
-    }
+    for (const e of others) if (manifestOf(e.folder).conflicts?.includes(id) || m.conflicts?.includes(e.id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
     // A user-level package's kinds are in use in every project; a project's, only in its own.
     const overlaps = (e: Entry): boolean => e.project === null || project === null || e.project === project;
     for (const kind of m.checks ?? []) {
@@ -525,12 +582,101 @@ class Host implements ExtensionHost {
     }
     const published = frozenDigests();
     for (const contract of m.kernel ?? []) if (!Object.hasOwn(published, contract)) throw Error(`${id} runs on the kernel contract ${contract}, which this kernel doesn't publish`);
+    // A package that uses a preview entry by name is a preview package (#139).
+    const listed = m.requires?.preview ?? [];
+    if (m.stability === 'stable' && listed.length && this.options.plant !== 'stable-may-call-preview') throw Error(`${id} declares itself stable and lists ${listed.join(', ')} in requires.preview; a package that uses a preview entry can't declare itself stable`);
+  }
+  /**
+   * An update of an installed package that no longer provides an interface another installed piece uses, neither
+   * itself nor through an adapter row, asks you once, naming those users, and installs nothing until you answer: your
+   * yes goes on, anything else refuses the update and leaves the installed version and its users' edges as they were.
+   */
+  private async updateHeld(m: Manifest): Promise<void> {
+    const before = this.entries[m.id];
+    if (!before) return;
+    const old = manifestOf(before.folder);
+    const keeps = new Set((m.provides ?? []).map((p) => p.interface));
+    const dropped = (old.provides ?? []).map((p) => p.interface).filter((i) => !keeps.has(i));
+    const users = Object.values(this.entries).filter((e) => e.id !== m.id)
+      .flatMap((e) => (manifestOf(e.folder).uses ?? []).filter((u) => dropped.includes(u.interface)).map((u) => ({ user: e.id, uses: u.interface })));
+    if (!users.length) return;
+    if (this.options.plant === 'rewires-to-newest') return;
+    const asks = this.options.asks;
+    const named = users.map((u) => `${u.user} uses ${u.uses}`).join('; ');
+    if (!asks) throw Error(`${m.id}@${m.version} no longer provides what installed pieces use (${named}), and this host has no asks core to ask you; nothing was installed`);
+    const now = this.options.now();
+    const key = sha256Hex(canonicalize({ update: m.id, version: m.version, users } as unknown as JsonValue));
+    const question = `Install ${m.id} ${m.version}? It no longer provides ${[...new Set(users.map((u) => u.uses))].join(', ')}, which ${[...new Set(users.map((u) => u.user))].join(', ')} use${users.length > 1 ? '' : 's'}, and keeps no adapter for it.`;
+    const ask = await asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, 'extension.update', {
+      kind: 'authority', question,
+      options: [{ id: 'approve', label: `Install ${m.version}`, decision: 'allow' }, { id: 'decline', label: `Keep ${before.version}`, decision: 'deny' }],
+      recommended: null, deadline: now + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
+      pinned_to: { kind: 'evidence', ref: key },
+    }, { steps: users.map((u) => ({ does: `Install ${m.id} ${m.version}, leaving ${u.user}'s use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Install ${m.id} ${before.version} again`, public: false, cost: 0 })), diff: key });
+    // Installs nothing until you answer: the install waits on the ask's close, and goes on only on your yes on record.
+    for (;;) {
+      const row = (await asks.inbox()).find((r) => r.ask === ask);
+      if (row?.status === 'closed') {
+        const answered = await this.options.record.read({ after: 0, kinds: ['ask.answered'], limit: 100_000 });
+        const yes = row.outcome === 'answered' && answered.some((e) => e.subject === ask && (e.data as { decision?: unknown }).decision === 'allow');
+        if (yes) return;
+        throw Error(`${m.id}@${m.version} isn't installed: you kept ${before.version}, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
+      }
+      if (this.closed) throw Error(`${m.id}@${m.version} isn't installed: the host closed before you answered`);
+      await sleep(50);
+    }
   }
   async trustKey(connection: Connection, id: string, key: string): Promise<void> {
     if (connection.writer !== 'app' && connection.writer !== 'cli') throw Error(`a publisher key is trusted only by your answer on the trusted path, the app or the CLI, not by ${connection.writer}`);
     if (!PUBLISHER_KEY.test(key)) throw Error(`${key} isn't a publisher key: ed25519:<64 lower-case hex>`);
     this.keys = { ...this.keys, [id]: key };
     this.save('keys.json', this.keys);
+  }
+  /** Only you approve or revoke run-as-you: the app, or the CLI outside any agent's session once the OS confirms you. */
+  private trustedPath(connection: Connection, what: string): void {
+    if ((connection.writer !== 'app' && connection.writer !== 'cli') || connection.session !== undefined) {
+      throw Error(`${what} only on your trusted path, the app or the CLI, not by ${connection.writer}${connection.session ? ` in session ${connection.session}` : ''}`);
+    }
+  }
+  async approve(connection: Connection, id: string, word: 'run_as_you'): Promise<void> {
+    this.trustedPath(connection, `${RUN_AS_YOU} is approved`);
+    const entry = this.entries[id];
+    if (!entry) throw Error(`${id} isn't installed`);
+    const manifest = manifestOf(entry.folder);
+    if (word !== RUN_AS_YOU || !(manifest.access?.words ?? []).includes(word)) throw Error(`${id}'s manifest doesn't ask for ${String(word)}, so there is nothing to approve`);
+    this.runAsYou = { ...this.runAsYou, [id]: true };
+    this.save('run-as-you.json', this.runAsYou);
+  }
+  async revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void> {
+    this.trustedPath(connection, `${RUN_AS_YOU} is revoked`);
+    if (word !== RUN_AS_YOU) throw Error(`only ${RUN_AS_YOU} is revoked here, not ${String(word)}`);
+    const { [id]: _gone, ...rest } = this.runAsYou;
+    this.runAsYou = rest;
+    this.save('run-as-you.json', this.runAsYou);
+    const owned = this.terminals.of(id);
+    // AC2's wrong programs: later commands are refused and what runs runs on; or only each terminal's program stops.
+    if (this.options.plant === 'revoke-keeps-running') return;
+    if (this.options.plant === 'revoke-stops-programs-only') {
+      for (const t of owned) {
+        try { process.kill(t.pid, 'SIGKILL'); } catch { /* gone */ }
+        this.terminals.forget(t);
+      }
+      return;
+    }
+    await Promise.all(owned.map((t) => this.terminals.stop(t)));
+  }
+  async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
+    if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
+      throw Error(`raw input for ${terminal} comes only from the panel you focused in the app, not from ${connection.writer}${connection.session ? ` in session ${connection.session}` : ''}`);
+    }
+    this.terminals.input(terminal, text);
+  }
+  /** Whether a loaded package holds the grant a call needs: run-as-you only once its manifest asks for it and you approved it. */
+  private holds(ext: Ext, needs: string): boolean {
+    if (needs !== RUN_AS_YOU) return granted(ext.manifest, needs);
+    const words = ext.manifest.access?.words ?? [];
+    if (this.options.plant === 'narrower-grant-implies-run-as-you' && (words.includes('files') || words.includes('programs'))) return true;
+    return words.includes(RUN_AS_YOU) && this.runAsYou[ext.entry.id] === true;
   }
   private installedOf(e: Entry): Installed {
     return { id: e.id, version: e.version, folder: e.folder, digest: e.digest, builtBy: e.builtBy, project: e.project, kits: structuredClone(e.kits ?? []) };
@@ -655,7 +801,7 @@ class Host implements ExtensionHost {
     const reasons: string[] = [];
     let manifest: Manifest | undefined;
     try {
-      manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+      manifest = manifestOf(folder);
     } catch (e) {
       reasons.push(`its deepbuild.json can't be read: ${message(e)}`);
     }
@@ -678,6 +824,8 @@ class Host implements ExtensionHost {
     const ext = this.ext(entry, folder, manifest, digest, 'sandbox', 'conformance');
     try {
       await this.start(ext);
+      // The calls it made and didn't wait for are answered too before its run is read.
+      await Promise.all(this.calls);
     } catch (e) {
       return [`its code didn't register in the platform sandbox: ${message(e)}`];
     } finally {
@@ -686,6 +834,7 @@ class Host implements ExtensionHost {
     const declared = manifest.checks ?? [];
     const environments = manifest.environments ?? [];
     return [
+      ...ext.refusals,
       ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
       ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
     ];
@@ -695,7 +844,7 @@ class Host implements ExtensionHost {
     return {
       entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(),
-      adapters: new Set(), leased: [], hubBound: this.hubBound(entry, folder, digest),
+      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -757,7 +906,7 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
       return refuse(not);
     }
-    const manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const manifest = manifestOf(folder);
     try {
       await this.declareKinds(entry.id, manifest.leases ?? []);
     } catch (e) {
@@ -839,17 +988,21 @@ class Host implements ExtensionHost {
   /** Runs the package's code: in the hub's process, or in the platform sandbox through the supervisor. */
   private async start(ext: Ext): Promise<void> {
     const index = join(ext.folder, 'index.ts');
-    const params = ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {};
+    const params = {
+      ...(ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {}),
+      ...(this.options.plant === 'piece-writes-input' ? { planted: ['deep.terminal.write'] } : {}),
+    };
     if (ext.place === 'hub') {
       const url = `${pathToFileURL(index).href}?digest=${ext.digest.slice(3)}`;
       ext.ask = extensionSide((method, params, scope) => this.dispatch(ext, method, params, scope), async (deep) => {
         const code = (await import(url)) as { default: (deep: unknown) => unknown };
-        await code.default(deep);
+        return await code.default(deep);
       }).serve;
     } else {
       await this.sandboxed(ext);
     }
-    await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
+    const returned = await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
+    if (ext.mode === 'loaded' && isPlain(returned)) this.loadResults.set(ext.entry.id, structuredClone(returned));
     // Its handlers, actions and outputs publish only now that it started, and only while it's still the one loaded.
     if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) ext.live = true;
   }
@@ -952,7 +1105,7 @@ class Host implements ExtensionHost {
     let proof: string[] = [];
     if (ext.run) {
       if (ext.cleaned?.outcome !== 'clean') return;
-      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = '${ext.run}' ORDER BY log_pos`);
+      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = ? ORDER BY log_pos`, [ext.run]);
       proof = (ended as { id: string }[]).map((e) => e.id);
     }
     for (const id of ids) await table.release(id, proof);
@@ -1015,14 +1168,16 @@ class Host implements ExtensionHost {
   }
   private async dispatchNow(ext: Ext, method: string, params: unknown, scope?: string): Promise<unknown> {
     const args: unknown[] = Array.isArray(params) ? params : [];
-    const schema = API.find((m) => m.method === method);
+    // AC3's wrong program offers a method that writes a terminal's input.
+    const planted = this.options.plant === 'piece-writes-input' && method === 'deep.terminal.write' ? { method, needs: RUN_AS_YOU } : undefined;
+    const schema = API.find((m) => m.method === method) ?? planted;
     if (!schema) throw Error(`${method} isn't in the extension API`);
     const id = ext.entry.id;
     // An unloaded copy's call, or one made for an ended action call, does nothing: not even a refusal on record.
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const connection = this.connection(ext, scope);
     const checked = this.options.plant !== 'grants-only-in-record-query' || method === 'deep.record.query';
-    if (schema.needs && checked && !granted(ext.manifest, schema.needs)) {
+    if (schema.needs && checked && !this.holds(ext, schema.needs)) {
       if (ext.mode === 'loaded') await this.refused(connection, method, 'grant', `access: ${schema.needs}`, args).catch(() => undefined);
       throw Error(`${method} needs the grant "${schema.needs}", which ${ext.entry.id} wasn't given`);
     }
@@ -1031,6 +1186,9 @@ class Host implements ExtensionHost {
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const conformance = ext.mode === 'conformance';
     const quiet = (): void => { if (conformance) throw Error(`${method}: nothing reaches the record while conformance runs`); };
+    this.previewHeld(ext, method);
+    // A shim that dropped a method answers it unsupported, naming it (the contract step's planted twin, #139).
+    if (this.options.unsupported?.includes(method)) return { outcome: 'unsupported', operation: method, surface: 'extension-api' };
     switch (method) {
       case 'deep.registerCheck': {
         const [type] = args;
@@ -1165,6 +1323,27 @@ class Host implements ExtensionHost {
       case 'deep.lease':
         quiet();
         return this.lease(ext, args[0], args[1]);
+      case 'deep.config.get': {
+        // The package's own settings (#139 wires it): ~/.deepbuild/config.json's extensions.<id>.<key>; a key nobody set reads null.
+        const [key] = args;
+        if (typeof key !== 'string' || !key) throw Error('deep.config.get takes a setting\'s key');
+        const file = join(this.options.home, 'config.json');
+        const all = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as { extensions?: Record<string, Record<string, unknown>> } : {};
+        const value = all.extensions?.[id]?.[key];
+        return value === undefined ? null : structuredClone(value);
+      }
+      // Hosted terminals (#104): what runs is the piece's own, under run-as-you, and never at its conformance run.
+      case 'deep.terminal.open': {
+        if (conformance) throw Error(`${method}: nothing runs while conformance runs`);
+        const t = await this.terminals.open(id, args[0] as OpenSpec, ext.manifest.host?.lives === 'past_app');
+        return { terminal: t.terminal, run: t.run, pid: t.pid };
+      }
+      case 'deep.terminal.list':
+        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
+      case 'deep.terminal.read':
+        return this.terminals.read(id, args[0] as string, args[1] as number);
+      case 'deep.terminal.write':
+        return void this.terminals.input(args[0] as string, args[1] as string);
       case 'deep.notices.send': {
         quiet();
         const readings = (args[0] as { readings?: unknown } | undefined)?.readings;
@@ -1178,6 +1357,23 @@ class Host implements ExtensionHost {
       default:
         throw Error(`${method} isn't wired into this host yet`);
     }
+  }
+  /**
+   * A preview method is used only by name (#139): a package lists each one it calls in its manifest's requires.preview,
+   * or the call is refused with preview_unrequested; and a package that declares itself stable calls none. Conformance
+   * runs the package's code at install, so a call it makes there refuses the install, naming the method.
+   */
+  private previewHeld(ext: Ext, method: string): void {
+    if (this.published.get(method)?.stability !== 'preview') return;
+    const m = ext.manifest;
+    let refusal: string | undefined;
+    if (m.stability === 'stable') {
+      if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
+    } else if (!(m.requires?.preview ?? []).includes(method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
+    if (!refusal) return;
+    // Kept on the run, so a package that never awaits the call is refused all the same.
+    ext.refusals.push(refusal);
+    throw Error(refusal);
   }
   /** The record its grant names, filtered here before anything crosses to the package. */
   private async query(ext: Ext, filter: unknown): Promise<unknown[]> {
@@ -1208,11 +1404,13 @@ class Host implements ExtensionHost {
     const id = ext.entry.id;
     if (typeof name !== 'string' || !ext.uses.has(name)) throw Error(`deep.read: ${String(name)} isn't an interface ${id} uses`);
     // Only a provider that started: an output publishes once its piece is ready, like its handlers and actions.
-    const provider = [...this.exts.values()].find((p) => p !== ext && p.live && p.provides.has(name) && !p.detached);
+    // The use reads the interface it is wired to (#139): the one its manifest names, unless the planted installer rewired it.
+    const to = this.wired.get(id)?.get(name) ?? name;
+    const provider = [...this.exts.values()].find((p) => p !== ext && p.live && p.provides.has(to) && !p.detached);
     if (!provider) return { missing: true };
     const edge = `${id} uses ${name} from ${provider.entry.id}`;
     if (!provider.ask) throw Error(`the edge ${edge}: ${provider.entry.id} stopped while ${id} still used it`);
-    const reading = within(CALL_MS, `the edge ${edge}`, provider.ask('output', { name }));
+    const reading = within(CALL_MS, `the edge ${edge}`, provider.ask('output', { name: to }));
     provider.reads.add(reading);
     try {
       return { value: await reading };
@@ -1420,9 +1618,7 @@ class Host implements ExtensionHost {
       // Only the owner's lines set the turn and open routes: an adapter that relays can't steer another's delivery.
       if (this.owners(b).includes(name)) {
         if (OPENS_TURN.has(line.event)) b.inTurn = true;
-        if (line.event === ENDS_TURN) b.inTurn = false;
-        if (line.event === ENDS_TURN) await this.flush(session, b, 'hold');
-        if (line.event === ENDS_TURN) await this.flush(session, b, 'wake');
+        if (line.event === ENDS_TURN) { b.inTurn = false; await this.flush(session, b, 'hold'); await this.flush(session, b, 'wake'); }
         if (line.event === 'UserPromptSubmit') await this.flush(session, b, 'prompt');
         if (OPENS_TURN.has(line.event)) await this.flush(session, b, 'steer');
       }
@@ -1609,6 +1805,22 @@ class Host implements ExtensionHost {
     });
   }
 
+  loadResult(id: string): Record<string, unknown> | undefined {
+    const r = this.loadResults.get(id);
+    return r === undefined ? undefined : structuredClone(r);
+  }
+  async edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]> {
+    const out: { user: string; uses: string; interface: string; provider: string }[] = [];
+    for (const ext of this.exts.values()) {
+      for (const uses of (ext.manifest.uses ?? []).map((u) => u.interface)) {
+        const to = this.wired.get(ext.entry.id)?.get(uses) ?? uses;
+        const provider = [...this.exts.values()].find((p) => p !== ext && (p.manifest.provides ?? []).some((row) => row.interface === to));
+        if (provider) out.push({ user: ext.entry.id, uses, interface: to, provider: provider.entry.id });
+      }
+    }
+    return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -1618,6 +1830,9 @@ class Host implements ExtensionHost {
     for (const ext of [...this.exts.values()]) await this.unload(ext);
     // A call that was under way finishes, or finds its package unloaded, before close returns.
     await Promise.all(this.calls);
+    // A terminal that lives past the app runs on, its run kept by the supervisor; AC1's wrong program stops them all.
+    const stopping = this.terminals.all().filter((t) => !t.kept || this.options.plant === 'close-stops-every-host');
+    await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
   }
 }
 

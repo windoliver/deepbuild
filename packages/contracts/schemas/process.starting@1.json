@@ -1,6 +1,8 @@
 {
   "title": "process.starting@1",
   "description": "A supervised run is about to start its process: the run and its working folder, recorded before the process exists, so a hub that crashes before the process is tracked still finds the run's sandbox at its next start.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

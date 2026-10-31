@@ -1,6 +1,8 @@
 {
   "title": "ask.answered@1",
   "description": "You answered an ask. Only the core appends it, from the trusted path.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

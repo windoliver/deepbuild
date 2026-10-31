@@ -1,6 +1,8 @@
 {
   "title": "ask.defaulted@1",
   "description": "An ask's deadline passed and its default applied. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

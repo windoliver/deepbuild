@@ -35,7 +35,7 @@ async function claimAfter(change: (repo: string) => void) {
   await record.append(as('hook', session), { v: 3, id: ulid(now()), kind: 'session.start', ts: now(), seq: `${now()}000000`, data: { agent: 'claude-code', worktree: repo, branch: null, thread: 'thread-1', billing: {}, loads: [] } });
   const invalid: { claim: string; reason: string }[] = [];
   const tasks = new AskTasks({
-    raw: (q) => record.raw(q), asks: () => { throw Error('no asks here'); }, now, plant: undefined, drafts, work: undefined,
+    raw: (q, params) => record.raw(q, params), asks: () => { throw Error('no asks here'); }, now, plant: undefined, drafts, work: undefined,
     append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({}),
     keep: async (bytes) => createHash('sha256').update(bytes).digest('hex'), run: async () => undefined, invalid: async (claim, _commit, reason) => { invalid.push({ claim, reason }); },
   });

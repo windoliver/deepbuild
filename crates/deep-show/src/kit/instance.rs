@@ -86,6 +86,7 @@ impl How {
             timing: None,
             pool: None,
             threads: None,
+            hash: Default::default(),
         }
     }
 }

@@ -1,6 +1,8 @@
 {
   "title": "lease.acquired@1",
   "description": "A lease was acquired.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "leases"
   ],

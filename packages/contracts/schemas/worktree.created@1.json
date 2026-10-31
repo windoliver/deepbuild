@@ -1,6 +1,8 @@
 {
   "title": "worktree.created@1",
   "description": "A worktree was created for its task, the owner, from its base commit.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],
