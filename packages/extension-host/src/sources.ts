@@ -186,6 +186,8 @@ export type Append = (kind: 'source.called' | 'reading.recorded', data: Record<s
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
   private readonly cache = new Map<string, Reading>();
+  /** The reading.recorded handle of each cached reading. */
+  private readonly handles = new Map<string, string>();
   private readonly spent = new Map<string, number[]>();
   private readonly backoff = new Map<string, { until: number; gap: number }>();
   private readonly recorded: RecordedCall[] = [];
@@ -201,10 +203,22 @@ export class Sources {
 
   /** A reading of the source: from the cache while it's fresh, else one call, parsed by the package once scrubbed. */
   async read(owner: string, source: Polled, parse: (answer: HttpAnswer) => Promise<unknown>): Promise<SourceRead> {
+    return (await this.readOne(owner, source, parse)).read;
+  }
+  /** Whether the secret store holds a package's secret now. */
+  async holds(owner: string, name: string): Promise<boolean> {
+    return this.options.replay !== undefined || (await this.options.secrets.get(secretKey(owner, name))) !== undefined;
+  }
+  /**
+   * A read as a schedule's run needs it (#365): with the handle of the reading.recorded it came from, and whether the
+   * call was held, by a rate limit or a 5xx from the provider, or by the hub's own quota or back-off.
+   */
+  async readOne(owner: string, source: Polled, parse: (answer: HttpAnswer) => Promise<unknown>): Promise<{ read: SourceRead; handle: string | null; held: boolean }> {
     const now = this.options.now();
     const cached = this.cache.get(source.name);
-    if (cached && now - cached.as_of < source.freshFor) return { status: 'reading', reading: { ...cached } };
-    const stop = (status: 'BLOCKED' | 'failed', cause: string): SourceRead => ({ status, source: source.name, cause });
+    if (cached && now - cached.as_of < source.freshFor) return { read: { status: 'reading', reading: { ...cached } }, handle: this.handles.get(source.name) ?? null, held: false };
+    let held = false;
+    const stop = (status: 'BLOCKED' | 'failed', cause: string): { read: SourceRead; handle: null; held: boolean } => ({ read: { status, source: source.name, cause }, handle: null, held });
     // A replay reads no secret: a recording holds none.
     let value: string | undefined;
     if (source.secret && !this.options.replay) {
@@ -213,11 +227,13 @@ export class Sources {
       this.held.add(value);
     }
     const back = this.backoff.get(source.name);
+    held = true;
     if (back && now < back.until) return stop('failed', `backing off until ${new Date(back.until).toISOString()}`);
     const times = (this.spent.get(source.name) ?? []).filter((t) => now - t < DAY);
     if (times.filter((t) => now - t < MINUTE).length >= source.quota.per_minute) return stop('failed', `quota: ${source.quota.per_minute} calls a minute`);
     if (times.length >= source.quota.per_day) return stop('failed', `quota: ${source.quota.per_day} calls a day`);
     this.spent.set(source.name, [...times, now]);
+    held = false;
     let url = `https://${source.host}${source.path}`;
     for (let hop = 0; ; hop++) {
       const answer = await this.call(source, { url, method: 'GET', headers: this.headers(source, value) });
@@ -225,6 +241,7 @@ export class Sources {
       if ('error' in answer || answer.status === 429 || answer.status >= 500) {
         const gap = back ? Math.min(back.gap * 2, BACKOFF_CAP_MS) : BACKOFF_MS;
         this.backoff.set(source.name, { until: now + gap, gap });
+        held = !('error' in answer);
         if ('error' in answer) return stop('failed', answer.error);
       } else {
         this.backoff.delete(source.name);
@@ -240,9 +257,11 @@ export class Sources {
         const { value: v, unit } = (parsed ?? {}) as { value?: unknown; unit?: unknown };
         if (typeof v !== 'number' || !Number.isFinite(v) || typeof unit !== 'string' || !unit) return stop('failed', 'no reading: the parser gave no value with a unit');
         const reading: Reading = { source: source.name, value: v, unit, as_of: now };
-        await this.options.append('reading.recorded', { reading: `reading:${ulid(now)}`, value: v, unit, as_of: now, source: source.name, n: 1, outside: false });
+        const handle = `reading:${ulid(now)}`;
+        await this.options.append('reading.recorded', { reading: handle, value: v, unit, as_of: now, source: source.name, n: 1, outside: false });
         this.cache.set(source.name, reading);
-        return { status: 'reading', reading: { ...reading } };
+        this.handles.set(source.name, handle);
+        return { read: { status: 'reading', reading: { ...reading } }, handle, held: false };
       }
       // The client never follows a redirect: the hub does, only to the source's own host, which the handle goes to.
       let next: URL | undefined;

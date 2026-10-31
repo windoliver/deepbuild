@@ -1,0 +1,15 @@
+{
+  "id": "test/market",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "checks": ["ext.market.report", "ext.market.above_target"],
+  "stores": ["ext.market.alert"],
+  "actions": ["ext.market.set_alert", "ext.market.list_alerts"],
+  "notices": ["ext.market.crossed"],
+  "secrets": [{ "name": "market_key", "for": "the market data API's key" }],
+  "sources": [{ "name": "ext.market.price", "variant": "polled" }],
+  "requires": {
+    "preview": ["deep.registerSource", "deep.secret", "deep.schedule", "deep.notices.send", "deep.registerAction", "deep.store", "deep.store.put", "deep.store.get", "deep.store.list"]
+  }
+}
