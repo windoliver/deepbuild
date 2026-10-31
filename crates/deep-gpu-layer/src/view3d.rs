@@ -292,6 +292,25 @@ pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
     Ok(out)
 }
 
+/// Writes a BGRA frame under `out` as an RGBA PNG named by its SHA-256; returns the name.
+pub(crate) fn write_final(out: &str, bgra: &[u8], size: [u32; 2]) -> Result<String, Value> {
+    let mut rgba = bgra.to_vec();
+    for p in rgba.as_chunks_mut::<4>().0 {
+        p.swap(0, 2);
+    }
+    write_named(out, &png(&rgba, size)?, "png")
+}
+
+/// Each pick ID with the item it stands for.
+pub(crate) fn picks_json(picks: &[(String, u32)]) -> Value {
+    Value::Object(
+        picks
+            .iter()
+            .map(|(id, p)| (p.to_string(), json!(id)))
+            .collect(),
+    )
+}
+
 /// Writes `bytes` under `out`, named by their SHA-256 with `ext`; returns the name.
 pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
     let name = hex(bytes);
@@ -571,14 +590,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             );
             if capture {
                 if let (Some(bgra), true) = (&drawn.bytes, args.targets.contains("final")) {
-                    let mut rgba = bgra.clone();
-                    for p in rgba.as_chunks_mut::<4>().0 {
-                        p.swap(0, 2);
-                    }
-                    frame.insert(
-                        "final".into(),
-                        json!(write_named(out, &png(&rgba, size)?, "png")?),
-                    );
+                    frame.insert("final".into(), json!(write_final(out, bgra, size)?));
                 }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
@@ -589,12 +601,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                             "ids".into(),
                             json!(write_named(out, &png(ids, size)?, "png")?),
                         );
-                        let picks: Map<String, Value> = drawn
-                            .picks
-                            .iter()
-                            .map(|(id, p)| (p.to_string(), json!(id)))
-                            .collect();
-                        frame.insert("picks".into(), Value::Object(picks));
+                        frame.insert("picks".into(), picks_json(&drawn.picks));
                     }
                 }
                 if let Some(name) = window_name {

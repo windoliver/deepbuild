@@ -18,14 +18,14 @@
 //!   the frame, greyed with its age once past its freshness.
 
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
-use std::time::Duration;
 
 use deep_canvas::scope::Event;
 use deep_canvas_marks::scene::{bound_text, Record, Shown};
 use serde_json::{json, Map, Value};
 
+use crate::capture::local_http;
 use crate::hub::{Hub, Planted};
+use crate::optional;
 use crate::shared::FLICKS;
 
 /// How long a plug-in's toast stays up; the design names no number.
@@ -546,27 +546,6 @@ fn check_binding(
     }
 }
 
-/// The wrong program `panel_policy_open`: the script's own HTTP fetch, made.
-fn fetch(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("http://") else {
-        return false;
-    };
-    let (host, path) = match rest.split_once('/') {
-        Some((h, p)) => (h, format!("/{p}")),
-        None => (rest, "/".to_string()),
-    };
-    // Even the wrong program reaches only this machine.
-    if !host.starts_with("127.0.0.1:") && !host.starts_with("localhost:") {
-        return false;
-    }
-    let Ok(mut stream) = std::net::TcpStream::connect(host) else {
-        return false;
-    };
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let request = format!("GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n");
-    stream.write_all(request.as_bytes()).is_ok() && stream.read_to_end(&mut Vec::new()).is_ok()
-}
-
 /// The wrong program `panel_policy_open`: the script's own program, run, if it is the Node the
 /// tests run under (the only program any scenario names).
 fn run_program(argv: &[String]) -> bool {
@@ -746,10 +725,7 @@ impl Hub<'_> {
                     .iter()
                     .map(answer)
                     .collect::<Option<Vec<_>>>()?;
-                let then = match s.get("then") {
-                    None => None,
-                    Some(t) => Some(answer(t)?),
-                };
+                let then = optional(s.get("then"), answer)?;
                 Some((fresh, replay, then))
             })();
             let Some((fresh, replay, then)) = parsed else {
@@ -915,10 +891,7 @@ impl Hub<'_> {
                     panel: panel.to_string(),
                     next,
                     every,
-                    until: match t.get("until") {
-                        None => None,
-                        Some(u) => Some(u.as_i64()?),
-                    },
+                    until: optional(t.get("until"), Value::as_i64)?,
                     ops: ops(t.get("do"))?,
                 })
             })
@@ -956,7 +929,8 @@ impl Hub<'_> {
         let mut failed_read = false;
         let (outcome, serial) = match op {
             // The panel's policy is empty: no network or program of its own.
-            Op::Fetch(url) => match self.planted(Planted::PanelPolicyOpen) && fetch(url) {
+            Op::Fetch(url) => match self.planted(Planted::PanelPolicyOpen) && local_http(url, None)
+            {
                 true => ("done", None),
                 false => ("refused", None),
             },
