@@ -449,12 +449,30 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })));
         }
         "frames" => {
-            return Some(Call::Frames {
+            let flag = |k: &str| match c.get(k) {
+                None => Some(false),
+                Some(b) => b.as_bool(),
+            };
+            // #856: a whole revision arriving at a frame's latch.
+            let revise = match c.get("revise") {
+                None => None,
+                Some(r) => Some((
+                    r.get("frame")?.as_u64()? as usize,
+                    r.get("document")?.clone(),
+                )),
+            };
+            return Some(Call::Frames(Box::new(crate::hub::Frames {
                 doc: doc()?,
                 count: c.get("count")?.as_u64()?.min(100_000) as usize,
                 from: time("from", 0)?,
                 step: time("step", flicks("1/60s").unwrap_or(11_760_000))?,
-            })
+                paced: flag("paced")?,
+                revise,
+                pixels: flag("pixels")?,
+            })));
+        }
+        "shaped_runs" => {
+            return Some(Call::ShapedRuns(c.get("text")?.as_str()?.to_string()));
         }
         "panel" => {
             return Some(Call::Panel {
@@ -1130,6 +1148,106 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     }
 }
 
+/// The virtual display clock `canvas` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
+/// half a millisecond a check, and each call ten frames after the one before, so a patch is current
+/// at a latch before the next call arrives, as on the stand-in's clock (#384, #96).
+const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
+const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
+
+/// `deep-show canvas` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
+/// `calls`, `clock` and `at`) is the hub's: the sessions it bound, the documents it minted, the
+/// record's objects, the claims, the window and card. Each call is played after every call before
+/// it, on the clock `canvas` keeps, and answered with its reply, so the replies are the stand-in's for
+/// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
+/// played again before it.
+struct CanvasSide {
+    world: Map<String, Value>,
+    calls: Vec<Value>,
+}
+
+impl CanvasSide {
+    fn scenario(&self, fault: bool) -> Option<Scenario> {
+        let mut input = self.world.clone();
+        if !fault {
+            input.remove("fault");
+        }
+        let (refresh_hz, lead, check) = CANVAS_CLOCK;
+        input.insert(
+            "clock".into(),
+            json!({"refresh_hz": refresh_hz, "lead": lead, "check": check}),
+        );
+        let calls: Vec<Value> = self
+            .calls
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let mut c = c.clone();
+                c["at"] = json!((i as i64 + 1) * CANVAS_SPACING);
+                c
+            })
+            .collect();
+        input.insert("calls".into(), Value::Array(calls));
+        scenario(&input)
+    }
+
+    fn line(&mut self, startup: &Startup, line: &str) -> Value {
+        let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
+            return bad_input();
+        };
+        if let Some(Value::Object(world)) = input.get("world") {
+            let before = std::mem::replace(&mut self.world, world.clone());
+            if self.scenario(false).is_none() {
+                self.world = before;
+                return bad_input();
+            }
+            return json!({"ok": true});
+        }
+        let Some(Value::Object(call)) = input.get("call") else {
+            return bad_input();
+        };
+        let mut call = call.clone();
+        let out = call.remove("out");
+        let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
+        self.calls.push(Value::Object(call));
+        let Some(scenario) = self.scenario(true) else {
+            self.calls.pop();
+            return bad_input();
+        };
+        match out.as_ref().and_then(Value::as_str) {
+            // The window as the calls leave it, drawn and written to `out`; the reply is the
+            // `screen` call's own, with the picture's size and each item's box beside it.
+            Some(out) if scenario.window.is_some() => {
+                let mut drawn = screen(&scenario, startup, out);
+                let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
+                else {
+                    return drawn;
+                };
+                let mut reply = replies.pop().unwrap_or(Value::Null);
+                for k in ["width", "height", "items"] {
+                    reply[k] = drawn[k].take();
+                }
+                json!({"ok": true, "reply": reply})
+            }
+            _ => {
+                let mut hub = hub::Hub::new(&scenario, startup);
+                let mut replies = hub.run_calls();
+                let reply = replies.pop().unwrap_or(Value::Null);
+                let presented = match doc.as_deref() {
+                    Some(doc)
+                        if reply.get("rev").is_some()
+                            && reply["outcome"] != "refused"
+                            && reply["outcome"] != "applied" =>
+                    {
+                        hub.presented_revision(doc)
+                    }
+                    _ => None,
+                };
+                json!({"ok": true, "reply": reply, "presented": presented})
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
     let mut hub = hub::Hub::new(scenario, startup);
@@ -1330,17 +1448,22 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
         seal_ms: started.elapsed().as_secs_f64() * 1000.0,
         steps_by_name: planted == Some(StartPlanted::StepsByName),
         test_build: TEST_BUILD,
+        shapes_on_ui_thread: planted == Some(StartPlanted::ShapesOnUiThread),
+        run_per_document: planted == Some(StartPlanted::RunPerDocument),
     })
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
 /// reads every dependency as required, #387's scheduler that orders steps at one time by
-/// canvas-module name, or #388's seal that lets a build without look start.
+/// canvas-module name, #388's seal that lets a build without look start, or #856's hub that
+/// shapes a long text on the UI thread and its shaped-run cache per document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
     StepsByName,
     StartsWithoutLook,
+    ShapesOnUiThread,
+    RunPerDocument,
 }
 
 #[cfg(test)]
@@ -1365,6 +1488,8 @@ mod tests {
             seal_ms: 0.0,
             steps_by_name: false,
             test_build: false,
+            shapes_on_ui_thread: false,
+            run_per_document: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-305-stamp-{}", std::process::id()));
         let doc = "01JB7D00000000000000000001";
@@ -1509,6 +1634,8 @@ mod tests {
             seal_ms: 0.0,
             steps_by_name: false,
             test_build: false,
+            shapes_on_ui_thread: false,
+            run_per_document: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-383-view-{}", std::process::id()));
         let doc = "01JB383V00000000000000000A";
@@ -1652,6 +1779,12 @@ fn planted_arg(args: &[String]) -> Result<Option<StartPlanted>, ()> {
         [flag, twin] if flag == "--planted" && twin == "starts_without_look" => {
             Ok(Some(StartPlanted::StartsWithoutLook))
         }
+        [flag, twin] if flag == "--planted" && twin == "shapes_on_ui_thread" => {
+            Ok(Some(StartPlanted::ShapesOnUiThread))
+        }
+        [flag, twin] if flag == "--planted" && twin == "run_per_document" => {
+            Ok(Some(StartPlanted::RunPerDocument))
+        }
         _ => Err(()),
     }
 }
@@ -1689,9 +1822,17 @@ fn main() {
         }
     };
     let stdin = io::stdin();
+    let mut canvas = CanvasSide {
+        world: Map::new(),
+        calls: Vec::new(),
+    };
+    canvas.world.insert("evidence".into(), json!(""));
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
-        let reply = answer(&command, &startup, &line);
+        let reply = match command.as_str() {
+            "canvas" => canvas.line(&startup, &line),
+            _ => answer(&command, &startup, &line),
+        };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
         if command == "live" {

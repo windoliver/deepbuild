@@ -8,6 +8,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     ops::Range,
+    sync::Arc,
 };
 
 use deep_text::{Align, Atlas, Shaper, Spec, PAGE};
@@ -107,7 +108,7 @@ pub struct Painted {
 struct Text {
     shaper: Shaper,
     atlas: Atlas,
-    shaped: HashMap<ShapeKey, Shaped>,
+    shaped: HashMap<ShapeKey, Arc<Shaped>>,
     /// The runs the frame since [`begin_frame`] drew from, each once.
     frame: HashSet<ShapeKey>,
     /// Per window (each has its own sprite atlas), the generation of each page it holds, so a
@@ -128,7 +129,7 @@ impl Text {
 
     /// The label's shape, from the cache: a label is shaped once, never per frame. The cache is
     /// emptied whole at 4,096 runs, so a frame of more than that shapes some of them again.
-    fn shape(&mut self, label: &Label) -> Shaped {
+    fn shape(&mut self, label: &Label) -> Arc<Shaped> {
         let key = ShapeKey::of(label);
         self.frame.insert(key.clone());
         if let Some(shaped) = self.shaped.get(&key) {
@@ -173,7 +174,7 @@ thread_local! {
 }
 
 /// The label's shaped run, shaped on first sight and reused after.
-pub fn shape(label: &Label) -> Shaped {
+pub fn shape(label: &Label) -> Arc<Shaped> {
     TEXT.with(|text| text.borrow_mut().shape(label))
 }
 
