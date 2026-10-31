@@ -51,6 +51,8 @@ struct Host {
     stdin: ChildStdin,
     lines: mpsc::Receiver<String>,
     pid: u32,
+    /// The focus moves refused before a client could press anything.
+    moves: Vec<Value>,
 }
 
 impl Host {
@@ -92,6 +94,7 @@ impl Host {
             stdin,
             lines,
             pid,
+            moves: Vec::new(),
         };
         let ready = host
             .next()
@@ -125,6 +128,8 @@ impl Host {
         loop {
             let reply = self.next()?;
             if !reply["move"].is_null() {
+                self.moves
+                    .push(json!({ "serial": reply["move"]["serial"], "result": "refused" }));
                 self.send(json!({ "granted": false }))?;
             } else if reply["released"].is_null() {
                 return Ok(reply);
@@ -357,15 +362,22 @@ impl Check {
         let area = rect(&flag(args, "--panel-area").ok_or("--panel-area x,y,w,h")?)?;
         let card = flag(args, "--card").map(|text| rect(&text)).transpose()?;
         let question = flag(args, "--question");
-        if question.is_some() && card.is_none() {
-            return Err("--question needs --card: a card that isn't drawn can't be checked".into());
+        if question.is_some() != card.is_some() {
+            return Err(
+                "--card and --question go together: a card that isn't drawn can't be checked"
+                    .into(),
+            );
         }
         let (w, h) = flag(args, "--window")
             .and_then(|size| {
                 let (w, h) = size.split_once('x')?;
                 Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
             })
+            .filter(|(w, h)| w.is_finite() && h.is_finite() && *w > 0. && *h > 0.)
             .ok_or("--window WxH")?;
+        if !inside(area, [0., 0., f64::from(w), f64::from(h)]) {
+            return Err("--panel-area isn't inside --window".into());
+        }
         let mut cx = HeadlessAppContext::with_platform(
             gpui_kit::platform::current_platform(true).text_system(),
             Arc::new(Assets),
@@ -519,6 +531,10 @@ fn run_check(args: &[String]) -> Result<i32, String> {
         found.extend(violations(update, &bounds, check.area, check.card)?);
         trees.push(tree.to_json(&bounds));
     }
+    // Before the verdict: a picture that can't be taken leaves no report saying pass.
+    if let Some(png) = &png {
+        check.png(png)?;
+    }
     let failed = !found.is_empty();
     let host_pid = host.pid;
     write(
@@ -527,14 +543,20 @@ fn run_check(args: &[String]) -> Result<i32, String> {
         &trees,
         &found,
     )?;
-    if let Some(png) = &png {
-        check.png(png)?;
-    }
     if serving {
-        let held = Held { trees, found };
-        return serve(check, host, app_pid, held, |trees, found| {
-            write("fail", Some(host_pid), trees, found)
+        let mut held = Held { trees, found };
+        let served = serve(check, host, app_pid, &mut held, |result, held| {
+            write(result, Some(host_pid), &held.trees, &held.found)
         });
+        if served.is_err() {
+            let result = if held.found.is_empty() {
+                UNTOLD
+            } else {
+                "fail"
+            };
+            write(result, Some(host_pid), &held.trees, &held.found)?;
+        }
+        return served;
     }
     Ok(i32::from(failed))
 }
@@ -546,6 +568,9 @@ enum Event {
     HostGone,
 }
 
+/// A report's result when a served tree couldn't be checked.
+const UNTOLD: &str = "inconclusive";
+
 /// What the report holds, which a served tree can still turn to a failure.
 struct Held {
     trees: Vec<Value>,
@@ -554,13 +579,14 @@ struct Held {
 
 /// The check held open, on JSON lines. The app owns the gesture serials: it mints one per press, and grants a focus
 /// move only on the newest serial, once, and only until that press has been answered. A tree served later is checked
-/// like the first ones: a failure goes in the report and the exit code, which comes when stdin closes.
+/// like the first ones: a failure, or a tree that couldn't be checked, goes in the report and the exit code, which
+/// comes once stdin has closed and everything sent before that is answered.
 fn serve(
     mut check: Check,
     mut host: Host,
     app_pid: u32,
-    mut held: Held,
-    fail: impl Fn(&[Value], &[Value]) -> Result<(), String>,
+    held: &mut Held,
+    report: impl Fn(&str, &Held) -> Result<(), String>,
 ) -> Result<i32, String> {
     let (events, inbox) = mpsc::channel();
     let commands = events.clone();
@@ -586,45 +612,76 @@ fn serve(
     say(json!({ "ready": true, "appPid": app_pid, "hostPid": host.pid }));
 
     let mut gone = false;
+    let mut untold = false;
+    let mut closed = false;
     let mut newest: u64 = 0;
     let mut spent = true;
     let mut owner = false;
-    let mut moves: Vec<Value> = Vec::new();
+    let mut moves = std::mem::take(&mut host.moves);
     // The command waiting on the host; others wait behind it.
     let mut waiting: Option<Value> = None;
     let mut since = Instant::now();
     let mut queue: std::collections::VecDeque<Value> = Default::default();
+    let settle = |held: &Held| {
+        report(
+            if held.found.is_empty() {
+                UNTOLD
+            } else {
+                "fail"
+            },
+            held,
+        )
+    };
+    let exit = |held: &Held, untold: bool| match (held.found.is_empty(), untold) {
+        (false, _) => 1,
+        (true, true) => 2,
+        (true, false) => 0,
+    };
     loop {
         if waiting.is_none() {
             while let Some(command) = queue.pop_front() {
-                match command["cmd"].as_str().unwrap_or_default() {
-                    "focus_owner" => say(json!({ "owner": if owner { "panel" } else { "app" } })),
-                    "focus_log" => say(json!({ "moves": moves })),
-                    "invalidate" if !gone => {
-                        gone = host.send(json!({ "cmd": "invalidate" })).is_err();
-                        waiting = (!gone).then_some(command);
+                let message = match command["cmd"].as_str().unwrap_or_default() {
+                    "focus_owner" => {
+                        say(json!({ "owner": if owner { "panel" } else { "app" } }));
+                        None
                     }
+                    "focus_log" => {
+                        say(json!({ "moves": moves }));
+                        None
+                    }
+                    "invalidate" if !gone => Some(json!({ "cmd": "invalidate" })),
                     "press" if !gone => {
                         newest += 1;
                         spent = false;
-                        gone = host
-                            .send(json!({ "cmd": "press", "id": command["id"], "serial": newest }))
-                            .is_err();
-                        waiting = (!gone).then_some(command);
+                        Some(json!({ "cmd": "press", "id": command["id"], "serial": newest }))
                     }
                     "blur" if !gone => {
                         owner = false;
-                        gone = host.send(json!({ "cmd": "blur" })).is_err();
-                        waiting = (!gone).then_some(command);
+                        Some(json!({ "cmd": "blur" }))
                     }
-                    "invalidate" | "press" | "blur" => say(json!({ "error": "host_gone" })),
-                    other => say(json!({ "error": format!("no command {other}") })),
-                }
-                if waiting.is_some() {
+                    "invalidate" | "press" | "blur" => {
+                        say(json!({ "error": "host_gone" }));
+                        None
+                    }
+                    other => {
+                        say(json!({ "error": format!("no command {other}") }));
+                        None
+                    }
+                };
+                let Some(message) = message else { continue };
+                if host.send(message).is_ok() {
+                    waiting = Some(command);
                     since = Instant::now();
                     break;
                 }
+                gone = true;
+                untold = true;
+                settle(held)?;
+                say(json!({ "error": "host_gone" }));
             }
+        }
+        if closed && waiting.is_none() && queue.is_empty() {
+            return Ok(exit(held, untold));
         }
         match inbox.recv_timeout(Duration::from_millis(20)) {
             // Liveness is the app's own, so a ping passes whatever waits on the host.
@@ -632,9 +689,11 @@ fn serve(
                 say(json!({ "pong": command["seq"] }))
             }
             Ok(Event::Command(command)) => queue.push_back(command),
-            Ok(Event::Closed) => return Ok(i32::from(!held.found.is_empty())),
+            Ok(Event::Closed) => closed = true,
             Ok(Event::HostGone) => {
                 gone = true;
+                untold = true;
+                settle(held)?;
                 if waiting.take().is_some() {
                     say(json!({ "error": "host_gone" }));
                 }
@@ -668,20 +727,21 @@ fn serve(
                     Some("invalidate") => match reply["tree"].as_str().map(parse) {
                         Some(Ok(tree)) => {
                             let update = held.trees.len();
-                            held.trees.push(tree.to_json(&[]));
                             match unknown_element(&tree) {
                                 Some(kind) => {
+                                    held.trees.push(tree.to_json(&[]));
                                     held.found.push(json!({ "kind": "unknown_element", "update": update, "element": kind }));
-                                    fail(&held.trees, &held.found)?;
+                                    settle(held)?;
                                     say(json!({ "error": format!("unknown_element {kind}") }));
                                 }
                                 None => {
                                     let bounds = check.lay_out(tree.clone())?;
                                     let found =
                                         violations(update, &bounds, check.area, check.card)?;
+                                    held.trees.push(tree.to_json(&bounds));
                                     if !found.is_empty() {
                                         held.found.extend(found.iter().cloned());
-                                        fail(&held.trees, &held.found)?;
+                                        settle(held)?;
                                     }
                                     say(
                                         json!({ "tree": tree.to_json(&bounds), "violations": found }),
@@ -689,8 +749,16 @@ fn serve(
                                 }
                             }
                         }
-                        Some(Err(error)) => say(json!({ "error": error })),
-                        None => say(json!({ "error": reply["error"] })),
+                        Some(Err(error)) => {
+                            untold = true;
+                            settle(held)?;
+                            say(json!({ "error": error }));
+                        }
+                        None => {
+                            untold = true;
+                            settle(held)?;
+                            say(json!({ "error": reply["error"] }));
+                        }
                     },
                     Some("press") => {
                         spent = true;
@@ -708,11 +776,13 @@ fn serve(
                 if waiting.is_some() && since.elapsed() > STUCK {
                     let _ = host.child.kill();
                     gone = true;
+                    untold = true;
                     waiting = None;
+                    settle(held)?;
                     say(json!({ "error": "host_stuck" }));
                 }
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(0),
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(exit(held, untold)),
         }
     }
 }
@@ -737,7 +807,8 @@ fn run_bench(args: &[String]) -> Result<(), String> {
         .ok_or("--runs N")?;
     let updates: usize = flag(args, "--updates")
         .and_then(|n| n.parse().ok())
-        .ok_or("--updates N")?;
+        .filter(|n| *n > 0)
+        .ok_or("--updates N, at least one")?;
     let out = flag(args, "--out").ok_or("--out FILE")?;
     let mut reports = Vec::new();
     let mut last = None;
