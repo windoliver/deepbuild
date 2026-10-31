@@ -24,7 +24,7 @@ const fixes = {
   card: 'Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.',
   deviation: 'Correct the deviation to the file it is about, or remove it if the file is gone.',
 };
-const cardHeadings = ['What it is for', 'Where new code goes', 'What it may import', 'Deviations'];
+const cardHeadings = 'What it is for|Where new code goes|What it may import|Deviations'.split('|');
 // Each pattern's match is the reported value; a home path's placeholders and shared folders don't match.
 const kinds = [
   ['home path', /(?<![\w.-])(?:\/Users\/(?!Shared\/)|\/home\/)[\w.-]+\/|(?<![\w.-])[A-Za-z]:(\\{1,2})Users\1(?!Public\1)[\w.-]+\1/g],
