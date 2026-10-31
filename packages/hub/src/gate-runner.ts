@@ -20,7 +20,7 @@ export interface GateOptions {
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -84,7 +84,7 @@ export class GateRunner {
     const runs = fast.map(async ({ c, ms }) => {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], outcome: null, running: true, stale: false };
       claim.entries.set(c.check, e);
-      const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null });
+      const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null });
       e.runs.push(run);
       e.outcome = await this.o.ended(run);
       e.running = false;
@@ -126,6 +126,16 @@ export class GateRunner {
     const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
     return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale).map((e) => ({ check: e.check.check, deadline_ms: e.check.deadline_ms ?? e.check.expected_ms ?? null })) : [];
   }
+  /** A claim's slow checks not started yet, for want of a CPU slot. */
+  slowUnstarted(claim: string): string[] {
+    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.runs.length).map((e) => e.check.check) : [];
+  }
+  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
+  slowStanding(claim: string): { pending: boolean; failed: string[] } {
+    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale);
+    return { pending: slow.some((c) => c.result === 'pending'), failed: slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED').map((c) => `${c.check} ${c.result}`) };
+  }
   /** Resolves once none of a claim's slow checks is running or queued. */
   async slowEnded(claim: string, until: number): Promise<void> {
     while (Date.now() < until) {
@@ -143,7 +153,7 @@ export class GateRunner {
       // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now.
       e.running = true;
       const cwd = c.checkout ??= await checkoutOf(c.cwd, c.snapshot);
-      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: e.check.expected_ms ?? await this.expectedMs(e.check.check) });
+      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: e.check.expected_ms ?? await this.expectedMs(e.check.check), deadline_ms: e.check.deadline_ms ?? null });
       e.runs.push(run);
       void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
     }

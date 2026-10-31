@@ -29,8 +29,8 @@ import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
-import { codexRelations, holdsFor, modified, readTrust, saveTrust, stopTimeoutS } from './codex-settings.js';
-import { codexReadings, loopsCovered, uncoveredLoops } from './codex-loops.js';
+import { codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
+import { codexReadings, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -210,11 +210,15 @@ interface Cursor { transcript: string; read: number; reached: string[]; ended?: 
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null }
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null }
 /** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
 const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 
+/** How long a run past its deadline has to stop once asked. */
+const RUN_KILL_GRACE_MS = 10_000;
+/** A prompt Codex's subagent got, which its hook names with the root's session ID and an agent_id. */
+const childPrompt = (meta: HookMeta): boolean => meta.agent === 'codex' && Boolean(meta.fields?.agent_id);
 /** One events row as the record stores it, its seq read as text so no digit is lost. */
 interface Row { v: number; id: string; kind: string; writer: string; actor: string; scope: string; ts: number; log_pos: number; data: string; evidence: string | null;
   subject: string | null; seq: string | null; session_id: string | null; project_id: string | null; agent: string | null; unverified: number }
@@ -776,15 +780,18 @@ export class Core {
         // Kept on the draft too: the turn it opens reads its task there (#83).
         draft.data.tasks = data.tasks = tasks;
         // A message typed mid-turn joins its turn; the turn's own prompt is what an answer begins with.
-        if (draft.queued && count.prompt) count.prompt.opened ||= tasks.length > 0;
+        if (childPrompt(meta)) { /* the root's turn reads no prompt of its subagent's */ }
+        else if (draft.queued && count.prompt) count.prompt.opened ||= tasks.length > 0;
         else {
           count.prompt = { person: data.from === 'person' || data.from === 'app', opened: tasks.length > 0 };
           this.midTurn.delete(meta.session);
         }
         // Each message typed mid-turn is acknowledged at the session's next tool call (#340).
         if (draft.queued && data.from === 'person' && verified) typed.push({ text: String(data.text), task: tasks[0] });
-        count.fresh = false;
-        count.changed = false;
+        if (!childPrompt(meta)) {
+          count.fresh = false;
+          count.changed = false;
+        }
         const session = this.sessions.get(meta.session);
         if (session && verified) {
           for (const task_ref of tasks) opens.push(this.tasks.opened({ session: meta.session, agent: meta.agent, cwd: meta.cwd, thread: session.thread, task_ref, text: String(data.text), prompt: draft.id, at: draft.ts, ...(item ? { item } : {}) }));
@@ -899,6 +906,8 @@ export class Core {
       } else if (draft.kind === 'user.ask') {
         // The origin joins the prompt to its transcript entry; one it can't place is unknown and opens no ask.
         const entry = meta.fields?.prompt_id && session ? (await this.turnFrom(session, meta.fields.prompt_id))[0] : undefined;
+        // A Codex subagent's prompt carries the root's session ID with an agent_id: no message of yours, nor the root's turn (#39).
+        if (childPrompt(meta)) { data.from = 'subagent'; continue; }
         let from = foreign ? 'unknown' : String(this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.from ?? data.from);
         if (from === 'unknown' && !foreign && this.options.plant === 'unplaced-is-person') from = 'person';
         // The planted wrong programs take an automatic continuation for yours, or read the resume prompt by its look.
@@ -960,7 +969,7 @@ export class Core {
           r.lastLine = e.ts;
           r.open = [];
           break;
-        case 'agent.stop': r.lastLine = e.ts; r.open = []; break;
+        case 'agent.stop': r.lastLine = e.ts; if (!d.subagent) r.open = []; break;
         case 'session.end': state.delete(e.session); break;
         case 'tool.before':
           if (call) {
@@ -1988,7 +1997,7 @@ export class Core {
       const context = [brief, open, answers].filter(Boolean).join('\n\n');
       return context ? { context } : {};
     }
-    if (!own) return {};
+    if (!own || (meta.event === 'UserPromptSubmit' && childPrompt(meta))) return {};
     // Behind the replay its hook waited for, so the queue holds the hook before this reply. A long replay can
     // put a stop's reply past the server's wait; its line then shows at the next prompt, from the record.
     await (this.replaying ?? Promise.resolve());
@@ -2046,8 +2055,10 @@ export class Core {
     until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
     if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
-      const failed = await this.slowStop(meta, judged.claim, held);
+      const failed = await this.slowStop(meta, r, judged.claim, held);
       if (failed) lane.sendBack = failed;
+      // An answer that ended the hold is delivered below, with the wait an answer gets.
+      until = Math.min(held, Date.now() + STOP_HOLD_MS);
     }
     let proceeded = false;
     try {
@@ -2075,7 +2086,7 @@ export class Core {
       return undefined;
     }) : undefined;
     // The chat has seen it once it is replied in time; a reply past the hold is not, and the next prompt shows the line.
-    if (line && judged && Date.now() < until) judged.delivered = line;
+    if (line && judged && Date.now() < held) judged.delivered = line;
     if (block && line) block = `${line}\n${block}`;
     // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end.
     if (lane && judged?.claim && !block && !proceeded) this.gate.turnEnded(judged.claim);
@@ -2121,19 +2132,36 @@ export class Core {
    * entry's timeout, so a FAIL reaches the agent in the same turn; otherwise replied at once, with the row saying why,
    * and the verdict comes with the next message. What it is sent back with, or nothing.
    */
-  private async slowStop(meta: HookMeta, claim: string, until: number): Promise<string | undefined> {
+  private async slowStop(meta: HookMeta, r: Routes, claim: string, held: number): Promise<string | undefined> {
     const timeoutS = stopTimeoutS(this.root.dir) ?? 600;
-    const late = this.gate.slowDeadlines(claim).find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
+    const verdictLater = async (why: string) => {
+      (r.slowClaims ??= []).push(claim);
+      await this.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`).catch(() => undefined);
+    };
+    // Something already sends the agent on: the turn isn't ending, so no slow check starts.
+    const waiting = () => this.queue(() => this.waitingFor(meta.session));
+    if (r.sendBacks.length || (await waiting()).length) return undefined;
+    const deadlines = this.gate.slowDeadlines(claim);
+    const late = deadlines.find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
     await this.gate.turnEnded(claim);
     if (late) {
-      (this.routesOf(meta.session).slowClaims ??= []).push(claim);
       const deadline = late.deadline_ms === null ? 'has no deadline' : `has a deadline of ${words(late.deadline_ms)}`;
-      await this.appendReading(meta.session, meta.agent, `This stop isn't held: ${late.check} ${deadline}, which must end at least 5 s before Codex's Stop hook timeout, ${timeoutS} s. Its verdict comes with your next message.`).catch(() => undefined);
+      await verdictLater(`${late.check} ${deadline}, which must end at least 5 s before Codex's Stop hook timeout, ${timeoutS} s`);
       return undefined;
     }
-    await this.gate.slowEnded(claim, until);
-    const failed = this.gate.standing(claim).filter((c) => c.lane === 'slow' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
-    return failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
+    // Measured from now, with the check started: `held` already ends 5 s before the timeout, counted from the stop.
+    const unstarted = this.gate.slowUnstarted(claim);
+    if (unstarted.length) { await verdictLater(`${unstarted[0]} is waiting for a CPU slot, so its deadline can't be kept before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
+    const tight = deadlines.find((c) => Date.now() + c.deadline_ms! > held);
+    if (tight) { await verdictLater(`${tight.check} has a deadline of ${words(tight.deadline_ms!)}, which no longer ends at least 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
+    while (Date.now() < held && this.gate.slowStanding(claim).pending) {
+      await this.gate.slowEnded(claim, Math.min(held, Date.now() + 500));
+      // An answer goes back at once; the check's verdict then comes with your next message.
+      if (r.sendBacks.length || (await waiting()).length) { (r.slowClaims ??= []).push(claim); return undefined; }
+    }
+    const standing = this.gate.slowStanding(claim);
+    if (standing.pending) { await verdictLater(`its checks were still going when the hold ended, 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
+    return standing.failed.length ? `DeepBuild sent this claim back: ${standing.failed.join(', ')}.` : undefined;
   }
   private async readCodexTrust(cwd: string): Promise<void> {
     const dirs = [...(process.env.PATH ?? '').split(':'), ...this.config().loginPath.split(':')].filter(Boolean);
@@ -2144,10 +2172,9 @@ export class Core {
   private slowVerdicts(r: Routes): string | undefined {
     const told: string[] = [];
     r.slowClaims = (r.slowClaims ?? []).filter((claim) => {
-      const slow = this.gate.standing(claim).filter((c) => c.lane === 'slow');
-      if (slow.some((c) => c.result === 'pending')) return true;
-      const failed = slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED');
-      if (failed.length) told.push(`DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.`);
+      const { pending, failed } = this.gate.slowStanding(claim);
+      if (pending) return true;
+      if (failed.length) told.push(`DeepBuild sent this claim back: ${failed.join(', ')}.`);
       return false;
     });
     return told.join('\n') || undefined;
@@ -2319,10 +2346,9 @@ export class Core {
     // A session's newest windows are what the runner admits the account's Codex jobs by.
     if (read.limits && read.account) await this.runner.report({ agent: 'codex', account: read.account, rate_limits: read.limits } as unknown as WindowReport).catch(() => undefined);
     const readings = read.version && !loopsCovered(read.version) && coveredBy('codex', read.version) ? [uncoveredLoops(read.version)] : read.readings;
-    for (const reading of readings) {
-      const [seen] = await this.record.raw(`SELECT 1 FROM session_readings WHERE session_id = '${sql(meta.session)}' AND reading = '${sql(reading)}' LIMIT 1`);
-      if (!seen) await this.appendReading(meta.session, meta.agent, reading);
-    }
+    const before = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Codex %: %' ORDER BY log_pos`)) as { reading: string }[];
+    const standing = standingReadings(before.map((b) => b.reading));
+    for (const reading of readings) if (!stands(standing, reading)) await this.appendReading(meta.session, meta.agent, reading);
   }
   /** The pull request a session opened, as its readings record it: the newest. */
   private async prOf(session: string | null): Promise<string | undefined> {
@@ -2356,7 +2382,7 @@ export class Core {
     const unjudged = live?.state !== undefined && live.claimTurn !== live.turn && live.state !== 'finished';
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim((q) => this.record.raw(q), meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.stateOf(claim) : undefined;
-    const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'agent.stop'`)) as { at: number | null }[];
+    const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'agent.stop' AND json_extract(data, '$.subagent') IS NULL`)) as { at: number | null }[];
     const needsYou = (await this.asks.inbox()).length;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
@@ -2663,9 +2689,9 @@ export class Core {
    */
   private async verify(meta: HookMeta): Promise<boolean> {
     if (!meta.session || !meta.cwd || !isAbsolute(meta.transcript)) return false;
-    const home = meta.agent === 'codex' ? join(homedir(), '.codex', 'sessions') : join(homedir(), '.claude', 'projects');
+    const homes = meta.agent === 'codex' ? sessionHomes(this.root.dir) : [join(homedir(), '.claude', 'projects')];
     const transcript = resolve(meta.transcript);
-    if (!isUnder(transcript, home)) return false;
+    if (!homes.some((home) => isUnder(transcript, home))) return false;
     const start = await this.startOf(meta.ppid);
     if (!start) return false;
     const session = this.sessions.get(meta.session);
@@ -2679,6 +2705,11 @@ export class Core {
       this.sessions.set(meta.session, { id: meta.session, thread: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map(), prompts: new Map(), entries: [] });
       // A session's first cursor is written at once: a restart before it would read the session from its end.
       this.writeCursors();
+      return true;
+    }
+    // A Codex thread's identity is its payload's: resumed in a new process, it is bound to that process from its start.
+    if (meta.agent === 'codex' && transcript === session.transcript && (meta.event === 'SessionStart' || session.ended)) {
+      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false });
       return true;
     }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
@@ -2794,7 +2825,7 @@ export class Core {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
-    const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: modified(this.root.dir), trust: readTrust(this.root.dir) ?? null };
+    const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
     return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude, codex };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
@@ -3547,7 +3578,7 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = '${sql(run.slice(4))}'`)) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
-  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null }): Promise<string> {
+  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null }): Promise<string> {
     let script = join(this.root.dir, 'checks', r.approved);
     if (this.options.plant === 'runs-disk-bytes') script = join(r.cwd, r.check);
     else if (!existsSync(script)) {
@@ -3557,7 +3588,7 @@ export class Core {
     }
     // An untrusted head's run gets its checkout and nothing else: no network, no credentials, none of your files.
     const grant = this.untrusted.get(r.claim) ? { write: [r.cwd], read: [r.cwd, script] } : RUN_AS_YOU;
-    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null });
+    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null });
     return String(run);
   }
   /**
@@ -3577,11 +3608,11 @@ export class Core {
     const [row] = session ? await this.record.raw(`SELECT MAX(json_extract(data, '$.msg')) AS msg FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask'`).catch(() => []) as { msg: number | null }[] : [];
     // The newest prompt stands for the turn's: a mid-turn message after the one that opened a task reads, until
     // the next prompt, as a prompt that opened none.
-    const [prompt] = session ? await this.record.raw(`SELECT json_extract(data, '$.from') AS f, json_extract(data, '$.tasks[0]') AS task, log_pos FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask' ORDER BY log_pos DESC LIMIT 1`).catch(() => []) as { f: string | null; task: string | null; log_pos: number }[] : [];
+    const [prompt] = session ? await this.record.raw(`SELECT json_extract(data, '$.from') AS f, json_extract(data, '$.tasks[0]') AS task, log_pos FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask' AND NOT (agent = 'codex' AND json_extract(data, '$.from') = 'subagent') ORDER BY log_pos DESC LIMIT 1`).catch(() => []) as { f: string | null; task: string | null; log_pos: number }[] : [];
     const [started] = prompt ? await this.record.raw(`SELECT 1 AS one FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.start' AND log_pos > ${prompt.log_pos} LIMIT 1`).catch(() => []) as { one: number }[] : [];
     // The turn's work since its last boundary (its prompt, its last stop or a start), so a turn a hub restart
     // interrupted is judged at its stop as the rule reads it (#83): a tool call, and one that may have changed code.
-    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events WHERE session_id = '${sql(session)}' AND kind IN ('user.ask', 'agent.stop', 'session.start')`).catch(() => []) as { at: number | null }[] : [];
+    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events WHERE session_id = '${sql(session)}' AND kind IN ('user.ask', 'agent.stop', 'session.start') AND json_extract(data, '$.subagent') IS NULL AND NOT (kind = 'user.ask' AND agent = 'codex' AND json_extract(data, '$.from') = 'subagent')`).catch(() => []) as { at: number | null }[] : [];
     const calls = boundary?.at !== null && boundary?.at !== undefined ? (await this.record.raw(`SELECT json_extract(data, '$.kind') AS k FROM events WHERE session_id = '${sql(session)}' AND kind = 'tool.after' AND log_pos > ${boundary.at}`).catch(() => [])) as { k: string | null }[] : [];
     const count = this.counters.get(session) ?? {
       msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: calls.length > 0, changed: calls.some((c) => !READS.has(String(c.k))),
@@ -3650,7 +3681,7 @@ export class Core {
   }
 
   private async runStart(params: Obj): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms } = params;
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
     if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
@@ -3670,7 +3701,7 @@ export class Core {
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const run = await this.launch({
       run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
-      ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
+      ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}), ...(typeof deadline_ms === 'number' ? { deadline_ms } : {}),
     });
     return { run };
   }
@@ -3752,7 +3783,14 @@ export class Core {
         void this.supervisor.status(run.run).then((s) => (s.state === 'held' ? this.supervisor.cleanup(run.run) : undefined)).catch(() => undefined);
       };
     }
-    const done = ended.then(async ({ code, failed, missing }) => {
+    // A run past its deadline is ended and fails: asked to stop, then killed if it won't.
+    let overran = false;
+    const deadline = run.deadline_ms ? setTimeout(() => {
+      overran = true;
+      stop();
+      setTimeout(() => void this.host.signal(run.run, 'SIGKILL').catch(() => undefined), RUN_KILL_GRACE_MS).unref();
+    }, run.deadline_ms) : undefined;
+    const done = ended.finally(() => clearTimeout(deadline)).then(async ({ code, failed, missing }) => {
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
       await writes;
@@ -3761,8 +3799,8 @@ export class Core {
         const put = await sink.close();
         if (put.status === 'stored') evidence.push((await this.stored(put, `${run.run}'s output`)).sha256);
       }
-      const outcome = this.stopping ? 'stopped' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
-      const findings = this.stopping ? ['hub stopped'] : missing ? [`its stack never came up: ${missing}`] : failed ? [failed] : [];
+      const outcome = this.stopping ? 'stopped' : missing ? 'missing' : overran ? 'overran' : code === 0 ? 'passed' : 'failed';
+      const findings = this.stopping ? ['hub stopped'] : missing ? [`its stack never came up: ${missing}`] : overran ? [`it ran past its deadline of ${run.deadline_ms} ms`] : failed ? [failed] : [];
       await this.finish(run, outcome, findings, evidence);
     });
     this.runs.set(run.run, { run, done, stop });

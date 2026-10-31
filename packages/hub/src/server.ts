@@ -573,7 +573,8 @@ class Hub {
     // A tool call this hub saw run marks its session as having worked, so the stop that follows at once is held for
     // its line whether or not the core's word of the turn has come back yet (#83).
     if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
-    const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
+    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
