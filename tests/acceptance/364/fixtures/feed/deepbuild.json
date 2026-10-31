@@ -1,0 +1,7 @@
+{
+  "id": "test/feed",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "sources": [{ "name": "ext.feed.events", "variant": "stream" }],
+  "requires": { "preview": ["deep.registerSource"] }
+}
