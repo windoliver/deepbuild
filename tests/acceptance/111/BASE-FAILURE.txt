@@ -1,0 +1,49 @@
+# Base run, commit 244a3455, Node 24.22, macOS
+# vitest run --root tests/acceptance/111 --no-file-parallelism: 20 failed (20)
+# tsc -p tests/acceptance/111/tsconfig.json: no error in this folder; its one error is packages/asks/src/index.ts(1780,33), which this suite didn't touch.
+
+ FAIL  budgets.test.ts > #111.5691aa30 budgets > #111.5691aa30 the perf lane has a #111 task, valid against the merge base's budgets, and it runs
+AssertionError: budgets.json has a #111 task for compiling the memory files: expected 0 to be greater than 0
+ FAIL  budgets.test.ts > #111.5691aa30 budgets > #111.5691aa30 compiling four agents' memory files, 200 rules each and 100 of them shared, takes under 60 s and leaves each shared rule one claim with four sources
+AssertionError: "shared rule number 7 of the corpus" is one claim held by all four agents after 3.7 s: expected undefined to be 4 // Object.is equality
+ FAIL  compile.test.ts > #111.fe2b4a16 a rule repeated in two agents' memory files > #111.fe2b4a16 a rule in Claude Code's and Codex's files is one claim on rules.md with both sources, proof 2; the rule that differs by one word stays its own claim
+AssertionError: expected [ Array(1) ] to deeply equal []
+ FAIL  compile.test.ts > #111.fe2b4a16 a rule repeated in two agents' memory files > #111.fe2b4a16 re-reading adds no source and no claim; a third agent's file that later says it adds its source to the same claim
+AssertionError: after the first compile: expected [ Array(1) ] to deeply equal []
+ FAIL  compile.test.ts > #111.fe2b4a16 a rule repeated in two agents' memory files > #111.fe2b4a16 the same rule across all four agents is one claim with four sources
+AssertionError: expected [ Array(1) ] to deeply equal []
+ FAIL  compile.test.ts > Scope: every agent's files read into the wiki with sources > Scope: each agent's own memory rule is a claim citing that agent's file: Claude Code, Codex, pi and Cursor; Cursor's front matter is no rule
+AssertionError: "Run the linter before every commit" from claude's file is on a page: expected +0 to be 1 // Object.is equality
+ FAIL  compile.test.ts > Scope: every agent's files read into the wiki with sources > Scope: a line you said in each agent's transcript is a claim citing your message, known from you; the same words from the assistant are not known from you
+AssertionError: expected [ …(2) ] to deeply equal []
+ FAIL  compile.test.ts > Scope: every agent's files read into the wiki with sources > Invariant 1: a rule an agent's own memory feature wrote still shows its source, and never reads as from you or your decision
+AssertionError: deep memory --json lists the lessons: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ FAIL  compile.test.ts > Scope: every agent's files read into the wiki with sources > Invariant: no credential value from any agent's memory file reaches a page, the log, the index, the ledger or the list; each file's other rules do
+AssertionError: "Run the linter before every commit" is on a page, so the sweep isn't of an empty wiki: expected +0 to be 1 // Object.is equality
+ FAIL  lessons.test.ts > Proof: the ranked keep-or-remove list > Proof: `deep memory` lists each lesson as a guard, a shared rule or a removal, ranked 1..n, each with its sources; a rule four agents hold outranks one two hold
+AssertionError: deep memory --json lists the lessons: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ FAIL  lessons.test.ts > Proof: the ranked keep-or-remove list > Proof: a person keeping a lesson saves a decision by the core, and it leaves the list, for good; the lessons left keep their IDs across a re-read
+AssertionError: deep memory --json lists the lessons: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ FAIL  lessons.test.ts > Proof: the ranked keep-or-remove list > Proof: a person removing a lesson takes its line off every page, and a re-read doesn't bring it back; its neighbour stays
+AssertionError: deep memory --json lists the lessons: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ FAIL  lessons.test.ts > Proof: the ranked keep-or-remove list > Proof: a proposed guard does nothing until you keep it; kept, deep-hook denies its command, and its twin still runs
+AssertionError: deep memory --json lists the lessons: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ FAIL  lessons.test.ts > Invariant 3: keep and remove are the person's > Invariant 3: with the OS not confirming you, keep and remove are refused and nothing changes; an agent's deep_propose applies nothing, and no deep_* tool keeps or removes
+AssertionError: deep memory --json lists the lessons: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+ FAIL  revive.test.ts > #111.ddf55f68 reviving a rejected direction > #111.ddf55f68 a direction you rejected in chat is saved as a decision, from Claude Code's and Codex's transcripts, by the core; the same words from the assistant save none
+AssertionError: your "rejected: `graphql`" is one saved decision: expected +0 to be 1 // Object.is equality
+ FAIL  revive.test.ts > #111.ddf55f68 reviving a rejected direction > #111.ddf55f68 an agent's deep_propose of the rejected direction is refused, citing the decision, and never reaches you; another direction, or the same one in another repo, goes on to the inbox
+AssertionError: the decision is saved: expected undefined to be defined
+ FAIL  revive.test.ts > #111.ddf55f68 reviving a rejected direction > #111.ddf55f68 an agent's tool call that revives it is denied by deep-hook, citing the decision; another package, or the same one in another repo, runs
+AssertionError: the decision is saved: expected undefined to be defined
+ FAIL  revive.test.ts > #111.ddf55f68 reviving a rejected direction > #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: proposing it is refused, citing the decision that answer saved; the one you chose isn't
+AssertionError: the passed-over option is refused: {"jsonrpc":"2.0","id":"tools/call#3","result":{"content":[{"type":"text","text":"{\"proposal\":\"doc:01M662CFG4CB745EYC5Q62XKP2\",\"ask\":\"ask:01M662CFFQFF60S3X5991G8W03\"}"}],"isError":false,"structuredContent":{"proposal":"doc:01M662CFG4CB745EYC5Q62XKP2","ask":"ask:01M662CFFQFF60S3X5991G8W03"}}}: expected false to be true // Object.is equality
+ FAIL  taste.test.ts > #111.536dfc0e your past taste decisions at session start > #111.536dfc0e an agent starting on checkout gets checkout's decision with its screenshot, and nothing of another screen or another repo
+AssertionError: what you chose on this screen: expected '{"v":1,"hello":"deep-hub","start":"01…' to contain 'marker amberline'
+ FAIL  taste.test.ts > #111.536dfc0e your past taste decisions at session start > #111.536dfc0e an agent starting on settings gets settings', and one starting on a screen you never called gets none
+AssertionError: settings' decision: expected '{"v":1,"hello":"deep-hub","start":"01…' to contain 'marker cedarline'
+
+# Why memory rules read 0 claims at the base: wiki-build.ts reads ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, and each line is a learn.applied at scope all whose state is refused: "was learned at install from no session of a known repo" (read from learned_layer, with history in two repos too). So rules.md holds no claim. Past that, the second file's rule targets the first's claim handle and adds no source (wiki-build.ts: remember). The implementer has to clear both.
+# The deep memory failures are 'Unsupported command': the verb is invented here (README). pi's and Cursor's files and transcripts are read by nothing at the base.
+
+# Sample fix: not attempted. No test here has passed on any program; see README, Not done.
