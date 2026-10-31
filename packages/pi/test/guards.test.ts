@@ -3,8 +3,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 // `deep setup` runs for real on a temp home, as tests/acceptance/19 does.
+import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
 import { CLI, Client, NODE, Pi, REPO, childEnv, cleanup, run as sh, startHub, tempDir, waitFor, word, type Hub, type Line, type Step } from '../../../tests/acceptance/40/helpers.js';
 
 const bash = (command: string): Step => ({ tools: [{ name: 'bash', arguments: { command } }] });
@@ -213,6 +214,34 @@ describe('guards on a pi call', () => {
     expect(end.isError, said(end)).toBe(true);
     expect(said(end)).toContain('no-kill-by-name');
     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+  }, 90_000);
+
+  it('in a home with no setup, a hub that refuses a call is still obeyed', async () => {
+    const tmp = tempDir();
+    const home = join(tmp, 'h');
+    const cwd = join(tmp, 'w');
+    mkdirSync(join(home, '.deepbuild'), { recursive: true });
+    mkdirSync(cwd);
+    const hub = createServer((sock) => {
+      sock.on('error', () => undefined);
+      sock.write('{}\n');
+      let buffer = '';
+      sock.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        if (!buffer.includes('\n')) return;
+        const { id, event } = JSON.parse(buffer.slice(0, buffer.indexOf('\n'))) as Line;
+        buffer = '';
+        sock.write(`${JSON.stringify({ ack: id, hold_until_ms: Date.now() + 1000 })}\n`);
+        sock.end(`${JSON.stringify(event === 'tool_call' ? { exit: 2, stdout: '', stderr: 'an extension says no\n' } : { exit: 0, stdout: '', stderr: '' })}\n`);
+      });
+    });
+    await new Promise<void>((done) => hub.listen(join(home, '.deepbuild/hub.sock'), done));
+    onTestFinished(() => void hub.close());
+    const pi = await Pi.start(home, cwd, { steps: [bash('touch ran.txt'), { text: 'Done.' }] });
+    const end = await run(pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect(said(end)).toContain('an extension says no');
+    expect(existsSync(join(cwd, 'ran.txt'))).toBe(false);
   }, 90_000);
 
   it('with the hub away a call no entry matches runs', async () => {

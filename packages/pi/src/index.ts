@@ -451,10 +451,9 @@ export default function deepbuild(pi: Pi): void {
       void hook('tool_result', { ...call, tool_use_id: String(event.toolCallId), outcome: 'failed', error: reason });
       return { block: true, reason };
     }
-    if (ruling === 'no setup') return undefined;
     if (reply) return reply.exit !== 0 ? { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' } : undefined;
     // The hub didn't answer: a fail-closed entry still holds the call, as deep-hook holds Claude Code's.
-    return ruling.denials.length ? { block: true, reason: ruling.denials.join('\n') } : undefined;
+    return ruling !== 'no setup' && ruling.denials.length ? { block: true, reason: ruling.denials.join('\n') } : undefined;
   });
   on('tool_execution_start', (event) => { sentBack = 0; if (!event.parentToolCallId) { toolCalls++; place(true); } });
   on('tool_execution_end', (event) => { if (!event.parentToolCallId) toolCalls = Math.max(0, toolCalls - 1); });
