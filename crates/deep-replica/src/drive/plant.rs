@@ -96,5 +96,8 @@ pub fn play_sound() {
         sound.setLoops(true);
         sound.play();
         std::mem::forget(sound);
+        // Playback starts from the run loop.
+        let until = objc2_foundation::NSDate::dateWithTimeIntervalSinceNow(0.5);
+        objc2_foundation::NSRunLoop::currentRunLoop().runUntilDate(&until);
     }
 }
