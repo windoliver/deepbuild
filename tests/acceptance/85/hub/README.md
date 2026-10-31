@@ -1,6 +1,6 @@
 # Acceptance tests for #85 on the real hub: the Slack thread and the network task
 
-Written blind from issue #85, `docs/technical-design.md` (the paragraphs **Tasks close themselves.**, **A network you must reconnect is found by trying it.** and **A chat-app task reads Slack, read-only.**) and the base commit `121ccac2`, read only to learn how to drive the hub. `tests/acceptance/85/` proves these criteria on the asks core with fakes; this folder proves them through `deep hub run`. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft by this job.
+Written blind from issue #85, `docs/technical-design.md` as of `1941ca24` (the paragraphs **Tasks close themselves.**, **A network you must reconnect is found by trying it.** and **A chat-app task reads Slack, read-only.**) and the base commit `121ccac2`, read only to learn how to drive the hub. `tests/acceptance/85/` proves these criteria on the asks core with fakes; this folder proves them through `deep hub run`. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft by this job.
 
 ## Run
 
@@ -37,6 +37,7 @@ The hub, its socket, its record, `deep mcp` and TCP are real. Slack is the one b
 - **`slack.json` is written before the hub starts**, so a hub that reads it once at start and one that reads it per raise both pass.
 - **A `slack.json` not mode 0600** reads as "not on": a thread task is refused, naming the file.
 - **"After your post"**: a message holding the expected text before your post, and your own post holding it, don't close the task, as the core's rule says.
+- **"Only your post since the task was raised counts, by its message time"** (design at `1941ca24`): posts and replies in the tests carry Slack `ts` values of the real clock, taken after the raise. An exchange a minute before the raise doesn't close the task; nor does a new reply with no new post of yours, or a reply older than your new post.
 - **At most once every 5 s** is checked as gaps of 4.5 s or more between arrivals at the fake, allowing for delivery.
 - **The first try after the port opens** must arrive within 7 s (5 s and 2 s for delivery); raises and closings get 15 s (the issue's 10 s and a margin for load); resumes are held to the design's 30 s from the first accepted connection.
 - **A stop "over 10 minutes old"** is stamped 11 minutes before now, its session's earlier hooks just before that. "Isn't tried" reads as no connection reaches a listening port and `owner` isn't `you` on a closed one.
@@ -50,5 +51,5 @@ The hub, its socket, its record, `deep mcp` and TCP are real. Slack is the one b
 ## Files
 
 - `helpers.ts`: the hub, hook lines, cli calls, the waiter, the record, sessions, TCP listeners, the fake Slack, `deep_ask` through `deep mcp`, and the token scan.
-- `thread.test.ts`: `#85.e12ca936`, 4 tests.
+- `thread.test.ts`: `#85.e12ca936`, 5 tests.
 - `network.test.ts`: `#85.0fa0b6d4`, 7 tests.

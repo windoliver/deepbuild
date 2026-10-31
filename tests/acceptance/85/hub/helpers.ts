@@ -25,6 +25,9 @@ export const BOT = 'U0BOT85';
 export const CHANNEL = 'C0THREAD85';
 export const THREAD_TS = '1700000000.000100';
 export const LINK = `https://acme-85.slack.com/archives/${CHANNEL}/p1700000000000100`;
+let posted = 0;
+/** A Slack message time, `ago` ms before now, unique as Slack's are. */
+export const slackTime = (ago = 0) => `${((Date.now() - ago) / 1000).toFixed(3)}${String(++posted % 1000).padStart(3, '0')}`;
 
 export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 export async function until<T>(probe: () => T | undefined | false | Promise<T | undefined | false>, ms: number): Promise<T | undefined> {
