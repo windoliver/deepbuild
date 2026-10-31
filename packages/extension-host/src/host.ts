@@ -14,6 +14,9 @@
 // files', a signature that doesn't verify or a key other than the one trusted for the package, a piece of the
 // trusted ring or the done gate replaced, a conflict with an installed package, a check kind another package holds
 // that it doesn't declare it replaces, and a kernel contract version the kernel doesn't publish.
+//
+// Sources and secrets (#364): the hub makes every call a polled source needs, adding a secret by its handle only on
+// the source's host (./sources.ts), and a stream source is held to source@1's kit at install, wherever it runs.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
@@ -33,6 +36,7 @@ import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/su
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
+import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { Terminals, type OpenSpec } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -97,6 +101,14 @@ export interface ExtensionHostOptions {
   /** Methods this host answers `unsupported` to, as a shim that dropped them would: the contract step's planted twin (#139). */
   unsupported?: readonly string[];
   plant?: Plant;
+  /** The OS secret store a source's secret is read from (#364). Default: the Keychain on macOS, and none elsewhere. */
+  secrets?: SecretStore;
+  /** Opens your browser at a sign-in page. Default: macOS's open. */
+  browse?: (url: string) => Promise<void>;
+  /** The HTTP client every source call goes through; it never follows a redirect. Default: Node's fetch. */
+  http?: HttpClient;
+  /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
+  replay?: Recording;
 }
 export interface InstallFrom {
   from: string;
@@ -177,6 +189,30 @@ export interface ExtensionHost {
   loadResult(id: string): Record<string, unknown> | undefined;
   /** Each use of a loaded package: the interface its manifest names, the one it is wired to and the provider (#139). */
   edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]>;
+  /**
+   * Your value for a secret a package's manifest names, on the trusted path (#364). A loaded source of it naming the
+   * secret with a key test calls once with the value first: valid saves it, the source refusing the key (invalid)
+   * saves nothing, and a test that couldn't run (INCONCLUSIVE) saves it. With no key test it reads untested and saves.
+   */
+  enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }>;
+  /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
+  readSource(name: string): Promise<SourceRead>;
+  /** Every source call this host made, with its secrets stripped. */
+  recording(): Recording;
+  /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
+  readings(source: string, window: { from: number; to: number }): Promise<Reading[]>;
+  /**
+   * Removes a secret on the trusted path: without your yes, or with a yes naming another list, it only answers the
+   * sources that will go BLOCKED without it; with a yes naming exactly those, it removes the secret.
+   */
+  removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }>;
+  /** Sign-in through an OAuth loopback for a loaded source that declares one, on the trusted path: the token is saved as the secret. */
+  signIn(connection: Connection, extension: string, name: string): Promise<{ saved: true }>;
+  /**
+   * The next page of a loaded stream source, from the cursor the hub keeps for it across a restart: each event held to
+   * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
+   */
+  readStream(name: string, limit: number): Promise<StreamRead>;
   /** Stops every process it started, but the terminals of a piece whose manifest's host lives past the app. */
   close(): Promise<void>;
 }
@@ -221,6 +257,12 @@ const PUBLISHER_KEY = /^ed25519:([0-9a-f]{64})$/;
 const ENVIRONMENT = 'environment@1';
 /** The wiki's index slot (#355): one fill, a package's that replaces the shipped index. */
 const INDEX = 'index@1';
+/** A stream source's slot (#364): read from a cursor, in order, losing nothing across a restart. */
+const SOURCE = 'source@1';
+/** The hub's own connection, for what only the core appends. */
+const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** A source's name, as the manifest contract holds it. */
+const SOURCE_NAME = /^ext\.[a-z0-9][a-z0-9_-]*\.[a-z][a-z0-9_]*$/;
 const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
 /** An index@1 fill as the host reaches it in the package: each call answered over the package's side. */
 export interface IndexFill extends SlotFill {
@@ -239,6 +281,8 @@ interface Manifest {
   /** extension.contract@1's (#139): whether it declares itself stable, and the preview entries it uses by name. */
   stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
+  secrets?: { name: string; for: string }[];
+  sources?: { name: string; variant: string; reading?: string }[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] }; holds: string[] }
@@ -268,6 +312,10 @@ interface Ext {
   index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
   hubBound: boolean;
+  /** The sources it registered, by name, as declared (#364); their functions stay with the package. */
+  sources: Map<string, Declared>;
+  /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
+  starts: number;
   /** How to take its resolver back from the asks core, once it registered one. */
   resolverDrop?: () => void;
   /** Inside DeepBuild's signed release: its replies are text, and join first. */
@@ -453,6 +501,7 @@ class Host implements ExtensionHost {
   /** The starts of the packages loaded before ready, once ready runs. */
   private starting: Promise<void> = Promise.resolve();
   private closed = false;
+  private readonly sources: Sources;
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
@@ -463,6 +512,11 @@ class Host implements ExtensionHost {
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
     this.terminals = new Terminals(options.home, options.supervisor);
+    this.sources = new Sources({
+      now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
+      // Each call's cost and each new reading, as the core: the hub makes every source call.
+      append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
+    });
   }
 
   private read<T>(name: string): Record<string, T> {
@@ -691,7 +745,9 @@ class Host implements ExtensionHost {
    * environment its manifest declares (#331) is an environment@1 fill; a kit's first FAIL refuses the install,
    * naming the case. A kind of the package's own is BLOCKED: unrun, so never passed. A replacement or an
    * environment the sandbox would run is BLOCKED too (the kits' suites and stacks run where the sandbox can't
-   * reach), and a BLOCKED one doesn't install. A package that declares nothing to kit runs no code at install.
+   * reach), and a BLOCKED one doesn't install. Each stream source its manifest lists is a source@1 fill (#364), judged
+   * wherever the package runs, the kit's restart a restart of its code. A package that declares nothing to kit runs no
+   * code at install.
    */
   private async installKits(entry: Entry, manifest: Manifest): Promise<KitRun[]> {
     const { folder, digest } = this.snapshot(entry);
@@ -704,6 +760,11 @@ class Host implements ExtensionHost {
     const kits = `${[kitted.length ? CHECK_KIND : '', environments.length ? ENVIRONMENT : ''].filter(Boolean).join(' and ')}'s kit${kitted.length && environments.length ? 's' : ''}`;
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
+    const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
+    if (hub && streams.length && !this.isReady) {
+      rmSync(folder, { recursive: true, force: true });
+      throw Error(`BLOCKED: ${entry.id} registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
+    }
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
     if (hub && indexed && !this.isReady) {
       rmSync(folder, { recursive: true, force: true });
@@ -718,7 +779,7 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
       throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     }
-    if (!kitted.length && !environments.length && !indexed) {
+    if (!kitted.length && !environments.length && !indexed && !streams.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
@@ -773,11 +834,101 @@ class Host implements ExtensionHost {
         const failed = report.cases.find((c) => c.outcome !== 'PASS');
         if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
       }
+      const sourceKit = streams.length ? slotKits().find((k) => k.slot === SOURCE) as SlotKit<SlotFill> | undefined : undefined;
+      if (streams.length && !sourceKit) throw Error(`the conformance package ships no ${SOURCE} kit`);
+      for (const name of streams) {
+        if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
+        // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
+        const fill = {
+          slot: SOURCE, revision: sourceKit!.revision, variant: 'stream',
+          read: (stream: unknown, cursor: unknown, limit: unknown) => within(CALL_MS, `${entry.id}'s ${name}`, ext.ask!('source.read', { name, stream, cursor, limit })),
+          restart: async () => {
+            await ext.stop?.();
+            if (ext.run) ext.run = `run:${ulid(this.options.now())}`;
+            await this.start(ext);
+          },
+        } as unknown as SlotFill;
+        const report = await runKit(sourceKit!, fill, { parts: ['fixed'] });
+        runs.push({ slot: SOURCE, fill: name, verdict: report.verdict });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s source ${name} reads ${report.verdict} on ${SOURCE}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+      }
     } finally {
       await ext.stop?.();
       rmSync(folder, { recursive: true, force: true });
     }
     return runs;
+  }
+  async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
+    this.trustedPath(connection, 'a secret is entered');
+    this.secretOf(extension, name);
+    if (typeof value !== 'string' || !value) throw Error(`a value for ${name} is a string`);
+    const ext = this.exts.get(extension);
+    const tested = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.keyTest !== null);
+    return this.sources.enter(extension, name, value, tested);
+  }
+  async readSource(name: string): Promise<SourceRead> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
+    if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the polled source ${name}` };
+    return this.sources.read(ext.entry.id, ext.sources.get(name) as Polled, (answer) => this.ask(ext, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+  }
+  recording(): Recording {
+    return this.sources.recording();
+  }
+  async readings(source: string, window: { from: number; to: number }): Promise<Reading[]> {
+    if (!SOURCE_NAME.test(source) || !Number.isSafeInteger(window?.from) || !Number.isSafeInteger(window?.to)) throw Error('readings takes a source\'s name and a window of two times in ms');
+    const rows = await this.options.record.raw(`SELECT value, unit, as_of, source FROM readings WHERE source = '${source}' AND as_of BETWEEN ${window.from} AND ${window.to} ORDER BY as_of, reading`) as { value: string; unit: string; as_of: number; source: string }[];
+    return rows.map((r) => ({ source: r.source, value: Number(r.value), unit: r.unit, as_of: r.as_of }));
+  }
+  async removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }> {
+    this.trustedPath(connection, 'a secret is removed');
+    this.secretOf(extension, name);
+    // What its packages registered needing it; schedules and checks name sources, so they go BLOCKED through them.
+    const blocked = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name).sort();
+    const yes = [...(answer?.yes ?? [])].sort();
+    if (!answer || yes.length !== blocked.length || yes.some((s, i) => s !== blocked[i])) return { removed: false, blocked };
+    await this.sources.remove(extension, name, blocked);
+    return { removed: true, blocked };
+  }
+  async signIn(connection: Connection, extension: string, name: string): Promise<{ saved: true }> {
+    this.trustedPath(connection, 'a sign-in is made');
+    this.secretOf(extension, name);
+    const ext = this.exts.get(extension);
+    const source = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.oauth !== null);
+    if (!source) throw Error(`no loaded source of ${extension} signs in for ${name}`);
+    return this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+  }
+  async readStream(name: string, limit: number): Promise<StreamRead> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'stream');
+    if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the stream source ${name}` };
+    if (!Number.isSafeInteger(limit) || limit < 1) throw Error('readStream takes a page limit of at least one event');
+    const failed = (cause: string): StreamRead => ({ status: 'failed', source: name, cause });
+    const cursors = this.read<string | null>('cursors.json');
+    // At run time the stream is the package's own upstream, which its read reaches through its grant.
+    let page: unknown;
+    try {
+      page = await this.ask(ext, CALL_MS, `${name}'s read`, 'source.read', { name, stream: null, cursor: cursors[name] ?? null, limit });
+    } catch (e) {
+      return failed(`its read failed: ${message(e)}`);
+    }
+    const p = page as { events?: unknown; cursor?: unknown } | null;
+    const events = p?.events;
+    const isEvent = (e: unknown): e is StreamEvent => isPlain(e) && Number.isSafeInteger(e.seq) && typeof e.kind === 'string' && 'data' in e;
+    if (!Array.isArray(events) || events.length > limit || !events.every(isEvent) || (p!.cursor !== null && typeof p!.cursor !== 'string')) return failed('its read gave no page of at most the limit, with a cursor');
+    const type = (ext.manifest.sources ?? []).find((s) => s.name === name)?.reading;
+    for (const e of type ? events : []) {
+      const held = validate(type!, e.data);
+      if (!held.ok) return failed(`event ${e.seq} isn't ${type}: ${held.issues[0]!.path || '/'} ${held.issues[0]!.code}`);
+    }
+    this.save('cursors.json', { ...cursors, [name]: p!.cursor });
+    return { status: 'events', source: name, events };
+  }
+  /** The secret a package's manifest names, or a refusal naming it. */
+  private secretOf(extension: string, name: string): void {
+    const entry = this.entries[extension];
+    if (!entry) throw Error(`${extension} isn't installed`);
+    const manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    if (!(manifest.secrets ?? []).some((s) => s.name === name)) throw Error(`${extension}'s manifest names no secret ${name}`);
   }
   async installed(): Promise<Installed[]> {
     return Object.values(this.entries).map((e) => this.installedOf(e));
@@ -848,7 +999,7 @@ class Host implements ExtensionHost {
     return {
       entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest),
+      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), starts: 0,
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -991,13 +1142,15 @@ class Host implements ExtensionHost {
 
   /** Runs the package's code: in the hub's process, or in the platform sandbox through the supervisor. */
   private async start(ext: Ext): Promise<void> {
+    ext.starts++;
     const index = join(ext.folder, 'index.ts');
     const params = {
       ...(ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {}),
       ...(this.options.plant === 'piece-writes-input' ? { planted: ['deep.terminal.write'] } : {}),
     };
     if (ext.place === 'hub') {
-      const url = `${pathToFileURL(index).href}?digest=${ext.digest.slice(3)}`;
+      // A restart runs its code afresh, as a new process would: nothing it held in memory survives.
+      const url = `${pathToFileURL(index).href}?digest=${ext.digest.slice(3)}${ext.starts > 1 ? `&start=${ext.starts}` : ''}`;
       ext.ask = extensionSide((method, params, scope) => this.dispatch(ext, method, params, scope), async (deep) => {
         const code = (await import(url)) as { default: (deep: unknown) => unknown };
         return await code.default(deep);
@@ -1270,6 +1423,20 @@ class Host implements ExtensionHost {
         const owner = conformance ? undefined : [...this.exts.values()].find((e) => e.index && e !== ext);
         if (owner) throw Error(`${INDEX} is already filled by ${owner.entry.id}`);
         ext.index = { name, revision: fill.revision as number };
+        return null;
+      }
+      case 'deep.secret': {
+        const [name] = args;
+        if (!(ext.manifest.secrets ?? []).some((s) => s.name === name)) throw Error(`deep.secret: ${String(name)} isn't a secret ${id}'s manifest names`);
+        return handleOf(name as string);
+      }
+      case 'deep.registerSource': {
+        const [name, declared] = args;
+        const own = { sources: ext.manifest.sources ?? [], secrets: ext.manifest.secrets ?? [], hosts: (ext.entry.grant.hosts ?? []).map((h) => h.host) };
+        const source = declareSource(name, declared, own);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.sources.has(source.name));
+        if (owner) throw Error(`deep.registerSource: ${source.name} is already registered by ${owner.entry.id}`);
+        ext.sources.set(source.name, source);
         return null;
       }
       case 'deep.registerRoute': {
