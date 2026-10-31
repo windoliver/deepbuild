@@ -54,14 +54,14 @@ A source of readings, each with its unit, source and as-of time: polled from a h
 
 ### `deep.store`
 
-In R1 · preview · `d1:1982b1979f80ec15fa337a0efc5a66ae0ab5f636ac7a5a7479e6a4abe151f7b4`
+In R1 · preview · `d1:7b959c929cca7fc80f98820934c9c93e767a8866fadad5a3db367ccfe61e0900`
 
 The plug-in's own data, kept in the record under a kind and a schema that only moves forward.
 
 | Parameter | Type | Required |
 |---|---|---|
-| `kind` | string, `^[a-z][a-z0-9_.-]*$` | yes |
-| `schema` | object | yes |
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+| `declared` | object | yes |
 
 ### `deep.schedule`
 
@@ -76,7 +76,7 @@ Runs a job on a cadence: never overlapping, with a deadline per run and one catc
 
 ### `deep.registerAction`
 
-Arrives in R2 · preview · `d1:e3f3d719dd4a19c61231550621eb4d966cdf7eba22e542d6d7be541b396e1cca`
+Arrives in R2 · preview · `d1:5a52fe18cc22318cd0ccc42e606723a61abef05b0cd255a25489008cba588bb8`
 
 What panels, your words and agents' MCP tools can do to the plug-in's data. It declares read, change or send, and a change or send returns its report.
 
@@ -267,6 +267,39 @@ Reads one of the package's settings.
 | Parameter | Type | Required |
 |---|---|---|
 | `key` | string | yes |
+
+### `deep.store.put`
+
+In R1 · preview · `d1:ac1335306776e0ed3ee5cdeba7b615c6f0dfde8fcd5c367f3f6f513bf15ec830`
+
+Writes one item of the plug-in's own store under its key, checked against the store's schema and tied to the action call that wrote it.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+| `key` | string | yes |
+| `value` | any | yes |
+
+### `deep.store.get`
+
+In R1 · preview · `d1:c730609691c50bf822922c5ed1f8c3f9a1b0e16003aaf842b0905856483fc6cf`
+
+Reads the latest item of the plug-in's own store under a key, or nothing when there is none.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+| `key` | string | yes |
+
+### `deep.store.list`
+
+In R1 · preview · `d1:3a6e7074261baae03245f92663edcc20c0c3c888edcd18c537680339239048b9`
+
+Reads the latest item under every key of the plug-in's own store.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
 
 ### `deep.read`
 

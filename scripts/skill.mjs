@@ -53,6 +53,10 @@ const TOOLS = {
     use: 'Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document\'s issues and snapshots by hash.',
     proves: 'A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are.',
   },
+  deep_drive: {
+    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
+    proves: 'Only assertions count: a drive passes on the assertions that passed, and a screenshot, snapshot or recording proves nothing on its own.',
+  },
   deep_env: {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',

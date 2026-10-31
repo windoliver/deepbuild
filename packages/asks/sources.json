@@ -1117,5 +1117,77 @@
         "decision": "deny"
       }
     }
+  },
+  {
+    "source": "action.change",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Let this session change your data with acme/stocks's ext.stocks.set_alert, given {\"symbol\":\"NVDA\",\"above\":200}?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Change it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "14a088729cc7cfc95d6edc49e0ab39af71a2c118d511cc2e839b37a2ff3311c9",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "action.send",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Let this session send with acme/stocks's ext.stocks.send_digest, given {\"to\":\"you@example.invalid\"}?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Send it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "9d56bcb682cb79274e26056b96a2b0b81dfa10b8b89e1845901576c05572db18",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
   }
 ]
