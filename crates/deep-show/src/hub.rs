@@ -789,10 +789,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         shuffle: scenario.shuffle,
         planted,
         timing: None,
-        pool: Some(Arc::new(Workers {
-            priority: Priority::Frame,
-            performance_cores: crate::workers::performance_cores(),
-        })),
+        pool: Some(Arc::new(Workers::at(Priority::Frame))),
         threads: scenario.threads,
         hash: scenario.hash,
     }
