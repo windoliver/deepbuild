@@ -247,6 +247,8 @@ for (const section of ['dependencies', 'devDependencies', 'optionalDependencies'
 
 // --- deps: Rust --------------------------------------------------------------------------------
 
+const crate = (tables) => `[package]\nname = "fx"\nversion = "0.0.0"\nedition = "2021"\n\n${tables}`;
+
 // ---- 'a Rust dependency fails in each section that declares it, and passes once listed with spec ^1' and 'a path
 // dependency is listed relative to its manifest, and no absolute path is printed or listed': redrafted blind after a
 // dispute (#879's cards rule fails their uncarded crates/fx and crates/helper); see redraft/deps.test.mjs.
