@@ -610,6 +610,18 @@ impl Replica {
         let act = &call["act"];
         let kind = act["kind"].as_str().unwrap_or_default().to_owned();
         let locator = &call["locator"];
+        // A drop target on any other action is a target put in the wrong field: say where it goes, rather than act
+        // on the focused element.
+        let given = |v: &Value| {
+            v.as_object()
+                .map_or(!v.is_null(), |o| o.values().any(|x| !x.is_null()))
+        };
+        if kind != "drag" && (given(&act["to"]) || given(&act["to_point"])) {
+            return Err(fail(
+                "refused",
+                format!("act {kind} takes its target in locator; to and to_point are where a drag drops"),
+            ));
+        }
         let timeout_ms = Self::timeout(call);
         let scale = self.scale();
         let at = |p: [i64; 2]| point(px(p[0] as f32 / scale), px(p[1] as f32 / scale));
