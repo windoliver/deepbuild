@@ -1,0 +1,13 @@
+// The picky plug-in (#363 AC1): three read actions, two of whose input schemas use a keyword a model API's strict tool
+// schemas reject: `minimum` (a range) and `oneOf` (a union). The third, `ok`, uses none.
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+const OUTPUT = strict({ echo: { type: 'string' }, size: { type: 'integer' } });
+
+export default function (deep: any): void {
+  deep.registerAction('ext.picky.ok', { declares: 'read', input: strict({ word: { type: 'string' } }), output: OUTPUT },
+    async (input: { word: string }) => ({ echo: input.word, size: input.word.length }));
+  deep.registerAction('ext.picky.min', { declares: 'read', input: strict({ count: { type: 'number', minimum: 0 } }), output: OUTPUT },
+    async (input: { count: number }) => ({ echo: String(input.count), size: 1 }));
+  deep.registerAction('ext.picky.union', { declares: 'read', input: strict({ either: { oneOf: [{ type: 'string' }, { type: 'number' }] } }), output: OUTPUT },
+    async (input: { either: unknown }) => ({ echo: String(input.either), size: 1 }));
+}

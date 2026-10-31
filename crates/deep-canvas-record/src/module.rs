@@ -3,6 +3,7 @@
 //! it shows ranked by their record facts and the rest folded into one count, one node per item.
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
@@ -62,8 +63,9 @@ fn is_salience(_: &Value, _: &str, item: &Value) -> bool {
 /// The level the item's params rank: what it shows, in order, and the fold.
 fn salience(v: &mut View<'_>) -> Result<(), OpError> {
     let fields = v
-        .json("core.fields")?
-        .ok_or_else(|| OpError::new("input_missing", v.path()))?;
+        .typed::<Fields>("core.fields")?
+        .ok_or_else(|| OpError::new("input_missing", v.path()))?
+        .to_json();
     let path = format!("items/{}/params", v.id().unwrap_or_default());
     let bad = || OpError::new("bad_doc", path.clone());
     let p = &fields["params"];
@@ -100,19 +102,7 @@ fn salience(v: &mut View<'_>) -> Result<(), OpError> {
         },
         None,
     );
-    let shown: Vec<Value> = out
-        .shown
-        .iter()
-        .map(|s| json!({"id": s.id, "rank": s.rank, "reasons": s.reasons}))
-        .collect();
-    let fold = out.fold.map_or(
-        Value::Null,
-        |f| json!({"count": f.items.len(), "items": f.items, "line": f.line}),
-    );
-    v.write(
-        "record.level",
-        Val::json(json!({"shown": shown, "fold": fold})),
-    )
+    v.write("record.level", Val::typed(out))
 }
 
 fn board() -> Value {

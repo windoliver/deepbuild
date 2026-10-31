@@ -19,10 +19,10 @@ use crate::kit::catalog::fix_of;
 use crate::shared::knows;
 
 /// A document the hub holds, at its current revision.
-struct Current {
+struct Current<'h> {
     rev: u64,
-    hash: String,
-    doc: Value,
+    hash: &'h str,
+    doc: &'h Value,
 }
 
 /// The verdicts a claim can get, worst first: the claim's is the worst of its requirements'.
@@ -107,7 +107,7 @@ impl<'a> Hub<'a> {
 
     /// A document's current revision: a shared document's, or a session's. A view of the record
     /// has no revisions (Revision), so it is no deliverable a verdict can be keyed by.
-    fn current_of(&self, doc: &str) -> Option<Current> {
+    fn current_of(&self, doc: &str) -> Option<Current<'_>> {
         if let Some(shared) = self.shared.get(doc) {
             if shared.doc.get("source").is_some() {
                 return None;
@@ -115,15 +115,15 @@ impl<'a> Hub<'a> {
             let k = shared.revs.len().checked_sub(1)?;
             return Some(Current {
                 rev: shared.current().rev,
-                hash: shared.hash(k, &self.startup.sealed).to_string(),
-                doc: shared.doc.clone(),
+                hash: shared.hash(k, &self.startup.sealed),
+                doc: &shared.doc,
             });
         }
         let row = self.current(doc)?;
         Some(Current {
             rev: row.rev,
-            hash: row.hash.clone(),
-            doc: row.doc.clone(),
+            hash: &row.hash,
+            doc: &row.doc,
         })
     }
 
@@ -253,7 +253,7 @@ impl<'a> Hub<'a> {
         let mut blocked: Vec<Value> = Vec::new();
         let mut by_kind = BTreeMap::new();
         for (doc, cur) in docs {
-            let checked = check_in(&cur.doc, sealed);
+            let checked = check_in(cur.doc, sealed);
             if !self.planted(Planted::ChecksSkipUnknownKind) {
                 unknown_by_kind(&checked.notices, &mut by_kind);
             }

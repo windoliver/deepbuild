@@ -94,7 +94,6 @@ struct Serve {
     panels: BTreeMap<String, [f64; 4]>,
     /// Plug-in panels: which terminal each shows, and whether it takes raw input.
     terminals_of: BTreeMap<String, (String, bool)>,
-    sessions: Vec<String>,
     terms: BTreeMap<String, Term>,
     focus: Option<String>,
     pointer: Option<[f64; 2]>,
@@ -191,11 +190,6 @@ impl Serve {
         Some(Serve {
             panels,
             terminals_of: BTreeMap::new(),
-            sessions: input
-                .get("sessions")
-                .and_then(Value::as_object)
-                .map(|s| s.keys().cloned().collect())
-                .unwrap_or_default(),
             terms: BTreeMap::new(),
             focus: None,
             pointer: None,
@@ -743,7 +737,6 @@ impl Serve {
             self.write(terminal, bytes.as_bytes());
             return json!({"written": true});
         }
-        let _ = &self.sessions;
         json!({"code": "raw_input_from_agent", "writer": writer,
                "what": format!("raw input comes only from your focused panel; {writer} is an agent's session")})
     }

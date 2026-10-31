@@ -1,0 +1,107 @@
+{
+  "fingerprint": {
+    "model": "Mac15,7",
+    "chip": "Apple M3 Pro",
+    "memoryBytes": 38654705664,
+    "macosBuild": "25G241"
+  },
+  "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+  },
+  "terms": {
+    "core.lower": {
+      "ns_per_item": 6101,
+      "ns_per_vertex": 1.68,
+      "ns_per_glyph": 0.41
+    },
+    "motion.compile": {
+      "ns_per_item": 2190,
+      "ns_per_glyph": 2.15
+    },
+    "core.fields": {
+      "ns_per_item": 1219,
+      "ns_per_vertex": 0.35,
+      "ns_per_glyph": 0.72
+    },
+    "core.transform": {
+      "ns_per_item": 761,
+      "ns_per_glyph": 1.01
+    },
+    "look.palette": {
+      "ns_per_item": 868,
+      "ns_per_glyph": 1.26
+    },
+    "motion.channels": {
+      "ns_per_item": 20416
+    },
+    "core.world": {
+      "ns_per_item": 392,
+      "ns_per_vertex": 0.03,
+      "ns_per_glyph": 0.6
+    },
+    "text.counter": {
+      "ns_per_item": 21583
+    },
+    "text.shape": {
+      "ns_per_item": 1,
+      "ns_per_glyph": 32503.37
+    },
+    "text.animate": {
+      "ns_per_item": 14458
+    },
+    "marks2d.frame": {
+      "ns_per_item": 11818,
+      "ns_per_vertex": 327.37,
+      "ns_per_glyph": 19.15
+    },
+    "scene3d.geometry": {
+      "ns_per_px": 0.0824,
+      "ns_per_vertex": 14.04,
+      "bytes_per_px": 16
+    },
+    "scene3d.output": {
+      "ns_per_px": 0.0001,
+      "ns_per_vertex": 7.38,
+      "bytes_per_px": 12
+    },
+    "effects.grid": {
+      "ns_per_px": 0.3052,
+      "bytes_per_px": 8
+    },
+    "effects.shadow": {
+      "ns_per_px": 0.3287,
+      "bytes_per_px": 8
+    },
+    "effects.particles": {
+      "ns_per_px": 0.0001,
+      "bytes_per_px": 8
+    },
+    "effects.outline": {
+      "ns_per_px": 0.1737,
+      "bytes_per_px": 8
+    },
+    "effects.glow": {
+      "ns_per_px": 0.2847,
+      "bytes_per_px": 11
+    },
+    "core.status": {
+      "ns_per_item": 500
+    },
+    "data.scale": {
+      "ns_per_item": 7375
+    },
+    "graph.layout": {
+      "ns_per_item": 29709
+    },
+    "record.salience": {
+      "ns_per_item": 23583
+    },
+    "sheet.place": {
+      "ns_per_item": 9625
+    },
+    "text.status": {
+      "ns_per_item": 322833
+    }
+  }
+}

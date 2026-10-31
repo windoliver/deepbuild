@@ -142,6 +142,14 @@
           "spec": "^0.25",
           "why": "Issue #339: the captured frame as gpui's RenderImage, and the held run's frame written as a PNG. Already in gpui's tree."
         },
+        "objc2-screen-capture-kit": {
+          "spec": "^0.3",
+          "why": "Issue #105: the bug capture through ScreenCaptureKit: the system picker, the stream and its recording output, which writes the MP4. Same objc2 family and version as gpui's tree."
+        },
+        "objc2-core-media": {
+          "spec": "^0.3",
+          "why": "Issue #105: CMSampleBuffer, the type each captured frame arrives in, so the capture counts its frames and times the first. Same objc2 family and version as gpui's tree."
+        },
         "block2": {
           "spec": "^0.6",
           "why": "Issue #339: the block the NSEvent local monitor takes. Already in gpui's tree."
@@ -169,6 +177,18 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #338: the snapshot, kit, parity and canvas files the record points at; already in gpui-kit's tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #124: deep_drive names its snapshots, screenshots, frames and trace by SHA-256, as the evidence store does. Already in the workspace tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #124: masks, highlight strips and PNG encoding of deep_drive's screenshots and recorded frames, on GPUI's own RgbaImage. Already in gpui's tree."
+        },
+        "crc32fast": {
+          "spec": "^1",
+          "why": "Issue #124: the chunk checksums of a deep_drive recording's animated PNG, assembled from its frames. Already in the png crate's tree."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -192,13 +212,13 @@
           "spec": "^0.2",
           "why": "Issue #389: the one ops module's pinned math, so CPU math a check reads matches across machines."
         },
-        "serde": {
-          "spec": "^1",
-          "why": "Issue #389: the document envelope, items and patches read and written as JSON."
-        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #389: the document JSON and the canonical bytes a revision hashes; already in the workspace tree."
+        },
+        "blake3": {
+          "spec": "^1",
+          "why": "Issue #855: hash@2, the BLAKE3 content keys and result digests."
         },
         "sha2": {
           "spec": "^0.10",
@@ -425,6 +445,10 @@
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The record's event data is the contracts' JsonValue."
         },
         "@deepbuild/leases": {
           "spec": "0.0.0",
@@ -1122,10 +1146,6 @@
           "spec": "^0.28",
           "why": "Issue #380: the criterion names it: per-pass GPU timestamps for the frame budget."
         },
-        "bytemuck": {
-          "spec": "^1",
-          "why": "Issue #380: operator inputs and the frame uniform written to GPU buffers."
-        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #380: operators and their parameters as JSON."
@@ -1227,6 +1247,54 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
+        }
+      }
+    },
+    "packages/adapters/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The adapter registry validates each facts file and payload against the published contract schemas, and its types are the contracts' JsonValue."
+        }
+      }
+    },
+    "packages/cli/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "deep run reads a recorded run result through the one code table, the conformance package's judge and exit code (#313)."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "deep run holds a run result to run.finished@1 through the contracts' validate (#313)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "deep debug bundle scrubs the logs and doctor output it writes, by pattern and by value, through the evidence package's scrub."
+        },
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "Every hub command (deep hub, setup, status, inbox, env, doctor and the rest) is the hub package's."
+        },
+        "@deepbuild/otlp": {
+          "spec": "0.0.0",
+          "why": "deep doctor reads the telemetry receiver's own doctor items (#42)."
+        },
+        "@deepbuild/reading": {
+          "spec": "0.0.0",
+          "why": "deep find and deep read are the reading package's query API (#63)."
+        }
+      }
+    },
+    "packages/conformance/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "The adapter kit drives an adapter through its contract, and its fake agent maps hooks by a facts file."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "The slot checks read the frozen API digests and error codes the contracts publish."
         }
       }
     }

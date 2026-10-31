@@ -104,7 +104,6 @@ export interface ResolverAnswer {
    */
   budget?: BudgetLeft;
 }
-/** What a resolver is asked: the card, the session the ask was raised in, its question class, its session's repo (null when unknown) and its subject. */
 /** A resolver's read of an ask: the card less what it says it saves and its receipt, which a resolver never sees. */
 export type ResolverAsk = Omit<Card, 'saves' | 'receipt'> & { session: string; key: string; repo: string | null; subject: Subject | null };
 export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;

@@ -3770,6 +3770,12 @@ export interface PromiseWoken {
   evidence?: Array<string>;
 }
 
+/** push.record@1 */
+export interface PushRecord {
+  commit: string;
+  pusher: string | null;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
@@ -4360,6 +4366,29 @@ export interface SessionStartV4 {
   evidence?: Array<string>;
 }
 
+/** source.called@1 */
+export interface SourceCalled {
+  v: 1;
+  id: string;
+  kind: "source.called";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    host: string;
+    outcome: "answered" | "timeout" | "unreachable";
+    status?: number;
+    ms: number;
+    bytes: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** spend.approved@1 */
 export interface SpendApproved {
   v: 1;
@@ -4524,6 +4553,27 @@ export interface StopHeld {
     queue_wait: number;
     code_changing: boolean;
     budget_cost: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** store.item@1 */
+export interface StoreItem {
+  v: 1;
+  id: string;
+  kind: string;
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    generation: number;
+    value: unknown;
+    call: string | null;
   };
   evidence?: Array<string>;
 }
@@ -5520,6 +5570,20 @@ export interface WorkBroke {
     cause: "revert" | "follow_up_fix" | "is_it_done" | "issue";
   };
   evidence?: Array<string>;
+}
+
+/** work.item@1 */
+export interface WorkItem {
+  source_id: string;
+  link: string;
+  title: string;
+  body: string;
+  criteria: Array<string>;
+  authors: Array<{
+    handle: string;
+    role: "owner" | "collaborator" | "outside";
+  }>;
+  updated: string;
 }
 
 /** worktree.created@1 */
