@@ -1737,6 +1737,7 @@ name = "deep-app"
 version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
+ "chrono",
  "deep-canvas-cells",
  "deep-canvas-marks",
  "deep-gpu",
@@ -1753,6 +1754,7 @@ dependencies = [
  "objc2-core-media",
  "objc2-foundation 0.3.2",
  "objc2-screen-capture-kit",
+ "objc2-user-notifications",
  "quickjs-jit-runtime",
  "raw-window-handle",
  "serde",
@@ -1904,6 +1906,7 @@ dependencies = [
  "gpui-pre-apple",
  "gpui-shell",
  "image",
+ "libc",
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
@@ -1940,6 +1943,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-apple",
  "image",
+ "libc",
  "serde_json",
  "vello_cpu",
 ]
@@ -2012,6 +2016,7 @@ dependencies = [
  "deep-text",
  "deep-text-gpui",
  "gpui-kit",
+ "gpui-pre-apple",
  "image",
  "libc",
  "serde_json",

@@ -1,0 +1,85 @@
+Blind redraft of three #246 deps criteria, run on 2026-10-31 with Node v23.9.0.
+
+Local paths are redacted: <tmp> is the system temporary folder, <mirror> a scratch folder outside
+the repository (a session scratchpad under /private/tmp) that holds one copy of the tests per wrong program.
+
+== On the base: HEAD f41a5b3e (scripts/repo-rules.mjs blob a5bad16, the same as at 69013e61) ==
+
+  node --test 'tests/acceptance/246/redraft/*.test.mjs'
+
+  ✔ a new packages/x/package.json with a dependencies entry fails, and one with none passes
+  ✔ a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+  ✔ a path dependency is listed relative to its manifest, and no absolute path is printed or listed
+  ℹ tests 3
+  ℹ pass 3
+  ℹ fail 0
+
+All three PASS on the base. That is expected: they prove #246's deps rule, which HEAD has, and the
+base has no cards rule. A redraft's failing-first proof is the wrong programs below.
+
+== Wrong programs ==
+
+Each is a copy of HEAD's scripts/repo-rules.mjs in <mirror>/<name>/scripts/, with one swap. The
+mirror also holds copies of ../helpers.mjs and deps.test.mjs at tests/acceptance/246/, so helpers'
+`root` resolves to the mirror and each scratch repository gets the wrong program. This checkout's
+scripts/repo-rules.mjs was never touched (git hash-object still a5bad16 after the runs).
+
+  node --test <mirror>/<name>/tests/acceptance/246/redraft/deps.test.mjs
+
+M1-skip-packages: the deps rule skips packages/*/package.json.
+  FAIL  a new packages/x/package.json with a dependencies entry fails, and one with none passes
+        deps.test.mjs:67: expected exit 1, actual 0 (PASS deps: 1 package.json file and 0 crates)
+  PASS  a Rust dependency fails in each section ...
+  PASS  a path dependency is listed relative to its manifest ...
+
+M2-ignore-dev-deps: the deps rule ignores [dev-dependencies] (skips dependency.kind === 'dev').
+  PASS  a new packages/x/package.json ...
+  FAIL  a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+        deps.test.mjs:85: [dev-dependencies]: expected exit 1, actual 0 (PASS deps: 1 package.json file and 1 crate)
+  PASS  a path dependency is listed relative to its manifest ...
+
+M2b-drop-target: the deps rule drops the target from the section, so cfg(unix) reads as dependencies.
+  PASS  a new packages/x/package.json ...
+  FAIL  a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+        [target.'cfg(unix)'.dependencies]: the FAIL line names dependencies, not that section
+  PASS  a path dependency is listed relative to its manifest ...
+
+M3-absolute-path: a path dependency's spec prints its absolute path (path=${dependency.path}).
+  PASS  a new packages/x/package.json ...
+  PASS  a Rust dependency fails in each section ...
+  FAIL  a path dependency is listed relative to its manifest, and no absolute path is printed or listed
+        the output holds the absolute path <tmp>/deep-rules-246-GRgkAa
+
+M3b-root-relative-path: a path dependency's spec is relative to the repository root, not its manifest.
+  PASS  a new packages/x/package.json ...
+  PASS  a Rust dependency fails in each section ...
+  FAIL  a path dependency is listed relative to its manifest, and no absolute path is printed or listed
+        the spec "* path=crates/helper" doesn't hold ../helper, the path relative to crates/fx/Cargo.toml
+
+Each criterion's test fails on the wrong program it names, and only that test fails.
+
+== Card-blind wrong program ==
+
+C-cards-rule: HEAD plus a cards check run before the output, standing in for #879: every folder
+directly under packages/ or crates/ that holds a file git lists must have a README.md holding the
+four lines "## What it is for", "## Where new code goes", "## What it may import" and
+"## Deviations", or the run prints "FAIL cards: <folders>" (exit 1).
+
+  The redraft, on C-cards-rule:
+  PASS  a new packages/x/package.json with a dependencies entry fails, and one with none passes
+  PASS  a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+  PASS  a path dependency is listed relative to its manifest, and no absolute path is printed or listed
+  node --test exit 0
+
+  For contrast, the first draft's three disputed tests (../repo-rules.test.mjs, selected with
+  --test-name-pattern, bodies not read), on C-cards-rule:
+  FAIL  a new packages/x/package.json with a dependencies entry fails, and one with none passes
+        stdout holds: FAIL cards: packages/x
+  FAIL  a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+        stdout holds: FAIL cards: crates/fx
+  FAIL  a path dependency is listed relative to its manifest, and no absolute path is printed or listed
+        stdout holds: FAIL cards: crates/fx, crates/helper
+  node --test exit 1
+
+So the carded fixtures are what separates the redraft from the first draft under a cards rule; the
+deps assertions still catch every deps wrong program above.

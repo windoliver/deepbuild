@@ -1,0 +1,48 @@
+sessions: S1 7684985c-36e5-4d89-b87a-2b5219267348, S2 7c691c55-54f8-4119-a724-0e78ae2e17de
+-- 2026-10-31T21:37:17.885Z before: the app is up, nothing asked
+   the app said since the last step:
+     first-frame-ms 3030.3
+   Notification Center holds:
+     (nothing)
+-- 2026-10-31T21:37:20.859Z AC1: ask:01M69YAGSWPFYCDVP1RA3D51GJ raised by S1, 2.5 s on
+   the app said since the last step:
+     deep-app: notified 7684985c-36e5-4d89-b87a-2b5219267348 ask:01M69YAGSWPFYCDVP1RA3D51GJ
+   Notification Center holds:
+     {"tag":"7684985c-36e5-4d89-b87a-2b5219267348","title":"DeepBuild · Session 7684985c","body":"! needs you — Which header colour on the checkout total? If you don't answer: Blue header, on Tue 3 Nov at 13:37."}
+   deep inbox answer ask:01M69YAGSWPFYCDVP1RA3D51GJ green: exit 0 ask:01M69YAGSWPFYCDVP1RA3D51GJ answered green, saved as a decision for session:7684985c36e54d89b87a2b5219267348 
+-- 2026-10-31T21:37:23.498Z AC1: 2 s after deep inbox answer ask:01M69YAGSWPFYCDVP1RA3D51GJ
+   the app said since the last step:
+     deep-app: withdrew 7684985c-36e5-4d89-b87a-2b5219267348
+   Notification Center holds:
+     (nothing)
+-- 2026-10-31T21:37:56.897Z AC2: ask:01M69YAP5E4WC7R9GF8JTHQWVS then, 30 s later, ask:01M69YBKPDANH6SDHE4JHETN2M from S1; ask:01M69YBKXNAHVQ27FTSAE20PQ4 from S2
+   the app said since the last step:
+     deep-app: notified 7684985c-36e5-4d89-b87a-2b5219267348 ask:01M69YAP5E4WC7R9GF8JTHQWVS
+     deep-app: notified 7684985c-36e5-4d89-b87a-2b5219267348 ask:01M69YBKPDANH6SDHE4JHETN2M
+     deep-app: notified 7c691c55-54f8-4119-a724-0e78ae2e17de ask:01M69YBKXNAHVQ27FTSAE20PQ4
+   Notification Center holds:
+     {"tag":"7684985c-36e5-4d89-b87a-2b5219267348","title":"DeepBuild · Session 7684985c","body":"! needs you — Which icon for the cart? If you don't answer: Bag, on Tue 3 Nov at 13:37."}
+     {"tag":"7c691c55-54f8-4119-a724-0e78ae2e17de","title":"DeepBuild · Session 7c691c55","body":"! needs you — Which tone for the release notes? If you don't answer: Plain, on Tue 3 Nov at 13:37."}
+-- 2026-10-31T21:38:05.218Z AC4: 5 s after quitting and reopening the app
+   the app said since the last step:
+     first-frame-ms 3108.9
+   Notification Center holds:
+     {"tag":"7684985c-36e5-4d89-b87a-2b5219267348","title":"DeepBuild · Session 7684985c","body":"! needs you — Which icon for the cart? If you don't answer: Bag, on Tue 3 Nov at 13:37."}
+     {"tag":"7c691c55-54f8-4119-a724-0e78ae2e17de","title":"DeepBuild · Session 7c691c55","body":"! needs you — Which tone for the release notes? If you don't answer: Plain, on Tue 3 Nov at 13:37."}
+-- 2026-10-31T21:38:16.425Z AC4: 5 s after restarting the hub
+   the app said since the last step:
+   Notification Center holds:
+     {"tag":"7684985c-36e5-4d89-b87a-2b5219267348","title":"DeepBuild · Session 7684985c","body":"! needs you — Which icon for the cart? If you don't answer: Bag, on Tue 3 Nov at 13:37."}
+     {"tag":"7c691c55-54f8-4119-a724-0e78ae2e17de","title":"DeepBuild · Session 7c691c55","body":"! needs you — Which tone for the release notes? If you don't answer: Plain, on Tue 3 Nov at 13:37."}
+-- 2026-10-31T21:38:20.316Z control: ask:01M69YCB09VMX7F3XJ49SX2VMD from S2 after the restarts
+   the app said since the last step:
+     deep-app: notified 7c691c55-54f8-4119-a724-0e78ae2e17de ask:01M69YCB09VMX7F3XJ49SX2VMD
+   Notification Center holds:
+     {"tag":"7684985c-36e5-4d89-b87a-2b5219267348","title":"DeepBuild · Session 7684985c","body":"! needs you — Which icon for the cart? If you don't answer: Bag, on Tue 3 Nov at 13:37."}
+     {"tag":"7c691c55-54f8-4119-a724-0e78ae2e17de","title":"DeepBuild · Session 7c691c55","body":"! needs you — Which order for the changelog? If you don't answer: By date, on Tue 3 Nov at 13:38."}
+-- 2026-10-31T21:38:25.326Z the end: the open asks answered in the CLI
+   the app said since the last step:
+     deep-app: withdrew 7684985c-36e5-4d89-b87a-2b5219267348
+     deep-app: withdrew 7c691c55-54f8-4119-a724-0e78ae2e17de
+   Notification Center holds:
+     (nothing)
