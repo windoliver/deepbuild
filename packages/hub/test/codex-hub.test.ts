@@ -1,12 +1,13 @@
 // A Codex session through a real hub and deep-hook (#39), beyond the acceptance suite: a subagent's prompt, a slow
 // check's deadline and hold, a resumed thread, a home set by CODEX_HOME, what doctor says of trust, setup that Codex's
 // files refuse, undo, readings that come back, a subagent's stop across a restart.
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  allEvents, answer, asksOf, begin, call, choice, cleanup, codexHook, control, Daemon, deep, doctor, editStopTimeout, finished, git, hookShown, hubWithSetup, inSlowLane, makeHome, MINUTE, newThread, ofSession, patch, rowOf, shown, SLOW_ASK, slowRepo, startHub, stopHub, tag, waitFor, type Home, type Line, type Thread,
+  allEvents, answer, childEnv, FIXTURES, NODE, own, asksOf, begin, call, choice, cleanup, codexHook, control, Daemon, deep, doctor, editStopTimeout, finished, git, hookShown, hubWithSetup, inSlowLane, makeHome, MINUTE, newThread, ofSession, patch, rowOf, shown, SLOW_ASK, slowRepo, startHub, stopHub, tag, waitFor, type Home, type Line, type Thread,
 } from '../../../tests/acceptance/39/helpers.ts';
 
 afterEach(cleanup, 60_000);
@@ -18,6 +19,21 @@ async function turn(h: Home, cwd: string): Promise<Thread> {
   return t;
 }
 const readings = (events: Awaited<ReturnType<typeof allEvents>>, session: string) => ofSession(events, session, 'session.reading').map((e) => String(e.data.reading));
+/** The daemon stand-in run as a binary named codex, as a real `codex resume` is. */
+function codexDaemon(h: Home, cwd: string): Daemon {
+  const exe = join(h.tmp, 'codex-bin', 'codex');
+  if (!existsSync(exe)) { mkdirSync(join(h.tmp, 'codex-bin')); symlinkSync(NODE, exe); }
+  const child = spawn(exe, [join(FIXTURES, 'daemon.mjs')], { cwd, env: childEnv(h), stdio: ['pipe', 'pipe', 'inherit'] });
+  own(child.pid);
+  return new (Daemon as unknown as new (c: ChildProcess) => Daemon)(child);
+}
+/** Its process gone, so a hub can read it as gone. */
+async function stopped(d: Daemon): Promise<void> {
+  const { child } = d as unknown as { child: ChildProcess };
+  const exit = new Promise((done) => child.once('exit', done));
+  d.stop();
+  await exit;
+}
 const goalLine = (session: string, id: string, status: string) => [
   { type: 'response_item', payload: { type: 'custom_tool_call', call_id: id, name: 'exec', input: `await tools.update_goal({"status":"${status}"})` } },
   { timestamp: new Date().toISOString(), type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: id, output: [{ type: 'input_text', text: JSON.stringify({ goal: { threadId: session, status } }) }] } },
@@ -111,6 +127,20 @@ describe('a slow check\'s deadline', () => {
     } finally { d.stop(); }
   }, 240_000);
 
+  it('is said once, and its verdict told once, however many stops the claim has', async () => {
+    const h = makeHome();
+    const repo = slowRepo(h, { expected_ms: 20 * MINUTE, deadline_ms: 60_000, sleepS: 1, exit: 1 });
+    const hub = await hubWithSetup(h);
+    editStopTimeout(h, 12);
+    const t = await turn(h, repo);
+    await codexHook(h, t, 'Stop', {}, 60_000);
+    await codexHook(h, t, 'Stop', {}, 60_000);
+    await waitFor(async () => finished(await allEvents(hub)).length > 0, 60_000, 'the check');
+    expect(readings(await allEvents(hub), t.id).filter((r) => r.startsWith('This stop isn\'t held'))).toHaveLength(1);
+    t.turn = randomUUID();
+    expect(context(await codexHook(h, t, 'UserPromptSubmit', { prompt: 'What happened?' })).match(/sent this claim back/g)).toHaveLength(1);
+  }, 240_000);
+
   it('a held stop\'s verdict line, once delivered, is not repeated at the next prompt', async () => {
     const h = makeHome();
     // Past the 60 s an answer waits, the hold the delivery was measured by.
@@ -125,23 +155,137 @@ describe('a slow check\'s deadline', () => {
 });
 
 describe('a Codex thread resumed in a new process', () => {
+  const post = (d: Daemon, t: Thread, id: string) => d.hook(t, 'PostToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: id, tool_response: { stdout: '', stderr: '', exit_code: 0 } });
+  const verifiedOf = async (hub: Awaited<ReturnType<typeof startHub>>, t: Thread, id: string) => ofSession(await allEvents(hub), t.id, 'tool.after').find((e) => e.data.call === id)?.verified !== false;
   it('is its own again from its SessionStart, and not before', async () => {
     const h = makeHome();
     const hub = await hubWithSetup(h);
     const t = newThread(h);
     const a = Daemon.start(h, t.cwd);
     await a.begin(t, 'Say hello.');
-    a.stop();
-    const b = Daemon.start(h, t.cwd);
+    await stopped(a);
+    const b = codexDaemon(h, t.cwd);
     try {
-      const post = (id: string) => b.hook(t, 'PostToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: id, tool_response: { stdout: '', stderr: '', exit_code: 0 } });
-      await post('call_before');
+      await post(b, t, 'call_before');
       await b.hook(t, 'SessionStart', { source: 'resume' });
-      await post('call_after');
-      const after = ofSession(await allEvents(hub), t.id, 'tool.after');
-      expect(after.find((e) => e.data.call === 'call_before')?.verified).toBe(false);
-      expect(after.find((e) => e.data.call === 'call_after')?.verified).not.toBe(false);
+      await post(b, t, 'call_after');
+      expect(await verifiedOf(hub, t, 'call_before')).toBe(false);
+      expect(await verifiedOf(hub, t, 'call_after')).toBe(true);
     } finally { b.stop(); }
+  }, 120_000);
+  it('is not taken from a process still running it, nor by anything but a Codex binary resuming it', async () => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const t = newThread(h);
+    const a = Daemon.start(h, t.cwd);
+    const other = codexDaemon(h, t.cwd);
+    const stranger = Daemon.start(h, t.cwd);
+    try {
+      await a.begin(t, 'Say hello.');
+      await other.hook(t, 'SessionStart', { source: 'resume' });
+      await post(other, t, 'call_while_running');
+      await post(a, t, 'call_own');
+      expect(await verifiedOf(hub, t, 'call_while_running')).toBe(false);
+      expect(await verifiedOf(hub, t, 'call_own')).toBe(true);
+      await stopped(a);
+      await stranger.hook(t, 'SessionStart', { source: 'resume' });
+      await post(stranger, t, 'call_stranger');
+      expect(await verifiedOf(hub, t, 'call_stranger')).toBe(false);
+      await other.hook(t, 'SessionStart', { source: 'compact' });
+      await post(other, t, 'call_compact');
+      expect(await verifiedOf(hub, t, 'call_compact')).toBe(false);
+      await other.hook(t, 'SessionStart', { source: 'resume' });
+      await post(other, t, 'call_resumed');
+      expect(await verifiedOf(hub, t, 'call_resumed')).toBe(true);
+    } finally { other.stop(); stranger.stop(); a.stop(); }
+  }, 180_000);
+});
+
+describe('two Codex threads on one daemon', () => {
+  it.each(['compact', 'clear', 'fork'])('stay apart when one starts again by %s: the other\'s answer is not its', async (source) => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const a = newThread(h);
+    const b = newThread(h, { cwd: a.cwd });
+    const d = Daemon.start(h, a.cwd);
+    try {
+      await d.begin(a);
+      await d.init();
+      await d.hook(b, 'SessionStart', { source });
+      const question = `Which header for ${tag()}?`;
+      void d.ask(a, choice(question));
+      const asked = await waitFor(async () => asksOf(await allEvents(hub), question)[0], 30_000, 'the ask');
+      await d.hook(a, 'SessionEnd', { reason: 'other' });
+      await answer(h, `ask:${asked.id}`, 'green');
+      b.turn = randomUUID();
+      const prompted = await d.hook(b, 'UserPromptSubmit', { prompt: 'Go on.' });
+      expect(prompted.ran.stdout).not.toMatch(/Green header/);
+    } finally { d.stop(); }
+  }, 180_000);
+  it('files each ask under its own thread, though the shared deep mcp met only the first', async () => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const a = newThread(h);
+    const b = newThread(h, { cwd: a.cwd });
+    const d = Daemon.start(h, a.cwd);
+    try {
+      await d.begin(a);
+      await d.init();
+      await d.mcp('tools/call', { name: 'deep_status', arguments: {} });
+      await d.begin(b);
+      const question = `Which header for ${tag()}?`;
+      void d.ask(b, choice(question));
+      const asked = await waitFor(async () => asksOf(await allEvents(hub), question)[0], 30_000, 'the ask');
+      expect(asked.session).toBe(b.id);
+    } finally { d.stop(); }
+  }, 180_000);
+});
+
+describe('a Codex subagent\'s hooks under its own turn', () => {
+  it('make no ask on the root, and leave the root\'s turn its own', async () => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const t = newThread(h);
+    await begin(h, t, 'Say hello.');
+    await codexHook(h, t, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 'call_child', agent_id: 'child-1', turn_id: randomUUID() });
+    await call(h, t, 'ls');
+    expect(ofSession(await allEvents(hub), t.id, 'user.ask').map((e) => e.data.text)).toEqual(['Say hello.']);
+  }, 120_000);
+});
+
+describe('an Interrupt that can\'t be checked against its session', () => {
+  it('ends nothing and says nothing', async () => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const t = newThread(h);
+    const d = Daemon.start(h, t.cwd);
+    try {
+      await d.begin(t, 'Say hello.');
+      await codexHook(h, t, 'Interrupt', {});
+      const mine = await allEvents(hub);
+      expect(ofSession(mine, t.id, 'session.attention').filter((e) => e.writer === 'core' && e.data.state === 'finished')).toEqual([]);
+      expect(readings(mine, t.id).join('\n')).not.toMatch(/^Interrupt/m);
+    } finally { d.stop(); }
+  }, 120_000);
+});
+
+describe('a Codex heartbeat gone from the automations', () => {
+  it('leaves the row at its next stop', async () => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const t = newThread(h);
+    const dir = join(h.codexHome, 'automations', 'beat-a');
+    mkdirSync(dir, { recursive: true });
+    const now = Date.now();
+    writeFileSync(join(dir, 'automation.toml'), ['version = 1', 'id = "beat-a"', 'kind = "heartbeat"', 'name = "beat-a"', 'prompt = "Check."', 'status = "ACTIVE"', 'rrule = "FREQ=MINUTELY;INTERVAL=15"', `target_thread_id = "${t.id}"`, `created_at = ${now}`, `updated_at = ${now}`, `last_run_at = ${now}`].join('\n'));
+    await begin(h, t, 'Say hello.');
+    await codexHook(h, t, 'Stop');
+    expect(JSON.stringify(await rowOf(hub, t.id))).toContain('beat-a');
+    rmSync(dir, { recursive: true });
+    t.turn = randomUUID();
+    await codexHook(h, t, 'UserPromptSubmit', { prompt: 'Again.' });
+    await codexHook(h, t, 'Stop');
+    expect(JSON.stringify(await rowOf(hub, t.id))).not.toContain('beat-a');
   }, 120_000);
 });
 
@@ -161,6 +305,38 @@ describe('a Codex home set by CODEX_HOME at setup', () => {
     await call(h, t, 'ls');
     expect(ofSession(await allEvents(hub), t.id, 'tool.after').at(-1)?.verified).not.toBe(false);
     expect((await control(hub, 'health') as { codex: { readings: string[] } }).codex.readings).toEqual([]);
+  }, 120_000);
+});
+
+describe('a Codex home set by CODEX_HOME at setup, later', () => {
+  async function elsewhere(): Promise<{ h: Home; other: string; hub: Awaited<ReturnType<typeof startHub>> }> {
+    const h = makeHome();
+    const other = join(h.tmp, 'elsewhere');
+    mkdirSync(join(other, 'sessions'), { recursive: true });
+    const hub = await startHub(h);
+    const set = await deep(h, ['setup'], { CODEX_HOME: other });
+    expect(set.code, shown(set)).toBe(0);
+    return { h, other, hub };
+  }
+  it('is the one doctor reads for hooks = false', async () => {
+    const { h, other } = await elsewhere();
+    writeFileSync(join(other, 'config.toml'), `${readFileSync(join(other, 'config.toml'), 'utf8')}\n[features]\nhooks = false\n`);
+    expect((await doctor(h)).stdout).toMatch(/hooks_disabled/);
+  }, 120_000);
+  it('is the one undo takes DeepBuild out of', async () => {
+    const { h, other } = await elsewhere();
+    const undone = await deep(h, ['setup', '--undo']);
+    expect(undone.code, shown(undone)).toBe(0);
+    for (const file of ['hooks.json', 'config.toml']) if (existsSync(join(other, file))) expect(readFileSync(join(other, file), 'utf8'), file).not.toMatch(/deep-hook|mcp_servers\.deep/);
+  }, 120_000);
+  it('is the one the hub asks Codex for trust in', async () => {
+    const { h, other } = await elsewhere();
+    const seen = join(h.tmp, 'codex-home-seen');
+    writeFileSync(join(h.bin, 'codex'), `#!/bin/sh\nprintf '%s' "$CODEX_HOME" > '${seen}'\necho '[]'\n`, { mode: 0o755 });
+    const t = newThread(h);
+    await codexHook(h, t, 'SessionStart');
+    await waitFor(async () => existsSync(seen) && readFileSync(seen, 'utf8') !== '', 30_000, 'the hub to ask Codex');
+    expect(readFileSync(seen, 'utf8')).toBe(other);
   }, 120_000);
 });
 

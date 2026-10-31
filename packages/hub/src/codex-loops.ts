@@ -158,14 +158,14 @@ export async function codexReadings(session: string, transcript: string, turn: s
   const dues = beats.active.flatMap((b) => (b.due === null ? [] : [b.due]));
   const due = dues.length ? Math.min(...dues) : null;
   let loop: Loop | undefined;
+  const going = goal !== undefined && f.goals.continuing.includes(goal);
   if (goal !== undefined) {
-    const going = f.goals.continuing.includes(goal);
     readings.push(going ? `Codex goal: ${goal}, looping` : `Codex goal: ${goal}, a loop with no automatic prompt left`);
     if (going) loop = { state: 'looping', due };
   }
   for (const b of beats.active) readings.push(`Codex heartbeat: ${b.id}, next automatic prompt due ${b.due === null ? 'on a schedule DeepBuild can\'t read' : new Date(b.due).toISOString()}`);
   if (beats.active.length) loop = { state: 'looping', due };
-  else if (beats.paused || continuation) readings.push('Codex heartbeat: no automatic prompt left');
+  else if ((beats.paused || continuation) && !going) readings.push('Codex heartbeat: no automatic prompt left');
   if (!loop && (goal !== undefined || beats.paused || continuation)) loop = { state: 'none_left' };
   const account = newest && accountIn(home);
   return { ...(version ? { version } : {}), readings, ...(loop ? { loop } : {}), ...(newest && account ? { limits: newest, account } : {}) };
@@ -177,6 +177,7 @@ export const uncoveredLoops = (version: string): string => `Codex ${version} is 
 /** Whether the facts name loops for a version. */
 export const loopsCovered = (version: string): boolean => facts().versions.includes(version);
 
+const GONE = ', gone';
 /** The reading's name: a heartbeat by its automation, any other by what it reads. */
 const readingName = (reading: string): string => /^Codex heartbeat: (?!no automatic)[^,]*/.exec(reading)?.[0] ?? reading.slice(0, reading.indexOf(':'));
 /** Readings, oldest first, as they stand: the newest of each name, heartbeats cleared when none is left, and that cleared when one comes back. */
@@ -184,11 +185,17 @@ export function standingReadings(readings: Iterable<string>): Map<string, string
   const out = new Map<string, string>();
   for (const reading of readings) {
     const name = readingName(reading);
+    if (reading.endsWith(GONE)) { out.delete(name); continue; }
     if (name === 'Codex heartbeat') { for (const k of [...out.keys()]) if (k.startsWith('Codex heartbeat:')) out.delete(k); }
     else if (name.startsWith('Codex heartbeat:')) out.delete('Codex heartbeat');
     out.set(name, reading);
   }
   return out;
+}
+/** What takes each standing heartbeat reading off the row that a stop's readings no longer say, itself recorded once. */
+export function heartbeatsGone(standing: ReadonlyMap<string, string>, readings: readonly string[]): string[] {
+  const said = new Set(readings.map(readingName));
+  return [...standing].filter(([name]) => name.startsWith('Codex heartbeat') && !said.has(name)).map(([name, reading]) => `${name === 'Codex heartbeat' ? reading : name}${GONE}`);
 }
 /** Whether a new reading says what its name already stands at. */
 export const stands = (standing: ReadonlyMap<string, string>, reading: string): boolean => standing.get(readingName(reading)) === reading;

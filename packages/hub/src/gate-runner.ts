@@ -152,10 +152,17 @@ export class GateRunner {
       const c = [...this.claims.values()].flat().find((x) => x.claim === e.claim)!;
       // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now.
       e.running = true;
-      const cwd = c.checkout ??= await checkoutOf(c.cwd, c.snapshot);
-      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: e.check.expected_ms ?? await this.expectedMs(e.check.check), deadline_ms: e.check.deadline_ms ?? null });
-      e.runs.push(run);
-      void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      // A check that can't start ran nothing: BLOCKED, and the next in the queue still gets its turn.
+      try {
+        const cwd = c.checkout ??= await checkoutOf(c.cwd, c.snapshot);
+        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: e.check.expected_ms ?? await this.expectedMs(e.check.check), deadline_ms: e.check.deadline_ms ?? null });
+        e.runs.push(run);
+        void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      } catch {
+        e.outcome = 'missing';
+        e.running = false;
+        this.cleanup(c);
+      }
     }
   }
   /** A claim's checkout is removed once no run on it is running or queued. */
