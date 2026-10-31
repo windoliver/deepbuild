@@ -50,26 +50,64 @@ describe('turn.usage at a stop', () => {
 });
 
 describe('labelling a period from before the hub', () => {
-  it('draws the sample from the manifest\'s transcripts in their windows, and counts your labels on them', async () => {
+  it('takes the manifest\'s messages from before the date, hidden and scrubbed, and your labels on them pass; a labels file can\'t add any', async () => {
+    const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    procs.push(claude);
     await withHub(async (root, home) => {
+      const work = join(home, 'work');
+      const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
+      mkdirSync(work, { recursive: true });
+      mkdirSync(projects, { recursive: true });
+      const transcript = join(projects, `${SESSION}.jsonl`);
+      writeFileSync(transcript, '');
+      const hook = (event: string, extra: Record<string, unknown> = {}) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, { session_id: SESSION, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra }, { ppid: claude.pid }));
+      await hook('SessionStart', { source: 'startup' });
+      await new Promise((r) => setTimeout(r, 500));
+      appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'now', promptId: 'p1', origin: { kind: 'human' }, promptSource: 'typed', turnOrigin: 'human', message: { role: 'user', content: 'typed after the date' } })}\n`);
+      await hook('UserPromptSubmit', { prompt: 'typed after the date', prompt_id: 'p1' });
+
       const line = (uuid: string, timestamp: string, content: unknown) => JSON.stringify({ type: 'user', uuid, timestamp, message: { role: 'user', content } });
-      const text = [line('u1', '2026-09-02T00:00:00Z', 'is it done yet?'), line('u1', '2026-09-02T00:00:00Z', 'is it done yet?'), line('u2', '2026-09-03T00:00:00Z', 'rename the file'), line('u3', '2026-09-20T00:00:00Z', 'outside the window'), line('u4', '2026-09-03T00:00:01Z', [{ type: 'tool_result', content: 'a tool, not you' }])].join('\n');
+      const secret = `ghp_${'a1'.repeat(18)}`;
+      const old = Array.from({ length: 99 }, (_, i) => line(`u${i}`, '2026-09-02T00:00:00Z', `rename file ${i}`));
+      const text = [...old, line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('key', '2026-09-03T00:00:01Z', `use ${secret}`), line('after', '2026-10-05T00:00:00Z', 'after the date, in the window'), line('held', '2026-09-03T00:00:02Z', 'typed after the date'), line('out', '2026-10-25T00:00:00Z', 'outside the window')].join('\n');
       const sha = createHash('sha256').update(text).digest('hex');
       mkdirSync(join(home, 'pilot'));
       writeFileSync(join(home, 'pilot', sha), text);
       const manifest = join(home, 'manifest.json');
-      writeFileSync(manifest, JSON.stringify({ baseline_sha256: 'a'.repeat(64), archive_dir: 'pilot', measures: [{ id: 'asks', kind: 'is_it_done', window: { from: '2026-09-01', to: '2026-09-10' }, transcripts: [{ sha256: sha }] }] }));
+      writeFileSync(manifest, JSON.stringify({ baseline_sha256: 'a'.repeat(64), archive_dir: 'pilot', measures: [{ id: 'asks', kind: 'is_it_done', window: { from: '2026-09-01', to: '2026-10-10' }, transcripts: [{ sha256: sha }, { sha256: 'b'.repeat(64) }] }] }));
       const token = readFileSync(join(root, 'control.token'), 'utf8').trim();
       const socket = join(root, 'hub.sock');
-      const drawn = await call(socket, token, 'numbers.sample', { before: Date.parse('2026-10-01'), manifest }) as { result: { messages: { message: string; text: string }[] } };
-      expect(drawn.result.messages.map((m) => m.text).sort()).toEqual(['is it done yet?', 'rename the file']);
-      expect(JSON.stringify(drawn.result.messages), 'no date to see').not.toContain('2026-09');
-      mkdirSync(join(root, 'labels'));
-      writeFileSync(join(root, 'labels', 'is_it_done.json'), JSON.stringify({ threshold: 0.8, before: Date.parse('2026-10-01'), manifest, labels: drawn.result.messages.map((m) => ({ message: m.message, label: m.text === 'is it done yet?' })) }));
-      const read = await call(socket, token, 'numbers.read', {}) as { result: { decision_one: { refused: { id: string; why: string }[] } } };
-      expect(read.result.decision_one.refused.find((r) => r.id === 'is_it_done')?.why, 'read, and still one-sided and short').toBe('its check is BLOCKED: agreement 1 over 2 messages');
+      const before = Date.parse('2026-10-01');
+      type Drawn = { warning?: string; messages: { message: string; text: string }[] };
+      let drawn: Drawn = { messages: [] };
+      for (let i = 0; i < 50; i++) {
+        drawn = (await call(socket, token, 'numbers.sample', { before, manifest }) as { result: Drawn }).result;
+        if (drawn.messages.some((m) => m.text === 'typed after the date')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(drawn.warning, 'says what it couldn\'t read').toContain('1 of the manifest\'s transcripts');
+      expect(JSON.stringify(drawn), 'scrubbed').not.toContain(secret);
+      expect(JSON.stringify(drawn), 'no date to see').not.toContain('2026-09');
+      mkdirSync(join(root, 'labels'), { recursive: true });
+      const write = (labels: { message: string; label: boolean }[]) => writeFileSync(join(root, 'labels', 'is_it_done.json'), JSON.stringify({ threshold: 0.8, before, labels }));
+      const decision = async () => (await call(socket, token, 'numbers.read', {}) as { result: { decision_one: { used: string[]; refused: { id: string; why: string }[] } } }).result.decision_one;
+      // The drawn sample is 60 a side, and a check needs 100: more of the pool's messages, by the ids a later draw shows.
+      const all = new Map(drawn.messages.map((m) => [m.message, m.text]));
+      for (let i = 0; i < 40 && all.size < 102; i++) for (const m of (await call(socket, token, 'numbers.sample', { before, manifest }) as { result: Drawn }).result.messages) all.set(m.message, m.text);
+      expect(all.size, 'the whole pool and the record\'s message').toBe(102);
+      const texts = [...all.values()];
+      expect(texts).toContain('is it done yet?');
+      expect(texts.filter((t) => t === 'is it done yet?'), 'a resume\'s repeated line is one message').toHaveLength(1);
+      expect(texts.filter((t) => t === 'typed after the date'), 'the record\'s own, once').toHaveLength(1);
+      expect(texts).not.toContain('after the date, in the window');
+      expect(texts).not.toContain('outside the window');
+      expect(JSON.stringify(texts), 'scrubbed, in every draw').not.toContain(secret);
+      write([...all].map(([message, t]) => ({ message, label: t === 'is it done yet?' })));
+      expect((await decision()).used, 'your labels, on both periods, pass').toContain('is_it_done');
+      write([...all].slice(0, 2).map(([message, t]) => ({ message, label: t === 'is it done yet?' })).concat(Array.from({ length: 100 }, (_, i) => ({ message: `forged${i}`, label: false }))));
+      expect((await decision()).refused.find((r) => r.id === 'is_it_done')?.why, 'ids nothing holds count for nothing').toMatch(/over 2 messages/);
     });
-  }, 60_000);
+  }, 120_000);
 });
 
 describe('deep_search', () => {

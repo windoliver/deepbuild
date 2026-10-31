@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { baselineMessages, CLASSIFIED, checkClassifier, decisionOneInputs, freshness, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
+import { scrubText } from '@deepbuild/evidence';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
 import { isStatusQuestion } from './verdict-chat.js';
@@ -20,6 +21,8 @@ const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 /** How a recorded baseline count's id says which classifier counted it. */
 const suffixOf = (kind: string | undefined): string => (kind === 'rework' ? `rework${CLASSIFIED}` : kind === 'is_it_done' ? `isitdone${CLASSIFIED}` : '');
 const SAMPLE = 120;
+/** The reading that names the messages `deep numbers sample` took from a manifest, by their evidence's hash. */
+const POOL = 'reading:labelpool';
 /** A refresh is yours to wait for, and reads a call or two per pull request: longer than a receipt's forge budget. */
 const REFRESH_MS = 60_000;
 /** An event's id holds its time; the sample hides it behind a hash. */
@@ -47,6 +50,7 @@ export class Numbers {
   /** The session each claim and run belongs to: the core writes a run with no session of its own. */
   private readonly claims = new Map<string, string>();
   private readonly runs = new Map<string, string>();
+  private readonly pools = new Map<string, { before: number; messages: Record<string, string> }>();
   constructor(private readonly o: NumbersOptions) {}
 
   /** One at a time, so two reads never fold the same rows. */
@@ -76,21 +80,21 @@ export class Numbers {
     return new Map(this.events.filter((e) => e.kind === 'user.ask' && e.data.from === 'person' && typeof e.data.text === 'string').map((e) => [opaque(e.id), e]));
   }
   /**
-   * Your labels, as `<root>/labels/<reading>.json`: `{ threshold, before, manifest?, labels: [{ message, label }] }`. Each
-   * message's text and period come from the record or the manifest's transcripts, never the file, and one neither holds
-   * doesn't count. A file that can't be read is no check.
+   * Your labels, as `<root>/labels/<reading>.json`: `{ threshold, before, labels: [{ message, label }] }`. Each message's
+   * text and period come from the record, or from the pool `deep numbers sample` took from a manifest for that date, never
+   * the file, and one neither holds doesn't count. A file that can't be read is no check.
    */
   private async checks() {
     const typed = this.typed();
     return Promise.all(Object.entries(CLASSIFIERS).map(async ([id, classifier]) => {
       try {
-        const { threshold, before, manifest, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; manifest?: string; labels: { message: string; label: boolean }[] };
+        const { threshold, before, labels } = JSON.parse(readFileSync(join(this.o.root, 'labels', `${id}.json`), 'utf8')) as { threshold: number; before: number; labels: { message: string; label: boolean }[] };
         if (typeof threshold !== 'number') return { id, check: null };
-        const archived = manifest ? await this.archived(manifest) : new Map<string, string>();
+        const pool = await this.pool(before);
         // A message labelled twice is one message.
         const sample = [...new Map(labels.map((l) => [l.message, l])).values()].flatMap((l): LabelledMessage[] => {
           const e = typed.get(l.message);
-          const text = e ? String(e.data.text) : archived.get(l.message);
+          const text = e ? String(e.data.text) : pool[l.message];
           return text === undefined ? [] : [{ message: l.message, text, label: l.label, period: !e || e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' }];
         });
         return { id, check: checkClassifier({ id, classifier, sample, threshold }) };
@@ -131,10 +135,35 @@ export class Numbers {
     }
     return { manifest, bytes };
   }
-  /** Your messages in a manifest's transcripts, by opaque id: the labels' way into a period the record never saw. */
-  private async archived(manifestPath: string): Promise<Map<string, string>> {
+  /** The newest pool taken for a date: only the core writes its reading, so a file can't add messages to your sample. */
+  private poolSha(before: number): string | undefined {
+    return this.events.flatMap((e) => (e.kind === 'reading.recorded' && e.data.reading === `${POOL}${before}` ? [String(e.data.source).slice('labelpool:'.length)] : [])).at(-1);
+  }
+  private async pool(before: number): Promise<Record<string, string>> {
+    const sha = this.poolSha(before);
+    if (!sha) return {};
+    let pool = this.pools.get(sha);
+    if (!pool) {
+      const bytes = await this.o.evidence(sha);
+      if (!bytes) return {};
+      pool = JSON.parse(Buffer.from(bytes).toString('utf8')) as { before: number; messages: Record<string, string> };
+      this.pools.set(sha, pool);
+    }
+    return pool.messages;
+  }
+  /** Takes a manifest's messages from before the date into a pool the core holds. A message the record also has stays the record's. */
+  private async takePool(before: number, manifestPath: string): Promise<{ messages: Record<string, string>; lost: number }> {
     const { manifest, bytes } = await this.manifest(manifestPath);
-    return new Map(baselineMessages(manifest.measures, (sha) => bytes.get(sha) ?? null).map((text) => [opaque(text), text]));
+    const { messages, lost } = baselineMessages(manifest.measures, (sha) => bytes.get(sha) ?? null);
+    const held = new Set([...this.typed().values()].map((e) => String(e.data.text)));
+    const pool = Object.fromEntries(messages.filter((m) => m.ts < before).map((m) => [opaque(`${m.ts}:${m.text}`), scrubText(m.text)] as const).filter(([, text]) => !held.has(text)));
+    const sha = await this.o.keep(Buffer.from(JSON.stringify({ before, messages: pool })), 'readings:label-pool');
+    // Another draw from the same pool records nothing new.
+    if (this.poolSha(before) === sha) return { messages: pool, lost };
+    const ts = this.o.now();
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence: [sha], data: { reading: `${POOL}${before}`, value: Object.keys(pool).length, unit: 'count', as_of: ts, source: `labelpool:${sha}`, n: Object.keys(pool).length, outside: false } });
+    await this.catchUp();
+    return { messages: pool, lost };
   }
   /** Recomputes the pilot baseline a manifest names, keeps its script and output as evidence, and records what it could. */
   async baseline(manifestPath: string) {
@@ -171,13 +200,15 @@ export class Numbers {
     await this.catchUp();
     const typed = [...this.typed()];
     const toMessage = ([message, e]: (typeof typed)[number]) => ({ message, text: String(e.data.text) });
-    const earlier = [...typed.filter(([, e]) => e.ts < before).map(toMessage), ...[...(manifest ? await this.archived(manifest) : [])].map(([message, text]) => ({ message, text }))];
+    const taken = manifest ? await this.takePool(before, manifest) : undefined;
+    const earlier = [...typed.filter(([, e]) => e.ts < before).map(toMessage), ...Object.entries(taken?.messages ?? {}).map(([message, text]) => ({ message, text }))];
     const later = typed.filter(([, e]) => e.ts >= before).map(toMessage);
     const shuffled = <T>(list: T[]) => list.map((e) => ({ e, k: Math.random() })).sort((a, b) => a.k - b.k).map((x) => x.e);
     const half = SAMPLE / 2;
     // The record holds only what the hub saw: a period before it has no messages to label without a manifest, and the check stays BLOCKED.
     const oneSided = !earlier.length || !later.length;
-    return { before, ...(oneSided ? { warning: 'There are messages from only one side of that date, so these labels can\'t pass: a check needs both periods.' } : {}), label_in: `${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, ${manifest ? `manifest: ${JSON.stringify(manifest)}, ` : ''}labels: [{ message, label }] }`, messages: shuffled([...shuffled(earlier).slice(0, half), ...shuffled(later).slice(0, half)]) };
+    const warnings = [...(oneSided ? ['There are messages from only one side of that date, so these labels can\'t pass: a check needs both periods.'] : []), ...(taken?.lost ? [`${taken.lost} of the manifest's transcripts are missing or fail their hash, so their messages aren't here.`] : [])];
+    return { before, ...(warnings.length ? { warning: warnings.join(' ') } : {}), label_in: `${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, labels: [{ message, label }] }`, messages: shuffled([...shuffled(earlier).slice(0, half), ...shuffled(later).slice(0, half)]) };
   }
 }
 /** `owner/name` of a worktree's origin on GitHub, or undefined. */

@@ -71,15 +71,26 @@ function count(kind: string, whole: string[], window: { from: number; to: number
   return null;
 }
 
-/** Your messages in a baseline's windows, for labelling a period the record never saw. A transcript that fails its hash gives none. */
-export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: string) => Uint8Array | null): string[] {
+/**
+ * Your dated messages in a baseline's windows, for labelling a period the record never saw. A line with no time of its own
+ * can't be placed in a period, so it isn't one; lost counts the transcripts missing or failing their hash.
+ */
+export function baselineMessages(measures: BaselineMeasure[], archive: (sha256: string) => Uint8Array | null): { messages: { text: string; ts: number }[]; lost: number } {
   const ms = (v: number | string): number => (typeof v === 'string' ? Date.parse(v) : v);
   const seen = new Set<string>();
-  return measures.flatMap((m) => m.transcripts.flatMap(({ sha256: hash }) => {
+  let lost = 0;
+  const messages = measures.flatMap((m) => m.transcripts.flatMap(({ sha256: hash }) => {
     const bytes = archive(hash);
-    if (!bytes || sha256(bytes) !== hash) return [];
-    return typed(inWindow(Buffer.from(bytes).toString('utf8'), { from: ms(m.window.from), to: ms(m.window.to) }), seen);
+    if (!bytes || sha256(bytes) !== hash) { lost += 1; return []; }
+    const window = { from: ms(m.window.from), to: ms(m.window.to) };
+    return Buffer.from(bytes).toString('utf8').split('\n').flatMap((line) => {
+      const ts = timeOf(line);
+      if (Number.isNaN(ts) || ts < window.from || ts >= window.to) return [];
+      // Claude Code writes this line itself when you interrupt, and an image alone has no words to label.
+      return typed(line, seen).filter((text) => text.trim() && !text.startsWith('[Request interrupted')).map((text) => ({ text, ts }));
+    });
   }));
+  return { messages, lost };
 }
 
 export function recomputeBaseline(input: { baseline_sha256: string; measures: BaselineMeasure[]; archive: (sha256: string) => Uint8Array | null }): BaselineResult {
