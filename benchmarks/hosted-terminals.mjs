@@ -54,6 +54,8 @@ try {
   const manifest = {
     id: ID, version: '1.0.0', digest: '', access: { words: ['run_as_you'] }, host: { runs: 'terminals', lives: 'past_app', owns: ['terminals'] },
     actions: ['ext.terminals.open', 'ext.terminals.read'],
+    // The preview methods it calls, listed by name (#139).
+    requires: { preview: ['deep.registerAction', 'deep.terminal.open', 'deep.terminal.read'] },
   };
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
   manifest.digest = packageDigest(folder);

@@ -1,6 +1,8 @@
 {
   "title": "action.entered@1",
   "description": "A plug-in action was entered.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "returns"
   ],

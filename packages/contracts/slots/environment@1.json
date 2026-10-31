@@ -1,6 +1,8 @@
 {
   "title": "environment@1",
   "description": "An environment: up(spec, lease, checkout) ready only after its health check, on leased ports, and down(handle) leaving nothing.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

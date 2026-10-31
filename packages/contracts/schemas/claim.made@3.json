@@ -1,6 +1,8 @@
 {
   "title": "claim.made@3",
   "description": "A claim on an ask-task, with the definition's hash the core recomputed from the stored definition and its checks' bytes at the claim.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

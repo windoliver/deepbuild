@@ -1,6 +1,8 @@
 {
   "title": "tool.after@1",
   "description": "A tool call ran.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "session_files",
     "returns"

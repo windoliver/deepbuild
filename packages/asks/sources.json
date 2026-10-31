@@ -1081,5 +1081,41 @@
         "decision": "deny"
       }
     }
+  },
+  {
+    "source": "extension.update",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Install acme/acme 2.0.0? It no longer provides ext.acme.prices@1, which acme/stocks uses, and keeps no adapter for it.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Install it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep 1.0.0",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "d591853f51073a613d3c62ef5d7a0ad26b74bcd88c5d153da8c2ef6072bee9e3",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "d591853f51073a613d3c62ef5d7a0ad26b74bcd88c5d153da8c2ef6072bee9e3"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
   }
 ]

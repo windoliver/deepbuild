@@ -1,6 +1,8 @@
 {
   "title": "hook.request@1",
   "description": "deep-hook's request line: the agent's hook JSON, stamped with seq and id.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "v": {
