@@ -6,7 +6,7 @@
 // what a base run proved. A checkout goes once no run on it is running or queued, and a crash's goes at the next open.
 import { execFile, spawn } from 'node:child_process';
 import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
-import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { connect } from 'node:net';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
@@ -72,13 +72,13 @@ const inside = (path: string): boolean => !isAbsolute(path) && !normalize(path).
 /** The deadline a check names in `asserts`, as `deadline:5s`. */
 const namesDeadline = (asserts: string[] | undefined): boolean => asserts !== null;
 /** A failure at an assertion its check names: one of `asserts`, or with no such list any assertion in its own files. */
-function atNamed(f: Failure, c: ClaimCheckInput): boolean {
+function atNamed(f: Failure, c: Pick<ClaimCheckInput, 'own' | 'asserts'>): boolean {
   if (!f.assertion) return false;
   if (c.asserts?.length) return c.asserts.includes(`${f.file}:${f.line}`);
   return !c.own.length || c.own.some((o) => f.file === o || f.file.startsWith(`${o}/`));
 }
 /** Whether a run on the base proves the fix, and why not: only a test that started and failed at a named assertion, or overran a named deadline. */
-export function baseProof(r: CheckResult, c: ClaimCheckInput, plant?: CheckoutPlant): { on_assertion: boolean; why: string | null } {
+export function baseProof(r: CheckResult, c: Pick<ClaimCheckInput, 'own' | 'asserts'>, plant?: CheckoutPlant): { on_assertion: boolean; why: string | null } {
   if (r.outcome === 'passed') return { on_assertion: false, why: 'passes on the merge base, so it can\'t prove the fix' };
   if (plant === 'any-nonzero-base-exit') return { on_assertion: true, why: null };
   const started = r.testsRun > 0 || r.failures.some((f) => f.test !== '(run)' && f.file !== '.') && r.outcome === 'overran';
@@ -187,8 +187,12 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const index = join(dir, 'index');
       const store = o.plant === 'snapshot-into-repo' ? {} : await repoEnv(worktree);
       const env = { ...store, ...(o.plant === 'snapshot-through-index' ? {} : { GIT_INDEX_FILE: index }) };
-      if (existsSync(join(gitDir, 'index'))) await writeFile(index, await readFile(join(gitDir, 'index')));
-      else await git(worktree, ['read-tree', 'HEAD'], env);
+      if (existsSync(join(gitDir, 'index'))) {
+        await writeFile(index, await readFile(join(gitDir, 'index')));
+        // The copy keeps the index's time: git reads a file edited in that second by its bytes only by comparing the two.
+        const { atime, mtime } = await stat(join(gitDir, 'index'));
+        await utimes(index, atime, mtime);
+      } else await git(worktree, ['read-tree', 'HEAD'], env);
       if (o.plant !== 'keeps-skip-worktree') {
         // Marks hide a change from `add`: cleared in the copy, each by its own option, since one call applies only its first.
         // One missing from disk keeps its mark, or `add` would read a sparse checkout's absent files as deleted.
