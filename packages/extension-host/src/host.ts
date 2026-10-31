@@ -342,6 +342,8 @@ interface Action {
 interface Store { generation: number; check: (value: unknown) => string | undefined }
 interface Ext {
   entry: Entry;
+  /** Its project folder's real path, resolved when it loads, which the hook path asks trust about (#881). */
+  project: string | null;
   /** The copy of its install folder it runs from, which only the host writes. */
   folder: string;
   manifest: Manifest;
@@ -1101,7 +1103,7 @@ class Host implements ExtensionHost {
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
+      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(),
       adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), starts: 0,
     };
@@ -1320,9 +1322,12 @@ class Host implements ExtensionHost {
       throw e;
     }
   }
-  /** Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. */
+  /**
+   * Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. It
+   * asks by the real path resolved at load, which trust answers from memory: a hook reads no record and no file (#881).
+   */
   private async revoked(ext: Ext): Promise<boolean> {
-    if (!ext.entry.project || (await this.options.trust.trusted(ext.entry.project))) return false;
+    if (!ext.project || (await this.options.trust.trusted(ext.project))) return false;
     await this.unload(ext);
     return true;
   }
@@ -1442,7 +1447,7 @@ class Host implements ExtensionHost {
       if (ext.mode === 'loaded') await this.refused(connection, method, 'grant', `access: ${schema.needs}`, args).catch(() => undefined);
       throw Error(`${method} needs the grant "${schema.needs}", which ${ext.entry.id} wasn't given`);
     }
-    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project is no longer trusted, so it was stopped`);
+    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
     // Unloaded while trust answered, by a new install, a revoke or close: the call does nothing.
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const conformance = ext.mode === 'conformance';
@@ -1910,7 +1915,7 @@ class Host implements ExtensionHost {
       const due = performance.now() + deadline + HOOK_GRACE_MS;
       const left = (): number => Math.max(0, due - performance.now());
       try {
-        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project is no longer trusted, so it was stopped`);
+        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
       } catch (e) {
         if (e instanceof Overran) return fail(`${id}'s trust check didn't answer within the hook's deadline of ${deadline} ms`);
         throw e;
@@ -2001,7 +2006,7 @@ class Host implements ExtensionHost {
     if (!ext || !ext.live || !ext.ask) return refuse(`${target?.handle} names no piece that is loaded and started`);
     // The target names its version: a call meant for another one, a removed or never-active version, runs nothing.
     if (ext.entry.version !== target.version) return refuse(`${target.handle}@${target.version} is a stale target: the version active is ${ext.entry.version}`);
-    if (await this.revoked(ext)) return refuse(`${id}'s project is no longer trusted, so it was stopped`);
+    if (await this.revoked(ext)) return refuse(`${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
     // Removed while trust answered: new calls stopped first, so this one runs nothing.
     if (this.exts.get(ext.entry.id) !== ext || !ext.live || !ext.ask) return refuse(`${target.handle} was removed before ${action} could run`);
     const declared = ext.actions.get(action);
