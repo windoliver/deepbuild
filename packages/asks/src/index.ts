@@ -185,7 +185,7 @@ export interface AsksOptions {
   /**
    * The read-only connector to your chat app's threads: how a chat-app task's check reads the thread, once per tick
    * while such a task is open. The link is the task's own words, so the connector holds it to the chat app it serves
-   * and fetches nothing else. Left out (as the hub leaves it until a channel exists), no thread is read.
+   * and fetches nothing else. Left out, no thread is read.
    */
   threads?: { read(link: string): Promise<ThreadMessage[]> };
   /**

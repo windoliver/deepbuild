@@ -344,6 +344,8 @@ export class Core {
   private watcher: FSWatcher | undefined;
   private settingsKey = '';
   private readonly settingsReadings: string[] = [];
+  /** Hooks waiting on a network stop's try, which the hub finishes before it stops. */
+  private readonly tried = new Set<Promise<unknown>>();
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
   /** The log position of the last session.continued the hub routed (#85). */
@@ -667,6 +669,13 @@ export class Core {
 
   // ---- Hooks.
 
+  /** A Claude Code stop whose payload says server_error, under 10 minutes old: the try of the host its API calls go to. */
+  private tryNetwork(drafts: Draft[], meta: HookMeta): Promise<void> | undefined {
+    if ((meta.agent !== 'claude-code' && meta.agent !== 'claude') || meta.fields?.error !== 'server_error' || this.now() - (drafts[0]?.ts ?? 0) >= 10 * 60_000) return undefined;
+    const host = apiHost();
+    return reachable(host).then((reached) => { meta.network = { host, reached }; });
+  }
+
   /**
    * One hook's events, checked and handed to the record in the order hooks arrived; the next hook waits only
    * for that, not for the commit. Resolves once each append settled.
@@ -677,11 +686,13 @@ export class Core {
     this.replayLate();
     const replayed = this.replaying ?? Promise.resolve();
     // A network stop's try runs before it queues, so it holds no other hook of any session (#85).
-    const stamped = drafts[0]?.ts ?? 0;
-    const tried = (meta.agent === 'claude-code' || meta.agent === 'claude') && meta.fields?.error === 'server_error' && this.now() - stamped < 10 * 60_000
-      ? (() => { const host = apiHost(); return reachable(host).then((reached) => { meta.network = { host, reached }; }); })()
-      : undefined;
-    return replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+    const tried = this.tryNetwork(drafts, meta);
+    const handled = replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+    if (!tried) return handled;
+    // It was acknowledged, so nothing else keeps it: the hub stops only once it's in the record.
+    const kept = handled.catch(() => undefined).finally(() => this.tried.delete(kept));
+    this.tried.add(kept);
+    return handled;
   }
   /**
    * A hook reaching the running hub shows it answers again: what deep-hook spooled while the hub was late is
@@ -4489,6 +4500,7 @@ export class Core {
         }
         if (parsed?.kind === 'hook') {
           const { drafts, meta } = parsed;
+          await this.tryNetwork(drafts, meta);
           await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch((error: unknown) => {
             failed = true;
             process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -4616,6 +4628,7 @@ export class Core {
       return;
     }
     await this.replaying;
+    await Promise.all(this.tried);
     await this.chain;
     this.writeCursors();
     this.canvasCore?.close();

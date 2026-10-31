@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { slackThreads } from '../src/reach.js';
+import { apiHost, slackThreads } from '../src/reach.js';
 import { ulid } from '../src/wire.js';
 import { hookLine, reply, send, withHub } from './hub.js';
 
@@ -72,10 +72,10 @@ describe('a stop the hub tries', () => {
     const project = join(home, '.claude', 'projects', 'tmp');
     mkdirSync(project, { recursive: true });
     let n = 0;
-    const line = (session: string, event: string, extra: Record<string, unknown>) => {
+    const line = (session: string, event: string, extra: Record<string, unknown>, wire: Record<string, unknown> = {}) => {
       const transcript = join(project, `${session}.jsonl`);
       appendFileSync(transcript, event === 'UserPromptSubmit' ? `${JSON.stringify({ type: 'user', uuid: `t${++n}`, promptId: extra.prompt_id, message: { role: 'user', content: 'go' }, origin: { kind: 'human' } })}\n` : '');
-      return hookLine(ulid(Date.now() + ++n), event, { session_id: session, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid, agent });
+      return hookLine(ulid(Date.now() + ++n), event, { session_id: session, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid, agent, ...wire });
     };
     return { line, sock: join(root, 'hub.sock') };
   };
@@ -110,4 +110,42 @@ describe('a stop the hub tries', () => {
       expect(await owner(root)).toBe('service');
     });
   }, 60_000);
+
+  it('keeps a stop the hub is told to stop during', async () => {
+    await withHub(async (root, home, { restart }) => {
+      const { line, sock } = world(root, home, { ANTHROPIC_BASE_URL: 'https://192.0.2.1' });
+      await send(sock, line(SESSION, 'SessionStart', { source: 'startup' }));
+      await send(sock, line(SESSION, 'UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' }));
+      await send(sock, line(SESSION, 'StopFailure', { error: 'server_error', prompt_id: 'p1' }));
+      await restart();
+      expect(await owner(root), 'the acknowledged stop reached the record').toBe('you');
+    });
+  }, 60_000);
+
+  it('tries a stop replayed from the spool', async () => {
+    await withHub(async (root, home) => {
+      const { line, sock } = world(root, home, { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9' });
+      await send(sock, line(SESSION, 'SessionStart', { source: 'startup' }));
+      await send(sock, line(SESSION, 'UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' }));
+      mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
+      writeFileSync(join(root, 'spool', 'spool.jsonl'), line(SESSION, 'StopFailure', { error: 'server_error', prompt_id: 'p1' }, { late: true }), { mode: 0o600 });
+      await send(sock, line(OTHER, 'SessionStart', { source: 'startup' }));
+      expect(await owner(root)).toBe('you');
+    });
+  }, 60_000);
+});
+
+describe('the host a session\'s API calls go to', () => {
+  const home = process.env.HOME;
+  afterEach(() => { process.env.HOME = home; });
+  it('skips a value with no http scheme or no host', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'reach-'));
+    dirs.push(dir);
+    mkdirSync(join(dir, '.claude'));
+    process.env.HOME = dir;
+    writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { HTTPS_PROXY: 'proxy.corp:8080', ANTHROPIC_BASE_URL: 'https://gateway.corp:8443' } }));
+    expect(apiHost()).toBe('gateway.corp:8443');
+    writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'localhost:4000' } }));
+    expect(apiHost()).toBe('api.anthropic.com:443');
+  });
 });
