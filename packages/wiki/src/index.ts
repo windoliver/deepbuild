@@ -28,7 +28,7 @@ export function knownOf(at: string, entry: { role?: string; tool?: string; outsi
       : entry.role === 'user' && !entry.outside ? 'you' : 'inferred';
 }
 /** One thing a claim rests on: the exact quote, and where it is. */
-export type Source = { at: string; quote: string } | { repo: string; path: string; commit: string; quote: string };
+export type Source = { at: string; quote: string; file?: string } | { repo: string; path: string; commit: string; quote: string };
 export interface Candidate {
   /** `repos/api` is `<folder>/repos/api.md`. */
   page: string;
@@ -54,6 +54,8 @@ export interface Wiki {
    * a line you added. Resolves with the decisions, then rewrites the pages it read.
    */
   keepEdits(connection: Connection): Promise<string[]>;
+  /** Takes a claim off its page on your decision, from your connection only, so no re-read brings it back; resolves with it. */
+  forget(connection: Connection, claim: string): Promise<string>;
 }
 export interface WikiOptions {
   record: RecordStore;
@@ -127,7 +129,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
       if (!entry) return `${source.at} names nothing the record can read`;
       if (!norm(entry.text).includes(quote)) return `the quote "${quote}" is not at ${source.at}`;
       const known = knownOf(source.at, entry);
-      return { known, kept: { at: source.at, quote, ...(entry.role ? { role: entry.role } : {}) }, evidence: pieces(source.quote).map((q) => ({ at: source.at, quote: q })) };
+      return { known, kept: { at: source.at, quote, ...(source.file ? { file: source.file } : {}), ...(entry.role ? { role: entry.role } : {}) }, evidence: pieces(source.quote).map((q) => ({ at: source.at, quote: q })) };
     }
     let bytes: Buffer;
     try {
@@ -202,7 +204,8 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
     // Each exact key the claim states is in one of its quotes, or the claim is inferred, whatever its sources.
     const missing = o.plant === 'quote-present-only' ? [] : keysOf(text).filter((key) => !checked.some((s) => holdsKey(s.kept.quote, key)));
     if (missing.length && RANK.indexOf(known) < RANK.indexOf('inferred')) known = 'inferred';
-    const distinct = new Map(checked.map((s) => ['at' in s.kept ? s.kept.at : `${s.kept.repo}:${s.kept.path}@${s.kept.commit}`, s]));
+    // Two files of the same bytes are two sources: each agent's own copy says it.
+    const distinct = new Map(checked.map((s) => ['at' in s.kept ? `${s.kept.at} ${s.kept.file ?? ''}` : `${s.kept.repo}:${s.kept.path}@${s.kept.commit}`, s]));
     const line = render(text, { id: c.id, known, proof: distinct.size, sources: [...distinct.values()].map((s) => s.kept), seen: new Date(now()).toISOString() });
     const old = c.supersedes ? await newest(c.supersedes) : undefined;
     const evidence = [...distinct.values()].flatMap((s) => s.evidence);
@@ -300,6 +303,16 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
     for (const row of rows) if (row.diff.split('\n').some((line) => added.has(line))) await record.rollBack(connection, { change: row.id });
   }
 
+  /** A line you removed: your decision says it isn't so, and the claim leaves the wiki. */
+  async function removeClaim(connection: Connection, row: Row): Promise<string> {
+    await unslice(connection, row.page, row.target);
+    const decision = await decide(connection, `no: ${parseClaimLine(row.diff.slice(2))!.text}`, row.scope, row.target);
+    // Every learning of it, newest first: rolling back only the newest would put an older one back in force.
+    const held = (await record.raw(`SELECT id FROM learned_layer WHERE target = ? AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC`, [row.target])) as { id: string }[];
+    for (const { id } of held) await record.rollBack(connection, { change: id });
+    return decision;
+  }
+
   async function keepEdits(connection: Connection): Promise<string[]> {
     if (!YOURS.has(connection.writer)) throw Error(`only you keep edits to the wiki, through the app or the CLI, not ${connection.writer}`);
     const decisions: string[] = [];
@@ -317,14 +330,9 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
         const was = parseClaimLine(row.diff.slice(2))!.text;
         const is = onPage.get(row.target.slice(row.target.indexOf('#') + 1));
         if (is === was) continue;
-        await unslice(connection, page, row.target);
-        if (is === undefined) {
-          // A line you removed: your decision says it isn't so, and the claim leaves the wiki.
-          decisions.push(await decide(connection, `no: ${was}`, row.scope, row.target));
-          // Every learning of it, newest first: rolling back only the newest would put an older one back in force.
-          const held = (await record.raw(`SELECT id FROM learned_layer WHERE target = ? AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC`, [row.target])) as { id: string }[];
-          for (const { id } of held) await record.rollBack(connection, { change: id });
-        } else {
+        if (is === undefined) decisions.push(await removeClaim(connection, row));
+        else {
+          await unslice(connection, page, row.target);
           const decision = await decide(connection, is, row.scope, row.target);
           decisions.push(decision);
           await onDecision(connection, row, is, decision);
@@ -377,6 +385,14 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
       return decision;
     },
     keepEdits,
+    async forget(connection, claim) {
+      if (!YOURS.has(connection.writer)) throw Error(`only you remove ${claim}, through the app or the CLI, not ${connection.writer}`);
+      const row = await newest(claim);
+      if (!row) throw Error(`${claim} is no claim in force`);
+      const decision = await removeClaim(connection, row);
+      await write();
+      return decision;
+    },
   };
 }
 

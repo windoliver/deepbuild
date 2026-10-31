@@ -16,7 +16,7 @@
 //! register operators, arrays, a table and fixtures, not kinds.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver, TableValue};
 use deep_canvas::schedule::core_ops::{Datum, Edits, Fields, StatusBase, Transform};
@@ -110,14 +110,19 @@ fn placed_items(v: &mut View<'_>) -> Result<Map<String, Value>, OpError> {
         let Some(fields) = fields.as_typed::<Fields>() else {
             continue;
         };
-        let mut item = fields.to_json();
         let world = worlds.get(id).and_then(|w| w.as_typed::<Transform>());
-        if let (Some(map), Some(at)) = (item.as_object_mut(), world) {
-            map.insert("at".into(), at.to_json());
-        }
-        items.insert(id.to_string(), item);
+        items.insert(id.to_string(), item_json(&fields, world.as_deref()));
     }
     Ok(items)
+}
+
+/// An item as the marks read it: its fields, at its world transform.
+fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
+    let mut item = fields.to_json();
+    if let (Some(map), Some(at)) = (item.as_object_mut(), world) {
+        map.insert("at".into(), at.to_json());
+    }
+    item
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -164,8 +169,28 @@ impl Canonical for Run {
     }
 }
 
+/// The text module's shapers: a fixed count, never one taken from the machine, so texts shaping
+/// on several of the scheduler's threads don't wait on one (#857). Each holds only the bundled
+/// fonts, so any of them shapes a spec to the same glyphs.
+pub struct Shapers(Vec<Mutex<Shaper>>);
+
+/// How many shapers the text module holds: the most threads a live view's class sets.
+const SHAPERS: usize = 4;
+
+impl Shapers {
+    /// A free shaper, else the first once it is.
+    fn lock(&self) -> Option<MutexGuard<'_, Shaper>> {
+        self.0
+            .iter()
+            .find_map(|s| s.try_lock().ok())
+            .or_else(|| self.0[0].lock().ok())
+    }
+}
+
 fn fonts() -> TableValue {
-    Arc::new(Mutex::new(Shaper::new()))
+    Arc::new(Shapers(
+        (0..SHAPERS).map(|_| Mutex::new(Shaper::new())).collect(),
+    ))
 }
 
 fn register_text(r: &mut Registrar) {
@@ -343,7 +368,7 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
             format!("items/{id}/params/size"),
         ));
     }
-    let fonts = v.table::<Mutex<Shaper>>("text.fonts")?;
+    let fonts = v.table::<Shapers>("text.fonts")?;
     let Some(shaper_spec) = spec.shaper_spec() else {
         return Err(OpError::new(
             "out_of_range",
@@ -352,7 +377,7 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     };
     let shaped = fonts
         .lock()
-        .map_err(|_| OpError::new("shaper_poisoned", format!("items/{id}")))?
+        .ok_or_else(|| OpError::new("shaper_poisoned", format!("items/{id}")))?
         .shape(&shaper_spec);
     v.write("text.run", Val::typed(Run { spec, shaped }))
 }
@@ -559,10 +584,10 @@ fn status(v: &mut View<'_>) -> Result<(), OpError> {
         .and_then(|s| s.get(1))
         .and_then(Value::as_f64)
         .unwrap_or(0.0);
-    let fonts = v.table::<Mutex<Shaper>>("text.fonts")?;
+    let fonts = v.table::<Shapers>("text.fonts")?;
     let mut shaper = fonts
         .lock()
-        .map_err(|_| OpError::new("shaper_poisoned", "status_bindings"))?;
+        .ok_or_else(|| OpError::new("shaper_poisoned", "status_bindings"))?;
     let out = status_drawing(marks, map.as_ref(), &palette, height, &mut shaper);
     v.write("text.status", Val::typed(out))
 }
@@ -918,6 +943,28 @@ fn register_marks2d(r: &mut Registrar) {
         "geometry",
         "extract",
     );
+    // #857: each R1 item's marks, built from the item alone on its own node, so a board's items
+    // build on the scheduler's pool; the frame places them.
+    r.array("marks2d.item", "placed", "item", "geometry", "extract");
+    r.operator(
+        "item",
+        "extract",
+        &[
+            "core.fields",
+            "core.world",
+            "text.counter",
+            "look.palette",
+            "view(locale)",
+        ],
+        &["marks2d.item"],
+    )
+    .applies(|_, _, item| {
+        matches!(
+            item.get("kind").and_then(Value::as_str),
+            Some("rect@1" | "circle@1" | "path@1" | "text@1")
+        )
+    })
+    .run(item);
     r.operator(
         "frame",
         "extract",
@@ -930,6 +977,7 @@ fn register_marks2d(r: &mut Registrar) {
             "text.run",
             "text.animated",
             "look.palette",
+            "marks2d.item",
         ],
         &["marks2d.frame"],
     )
@@ -1051,11 +1099,90 @@ fn register_marks2d(r: &mut Registrar) {
     }));
 }
 
+/// One item's marks, built from the item alone (#857); `None` for an item the frame builds
+/// itself.
+fn item(v: &mut View<'_>) -> Result<(), OpError> {
+    let id = v.id().unwrap_or("");
+    let fields = v.typed::<Fields>("core.fields")?;
+    let world = v.typed::<Transform>("core.world")?;
+    let shown = v
+        .typed::<Option<Shown>>("text.counter")?
+        .and_then(|s| (*s).clone());
+    // A text's marks move with the locale's formatting; it keys every item's marks, as shaping does.
+    let _ = v.locale()?;
+    let look = v
+        .typed::<LookValue>("look.palette")?
+        .ok_or_else(|| OpError::new("input_missing", "look"))?;
+    let placed = fields.and_then(|f| {
+        let item = item_json(&f, world.as_deref());
+        scene::item_placed(id, &item, &look.palette, shown.as_ref())
+    });
+    v.write("marks2d.item", Val::typed(placed))
+}
+
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let record = record_of(v.outside()?);
-    let items = placed_items(v)?;
+    // Each item's transform, looked up only for the items the frame builds itself.
+    let worlds = v.every("core.world")?;
+    let by_id = std::cell::OnceCell::new();
+    let world = |id: &str| {
+        let by_id: &BTreeMap<&str, &Val> =
+            by_id.get_or_init(|| worlds.iter().map(|(i, w)| (*i, w)).collect());
+        by_id.get(id).and_then(|w| w.as_typed::<Transform>())
+    };
+    let fields: Vec<(&str, Arc<Fields>)> = v
+        .every("core.fields")?
+        .into_iter()
+        .filter_map(|(id, f)| f.as_typed::<Fields>().map(|f| (id, f)))
+        .collect();
+    // Each item's own marks, in item order as the fields are; an item out of that order is built
+    // by the frame, which draws it the same.
+    let prebuilt: Vec<(&str, Arc<Option<scene::Placed>>)> = v
+        .every("marks2d.item")?
+        .into_iter()
+        .filter_map(|(id, p)| p.as_typed::<Option<scene::Placed>>().map(|p| (id, p)))
+        .collect();
+    let mut prebuilt = prebuilt.iter().peekable();
+    // An item in a collection or naming a layer the document lacks, and one that is a parent,
+    // draws in a scope other items set or is refused: the frame builds those itself.
+    let members: std::collections::BTreeSet<&str> = doc["collections"]
+        .as_object()
+        .into_iter()
+        .flat_map(|c| c.values())
+        .flat_map(|c| c["members"].as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .collect();
+    let layers = doc["layers"].as_object();
+    let mut items = Map::new();
+    let mut held: Vec<(&str, &Fields, &scene::Placed)> = Vec::new();
+    for (id, f) in &fields {
+        let own = prebuilt.next_if(|(i, _)| i == id).map(|(_, p)| p);
+        match own.and_then(|p| p.as_ref().as_ref()) {
+            Some(p)
+                if !members.contains(id) && layers.is_some_and(|l| l.contains_key(&p.layer)) =>
+            {
+                held.push((id, f, p));
+            }
+            _ => {
+                items.insert(id.to_string(), item_json(f, world(id).as_deref()));
+            }
+        }
+    }
+    // A prebuilt item has no parent, so every parent's child is among the items built here.
+    let parents: std::collections::BTreeSet<String> = items
+        .values()
+        .filter_map(|i| i.get("parent").and_then(Value::as_str).map(str::to_string))
+        .collect();
+    let mut placed: Vec<(&str, &scene::Placed)> = Vec::new();
+    for (id, f, p) in held {
+        if parents.contains(id) {
+            items.insert(id.to_string(), item_json(f, world(id).as_deref()));
+        } else {
+            placed.push((id, p));
+        }
+    }
     let mut bound = BTreeMap::new();
     for (id, s) in v.every("text.counter")? {
         if let Some(shown) = s.as_typed::<Option<Shown>>().and_then(|s| (*s).clone()) {
@@ -1080,7 +1207,20 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
     let frame =
-        scene::frame_with(doc, &items, &look.palette, 1.0, &bound, &record).map_err(refused)?;
+        match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed)
+            .map_err(refused)?
+        {
+            Some(frame) => frame,
+            // A paint spanning boxes reads every item's: the frame builds them all.
+            None => {
+                let all: Map<String, Value> = fields
+                    .iter()
+                    .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
+                    .collect();
+                scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record)
+                    .map_err(refused)?
+            }
+        };
     // Each text mark's font names a role the shaper bundles.
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         if let Mark::Text { item, spec, .. } = &drawn.mark {
