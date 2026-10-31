@@ -148,6 +148,22 @@ describe('checkouts from where a session sits', () => {
     } finally { chmodSync(join(repo, 'node_modules/ro'), 0o755); }
   }, 60_000);
 
+  it('an edit of the same size in the second of the last `git add` is in the snapshot', async () => {
+    const { repo, service, git } = world();
+    const s = await service;
+    // At the start of a second, so the write, the add and the edit share it, and the snapshot comes in a later one.
+    while (Date.now() % 1000 > 50) await new Promise((resolve) => setTimeout(resolve, 5));
+    writeFileSync(join(repo, 'edit.txt'), 'a\n');
+    git('add', '-A');
+    git('commit', '-qm', 'base');
+    writeFileSync(join(repo, 'edit.txt'), 'b\n');
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    const { commit } = await s.snapshot(repo);
+    const c = await s.checkout({ worktree: repo, commit, runs: ['r'] });
+    expect(readFileSync(join(c.dir, 'edit.txt'), 'utf8')).toBe('b\n');
+    await s.close();
+  }, 60_000);
+
   describe('what a later claim carries', () => {
     const kindOf = (outcomes: string[]): { kind: { kind: string; run(): Promise<unknown> }; calls(): number } => {
       let i = 0;
