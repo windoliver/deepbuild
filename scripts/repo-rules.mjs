@@ -21,7 +21,10 @@ const fixes = {
   git: 'Install git and run this from a git checkout.',
   cargo: 'Install Rust with Cargo, which preflight already needs.',
   empty: 'Run this from a checkout whose files git lists.',
+  card: 'Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.',
+  deviation: 'Correct the deviation to the file it is about, or remove it if the file is gone.',
 };
+const cardHeadings = ['What it is for', 'Where new code goes', 'What it may import', 'Deviations'];
 // Each pattern's match is the reported value; a home path's placeholders and shared folders don't match.
 const kinds = [
   ['home path', /(?<![\w.-])(?:\/Users\/(?!Shared\/)|\/home\/)[\w.-]+\/|(?<![\w.-])[A-Za-z]:(\\{1,2})Users\1(?!Public\1)[\w.-]+\1/g],
@@ -242,6 +245,48 @@ function checkDeps(files, listed) {
   }
 }
 
+// Each folder under packages/ and crates/ that git lists a file in has a README.md card with the four
+// headings, and each deviation names a file its folder still has (#879). Which imports a package
+// declares is the deps rule's, never the card's.
+function checkCards(files) {
+  const before = results.length;
+  const counts = { packages: 0, crates: 0, deviations: 0 };
+  const folders = [...new Set(files.filter((path) => /^(packages|crates)\/[^/]+\//.test(path)).map((path) => path.split('/').slice(0, 2).join('/')))].sort();
+  for (const folder of folders) {
+    counts[folder.split('/')[0]]++;
+    const card = `${folder}/README.md`;
+    let text;
+    try {
+      text = readFileSync(join(root, card), 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') report('FAIL', 'cards', `${folder} has no README.md card`, fixes.card);
+      else report('BLOCKED', 'cards', `${card} cannot be read (${error.code})`, fixes.read);
+      continue;
+    }
+    const lines = text.split('\n');
+    const headings = new Map();
+    let fenced = false;
+    lines.forEach((line, index) => {
+      if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+      const heading = !fenced && line.match(/^#{1,6}\s+(.*?)\s*#*\s*$/);
+      if (heading) headings.set(heading[1].toLowerCase(), index);
+    });
+    for (const name of cardHeadings) if (!headings.has(name.toLowerCase())) report('FAIL', 'cards', `${card} has no "${name}" heading`, fixes.card);
+    const start = headings.get('deviations');
+    if (start === undefined) continue;
+    for (let index = start + 1; index < lines.length && !/^#{1,6}\s/.test(lines[index]); index++) {
+      const path = lines[index].match(/^\s*(?:[-*+]|\d+[.)])\s+`([^`]+)`/)?.[1];
+      if (!path) continue;
+      counts.deviations++;
+      const inside = posix.normalize(path);
+      if (inside.startsWith('../') || inside.startsWith('/') || !existsSync(join(root, folder, inside)))
+        report('FAIL', 'cards', `${card}:${index + 1}: a deviation names ${path}, which ${folder} doesn't have`, fixes.deviation);
+    }
+  }
+  if (results.length === before)
+    report('PASS', 'cards', `${plural(counts.packages, 'package')} and ${plural(counts.crates, 'crate')} have cards with the four headings; ${plural(counts.deviations, 'deviation')}, each naming a file that exists`);
+}
+
 // Report only: lines added and removed against the merge base perf uses, never the exit status.
 function noteSize() {
   let base;
@@ -306,6 +351,7 @@ if (files) {
   else checkSecrets(files, rules.allowed ?? []);
   if (rules.error) report('INVALID', 'deps', rules.error, fixes.config);
   else checkDeps(files, rules.listed);
+  checkCards(files);
   noteSize();
 }
 const order = ['FAIL', 'INVALID', 'BLOCKED', 'PASS', 'NOTE'];
