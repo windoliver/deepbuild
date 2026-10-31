@@ -1,21 +1,21 @@
 
  RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-acc593499bc1d6118
 
- ❯ tests/acceptance/85/hub/thread.test.ts (4 tests | 4 failed) 5469ms
+ ❯ tests/acceptance/85/hub/thread.test.ts (4 tests | 4 failed) 6285ms
    ❯ a chat-app task on the real hub (4)
-     × #85.e12ca936 closes from the thread with nothing typed; no reply and a wrong one send it back with the link; the token goes only in the request's Authorization; only conversations.replies is called 1749ms
-     × #85.e12ca936 refuses a link that isn't a Slack thread when the task is raised, so the token only goes to the Slack API 1115ms
-     × #85.e12ca936 refuses a thread task saying so when slack.json is missing, or isn't mode 0600 1047ms
-     × #85.e12ca936 keeps the task open with the link on its card while Slack's read fails, and closes once it reads 1556ms
- ❯ tests/acceptance/85/hub/network.test.ts (7 tests | 7 failed) 128789ms
+     × #85.e12ca936 closes from the thread with nothing typed; no reply and a wrong one send it back with the link; the token goes only in the request's Authorization; only conversations.replies is called 2050ms
+     × #85.e12ca936 refuses a link that isn't a Slack thread when the task is raised, so the token only goes to the Slack API 1457ms
+     × #85.e12ca936 refuses a thread task saying so when slack.json is missing, or isn't mode 0600 1515ms
+     × #85.e12ca936 keeps the task open with the link on its card while Slack's read fails, and closes once it reads 1252ms
+ ❯ tests/acceptance/85/hub/network.test.ts (7 tests | 7 failed) 124904ms
    ❯ a network you must reconnect, on the real hub (7)
-     × #85.0fa0b6d4 shares one task across sessions in different folders, and a real connection closes it and resumes each without you typing 17040ms
-     × #85.0fa0b6d4 with the port listening at the stop leaves it to the service: one automatic continue and no task 16181ms
-     × #85.0fa0b6d4 raises no task for a stop stamped over 10 minutes old on a closed port, while a fresh stop on it does 22849ms
-     × #85.0fa0b6d4 doesn't try the host for a stop stamped over 10 minutes old, while a fresh stop does 24091ms
-     × #85.0fa0b6d4 shows what's missing on the card while the port stays closed, and stays open 17414ms
-     × #85.0fa0b6d4 still closes an open task and resumes its sessions after a hub restart 15676ms
-     × #85.0fa0b6d4 tries HTTPS_PROXY over ANTHROPIC_BASE_URL 15533ms
+     × #85.0fa0b6d4 shares one task across sessions in different folders, and a real connection closes it and resumes each without you typing 16838ms
+     × #85.0fa0b6d4 with the port listening at the stop leaves it to the service: one automatic continue and no task 15612ms
+     × #85.0fa0b6d4 raises no task for a stop stamped over 10 minutes old on a closed port, while a fresh stop on it does 23041ms
+     × #85.0fa0b6d4 doesn't try the host for a stop stamped over 10 minutes old, while a fresh stop does 22698ms
+     × #85.0fa0b6d4 shows what's missing on the card while the port stays closed, and stays open 15519ms
+     × #85.0fa0b6d4 still closes an open task and resumes its sessions after a hub restart 15610ms
+     × #85.0fa0b6d4 tries HTTPS_PROXY over ANTHROPIC_BASE_URL 15585ms
 
 ⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
 
@@ -238,6 +238,6 @@ AssertionError: raised: expected { refused: true, …(1) } to match object { ref
 
  Test Files  2 failed (2)
       Tests  11 failed (11)
-   Start at  18:21:46
-   Duration  129.02s (tests 100%)
+   Start at  18:29:18
+   Duration  125.54s (tests 100%)
 

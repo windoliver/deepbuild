@@ -26,6 +26,7 @@ The hub, its socket, its record, `deep mcp` and TCP are real. Slack is the one b
 ## How the design was read
 
 - **"The card" on the hub is the `inbox.read` row.** It's the one surface the hub has for an ask you see. On the base the row has no `missing`. These tests read `row.missing`, the shape of the asks core's `Card.missing`: `{check, reasons, link}`.
+- **"Open in Needs you"** is the `inbox.read` rows still open by their own `status` and `outcome` (`unanswered` until closed): the read holds every ask, closed and superseded ones too.
 - **"Sends the claim back with the thread link"** is that `missing`, its `link` the thread's, as `tests/acceptance/85/README.md` reads it. The agent's own send-back line isn't asserted.
 - **The moot's "host"** is asserted as `127.0.0.1:<port>` somewhere in `ask.moot`'s data; no field name is required.
 - **`because` on a thread close** isn't asserted: the design names none for it.
