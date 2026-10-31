@@ -1,6 +1,8 @@
 {
   "title": "open_item.opened@1",
   "description": "An open item was opened.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "open_items"
   ],

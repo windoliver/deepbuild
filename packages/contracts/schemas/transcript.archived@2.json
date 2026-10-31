@@ -1,6 +1,8 @@
 {
   "title": "transcript.archived@2",
   "description": "A copy of a session transcript was archived as evidence, read back and matched; the source it was read from is named by size and hash before redaction.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions",
     "evidence"

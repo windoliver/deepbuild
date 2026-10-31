@@ -1,6 +1,8 @@
 {
   "title": "doc.patched@2",
   "description": "A document was patched, by its writer. @2 adds the revision's hash and the writer layer it went into (#806).",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "documents",
     "returns"

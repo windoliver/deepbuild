@@ -1,6 +1,8 @@
 {
   "title": "decision.overruled@2",
   "description": "You overruled a saved decision on the trusted path at one scope: it answers nothing there, and keeps answering wherever else it covers. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "decisions"
   ],

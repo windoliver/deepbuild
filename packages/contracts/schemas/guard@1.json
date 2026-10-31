@@ -1,6 +1,8 @@
 {
   "title": "guard@1",
   "description": "One guard entry, which deep-hook and the hub's guard engine both read.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "match": {

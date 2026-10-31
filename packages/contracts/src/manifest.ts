@@ -72,11 +72,22 @@ function checkEnvironments(environments: unknown): ContractIssue[] {
 export function checkManifest(value: unknown): Validation {
   // Read beside extension.manifest@1, whose frozen shape doesn't list them: `templates` is hook.template@1's,
   // `environments` the environment slot's (#331), `conflicts` and `kernel` are extension.edges@1's and `signature` is
-  // package.signature@1's (#351), and `leases` is an array here, each item held to lease.kind@1 and to the names
-  // other packages declared once the host declares it in the lease table (#44). Each sits at the manifest's root, so its
-  // issues' paths are the manifest's.
+  // package.signature@1's (#351), `leases` is an array here, each item held to lease.kind@1 and to the names
+  // other packages declared once the host declares it in the lease table (#44), and `host` is extension.host@1's (#104).
+  // `stability`, `requires` and `calls` are extension.contract@1's (#139), and so is a `provides` row's `adapter`, the
+  // interface a row's reading is adapted from. Each sits at the manifest's root, or in its row, so its issues' paths are
+  // the manifest's.
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, environments, conflicts, kernel, signature, leases, ...rest } = object ? value as Record<string, unknown> : {};
+  const { templates, environments, conflicts, kernel, signature, leases, host, stability, requires, calls, ...rest } = object ? value as Record<string, unknown> : {};
+  const adapters: { at: number; adapter: unknown }[] = [];
+  if (Array.isArray(rest.provides)) {
+    rest.provides = rest.provides.map((row: unknown, at) => {
+      if (typeof row !== 'object' || row === null || Array.isArray(row) || !('adapter' in row)) return row;
+      const { adapter, ...kept } = row as Record<string, unknown>;
+      adapters.push({ at, adapter });
+      return kept;
+    });
+  }
   const held = validate(MANIFEST, object ? rest : value);
   if (!held.ok) return held;
   const beside = (schema: string, fields: Record<string, unknown>): ContractIssue[] => {
@@ -92,6 +103,13 @@ export function checkManifest(value: unknown): Validation {
     ...(leases === undefined || Array.isArray(leases) ? [] : [issue('type', '/leases', leases)]),
     ...beside('extension.edges@1', { conflicts, kernel }),
     ...beside('package.signature@1', { signature }),
+    ...beside('extension.host@1', { host }),
+    ...beside('extension.contract@1', { stability, requires, calls }),
+    ...adapters.flatMap(({ at, adapter }): ContractIssue[] => {
+      const from = (adapter as { from?: unknown } | null)?.from;
+      const ok = typeof adapter === 'object' && adapter !== null && Object.keys(adapter).length === 1 && typeof from === 'string' && /^[a-z][a-z0-9_.-]*@[1-9][0-9]*$/.test(from);
+      return ok ? [] : [issue('type', `/provides/${at}/adapter`, adapter)];
+    }),
   ];
   const words = new Set(m.access?.words ?? []);
   (m.panels ?? []).forEach((panel, i) => {

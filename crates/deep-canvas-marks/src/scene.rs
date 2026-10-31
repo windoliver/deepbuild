@@ -501,6 +501,22 @@ pub struct Drawn {
     pub scopes: Vec<Scope>,
 }
 
+impl Drawn {
+    /// The mark, its scopes and its clip, for its layer's key.
+    fn feed(&self, k: &mut KeyBuilder, bucket: i32) {
+        self.mark.feed(k, bucket);
+        self.scopes.iter().for_each(|s| s.feed(k));
+        match self.clip {
+            Some(c) => c.iter().for_each(|v| {
+                k.number(*v);
+            }),
+            None => {
+                k.text("unclipped");
+            }
+        }
+    }
+}
+
 impl Mark {
     pub fn item(&self) -> &str {
         match self {
@@ -2056,13 +2072,12 @@ fn frame_shown(
 ) -> Result<Frame, Refused> {
     let (frame, wants_boxes) = build(
         doc,
-        items,
+        (items, &[]),
         palette,
         (bound, row_readings),
         zoom,
         planted,
         None,
-        &[],
     )?;
     if !wants_boxes {
         return Ok(frame);
@@ -2071,13 +2086,12 @@ fn frame_shown(
     let boxes = boxes_of(&frame, items);
     Ok(build(
         doc,
-        items,
+        (items, &[]),
         palette,
         (bound, row_readings),
         zoom,
         planted,
         Some(&boxes),
-        &[],
     )?
     .0)
 }
@@ -2089,6 +2103,18 @@ pub struct Placed {
     pub layer: String,
     pub order: String,
     pub drawn: Vec<Drawn>,
+}
+
+/// An item's marks by their layer, their order and each mark's key input, as a layer keys them.
+impl deep_canvas::schedule::Canonical for Placed {
+    fn encode(&self, out: &mut Vec<u8>) {
+        let mut k = KeyBuilder::new("placed@marks2d.1");
+        k.text(&self.layer).text(&self.order);
+        for m in &self.drawn {
+            m.feed(&mut k, 0);
+        }
+        deep_canvas::schedule::Canonical::encode(&k.finish().0, out);
+    }
 }
 
 /// What an item's marks read beyond the item: the document's items, the palette and paints,
@@ -2491,13 +2517,12 @@ pub fn frame_prebuilt(
     let row_readings = bound_rows(doc, record);
     let (frame, wants_boxes) = build(
         doc,
-        items,
+        (items, prebuilt),
         palette,
         (bound, &row_readings),
         zoom,
         Planted::None,
         None,
-        prebuilt,
     )?;
     Ok((!wants_boxes).then_some(frame))
 }
@@ -2505,14 +2530,14 @@ pub fn frame_prebuilt(
 /// The frame, and whether a paint asked for boxes that `boxes` doesn't yet hold.
 fn build(
     doc: &Map<String, Value>,
-    items: &Map<String, Value>,
+    // The items to build, and those built from the item alone (#857), placed as given.
+    (items, prebuilt): (&Map<String, Value>, &[(&str, &Placed)]),
     palette: &Palette,
     // What each bound value and counter shows, and the readings bound to mark sets' rows.
     (bound, row_readings): (&BTreeMap<String, Shown>, &BTreeMap<String, data::BoundRows>),
     zoom: f64,
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
-    prebuilt: &[(&str, &Placed)],
 ) -> Result<(Frame, bool), Refused> {
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
@@ -2597,16 +2622,7 @@ fn build(
             let mut k = KeyBuilder::new("layer@marks2d.1");
             k.text(&id).number(size[0]).number(size[1]).number(zoom);
             for m in &marks {
-                m.mark.feed(&mut k, bucket);
-                m.scopes.iter().for_each(|s| s.feed(&mut k));
-                match m.clip {
-                    Some(c) => c.iter().for_each(|v| {
-                        k.number(*v);
-                    }),
-                    None => {
-                        k.text("unclipped");
-                    }
-                }
+                m.feed(&mut k, bucket);
             }
             Layer {
                 key: k.finish(),

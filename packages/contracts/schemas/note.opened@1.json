@@ -1,6 +1,8 @@
 {
   "title": "note.opened@1",
   "description": "A note was opened on an item. Only you write one, from the app.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "notes"
   ],

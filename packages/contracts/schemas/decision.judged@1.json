@@ -1,6 +1,8 @@
 {
   "title": "decision.judged@1",
   "description": "A standing rule was judged by what later broke in the work it decided, against the same kind of work you decided yourself, and its state changed: active (it can widen), frozen (it keeps deciding at its scope but can't widen) or revoked (it answers nothing). Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "decisions"
   ],

@@ -1,6 +1,8 @@
 {
   "title": "hook.ack@2",
   "description": "The hub's first line back, within 20 ms of reading the request. Every socket line carries its version.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "v": {

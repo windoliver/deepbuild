@@ -1,6 +1,8 @@
 {
   "title": "reading.rollup@1",
   "description": "A rollup of readings over a window.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "rollups"
   ],

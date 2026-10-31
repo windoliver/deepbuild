@@ -1,0 +1,7 @@
+{
+  "pieces": [
+    { "piece": "packages/proof", "calls": ["deep.registerCheck"] },
+    { "piece": "docs/extension-guide/typescript", "calls": ["deep.registerCheck"] },
+    { "piece": "docs/extension-guide/json-rpc", "calls": ["deep.registerCheck"] }
+  ]
+}
