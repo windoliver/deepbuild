@@ -1,0 +1,65 @@
+Acceptance tests for #880 on the base 0f7fb686 (main: confirm.ts counts an answer when dist/deep-confirm exits 0),
+run on 2026-10-31 on a Mac15,7 (macOS 26.7.1), Node 24.22.0, vitest 5.0.5, after `npm ci`,
+`npm run build --workspaces` and `cargo build --locked -q -p deep-hook`:
+
+  npx vitest run tests/acceptance/880
+  npx tsc -p tests/acceptance/880        (no errors)
+
+Trimmed to each failure's reason. ULIDs and temp paths are from this run; <repo> is the checkout.
+After the run no process with dh880 in its command line was left, and no /tmp/dh880-* folder.
+
+
+== npx vitest run tests/acceptance/880
+
+ ❯ tests/acceptance/880/plants.test.ts (1 test | 1 failed) 9556ms
+ ❯ tests/acceptance/880/replay.test.ts (1 test | 1 failed) 11047ms
+ ❯ tests/acceptance/880/exit-code.test.ts (1 test | 1 failed) 11094ms
+ ❯ tests/acceptance/880/code-signature.test.ts (1 test | 1 failed) 11251ms
+   (touch-id.test.ts gets no line of its own from the default reporter; it is the "1 passed" file, its test skipped)
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  4 failed | 1 skipped (5)
+   Duration  11.82s
+
+FAIL  exit-code.test.ts  #880.dcc31bd2 with deep-confirm replaced by a script that prints nothing and exits 0, a yes
+                         with authority from deep inbox is refused naming the helper's path, and its ask stays open
+  AssertionError: ask ask:01M69B4AN3T1ZF3A31866E7BQ4 (a yes with authority from deep inbox, the helper replaced by a
+  script that prints nothing and exits 0) counted: it must be refused and the ask stay open, no decision saved:
+  expected [ …(2) ] to deeply equal []
+  - []
+  + [
+  +   "ask.answered 01M69B4CG3K0D2TNY28K774488",
+  +   "decision.created 01M69B4CHD0M4F6NB95Q105JNE",
+  + ]
+  (Expected, the reason the criterion names: the base hub ran the copy's dist/deep-confirm, the planted exit-0 script,
+  without DEEP_HUB_TEST_CONFIRM, and counted the approval as confirmed: one ask.answered and one decision saved.)
+
+FAIL  replay.test.ts     #880.64e218e8 valid signatures captured for an earlier ask, for the same ask over an earlier
+                         nonce, and at an older revision are refused naming the ask; a fresh one counts
+  AssertionError: the hub sent the helper a challenge on stdin (ask:01M69B4ANJ0GX4ZCHXM73QAGB9 answered): expected
+  undefined to be type of 'object'
+  (Expected, a missing seam: the base hub calls the helper with the prompt's reason as its one argument, not
+  `deep-confirm sign` with a challenge on stdin, so the test helper logged a base-protocol call, exited 1, and no
+  signature was ever made or verified. The scenario stops at step 1, before any replay.)
+
+FAIL  plants.test.ts     #880.64e218e8 fails on a hub that accepts any signature by the stored key, whatever it covers,
+                         naming the ask
+  AssertionError: expected [Function] to throw error matching /ask ask:[0-9A-Za-z]+ \(answered with …/ but got
+  'BLOCKED: the hub didn't start with D…'
+  Error: DEEP_HUB_PLANT=signature-covers-anything names no planted program
+  (Expected: the base has no such plant, so the hub refuses to start; the plant test fails, as it must until the
+  implementer adds the plant.)
+
+FAIL  code-signature.test.ts  #880.25cf9ef0 a helper whose code signature differs from the one recorded at setup isn't
+                              started, and the answer is refused naming the path
+  AssertionError: the helper whose code signature differs from the one recorded at setup (CDHash
+  25d806ca64d5af2d323ff2cc58ca531652eb7cb0, not 8167069928e715c609f84cf748f675c44b0130c4) was started: it wrote
+  /private/tmp/dh880-OOGG7z/k/impostor-started: expected '62714 ["answer “Push release v1 to or…' to be null
+  (Expected, the reason the criterion names: the base checks no code signature and started the impostor, which wrote
+  its marker with the base's one argument, the prompt's reason. Same identifier `deep-confirm`, different CDHash, as
+  the test checks first.)
+
+SKIP  touch-id.test.ts   #880.e0afc5f5 on the reference Mac, Touch ID accepted counts the answer within 2 s of the
+                         touch; cancelled leaves the ask open with "the prompt was cancelled"
+  (Skipped as INCONCLUSIVE: DEEP_880_TOUCH_ID isn't set. Not run: it shows Touch ID and uses the real Secure Enclave,
+  so only a person runs it, on the reference Mac, recording the screen.)
