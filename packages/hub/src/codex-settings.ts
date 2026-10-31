@@ -67,8 +67,8 @@ export function withEntries(text: string, hook: string): string {
   return changed ? `${JSON.stringify({ ...parsed.value, hooks }, null, 2)}\n` : text;
 }
 /** Keeps what setup wrote, and in which home: the hub and doctor read this home whatever their own environment says. */
-export function recordEntries(root: string, hook: string): void {
-  writeThrough(recordFile(root), `${JSON.stringify({ hooks: ourGroups(hook), home: home() }, null, 2)}\n`);
+export function recordEntries(root: string, hook: string, server: { node: string; cli: string }): void {
+  writeThrough(recordFile(root), `${JSON.stringify({ hooks: ourGroups(hook), home: home(), server }, null, 2)}\n`);
 }
 /** What setup kept for Codex, gone at undo. */
 export function forgetEntries(root: string): void {
@@ -254,10 +254,24 @@ export function withServer(text: string, node: string, cli: string): string {
   const lead = text && !text.endsWith('\n') ? '\n' : '';
   return `${text}${lead}${text ? '\n' : ''}[mcp_servers.${MCP_SERVER}]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify([cli, 'mcp'])}\n`;
 }
-/** `text` with the server block setup added taken out. */
-export const withoutServer = (text: string, node: string, cli: string): string => text.replace(`[mcp_servers.${MCP_SERVER}]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify([cli, 'mcp'])}\n`, '');
+/** `text` with the server's table taken out, from its header to the next not under it, your additions too, when its command and args are what setup wrote. */
+export function withoutServer(text: string, node: string, cli: string): string {
+  const header = `[mcp_servers.${MCP_SERVER}]\n`;
+  const start = text.startsWith(header) ? 0 : text.indexOf(`\n${header}`) + 1;
+  if (start === 0 && !text.startsWith(header)) return text;
+  const after = start + header.length;
+  const rest = new RegExp(`^[ \\t]*\\[(?!mcp_servers\\.${MCP_SERVER}\\.)`, 'm').exec(text.slice(after));
+  const table = text.slice(after, rest ? after + rest.index : undefined).split('\n');
+  if (!table.includes(`command = ${JSON.stringify(node)}`) || !table.includes(`args = ${JSON.stringify([cli, 'mcp'])}`)) return text;
+  return text.slice(0, start) + (rest ? text.slice(after + rest.index) : '');
+}
+/** The server setup recorded, for undo; undefined where it recorded none. */
+export function recordedServer(root: string): { node: string; cli: string } | undefined {
+  const set = readJson(recordFile(root))?.server;
+  return isObj(set) && typeof set.node === 'string' && typeof set.cli === 'string' ? { node: set.node, cli: set.cli } : undefined;
+}
 /** Your `hooks = false` under [features], which setup never flips. */
-export const hooksDisabled = (): boolean => configTables()?.get('features')?.get('hooks') === 'false';
+export const hooksDisabled = (root: string): boolean => configTables(join(recordedHome(root), 'config.toml'))?.get('features')?.get('hooks') === 'false';
 /** The `tool_timeout_sec` Codex gives DeepBuild's MCP server, in seconds. */
 export function toolTimeoutS(file = codexConfig()): number {
   const set = configTables(file)?.get(`mcp_servers.${MCP_SERVER}`)?.get('tool_timeout_sec');
@@ -266,7 +280,8 @@ export function toolTimeoutS(file = codexConfig()): number {
 
 // ---- Health: what the file holds against what setup wrote, and the timing relations (design: Numbers, timing relations).
 
-const recordedHome = (root: string): string => { const set = readJson(recordFile(root))?.home; return typeof set === 'string' && set ? set : home(); };
+/** The home setup wrote in, whatever this process's environment says; before setup, this environment's. */
+export const recordedHome = (root: string): string => { const set = readJson(recordFile(root))?.home; return typeof set === 'string' && set ? set : home(); };
 const entriesFor = (root: string, event: string): Obj[] => {
   const file = join(recordedHome(root), 'hooks.json');
   const hooks = existsSync(file) ? readJson(file)?.hooks : undefined;

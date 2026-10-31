@@ -15,7 +15,7 @@ import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
 import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
-import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
+import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
@@ -180,7 +180,7 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
   const [hooksFile, configFile] = [codexHooks(), codexConfig()];
   const [hooksText, configText] = [read(hooksFile), read(configFile)];
   const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, process.execPath, cli)];
-  recordEntries(root, hook);
+  recordEntries(root, hook, { node: process.execPath, cli });
   for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
     if (after === before) continue;
     keepOriginal(root, record, file);
@@ -264,12 +264,14 @@ async function undo(): Promise<number> {
     delete servers.deepbuild;
     return { ...v, mcpServers: servers };
   });
+  // Codex's files where setup wrote them, and the server as it wrote it, whatever this environment says today.
+  const [recordedHooks, recordedConfig, server] = [join(recordedHome(root), 'hooks.json'), join(recordedHome(root), 'config.toml'), recordedServer(root)];
   // The planted wrong program takes our entries out and writes the JSON again, whatever you had.
   const notes = [
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
-    putBack(root, record, codexHooks(), () => editedCodex(codexHooks(), (text) => withoutEntries(root, text), "only DeepBuild's entries")),
-    putBack(root, record, codexConfig(), () => editedCodex(codexConfig(), (text) => withoutServer(text, process.execPath, join(REPO, 'packages/cli/dist/main.js')), "DeepBuild's MCP server if it was as setup wrote it")),
+    putBack(root, record, recordedHooks, () => editedCodex(recordedHooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
+    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server.node, server.cli) : text), "DeepBuild's MCP server if it was as setup wrote it")),
   ].filter((n): n is string => n !== undefined);
   forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });

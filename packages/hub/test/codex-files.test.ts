@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { writeThrough } from '../src/agent-files.js';
-import { codexReadings, rowReadings } from '../src/codex-loops.js';
-import { readTrust, tomlTables, withServer } from '../src/codex-settings.js';
+import { codexReadings, heartbeatsGone, rowReadings, standingReadings } from '../src/codex-loops.js';
+import { readTrust, tomlTables, withoutServer, withServer } from '../src/codex-settings.js';
 import { GateRunner } from '../src/gate-runner.js';
 import { answerWaitMs } from '../src/mcp.js';
 import { render } from '../src/status.js';
@@ -60,6 +60,19 @@ describe('config.toml as TOML reads it', () => {
   it('adds no second server however the first is spelled', () => {
     for (const text of ['[mcp_servers."deep"]\ncommand = "x"\n', 'mcp_servers.deep.command = "x"\n', '[mcp_servers]\ndeep = { command = "x" }\n', 'notify = ["a # b"]\n[mcp_servers.deep]\ncommand = "x"\n']) expect(withServer(text, '/n', '/c')).toBe(text);
     expect(withServer('[mcp_servers.other]\ncommand = "x"\n', '/n', '/c')).toContain('[mcp_servers.deep]');
+  });
+});
+
+describe('taking our server out', () => {
+  const ours = '[mcp_servers.deep]\ncommand = "/n"\nargs = ["/c","mcp"]\n';
+  it('takes what you added to its table, and no other table', () => {
+    expect(withoutServer(`a = 1\n\n${ours}tool_timeout_sec = 900\n[mcp_servers.deep.env]\nX = "1"\n\n[other]\nb = 2\n`, '/n', '/c')).toBe('a = 1\n\n[other]\nb = 2\n');
+    expect(withoutServer(`[other]\nb = 2\n\n${ours}`, '/n', '/c')).toBe('[other]\nb = 2\n\n');
+  });
+  it('leaves a server that isn\'t the one setup recorded', () => {
+    const yours = '[mcp_servers.deep]\ncommand = "/yours"\nargs = ["/c","mcp"]\n[other]\nb = 2\n';
+    expect(withoutServer(yours, '/n', '/c')).toBe(yours);
+    expect(withoutServer('[mcp_servers.deep_two]\ncommand = "/n"\nargs = ["/c","mcp"]\n', '/n', '/c')).toContain('deep_two');
   });
 });
 
@@ -131,6 +144,19 @@ describe('a goal record', () => {
 
 describe('a row\'s readings', () => {
   const row = (...readings: string[]) => rowReadings(async () => readings.map((reading) => ({ session_id: 's', reading })), ['s'], 0, () => '0 s').then((m) => m.get('s'));
+  it('drops a heartbeat gone from the automations, and only that one', async () => {
+    const a = 'Codex heartbeat: a, next automatic prompt due x';
+    const b = 'Codex heartbeat: b, next automatic prompt due y';
+    const gone = heartbeatsGone(standingReadings([a, b]), [a]);
+    expect(await row(a, b, ...gone)).toEqual([a]);
+    expect(heartbeatsGone(standingReadings([a, b]), [a, b])).toEqual([]);
+    expect(await row('Codex heartbeat: no automatic prompt left', ...heartbeatsGone(standingReadings(['Codex heartbeat: no automatic prompt left']), ['Codex goal: active, looping']))).toEqual([]);
+  });
+  it('says no automatic prompt is left only when no goal goes on', async () => {
+    const going = rollout(goalCall('call_1') + goalOutput('call_1', 'active'));
+    expect((await codexReadings(SESSION, going.transcript, undefined, true)).readings.join('\n')).not.toMatch(/no automatic prompt left/);
+    expect((await codexReadings(SESSION, rollout('').transcript, undefined, true)).readings.join('\n')).toMatch(/no automatic prompt left/);
+  });
   it('keeps a heartbeat per automation', async () => {
     expect(await row('Codex heartbeat: a, next automatic prompt due x', 'Codex heartbeat: b, next automatic prompt due y')).toEqual(['Codex heartbeat: a, next automatic prompt due x', 'Codex heartbeat: b, next automatic prompt due y']);
   });
@@ -144,6 +170,26 @@ describe('the status text', () => {
   it('shows why a stop was not held', () => {
     const text = render([{ id: 'abcdefgh', repo: 'r', agent: 'codex', state: 'needs you', why: 'w', note: 'This stop isn\'t held: slow has no deadline' }], 'from');
     expect(text).toContain('This stop isn\'t held: slow has no deadline');
+  });
+});
+
+describe('a slow check that can\'t start', () => {
+  it('is BLOCKED, never pending, and the next one still runs', async () => {
+    const repo = temp();
+    const git = (...a: string[]) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: repo });
+    git('init', '-q');
+    writeFileSync(join(repo, 'f'), '1\n');
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    const gate = new GateRunner({
+      raw: async () => [], now: Date.now, append: async () => undefined, core: undefined as never,
+      start: async (r) => { if (r.check === 'x') throw Error('no start'); return `run:${r.check}`; }, ended: async () => 'passed', slots: () => ({ free: 1 }), budget_ms: 0, hold_ms: 1000,
+    });
+    const check = (name: string) => ({ check: name, approved: name, on_base: 'fails' as const, expected_ms: 60_000 });
+    await gate.stop({ session: 's', claim: 'claim:a', cwd: repo, checks: [check('x'), check('y')], stopAt: Date.now() });
+    await gate.turnEnded('claim:a');
+    await new Promise((done) => setTimeout(done, 50));
+    expect(gate.slowStanding('claim:a')).toEqual({ pending: false, failed: ['x BLOCKED'] });
   });
 });
 

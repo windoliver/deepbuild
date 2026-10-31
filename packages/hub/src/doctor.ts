@@ -19,7 +19,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
-import { codexConfig, codexHooks, hooksDisabled, installedCodex, modified, readTrust, trustProblems } from './codex-settings.js';
+import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const MANAGED = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode/managed-settings.json' : '/etc/claude-code/managed-settings.json';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -188,7 +188,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
 async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
   const root = installedRoot();
-  if (hooksDisabled()) add('codex.hooks_enabled', agent, 'hooks_disabled', 'fail', `${codexConfig()} has hooks = false under [features], so DeepBuild's hooks won't run there; setup never flips your setting`, 'Take hooks = false out of [features] if you want DeepBuild to hear Codex sessions.');
+  if (hooksDisabled(root)) add('codex.hooks_enabled', agent, 'hooks_disabled', 'fail', `${join(recordedHome(root), 'config.toml')} has hooks = false under [features], so DeepBuild's hooks won't run there; setup never flips your setting`, 'Take hooks = false out of [features] if you want DeepBuild to hear Codex sessions.');
   if (installedCodex(root)) {
     const changed = modified(root);
     for (const text of changed) add('codex.hooks', agent, 'hooks_modified', 'fail', text, `Put the entry back as ${root}/codex-hooks.json has it, then approve it once in /hooks if Codex asks.`);

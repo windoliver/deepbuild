@@ -29,8 +29,8 @@ import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
-import { codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
-import { codexReadings, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
+import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
+import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -54,6 +54,8 @@ import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
+/** A process running Codex's own binary, by the path it was started from. */
+const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 /** A value quoted into SQL. */
@@ -829,7 +831,7 @@ export class Core {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
       }), ...opens];
     });
-    this.follow(drafts, meta);
+    this.follow(drafts, meta, verified);
     if (typed.length) {
       this.acks.set(meta.session, [...(this.acks.get(meta.session) ?? []), ...typed]);
       this.midTurn.set(meta.session, [...(this.midTurn.get(meta.session) ?? []), ...typed.map((t) => t.text)].slice(-32));
@@ -1213,7 +1215,8 @@ export class Core {
    */
   private async promptless(drafts: Draft[], meta: HookMeta, session: Session): Promise<void> {
     const turn = meta.fields?.turn_id;
-    if (!turn) return;
+    // A subagent's hooks carry its own turn; no prompt of the root's stands behind them.
+    if (!turn || meta.fields?.agent_id) return;
     const started = this.turnsStarted.get(session.id);
     this.turnsStarted.set(session.id, turn);
     if (meta.event === 'UserPromptSubmit' || meta.event === 'SessionStart' || started === undefined || started === turn) return;
@@ -1380,7 +1383,7 @@ export class Core {
    * What a hook says of its session beyond its events: whether it is working, so its hooks going quiet reads unknown,
    * the calls still running, and the commits made in its worktree.
    */
-  private follow(drafts: Draft[], meta: HookMeta): void {
+  private follow(drafts: Draft[], meta: HookMeta, verified: boolean): void {
     if (!meta.session) return;
     const live = this.liveOf(meta);
     const now = Date.now();
@@ -1419,8 +1422,8 @@ export class Core {
     }
     for (const [call, c] of live.calls) if (c.ended !== undefined && now - c.ended > CALL_GRACE) live.calls.delete(call);
     // A turn you interrupted (#39) has no stop to say so: it ends here, with no claim.
-    if (meta.event === 'Interrupt') { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
-    if (meta.reading) void this.appendReading(meta.session, meta.agent, meta.reading).catch(() => undefined);
+    if (verified && meta.event === 'Interrupt') { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
+    if (verified && meta.reading) void this.appendReading(meta.session, meta.agent, meta.reading).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
     // A person's status question changes none: answered from the record it runs no model, and let through (an
     // answer waiting, or DeepBuild off) it shows its state at its next hook, as the record's row does.
@@ -1463,9 +1466,11 @@ export class Core {
   /**
    * The thread a session's ID joins. `/clear`, `/compact` and a fork inside a session rotate the ID in the same agent
    * process, so the new ID joins that process's last session; `--fork-session` starts a new process, whose arguments
-   * name the session it forked. Anything else starts a thread of its own.
+   * name the session it forked. Anything else starts a thread of its own. Codex keeps its ID through a compaction and
+   * a clear, its daemon runs many threads, and its payload names no fork's parent: its thread is its own ID.
    */
   private async threadOf(session: Session, source: string | undefined): Promise<string> {
+    if (session.agent === 'codex') return session.id;
     if (source !== 'clear' && source !== 'compact' && source !== 'fork') return session.id;
     const before = [...this.sessions.values()].filter((s) => s.id !== session.id && s.pid === session.pid && s.start === session.start).at(-1);
     if (before) return before.thread;
@@ -2054,14 +2059,14 @@ export class Core {
     const held = until;
     until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
-    if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
-      const failed = await this.slowStop(meta, r, judged.claim, held);
-      if (failed) lane.sendBack = failed;
-      // An answer that ended the hold is delivered below, with the wait an answer gets.
-      until = Math.min(held, Date.now() + STOP_HOLD_MS);
-    }
     let proceeded = false;
     try {
+      if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
+        const failed = await this.slowStop(meta, r, judged.claim, held);
+        if (failed) lane.sendBack = failed;
+        // An answer that ended the hold is delivered below, with the wait an answer gets.
+        until = Math.min(held, Date.now() + STOP_HOLD_MS);
+      }
       // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
       const proceed = await this.holds.proceed(meta, until);
       if (proceed) {
@@ -2134,8 +2139,11 @@ export class Core {
    */
   private async slowStop(meta: HookMeta, r: Routes, claim: string, held: number): Promise<string | undefined> {
     const timeoutS = stopTimeoutS(this.root.dir) ?? 600;
+    const slowClaims = (r.slowClaims ??= []);
     const verdictLater = async (why: string) => {
-      (r.slowClaims ??= []).push(claim);
+      // A claim the agent stopped on again is told once, and said once.
+      if (slowClaims.includes(claim)) return;
+      slowClaims.push(claim);
       await this.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`).catch(() => undefined);
     };
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
@@ -2157,7 +2165,7 @@ export class Core {
     while (Date.now() < held && this.gate.slowStanding(claim).pending) {
       await this.gate.slowEnded(claim, Math.min(held, Date.now() + 500));
       // An answer goes back at once; the check's verdict then comes with your next message.
-      if (r.sendBacks.length || (await waiting()).length) { (r.slowClaims ??= []).push(claim); return undefined; }
+      if (r.sendBacks.length || (await waiting()).length) { if (!slowClaims.includes(claim)) slowClaims.push(claim); return undefined; }
     }
     const standing = this.gate.slowStanding(claim);
     if (standing.pending) { await verdictLater(`its checks were still going when the hold ended, 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
@@ -2166,7 +2174,7 @@ export class Core {
   private async readCodexTrust(cwd: string): Promise<void> {
     const dirs = [...(process.env.PATH ?? '').split(':'), ...this.config().loginPath.split(':')].filter(Boolean);
     const codex = dirs.map((d) => join(d, 'codex')).find((p) => existsSync(p));
-    if (codex) await saveTrust(this.root.dir, codex, cwd, process.env).catch(() => undefined);
+    if (codex) await saveTrust(this.root.dir, codex, cwd, { ...process.env, CODEX_HOME: recordedHome(this.root.dir) }).catch(() => undefined);
   }
   /** The verdicts of the slow checks no stop was held for, once each has ended: what a prompt carries, or nothing. */
   private slowVerdicts(r: Routes): string | undefined {
@@ -2348,6 +2356,7 @@ export class Core {
     const readings = read.version && !loopsCovered(read.version) && coveredBy('codex', read.version) ? [uncoveredLoops(read.version)] : read.readings;
     const before = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Codex %: %' ORDER BY log_pos`)) as { reading: string }[];
     const standing = standingReadings(before.map((b) => b.reading));
+    if (readings === read.readings) for (const gone of heartbeatsGone(standing, readings)) await this.appendReading(meta.session, meta.agent, gone);
     for (const reading of readings) if (!stands(standing, reading)) await this.appendReading(meta.session, meta.agent, reading);
   }
   /** The pull request a session opened, as its readings record it: the newest. */
@@ -2707,8 +2716,10 @@ export class Core {
       this.writeCursors();
       return true;
     }
-    // A Codex thread's identity is its payload's: resumed in a new process, it is bound to that process from its start.
-    if (meta.agent === 'codex' && transcript === session.transcript && (meta.event === 'SessionStart' || session.ended)) {
+    // A Codex thread's identity is its payload's: resumed in a new Codex process, once the old one is gone or the session
+    // ended, it is bound to that process from its start.
+    if (meta.agent === 'codex' && transcript === session.transcript && meta.event === 'SessionStart' && (meta.fields?.source === 'resume' || meta.fields?.source === 'startup')
+      && (session.ended || await this.startOf(session.pid, true) !== session.start) && CODEX_BINARY.test(await argsOf(meta.ppid))) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false });
       return true;
     }
@@ -2721,7 +2732,8 @@ export class Core {
       const actual = await this.startOf(parent.pid, true);
       if (!actual || actual !== parent.start) return null;
       const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
-      return served.length === 1 ? served[0]!.id : null;
+      // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
+      return served.length === 1 && served[0]!.agent !== 'codex' ? served[0]!.id : null;
     });
   }
 
