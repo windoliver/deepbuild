@@ -14,9 +14,10 @@ import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { hubAdapters } from './hookmap.js';
+import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
-import { installedRoot, rootOf, type Root } from './paths.js';
+import { reaches } from './memory.js';
+import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
@@ -47,6 +48,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
+  // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
+  ['memory.list', ['cli']], ['memory.act', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
@@ -136,6 +139,8 @@ function withWaits(ruled: string, event: string, wait: WaitReply): string {
   if (wait.message) out.systemMessage = [out.systemMessage, wait.message].filter(Boolean).join('\n');
   return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
 }
+/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
+const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
@@ -283,7 +288,7 @@ class Conn {
  */
 interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
 /** What the hub reads of a guard@1 entry in rules.json. */
-interface Guard { match?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown; fail_closed?: unknown }
+interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown; fail_closed?: unknown }
 
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
@@ -386,12 +391,12 @@ class Hub {
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
   private rewrites(agent: string): boolean {
-    try { return hubAdapters().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
+    try { return registry().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
   }
   /** Whether an agent's hooks include FileChanged, by its facts: the route a line takes while a call still runs. */
   private watches(agent: string): boolean {
     try {
-      const facts = hubAdapters().get(agent === 'claude-code' ? 'claude' : agent).facts;
+      const facts = registry().get(agent === 'claude-code' ? 'claude' : agent).facts;
       const versions = isObj(facts) && isObj(facts.events) && isObj(facts.events.versions) ? facts.events.versions : {};
       return Object.values(versions).some((hooks) => isObj(hooks) && 'FileChanged' in hooks);
     } catch { return false; }
@@ -722,7 +727,7 @@ class Hub {
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {
     const files = [claudeSettings(), join(this.root.dir, 'claude-hooks.json')];
-    const key = files.map((f) => { try { const s = statSync(f); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } }).join('|');
+    const key = files.map(fileKey).join('|');
     if (key !== this.settingsSeen.key) {
       const relation = relations(this.root.dir, readJson(files[0]!)).find((r) => r.name === 'stop hold');
       this.settingsSeen = { key, relation: relation ?? { name: 'stop hold', holds: true, timeoutS: 600, text: '' } };
@@ -775,7 +780,7 @@ class Hub {
     // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
     const matched = this.plant === 'matches-text'
       ? Object.keys(entries).filter((n) => { const m = String(entries[n]?.match ?? ''); return m.startsWith('run:') && (meta.command ?? '').includes(m.slice(4)); })
-      : meta.matched;
+      : meta.matched.filter((n) => reaches(n, entries[n]?.scope, repoOf(meta.cwd), meta.session));
     const mode = (n: string): unknown => (this.plant === 'warn-as-block' && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
     // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
@@ -797,11 +802,8 @@ class Hub {
   /** The entries of rules.json, read again only when the file changes. */
   private rules(): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    let key = 'none';
-    try {
-      const s = statSync(file);
-      key = `${s.ino}:${s.size}:${s.mtimeMs}`;
-    } catch { /* no rules.json: no entries */ }
+    // No rules.json: no entries.
+    const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
       let entries: Record<string, Guard | undefined> = {};
       try {

@@ -196,7 +196,7 @@ impl Render for View {
 }
 
 /// A straight RGBA raster as the BGRA picture GPUI paints.
-fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
+pub(crate) fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
     for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
     }
@@ -204,7 +204,7 @@ fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
     Some(Arc::new(RenderImage::new([image::Frame::new(frame)])))
 }
 
-fn refused(code: &str) -> Value {
+pub(crate) fn refused(code: &str) -> Value {
     json!({"ok": false, "code": code})
 }
 
@@ -242,10 +242,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
         let panel = hub
             .slot(panel_id)
             .expect("a document's panel is in the scenario");
-        let size = [
-            panel[2].round().clamp(1., 8192.) as u16,
-            panel[3].round().clamp(1., 8192.) as u16,
-        ];
+        let size = crate::snapshot::px([panel[2], panel[3]]);
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
             // panel from the top left as a 2D layer's is.
@@ -284,8 +281,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             ) else {
                 continue;
             };
-            let [dw, dh] = drawn.frame.size;
-            let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
+            let scale = drawn.scale(size);
             for (id, b) in drawn.boxes() {
                 let at = [
                     panel[0] + b[0] * scale,
