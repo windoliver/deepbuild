@@ -1,11 +1,12 @@
 // #31 AC15 #31.a271090e: a temporary checkout is gone once no run on it is running or queued; and after a hub killed mid-run restarts,
 // no checkout it left remains. The service's side on real folders; the crash through the real hub and deep-hook, as #29's
 // hub tests go (a hub that can't start is BLOCKED, never a pass).
+import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, writeFileSync, mkdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { git as gitIn, makeRepo, mustFail, openWorld, presenceKind, SEEDED, spec, type World } from './helpers.ts';
-import { BEHAVIOR, CHECK_FILE, cleanup, CLI, DEEP_HOOK, draftFor, lockedFor, askNamed, makeWorld, req, Session, settle, sleep, startHub, stopHub, taskOf } from '../29/h-d.ts';
+import { BEHAVIOR, CHECK_FILE, cleanup, CLI, DEEP_HOOK, draftFor, lockedFor, askNamed, makeWorld, REPO, req, Session, settle, sleep, startHub, stopHub, taskOf } from '../29/h-d.ts';
 
 afterEach(cleanup);
 async function withWorld(body: (w: World) => Promise<void>): Promise<void> {
@@ -73,8 +74,12 @@ function findMarker(root: string, name: string): string[] {
   return found;
 }
 
+const BUILD_LIMIT = 600_000;
+
 describe('AC15 #31.a271090e after a hub killed mid-run restarts, no checkout it left remains', () => {
   it('AC15 a hub killed with SIGKILL during a run leaves its checkout, and its next start removes it', async () => {
+    // A copy of the tracked files has no target/. A failed build, or no cargo, leaves the binary missing: BLOCKED below.
+    if (!existsSync(DEEP_HOOK)) spawnSync('cargo', ['build', '-p', 'deep-hook'], { cwd: REPO, stdio: 'inherit', timeout: BUILD_LIMIT });
     for (const [what, path] of [['the deep CLI (npm run build)', CLI], ['deep-hook (cargo build -p deep-hook)', DEEP_HOOK]] as const) {
       if (!existsSync(path)) throw Error(`BLOCKED: ${what} is not built at ${path}`);
     }
@@ -127,5 +132,5 @@ describe('AC15 #31.a271090e after a hub killed mid-run restarts, no checkout it 
       if (savedTmp === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = savedTmp;
     }
-  }, 300_000);
+  }, 300_000 + BUILD_LIMIT);
 });

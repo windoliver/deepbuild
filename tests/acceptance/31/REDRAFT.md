@@ -1,3 +1,23 @@
+# Blind redraft: AC15's hub test builds deep-hook (#31, fixture only)
+
+`lifetime.test.ts` alone changed, and only in AC15's hub test. No assertion, expected value, test name, tag, the deep CLI
+check, the BLOCKED message or `tests/acceptance/29/h-d.ts` changed.
+
+What changed: when `DEEP_HOOK` is missing, the test runs `cargo build -p deep-hook` with cwd `REPO`, both from `h-d.ts`, before
+the existing check. The check then decides as before: a failed build, or no cargo, leaves the binary missing and throws the
+same BLOCKED. The build may take 600 s, and the test's timeout grew by that much, from 300 s to 900 s.
+
+Why: the proof lanes run tests in a copy of the tracked files with `npm run build` done and no cargo build. `target/` never
+exists there, so this test threw BLOCKED every time and could never prove the criterion in a lane.
+
+Proof: with `target/debug/deep-hook` moved aside, the file passed 4 of 4 and the binary was back. Cargo relinked it from
+`target/debug/deps` in 0.47 s, same hash and date, with no compile. A compile from nothing into a separate target folder took
+8 s. With the binary aside and cargo off `PATH`, and again with a `cargo` that exits 1, the test threw the BLOCKED and the
+binary stayed missing.
+
+Not run: the proof lanes themselves, a compile from nothing inside `target/` followed by this test, and the other test files
+in this folder.
+
 # Blind redraft: the sample's install (#31, fixture only)
 
 `install` in `helpers.ts` alone changed. No assertion, expected value, test name, tag, line a test reads or the surface in
