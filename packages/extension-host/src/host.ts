@@ -374,6 +374,8 @@ function declaredPath(schema: unknown, path: string): string {
   return kept;
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
+/** A package's manifest, as its folder holds it. */
+const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
 async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
   let disarm = (): void => undefined;
   try {
@@ -457,7 +459,7 @@ class Host implements ExtensionHost {
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
     // An install recorded before #351 holds the check kinds its manifest declares.
-    for (const e of Object.values(this.entries)) e.holds ??= (JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest).checks ?? [];
+    for (const e of Object.values(this.entries)) e.holds ??= manifestOf(e.folder).checks ?? [];
     this.results = this.read('checked.json');
     this.keys = this.read('keys.json');
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
@@ -524,8 +526,7 @@ class Host implements ExtensionHost {
     if (this.options.plant === 'rewires-to-newest') {
       const provided = (manifest.provides ?? []).map((p) => p.interface);
       for (const e of Object.values(this.entries).filter((x) => x.id !== id)) {
-        const theirs = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
-        for (const u of theirs.uses ?? []) {
+        for (const u of manifestOf(e.folder).uses ?? []) {
           const base = u.interface.slice(0, u.interface.lastIndexOf('@'));
           const newest = provided.filter((i) => i.startsWith(`${base}@`)).sort((a, b) => Number(b.split('@')[1]) - Number(a.split('@')[1]))[0];
           if (newest && newest !== u.interface) this.wired.set(e.id, new Map([...(this.wired.get(e.id) ?? []), [u.interface, newest]]));
@@ -572,10 +573,7 @@ class Host implements ExtensionHost {
       throw Error(`${id} declares it replaces the done gate, or provides a second one beside it (${GATE}); no package does until a second gate exists and ${GATE} opens with its kit`);
     }
     const others = Object.values(this.entries).filter((e) => e.id !== id);
-    for (const e of others) {
-      const theirs = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
-      if (m.conflicts?.includes(e.id) || theirs.conflicts?.includes(id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
-    }
+    for (const e of others) if (manifestOf(e.folder).conflicts?.includes(id) || m.conflicts?.includes(e.id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
     // A user-level package's kinds are in use in every project; a project's, only in its own.
     const overlaps = (e: Entry): boolean => e.project === null || project === null || e.project === project;
     for (const kind of m.checks ?? []) {
@@ -596,13 +594,11 @@ class Host implements ExtensionHost {
   private async updateHeld(m: Manifest): Promise<void> {
     const before = this.entries[m.id];
     if (!before) return;
-    const old = JSON.parse(readFileSync(join(before.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const old = manifestOf(before.folder);
     const keeps = new Set((m.provides ?? []).map((p) => p.interface));
     const dropped = (old.provides ?? []).map((p) => p.interface).filter((i) => !keeps.has(i));
-    const users = Object.values(this.entries).filter((e) => e.id !== m.id).flatMap((e) => {
-      const theirs = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
-      return (theirs.uses ?? []).filter((u) => dropped.includes(u.interface)).map((u) => ({ user: e.id, uses: u.interface }));
-    });
+    const users = Object.values(this.entries).filter((e) => e.id !== m.id)
+      .flatMap((e) => (manifestOf(e.folder).uses ?? []).filter((u) => dropped.includes(u.interface)).map((u) => ({ user: e.id, uses: u.interface })));
     if (!users.length) return;
     if (this.options.plant === 'rewires-to-newest') return;
     const asks = this.options.asks;
@@ -646,7 +642,7 @@ class Host implements ExtensionHost {
     this.trustedPath(connection, `${RUN_AS_YOU} is approved`);
     const entry = this.entries[id];
     if (!entry) throw Error(`${id} isn't installed`);
-    const manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const manifest = manifestOf(entry.folder);
     if (word !== RUN_AS_YOU || !(manifest.access?.words ?? []).includes(word)) throw Error(`${id}'s manifest doesn't ask for ${String(word)}, so there is nothing to approve`);
     this.runAsYou = { ...this.runAsYou, [id]: true };
     this.save('run-as-you.json', this.runAsYou);
@@ -805,7 +801,7 @@ class Host implements ExtensionHost {
     const reasons: string[] = [];
     let manifest: Manifest | undefined;
     try {
-      manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+      manifest = manifestOf(folder);
     } catch (e) {
       reasons.push(`its deepbuild.json can't be read: ${message(e)}`);
     }
@@ -910,7 +906,7 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
       return refuse(not);
     }
-    const manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const manifest = manifestOf(folder);
     try {
       await this.declareKinds(entry.id, manifest.leases ?? []);
     } catch (e) {
@@ -1622,9 +1618,7 @@ class Host implements ExtensionHost {
       // Only the owner's lines set the turn and open routes: an adapter that relays can't steer another's delivery.
       if (this.owners(b).includes(name)) {
         if (OPENS_TURN.has(line.event)) b.inTurn = true;
-        if (line.event === ENDS_TURN) b.inTurn = false;
-        if (line.event === ENDS_TURN) await this.flush(session, b, 'hold');
-        if (line.event === ENDS_TURN) await this.flush(session, b, 'wake');
+        if (line.event === ENDS_TURN) { b.inTurn = false; await this.flush(session, b, 'hold'); await this.flush(session, b, 'wake'); }
         if (line.event === 'UserPromptSubmit') await this.flush(session, b, 'prompt');
         if (OPENS_TURN.has(line.event)) await this.flush(session, b, 'steer');
       }
