@@ -206,14 +206,10 @@ impl Replica {
         let from = word("from", &["fixture", "record_copy", "empty"], "fixture")?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
-        // GPUI's headless window draws at 2x and can't be changed from outside it, so a replica at 1x waits on that.
         let scale = match &args["scale"] {
             Value::Null => 2.,
             v if v == 2 => 2.,
-            v if v == 1 => return Err(fail(
-                "refused",
-                "a replica draws at scale 2 only: GPUI's headless window can't be set to 1x yet",
-            )),
+            v if v == 1 => 1.,
             other => {
                 return Err(fail(
                     "refused",
@@ -235,6 +231,29 @@ impl Replica {
                 return Err(fail(
                     "refused",
                     format!("launch.size is [width, height] in points, not {other}"),
+                ))
+            }
+        };
+        // Nothing the app draws is localized yet, so every locale draws the same; the reply says which one ran.
+        let locale = match &args["locale"] {
+            Value::Null => "en-US".to_owned(),
+            Value::String(tag)
+                if tag.split('-').enumerate().all(|(i, part)| {
+                    let n = part.len();
+                    part.chars().all(|c| c.is_ascii_alphanumeric())
+                        && if i == 0 {
+                            (2..=3).contains(&n) && part.chars().all(|c| c.is_ascii_alphabetic())
+                        } else {
+                            (2..=8).contains(&n)
+                        }
+                }) =>
+            {
+                tag.clone()
+            }
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.locale is a language tag such as en-US, not {other}"),
                 ))
             }
         };
@@ -384,6 +403,10 @@ impl Replica {
             .borrow_mut()
             .clone()
             .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?;
+        // GPUI's test window reports 2x; the window itself lays out and paints at the scale it's set to, and the
+        // renderer sizes its images to match.
+        glyphs.draw_at(scale);
+        let _ = cx.update_window(window, |_, window, _| window.set_scale_factor(scale));
 
         let mut notifier = Notifier::new(NOTIFY_AFTER);
         for event in &events {
@@ -422,6 +445,7 @@ impl Replica {
         let reply = json!({
             "replica": replica.id,
             "window": {"size": [size.0 as u32, size.1 as u32], "scale": scale as u32},
+            "locale": locale,
         });
         replica
             .trace

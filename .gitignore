@@ -17,3 +17,5 @@ crates/deep-app/panels/*/gpui-kit.d.ts
 crates/deep-app/panels/*/jsconfig.json
 tests/acceptance/124/fixtures/panels/*/gpui-kit.d.ts
 tests/acceptance/124/fixtures/panels/*/jsconfig.json
+crates/deep-replica/tests/fixtures/*/gpui-kit.d.ts
+crates/deep-replica/tests/fixtures/*/jsconfig.json
