@@ -5,7 +5,7 @@ export interface PanelRow {
   id: string; subject: string | null; value: number | string | null; unit: string;
   source: string; age_ms: number; basis: 'observed' | 'modeled';
   status: 'current' | 'STALE';
-  agreement: { share: number; n: number; status: ClassifierCheck['status'] } | null;
+  agreement: { share: number; n: number; yes: number; recall: number | null; precision: number | null; status: ClassifierCheck['status'] } | null;
   cost?: Reading['cost']; complete?: boolean; by?: Reading['by']; band?: Reading['band']; detail?: Reading['detail'];
 }
 interface Freshness { now: number; fresh_for: Record<string, number> }
@@ -22,7 +22,7 @@ export function panelRows(readings: Reading[], options: Freshness): PanelRow[] {
     return {
       id: r.id, subject: r.subject, value: r.value, unit: r.unit, source: r.source, age_ms, basis: r.basis,
       status: freshness(r, options),
-      agreement: check && check.agreement !== null ? { share: check.agreement, n: check.n, status: check.status } : null,
+      agreement: check && check.agreement !== null ? { share: check.agreement, n: check.n, yes: check.yes, recall: check.recall, precision: check.precision, status: check.status } : null,
       ...(r.cost ? { cost: r.cost } : {}), ...(r.complete !== undefined ? { complete: r.complete } : {}), ...(r.by ? { by: r.by } : {}), ...(r.band ? { band: r.band } : {}), ...(r.detail ? { detail: r.detail } : {}),
     };
   });

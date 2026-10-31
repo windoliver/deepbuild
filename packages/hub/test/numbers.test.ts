@@ -71,7 +71,7 @@ describe('labelling a period from before the hub', () => {
 
       const line = (uuid: string, timestamp: string, content: unknown) => JSON.stringify({ type: 'user', uuid, timestamp, message: { role: 'user', content } });
       const secret = `ghp_${'a1'.repeat(18)}`;
-      const old = Array.from({ length: 99 }, (_, i) => line(`u${i}`, '2026-09-02T00:00:00Z', `rename file ${i}`));
+      const old = Array.from({ length: 99 }, (_, i) => line(`u${i}`, '2026-09-02T00:00:00Z', i < 9 ? `is it done yet ${i}?` : `rename file ${i}`));
       const text = [...old, line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('asked', '2026-09-03T00:00:00Z', 'is it done yet?'), line('key', '2026-09-03T00:00:01Z', `use ${secret}`), line('after', '2026-10-05T00:00:00Z', 'after the date, in the window'), line('older', '2026-09-03T00:00:02Z', 'typed after the date'), line('same', new Date().toISOString(), 'typed after the date'), line('samelong', new Date().toISOString(), long), line('out', '2026-10-25T00:00:00Z', 'outside the window')].join('\n');
       const sha = createHash('sha256').update(text).digest('hex');
       mkdirSync(join(home, 'pilot'));
@@ -105,7 +105,7 @@ describe('labelling a period from before the hub', () => {
       expect(texts).not.toContain('after the date, in the window');
       expect(texts).not.toContain('outside the window');
       expect(JSON.stringify(texts), 'scrubbed, in every draw').not.toContain(secret);
-      write([...all].map(([message, t]) => ({ message, label: t === 'is it done yet?' })));
+      write([...all].map(([message, t]) => ({ message, label: t.startsWith('is it done yet') })));
       expect((await decision()).used, 'your labels, on both periods, pass').toContain('is_it_done');
       const noManifest = (await call(socket, token, 'numbers.sample', { before }) as { result: Drawn }).result;
       expect(noManifest.warning, 'the pool is still the earlier side').toBeUndefined();
