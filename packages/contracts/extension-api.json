@@ -447,24 +447,120 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#363",
-    "digest": "d1:1982b1979f80ec15fa337a0efc5a66ae0ab5f636ac7a5a7479e6a4abe151f7b4",
+    "digest": "d1:7b959c929cca7fc80f98820934c9c93e767a8866fadad5a3db367ccfe61e0900",
     "params": {
       "type": "object",
       "properties": {
         "kind": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_.-]*$"
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
         },
-        "schema": {
+        "declared": {
           "type": "object",
-          "properties": {},
-          "required": [],
-          "additionalProperties": true
+          "properties": {
+            "generation": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "schema": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": true
+            },
+            "migrates": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "required": [
+            "generation",
+            "schema"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "kind",
-        "schema"
+        "declared"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store.put",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#363",
+    "digest": "d1:ac1335306776e0ed3ee5cdeba7b615c6f0dfde8fcd5c367f3f6f513bf15ec830",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {}
+      },
+      "required": [
+        "kind",
+        "key",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store.get",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#363",
+    "digest": "d1:c730609691c50bf822922c5ed1f8c3f9a1b0e16003aaf842b0905856483fc6cf",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store.list",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#363",
+    "digest": "d1:3a6e7074261baae03245f92663edcc20c0c3c888edcd18c537680339239048b9",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+        }
+      },
+      "required": [
+        "kind"
       ],
       "additionalProperties": false
     }
@@ -642,7 +738,7 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#363",
-    "digest": "d1:e3f3d719dd4a19c61231550621eb4d966cdf7eba22e542d6d7be541b396e1cca",
+    "digest": "d1:5a52fe18cc22318cd0ccc42e606723a61abef05b0cd255a25489008cba588bb8",
     "params": {
       "type": "object",
       "properties": {
@@ -662,6 +758,23 @@
             },
             "input": {
               "type": "object"
+            },
+            "output": {
+              "type": "object"
+            },
+            "changes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+              }
+            },
+            "reads": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+              }
             }
           },
           "required": [
