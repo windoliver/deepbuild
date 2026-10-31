@@ -122,6 +122,23 @@ describe('a stop the hub tries', () => {
     });
   }, 60_000);
 
+  it('makes one try per host for a whole spool, so a replay holds later hooks for one try at most', async () => {
+    await withHub(async (root, home) => {
+      const { line, sock } = world(root, home, { ANTHROPIC_BASE_URL: 'https://192.0.2.1' });
+      const sessions = [SESSION, OTHER, '3b9f1c2e-1111-4222-8333-44445555cccc'];
+      for (const s of sessions) {
+        await send(sock, line(s, 'SessionStart', { source: 'startup' }));
+        await send(sock, line(s, 'UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' }));
+      }
+      mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
+      writeFileSync(join(root, 'spool', 'spool.jsonl'), sessions.map((s) => line(s, 'StopFailure', { error: 'server_error', prompt_id: 'p1' }, { late: true })).join(''), { mode: 0o600 });
+      const at = Date.now();
+      await reply(sock, line(OTHER, 'UserPromptSubmit', { prompt: 'again', prompt_id: 'p2' }));
+      expect(Date.now() - at, 'a prompt behind the replay waits for one try, not three').toBeLessThan(3000);
+      expect(await owner(root), 'the replayed stop was tried').toBe('you');
+    });
+  }, 60_000);
+
   it('tries a stop replayed from the spool', async () => {
     await withHub(async (root, home) => {
       const { line, sock } = world(root, home, { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9' });
