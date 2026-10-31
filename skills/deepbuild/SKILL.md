@@ -77,6 +77,7 @@ Never: A process stopped that DeepBuild can't prove it started.
 ## Screen and panel
 
 - deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
+- deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
 
 Never: Drawn over the question card, run past its grant, painted in the status colors except through a status binding, pushed to you, or taken as proof.
 
@@ -91,3 +92,15 @@ Never: The source of truth; the wiki's pages are.
 - deep_search. Search your wiki, past decisions and the project's spec, and in your own session its open items and verdicts, read only; every hit names its source.
 
 Never: Called from a panel or past its quota, or a reading without its source and as-of time, or a tool not counted as read.
+
+## Physics
+
+- deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
+
+Never: Code run per step, a body created mid-run, a GPU simulation's result used in a check, or a claim passed by a clip.
+
+## Media
+
+- deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
+
+Never: Sound that starts without your gesture, a capture without the system picker or the OS permission, or without its indicator, a microphone combined with network access you didn't see, or a voice cloned from evidence.

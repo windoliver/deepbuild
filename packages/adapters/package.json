@@ -10,5 +10,8 @@
     "development": "./src/index.ts",
     "default": "./dist/index.js"
   },
-  "scripts": { "build": "tsc -b tsconfig.json" }
+  "scripts": { "build": "tsc -b tsconfig.json" },
+  "dependencies": {
+    "@deepbuild/contracts": "0.0.0"
+  }
 }

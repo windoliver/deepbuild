@@ -1,6 +1,8 @@
 {
   "title": "suggestion.filed@1",
   "description": "A suggestion was filed on your item.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "suggestions"
   ],

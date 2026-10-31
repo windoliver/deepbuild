@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
+members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
@@ -15,6 +15,9 @@ opt-level = 3
 # documents takes under 200 ms) are read off the dev binaries the acceptance tests run, so the
 # kernel and the JSON, map and hash crates it spends its time in build at release speed there.
 [profile.dev.package.deep-canvas]
+opt-level = 3
+# Issue #402: the terminal emulator a panel host feeds 50 MB of a program's output through.
+[profile.dev.package.deep-canvas-cells]
 opt-level = 3
 [profile.dev.package.serde_json]
 opt-level = 3

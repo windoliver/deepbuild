@@ -4,10 +4,25 @@
 //! its captions, one node per item.
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
-use crate::{captions, place, Cell};
+use crate::{captions, place, Cell, Placed};
+
+/// What `sheet.placed` holds: the card's slot, the sheet, each cell's rect and highlight marks,
+/// and the captions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sheet {
+    pub placed: Placed,
+    pub captions: Vec<String>,
+}
+
+impl deep_canvas::schedule::Canonical for Sheet {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.placed, &self.captions), out);
+    }
+}
 
 /// The sheet module: its manifest and its one register call.
 pub fn module() -> Module {
@@ -77,8 +92,9 @@ fn size(v: &Value) -> Option<[u32; 2]> {
 /// The sheet's card slot, its box, each cell's rect and highlight marks, and its captions.
 fn placed(v: &mut View<'_>) -> Result<(), OpError> {
     let fields = v
-        .json("core.fields")?
-        .ok_or_else(|| OpError::new("input_missing", v.path()))?;
+        .typed::<Fields>("core.fields")?
+        .ok_or_else(|| OpError::new("input_missing", v.path()))?
+        .to_json();
     let path = format!("items/{}/params", v.id().unwrap_or_default());
     let bad = || OpError::new("bad_doc", path.clone());
     let p = &fields["params"];
@@ -140,10 +156,10 @@ fn placed(v: &mut View<'_>) -> Result<(), OpError> {
         place(view, card, &cells, columns, gap).map_err(|code| OpError::new(code, path.clone()))?;
     v.write(
         "sheet.placed",
-        Val::json(
-            json!({"card": placed.card, "sheet": placed.sheet, "cells": placed.cells,
-                         "marks": placed.marks, "captions": captions(&cells, &labels)}),
-        ),
+        Val::typed(Sheet {
+            placed,
+            captions: captions(&cells, &labels),
+        }),
     )
 }
 

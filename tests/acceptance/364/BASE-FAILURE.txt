@@ -1,0 +1,391 @@
+# #364 acceptance tests on the base commit 6ba47cdb, 2026-10-31T02:18Z, Node v24.22.0
+# Expected: every test fails, each for the missing #364 surface: the market package's conformance refuses its
+# manifest's secrets and sources (extension.manifest@1 has no such fields), so nothing after install-check-load
+# runs (no enterSecret, readSource or recording on the host); the stream sources install with no source@1 kit run
+# (kits: []), and the planted reader installs instead of being refused. tsc fails on the same missing names
+# (HttpAnswer, HttpClient, HttpRequest, Recording, SecretStore, the secrets/http options, enterSecret, readSource,
+# recording) and the implicit anys they cause; no other error.
+
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/364 --no-file-parallelism
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-364-eb9b67/tests/acceptance/364
+
+ ❯ secrets.test.ts (6 tests | 6 failed) 14669ms
+   ❯ AC1 #364.8ec0560e a secret's value never appears in the record, a log, a URL or a prompt (2)
+     × AC1 an outside plug-in's price call carries the key only in its X-Api-Key header, and no form of it is in the URL, what the plug-in or the caller gets, the record, or any file the hub wrote 5505ms
+     × AC1 a release plug-in that puts everything it was given into a tool.before context puts no form of the key in what reaches the agent's prompt 3805ms
+   ❯ AC5 #364.161145a6 with the market key mk/test+51f0c9=, a recorded error answer whose body reads "invalid key mk/test+51f0c9=" and whose headers carry the key base64 and URL-encoded reaches the plug-in's parser as "invalid key [redacted]", with no form of the key anywhere in what it gets; a hub that scrubs only logs and traces fails, naming the form it found (2)
+     × AC5 the parser gets the 401 with its body as "invalid key [redacted]" and no form of the key in its status, headers or body 2426ms
+     × AC5 (wrong program) a hub that scrubs only logs and traces hands the parser the key and fails, naming the form 1ms
+   ❯ AC7 #364.5f1f8998 with the market key mk/test+51f0c9= sent as Basic credentials for user: and the key, so its base64 starts at byte offset 2, and echoed in a header in the URL-safe alphabet, the plug-in's parser gets neither form; a hub that scrubs only the key's own base64 in the standard alphabet fails, naming the form it found (2)
+     × AC7 the key goes as Basic credentials for user:, and the parser gets neither the base64 at byte offset 2 nor the URL-safe echo 2595ms
+     × AC7 (wrong program) a hub that scrubs only the key's own base64 in the standard alphabet leaves the Basic credentials' base64 and fails, naming byte offset 2 1ms
+ ❯ redirect.test.ts (3 tests | 3 failed) 4786ms
+   ❯ AC4 #364.25091cf4 a price call carrying the market key in X-Api-Key that gets 302 Location: https://cdn.other.example/q sends nothing to cdn.other.example and what needs the price reading is BLOCKED, cause off-host redirect, while a redirect to https://api.market.example/v2/q is followed with the key; a hub that lets its HTTP client follow redirects delivers the key to cdn.other.example and fails, naming that host (3)
+     × AC4 a 302 to https://cdn.other.example/q sends nothing to cdn.other.example, and the price reading is BLOCKED, cause off-host redirect 880ms
+     × AC4 a 302 to https://api.market.example/v2/q is followed with the key, and the price reads from it 962ms
+     × AC4 (wrong program) a hub that lets its HTTP client follow redirects delivers the key to cdn.other.example and fails, naming that host 1859ms
+ ❯ stream.test.ts (2 tests | 2 failed) 4192ms
+   ❯ AC3 #364.3a628510 a stream source passes source@1 at install: read twice from one cursor it returns the same events in order and loses none across a hub restart; a planted reader that skips the first event after a resume fails it, naming the fixture (2)
+     × AC3 the stream source installs with source@1's kit passed on it, and loads 1478ms
+     × AC3 (wrong program) a planted reader that skips the first event after a resume is refused at install, naming the fixture 472ms
+ ❯ replay.test.ts (1 test | 1 failed) 8162ms
+   ❯ AC2 #364.fd9dab33 a plug-in's tests run from recorded source calls with secrets stripped and a clock they control, and make no live call (1)
+     × AC2 two live price calls record with no form of the key; replayed on a controlled clock they give the same prices as of that clock, the cache holds within freshness, and nothing reaches the network 6634ms
+ ❯ keytest.test.ts (2 tests | 2 failed) 10110ms
+   ❯ AC6 #364.9f6db5ef the price source's key test reads valid and saves on 200, invalid and saves nothing on 401, and INCONCLUSIVE and saves the value on 503, on a timeout and with no network; a test that rejects the value on the 503, the timeout or no network fails, naming the case (2)
+     × AC6 each case reads and saves as the issue says, and the test call carries the value as entered 7267ms
+     × AC6 (wrong program) a key test that rejects the value on the 503, the timeout and no network fails, naming each case 2ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  keytest.test.ts > AC6 #364.9f6db5ef the price source's key test reads valid and saves on 200, invalid and saves nothing on 401, and INCONCLUSIVE and saves the value on 503, on a timeout and with no network; a test that rejects the value on the 503, the timeout or no network fails, naming the case > AC6 each case reads and saves as the issue says, and the test call carries the value as entered
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ keytest.test.ts:31:3
+ ❯ cases keytest.test.ts:37:13
+ ❯ keytest.test.ts:56:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  keytest.test.ts > AC6 #364.9f6db5ef the price source's key test reads valid and saves on 200, invalid and saves nothing on 401, and INCONCLUSIVE and saves the value on 503, on a timeout and with no network; a test that rejects the value on the 503, the timeout or no network fails, naming the case > AC6 (wrong program) a key test that rejects the value on the 503, the timeout and no network fails, naming each case
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ keytest.test.ts:31:3
+ ❯ cases keytest.test.ts:37:13
+ ❯ keytest.test.ts:56:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  redirect.test.ts > AC4 #364.25091cf4 a price call carrying the market key in X-Api-Key that gets 302 Location: https://cdn.other.example/q sends nothing to cdn.other.example and what needs the price reading is BLOCKED, cause off-host redirect, while a redirect to https://api.market.example/v2/q is followed with the key; a hub that lets its HTTP client follow redirects delivers the key to cdn.other.example and fails, naming that host > AC4 a 302 to https://cdn.other.example/q sends nothing to cdn.other.example, and the price reading is BLOCKED, cause off-host redirect
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario redirect.test.ts:29:3
+ ❯ redirect.test.ts:37:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  redirect.test.ts > AC4 #364.25091cf4 a price call carrying the market key in X-Api-Key that gets 302 Location: https://cdn.other.example/q sends nothing to cdn.other.example and what needs the price reading is BLOCKED, cause off-host redirect, while a redirect to https://api.market.example/v2/q is followed with the key; a hub that lets its HTTP client follow redirects delivers the key to cdn.other.example and fails, naming that host > AC4 a 302 to https://api.market.example/v2/q is followed with the key, and the price reads from it
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario redirect.test.ts:29:3
+ ❯ redirect.test.ts:47:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  redirect.test.ts > AC4 #364.25091cf4 a price call carrying the market key in X-Api-Key that gets 302 Location: https://cdn.other.example/q sends nothing to cdn.other.example and what needs the price reading is BLOCKED, cause off-host redirect, while a redirect to https://api.market.example/v2/q is followed with the key; a hub that lets its HTTP client follow redirects delivers the key to cdn.other.example and fails, naming that host > AC4 (wrong program) a hub that lets its HTTP client follow redirects delivers the key to cdn.other.example and fails, naming that host
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario redirect.test.ts:29:3
+ ❯ redirect.test.ts:55:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  replay.test.ts > AC2 #364.fd9dab33 a plug-in's tests run from recorded source calls with secrets stripped and a clock they control, and make no live call > AC2 two live price calls record with no form of the key; replayed on a controlled clock they give the same prices as of that clock, the cache holds within freshness, and nothing reaches the network
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ replay.test.ts:28:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  secrets.test.ts > AC1 #364.8ec0560e a secret's value never appears in the record, a log, a URL or a prompt > AC1 an outside plug-in's price call carries the key only in its X-Api-Key header, and no form of it is in the URL, what the plug-in or the caller gets, the record, or any file the hub wrote
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ secrets.test.ts:32:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  secrets.test.ts > AC1 #364.8ec0560e a secret's value never appears in the record, a log, a URL or a prompt > AC1 a release plug-in that puts everything it was given into a tool.before context puts no form of the key in what reaches the agent's prompt
+AssertionError: deepbuild/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ secrets.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  secrets.test.ts > AC5 #364.161145a6 with the market key mk/test+51f0c9=, a recorded error answer whose body reads "invalid key mk/test+51f0c9=" and whose headers carry the key base64 and URL-encoded reaches the plug-in's parser as "invalid key [redacted]", with no form of the key anywhere in what it gets; a hub that scrubs only logs and traces fails, naming the form it found > AC5 the parser gets the 401 with its body as "invalid key [redacted]" and no form of the key in its status, headers or body
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scrubScenario secrets.test.ts:95:3
+ ❯ secrets.test.ts:113:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  secrets.test.ts > AC5 #364.161145a6 with the market key mk/test+51f0c9=, a recorded error answer whose body reads "invalid key mk/test+51f0c9=" and whose headers carry the key base64 and URL-encoded reaches the plug-in's parser as "invalid key [redacted]", with no form of the key anywhere in what it gets; a hub that scrubs only logs and traces fails, naming the form it found > AC5 (wrong program) a hub that scrubs only logs and traces hands the parser the key and fails, naming the form
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scrubScenario secrets.test.ts:95:3
+ ❯ secrets.test.ts:113:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  secrets.test.ts > AC7 #364.5f1f8998 with the market key mk/test+51f0c9= sent as Basic credentials for user: and the key, so its base64 starts at byte offset 2, and echoed in a header in the URL-safe alphabet, the plug-in's parser gets neither form; a hub that scrubs only the key's own base64 in the standard alphabet fails, naming the form it found > AC7 the key goes as Basic credentials for user:, and the parser gets neither the base64 at byte offset 2 nor the URL-safe echo
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scrubScenario secrets.test.ts:95:3
+ ❯ secrets.test.ts:144:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  secrets.test.ts > AC7 #364.5f1f8998 with the market key mk/test+51f0c9= sent as Basic credentials for user: and the key, so its base64 starts at byte offset 2, and echoed in a header in the URL-safe alphabet, the plug-in's parser gets neither form; a hub that scrubs only the key's own base64 in the standard alphabet fails, naming the form it found > AC7 (wrong program) a hub that scrubs only the key's own base64 in the standard alphabet leaves the Basic credentials' base64 and fails, naming byte offset 2
+AssertionError: test/market@1.0.0's conformance: its manifest fails extension.manifest@1 at /secrets: unlisted_field [{"name":"market_key","for":"the market data API's key"}]; its manifest fails extension.manifest@1 at /sources: unlisted_field [{"name":"ext.market.price","variant":"polled"}]: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ installAndLoad helpers.ts:258:95
+    256|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    257|   const checked = await h.check(p);
+    258|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    259|   const load = await h.load(p);
+    260|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scrubScenario secrets.test.ts:95:3
+ ❯ secrets.test.ts:144:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  stream.test.ts > AC3 #364.3a628510 a stream source passes source@1 at install: read twice from one cursor it returns the same events in order and loses none across a hub restart; a planted reader that skips the first event after a resume fails it, naming the fixture > AC3 the stream source installs with source@1's kit passed on it, and loads
+AssertionError: the kits the install ran: expected [] to deep equally contain { slot: 'source@1', …(2) }
+
+- Expected:
+{
+  "fill": "ext.feed.events",
+  "slot": "source@1",
+  "verdict": "PASS",
+}
+
++ Received:
+[]
+
+ ❯ stream.test.ts:18:48
+     16|     const h = await open();
+     17|     const p = await h.install({ from: await pkg('feed'), builtBy: null…
+     18|     expect(p.kits, 'the kits the install ran').toContainEqual({ slot: …
+       |                                                ^
+     19|     const checked = await h.check(p);
+     20|     expect(checked.passed, checked.reasons.join('; ')).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  stream.test.ts > AC3 #364.3a628510 a stream source passes source@1 at install: read twice from one cursor it returns the same events in order and loses none across a hub restart; a planted reader that skips the first event after a resume fails it, naming the fixture > AC3 (wrong program) a planted reader that skips the first event after a resume is refused at install, naming the fixture
+AssertionError: promise resolved "{ id: 'test/feed-skips', …(6) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "builtBy": null,
++   "digest": "d1:f2f62bfbc98105525d57cb45309251c034ab92a4a242103c43fce8ecfcadc462",
++   "folder": "/private/tmp/dh364-world-OZX7Mn/deepbuild/extensions/test/feed-skips/1.0.0-x7rmd1",
++   "id": "test/feed-skips",
++   "kits": [],
++   "project": null,
++   "version": "1.0.0",
+  }
+
+ ❯ stream.test.ts:26:138
+     24|   it('AC3 (wrong program) a planted reader that skips the first event …
+     25|     const h = await open();
+     26|     await expect(h.install({ from: await pkg('feed-skips'), builtBy: n…
+       |                                                                                                                                          ^
+     27|     expect((await h.installed()).map((i) => i.id), 'installed packages…
+     28|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  14 failed (14)
+   Start at  19:18:50
+   Duration  71.69s (tests 67%, import 30%, transform 3%)
+
+     Import  80 modules were evaluated 261 times · 18.99s total, 30% of tracked time
+             ~13.17s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/364/tsconfig.json
+
+tests/acceptance/364/helpers.ts(22,31): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpAnswer'.
+tests/acceptance/364/helpers.ts(22,43): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpClient'.
+tests/acceptance/364/helpers.ts(22,55): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpRequest'.
+tests/acceptance/364/helpers.ts(22,106): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'Recording'.
+tests/acceptance/364/helpers.ts(22,131): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'SecretStore'.
+tests/acceptance/364/helpers.ts(122,5): error TS2353: Object literal may only specify known properties, and 'get' does not exist in type 'TestStore'.
+tests/acceptance/364/helpers.ts(122,17): error TS7006: Parameter 'key' implicitly has an 'any' type.
+tests/acceptance/364/helpers.ts(123,17): error TS7006: Parameter 'key' implicitly has an 'any' type.
+tests/acceptance/364/helpers.ts(123,22): error TS7006: Parameter 'value' implicitly has an 'any' type.
+tests/acceptance/364/helpers.ts(124,20): error TS7006: Parameter 'key' implicitly has an 'any' type.
+tests/acceptance/364/helpers.ts(142,5): error TS2353: Object literal may only specify known properties, and 'secrets' does not exist in type 'ExtensionHostOptions'.
+tests/acceptance/364/helpers.ts(186,37): error TS7006: Parameter 'request' implicitly has an 'any' type.
+tests/acceptance/364/helpers.ts(186,46): error TS7006: Parameter 'signal' implicitly has an 'any' type.
+tests/acceptance/364/keytest.test.ts(36,57): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/keytest.test.ts(56,59): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/redirect.test.ts(7,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpClient'.
+tests/acceptance/364/redirect.test.ts(30,11): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/redirect.test.ts(31,24): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(29,14): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(30,21): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(32,21): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(34,26): error TS2339: Property 'recording' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(35,33): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/364/replay.test.ts(38,33): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/364/replay.test.ts(49,21): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(51,21): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(54,21): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/replay.test.ts(56,28): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/secrets.test.ts(11,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpAnswer'.
+tests/acceptance/364/secrets.test.ts(34,29): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/secrets.test.ts(36,26): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/secrets.test.ts(78,13): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/secrets.test.ts(79,20): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/secrets.test.ts(96,27): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/secrets.test.ts(98,24): error TS2339: Property 'readSource' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/twins.ts(4,30): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpAnswer'.
+tests/acceptance/364/twins.ts(4,42): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HttpClient'.
+tests/acceptance/364/twins.ts(14,17): error TS7006: Parameter 'request' implicitly has an 'any' type.
+tests/acceptance/364/twins.ts(14,26): error TS7006: Parameter 'signal' implicitly has an 'any' type.
+tests/acceptance/364/twins.ts(28,114): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+tests/acceptance/364/twins.ts(55,86): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+tests/acceptance/364/twins.ts(57,29): error TS2339: Property 'enterSecret' does not exist on type 'ExtensionHost'.
+(tsc exit 2)

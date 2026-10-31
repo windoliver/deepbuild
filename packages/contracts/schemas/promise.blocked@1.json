@@ -1,6 +1,8 @@
 {
   "title": "promise.blocked@1",
   "description": "A promise set again a fourth time, or past its end, is BLOCKED (#120): with the owner who can clear it, the service or you, and the one ask raised for it, if any. No further wake-up fires.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -1,6 +1,8 @@
 {
   "title": "error@2",
   "description": "The one shape every refusal shares, the hub socket's refusals included.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "code": {

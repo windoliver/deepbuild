@@ -1,6 +1,8 @@
 {
   "title": "package.envelope@1",
   "description": "The one envelope extensions, packs, blueprints and kits share: the package's id as owner/name, its version, the frozen digest of its contents and, when signed, the publisher's key. Nothing else: a manifest carries these same fields at its root.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "id": {

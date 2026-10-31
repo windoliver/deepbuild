@@ -1,6 +1,8 @@
 {
   "title": "ask.batched@1",
   "description": "Asks were batched into one card.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

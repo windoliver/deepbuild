@@ -1,6 +1,8 @@
 {
   "title": "check.code@1",
   "description": "The check catalog's codes: the one source of the findings a check run can carry about how it ran, each mapped to a verdict. exit_masked: the command's exit status is masked, so it can't fail. no_tests_ran: a run of zero tests. crashed_before_first_assertion: the suite crashed before its first assertion ran. reported_after_deadline: a result reported after the run's deadline. output_dropped: a crashed run's output was dropped. type_error_as_assertion: a TypeError thrown before the first assertion was reported as an assertion failure.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "string",
   "enum": [
     "exit_masked",
