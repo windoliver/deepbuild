@@ -1,0 +1,17 @@
+// The planted reader (#364 AC3): the same stream source, except that the first read of a run that starts from a cursor
+// (a resume after a restart) skips that cursor's first event. A run that starts from the stream's start reads true.
+interface Event { seq: number; kind: string; data: string }
+let fresh = true;
+
+export default function (deep: any): void {
+  deep.registerSource('ext.feed-skips.events', {
+    variant: 'stream',
+    read(stream: { events: Event[] }, cursor: string | null, limit: number): { events: Event[]; cursor: string | null } {
+      let start = cursor === null ? 0 : Number(cursor);
+      if (fresh && cursor !== null) start += 1;
+      fresh = false;
+      const events = stream.events.slice(start, start + limit);
+      return { events, cursor: String(start + events.length) };
+    },
+  });
+}

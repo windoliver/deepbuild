@@ -1,0 +1,36 @@
+// The stocks view's price source (#364): a polled source on api.market.example that needs the market key, which the
+// hub adds to each call by its handle, as X-Api-Key or as Basic credentials for `user` (probe.json's `auth`). Its
+// parser keeps every answer it is given, and the probe check `ext.market.report` reports them with the handle
+// deep.secret gave it. With probe.json's `hook`, a release copy of it in the hub adds the same to a tool.before
+// context, so a test can read what would reach an agent's prompt.
+import { readFileSync } from 'node:fs';
+
+interface Probe { auth: 'header' | 'basic'; timeout: number; freshFor: number; keyTest: boolean; hook: boolean }
+interface Answer { status: number; headers: Record<string, string>; body: string }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const seen: Answer[] = [];
+
+export default async function (deep: any): Promise<void> {
+  const handle = await deep.secret('market_key');
+  await deep.registerSource('ext.market.price', {
+    variant: 'polled',
+    host: 'api.market.example',
+    path: '/q',
+    secret: handle,
+    ...(probe.auth === 'basic' ? { basic: { user: 'user' } } : { header: 'X-Api-Key' }),
+    quota: { per_minute: 60, per_day: 1000 },
+    timeout: probe.timeout,
+    freshFor: probe.freshFor,
+    ...(probe.keyTest ? { keyTest: { path: '/v1/key' } } : {}),
+    parse(answer: Answer): { value: number; unit: string } {
+      seen.push(answer);
+      if (answer.status !== 200) throw Error(`no price in a ${answer.status} answer`);
+      return { value: Number(JSON.parse(answer.body).price), unit: 'USD' };
+    },
+  });
+  deep.registerCheck('ext.market.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ handle, seen }) }],
+  }));
+  if (probe.hook) deep.on('tool.before', async () => ({ context: JSON.stringify({ handle, seen }) }));
+}
