@@ -15,7 +15,7 @@ import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
 import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
-import { codexConfig, codexHooks, codexRelations, fixedHook, hasCodex, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
+import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
@@ -95,7 +95,10 @@ async function install(cli: string, quiet = false): Promise<number> {
     const groups = ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000)));
     for (const file of [settingsFile, userFile]) keepOriginal(root, record, file);
     saveRecord(root, record);
-    if (hasCodex()) installCodex(root, record, cli, hook);
+    if (hasCodex()) {
+      // A Codex file it can't read refuses Codex's part alone: Claude Code's goes on.
+      try { installCodex(root, record, cli, hook); } catch (e) { process.stderr.write(`Codex was left out of setup: ${e instanceof Error ? e.message : String(e)}. Fix the file and run deep setup again.\n`); }
+    }
     const settings = withStatusLine(root, withHooks(root, planned.get(settingsFile)!, groups), `${q(hook)} statusline`);
     writeJson(settingsFile, settings);
     noteWritten(record, settingsFile);
@@ -176,7 +179,8 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
   // Both are read before either is written: one that won't parse refuses the pair.
   const [hooksFile, configFile] = [codexHooks(), codexConfig()];
   const [hooksText, configText] = [read(hooksFile), read(configFile)];
-  const [hooks, config] = [withEntries(root, hooksText, hook), withServer(configText, process.execPath, cli)];
+  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, process.execPath, cli)];
+  recordEntries(root, hook);
   for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
     if (after === before) continue;
     keepOriginal(root, record, file);
@@ -264,15 +268,26 @@ async function undo(): Promise<number> {
   const notes = [
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
-    putBack(root, record, codexHooks(), () => { const f = target(codexHooks()); writeThrough(codexHooks(), withoutEntries(root, readFileSync(f, 'utf8'))); return `you edited ${codexHooks()} since setup, so undo took out only DeepBuild's entries`; }),
-    putBack(root, record, codexConfig(), () => { const f = target(codexConfig()); writeThrough(codexConfig(), withoutServer(readFileSync(f, 'utf8'), process.execPath, join(REPO, 'packages/cli/dist/main.js'))); return `you edited ${codexConfig()} since setup, so undo took out DeepBuild's MCP server if it was as setup wrote it`; }),
+    putBack(root, record, codexHooks(), () => editedCodex(codexHooks(), (text) => withoutEntries(root, text), "only DeepBuild's entries")),
+    putBack(root, record, codexConfig(), () => editedCodex(codexConfig(), (text) => withoutServer(text, process.execPath, join(REPO, 'packages/cli/dist/main.js')), "DeepBuild's MCP server if it was as setup wrote it")),
   ].filter((n): n is string => n !== undefined);
+  forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });
   rmSync(join(root, 'setup.json'), { force: true });
   for (const note of notes) console.log(note);
   console.log(`DeepBuild is removed from Claude Code: its hooks, status line forwarder, MCP server, skill and the hub's login service are gone, and your settings are as they were. Your record, evidence and wiki stay in ${root}; deleting that folder is yours to do.`);
   return 0;
+}
+
+/** A Codex file you edited since setup: ours taken out, or, one that's gone or no longer reads, left as it is and said. */
+function editedCodex(file: string, without: (text: string) => string, what: string): string {
+  try {
+    writeThrough(file, without(readFileSync(target(file), 'utf8')));
+    return `you edited ${file} since setup, so undo took out ${what}`;
+  } catch (e) {
+    return `undo left ${file} as it is: ${e instanceof Error ? e.message : String(e)}`;
+  }
 }
 
 /** deep doctor's item for each timing relation our entries keep, with both values: broken is a failed item. */

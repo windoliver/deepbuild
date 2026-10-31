@@ -5,7 +5,7 @@
 // in <root>/codex-hooks.json, and reads trust from Codex's own hook list. Identity is always the payload's, never this
 // process's environment: the shared daemon keeps the environment of the terminal that started it.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { strictObject, target, writeThrough } from './agent-files.js';
@@ -53,7 +53,7 @@ const present = (groups: unknown, command: string): boolean => Array.isArray(gro
  * `file`'s bytes with our entries added after yours, or the same bytes when each is there already: an entry that is
  * there, timeout and all, stays as it is, so a second setup or an update leaves the file and Codex's trust alone.
  */
-export function withEntries(root: string, text: string, hook: string): string {
+export function withEntries(text: string, hook: string): string {
   const parsed = text.trim() ? strictObject(text) : { value: {} };
   if ('refused' in parsed) throw Error(`${codexHooks()} ${parsed.refused}`);
   const groups = ourGroups(hook);
@@ -64,8 +64,20 @@ export function withEntries(root: string, text: string, hook: string): string {
     hooks[event] = [...(Array.isArray(hooks[event]) ? hooks[event] as unknown[] : []), group];
     changed = true;
   }
-  writeThrough(recordFile(root), `${JSON.stringify({ hooks: groups }, null, 2)}\n`);
   return changed ? `${JSON.stringify({ ...parsed.value, hooks }, null, 2)}\n` : text;
+}
+/** Keeps what setup wrote, and in which home: the hub and doctor read this home whatever their own environment says. */
+export function recordEntries(root: string, hook: string): void {
+  writeThrough(recordFile(root), `${JSON.stringify({ hooks: ourGroups(hook), home: home() }, null, 2)}\n`);
+}
+/** What setup kept for Codex, gone at undo. */
+export function forgetEntries(root: string): void {
+  for (const file of [recordFile(root), trustFile(root), join(root, 'bin', 'deep-hook')]) rmSync(file, { force: true });
+}
+/** Where a session's rollouts may sit: the default home, and the one setup wrote in. */
+export function sessionHomes(root: string): string[] {
+  const set = readJson(recordFile(root))?.home;
+  return [...new Set([join(homedir(), '.codex'), ...(typeof set === 'string' && set ? [set] : [])])].map((h) => join(h, 'sessions'));
 }
 /** `text` with our entries taken out, for undo after you edited the file. */
 export function withoutEntries(root: string, text: string): string {
@@ -90,42 +102,147 @@ function recorded(root: string): Ours[] {
   return Object.entries(record.hooks).flatMap(([event, g]) => ((g as Group).hooks ?? []).map((entry) => ({ event, command: String(entry.command), entry })));
 }
 
-// ---- config.toml: read as far as DeepBuild needs it, by table; a repeated key or table refuses the file.
+// ---- config.toml: read as far as DeepBuild needs it, by table; what TOML itself refuses refuses the file.
 
 export type Tables = Map<string, Map<string, string>>;
-/** The tables of a TOML text, each key's raw value, or why it won't do. A multi-line value's lines are skipped. */
-export function tomlTables(text: string): { tables: Tables } | { refused: string } {
-  const tables: Tables = new Map([['', new Map()]]);
-  let table = tables.get('')!;
-  let open = 0;
-  let quote: string | undefined;
-  for (const [n, raw] of text.split('\n').entries()) {
-    const line = raw.trim();
-    if (quote) { if (line.includes(quote)) quote = undefined; continue; }
-    if (open > 0) { open += (line.match(/\[/g)?.length ?? 0) - (line.match(/\]/g)?.length ?? 0); continue; }
-    if (!line || line.startsWith('#')) continue;
-    const head = /^\[([^[\]]+)\]\s*(#.*)?$/.exec(line);
-    if (head) {
-      const name = head[1]!.trim();
-      if (tables.has(name)) return { refused: `repeats the table [${name}] on line ${n + 1}` };
-      tables.set(name, table = new Map());
+/** Where the string starting at `i` ends, one past its closing quote; -1 if it never closes. */
+function stringEnd(s: string, i: number): number {
+  const quote = s[i]!;
+  const triple = quote.repeat(3);
+  const long = s.startsWith(triple, i);
+  for (let at = i + (long ? 3 : 1); at < s.length; at++) {
+    if (quote === '"' && s[at] === '\\') { at++; continue; }
+    if (!long && s[at] === '\n') return -1;
+    if (long ? s.startsWith(triple, at) : s[at] === quote) {
+      if (!long) return at + 1;
+      // A closing run may hold up to two more quotes of the string's own.
+      let end = at + 3;
+      while (s[end] === quote && end < at + 5) end++;
+      return end;
+    }
+  }
+  return -1;
+}
+/** Where the value starting at `i` ends: a line's end or comment at the top; a comma or closing brace inside an inline table. -1 if a string or bracket never closes. */
+function valueEnd(s: string, i: number, inline: boolean): number {
+  let depth = 0;
+  for (let at = i; at < s.length; at++) {
+    const c = s[at]!;
+    if (c === '"' || c === "'") { at = stringEnd(s, at) - 1; if (at < 0) return -1; continue; }
+    if (c === '#') {
+      if (depth === 0) return at;
+      while (at < s.length && s[at] !== '\n') at++;
       continue;
     }
-    if (/^\[\[.*\]\]/.test(line)) { table = new Map(); continue; }
-    const pair = /^("[^"]*"|'[^']*'|[\w.-]+)\s*=\s*(.*)$/.exec(line);
-    if (!pair) return { refused: `has a line that isn't TOML, line ${n + 1}` };
-    if (table.has(pair[1]!)) return { refused: `repeats the key ${pair[1]} on line ${n + 1}` };
-    const value = pair[2]!.replace(/\s+#.*$/, '').trim();
-    table.set(pair[1]!, value);
-    const triple = /^("""|''')/.exec(value)?.[1];
-    if (triple && !value.slice(3).includes(triple)) quote = triple;
-    else if (value.startsWith('[') || value.startsWith('{')) open = Math.max(0, (value.match(/[[{]/g)?.length ?? 0) - (value.match(/[\]}]/g)?.length ?? 0));
+    if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') { if (depth === 0) return at; depth--; }
+    else if (depth === 0 && (c === '\n' || (inline && c === ','))) return at;
+  }
+  return depth === 0 ? s.length : -1;
+}
+const blanks = (s: string, i: number): number => { while (s[i] === ' ' || s[i] === '\t' || s[i] === '\r') i++; return i; };
+/** A dotted key at `i`, its parts unquoted, and where it ends. */
+function keyAt(s: string, i: number): { parts: string[]; end: number } | undefined {
+  const parts: string[] = [];
+  for (let at = blanks(s, i); ; at = blanks(s, at + 1)) {
+    let end: number;
+    if (s[at] === '"' || s[at] === "'") {
+      if (s.startsWith(s[at]!.repeat(3), at)) return undefined;
+      end = stringEnd(s, at);
+      if (end < 0) return undefined;
+      const raw = s.slice(at, end);
+      try { parts.push(raw[0] === '"' ? JSON.parse(raw) as string : raw.slice(1, -1)); } catch { parts.push(raw.slice(1, -1)); }
+    } else {
+      end = at;
+      while (end < s.length && /[\w-]/.test(s[end]!)) end++;
+      if (end === at) return undefined;
+      parts.push(s.slice(at, end));
+    }
+    at = blanks(s, end);
+    if (s[at] !== '.') return { parts, end: at };
+  }
+}
+/** The tables of a TOML text, each key's raw value, or why it won't do. Tables under an array of tables aren't kept: DeepBuild reads none. */
+export function tomlTables(text: string): { tables: Tables } | { refused: string } {
+  const tables: Tables = new Map([['', new Map()]]);
+  const declared = new Set<string>();
+  const arrays = new Set<string>();
+  const lineAt = (i: number): number => text.slice(0, i).split('\n').length;
+  const notToml = (i: number) => ({ refused: `has a line that isn't TOML, line ${lineAt(i)}` });
+  const inside = (name: string): boolean => [...arrays].some((a) => name === a || name.startsWith(`${a}.`));
+  const tableOf = (name: string): Map<string, string> => { let t = tables.get(name); if (!t) tables.set(name, t = new Map()); return t; };
+  /** Puts `parts = raw` under `prefix`; an inline table's keys go under its own name. */
+  const put = (prefix: string[], parts: string[], raw: string, scratch: Map<string, string> | undefined, i: number): { refused: string } | undefined => {
+    const key = parts.at(-1)!;
+    const name = [...prefix, ...parts.slice(0, -1)].join('.');
+    const into = scratch ?? tableOf(name);
+    const shown = scratch ? parts.join('.') : key;
+    if (into.has(shown)) return { refused: `repeats the key ${shown} on line ${lineAt(i)}` };
+    into.set(shown, raw);
+    if (scratch || !raw.startsWith('{')) return undefined;
+    const body = raw.slice(1, -1);
+    const under = [...prefix, ...parts];
+    tableOf(under.join('.'));
+    for (let at = blanks(body, 0); at < body.length; at = blanks(body, at + 1)) {
+      if (body[at] === '\n') continue;
+      const inner = keyAt(body, at);
+      if (!inner || body[inner.end] !== '=') return notToml(i);
+      const from = blanks(body, inner.end + 1);
+      const end = valueEnd(body, from, true);
+      if (end < 0) return notToml(i);
+      const bad = put(under, inner.parts, body.slice(from, end).trim(), undefined, i);
+      if (bad) return bad;
+      at = blanks(body, end);
+      if (at < body.length && body[at] !== ',') return notToml(i);
+    }
+    return undefined;
+  };
+  let prefix: string[] = [];
+  let scratch: Map<string, string> | undefined;
+  for (let i = 0; i < text.length;) {
+    i = blanks(text, i);
+    if (i >= text.length) break;
+    if (text[i] === '\n') { i++; continue; }
+    if (text[i] === '#') { const nl = text.indexOf('\n', i); i = nl < 0 ? text.length : nl + 1; continue; }
+    let end: number;
+    if (text[i] === '[') {
+      const many = text[i + 1] === '[';
+      const head = keyAt(text, i + (many ? 2 : 1));
+      if (!head || !text.startsWith(many ? ']]' : ']', head.end)) return notToml(i);
+      const name = head.parts.join('.');
+      end = head.end + (many ? 2 : 1);
+      if (many) {
+        if (declared.has(name)) return { refused: `repeats the table [${name}] on line ${lineAt(i)}` };
+        arrays.add(name);
+        scratch = new Map();
+      } else if (inside(name)) scratch = new Map();
+      else {
+        if (declared.has(name)) return { refused: `repeats the table [${name}] on line ${lineAt(i)}` };
+        declared.add(name);
+        tableOf(name);
+        scratch = undefined;
+      }
+      prefix = head.parts;
+    } else {
+      const key = keyAt(text, i);
+      if (!key || text[key.end] !== '=') return notToml(i);
+      const from = blanks(text, key.end + 1);
+      end = valueEnd(text, from, false);
+      if (end < 0) return notToml(i);
+      const raw = text.slice(from, end).trim();
+      if (!raw) return notToml(i);
+      const bad = put(prefix, key.parts, raw, scratch, i);
+      if (bad) return bad;
+    }
+    i = blanks(text, end);
+    if (i < text.length && text[i] !== '\n' && text[i] !== '#') return notToml(i);
+    if (text[i] === '#') { const nl = text.indexOf('\n', i); i = nl < 0 ? text.length : nl; }
   }
   return { tables };
 }
-const configTables = (): Tables | undefined => {
+const configTables = (file = codexConfig()): Tables | undefined => {
   try {
-    const read = tomlTables(readFileSync(target(codexConfig()), 'utf8'));
+    const read = tomlTables(readFileSync(target(file), 'utf8'));
     return 'tables' in read ? read.tables : undefined;
   } catch { return undefined; }
 };
@@ -142,15 +259,17 @@ export const withoutServer = (text: string, node: string, cli: string): string =
 /** Your `hooks = false` under [features], which setup never flips. */
 export const hooksDisabled = (): boolean => configTables()?.get('features')?.get('hooks') === 'false';
 /** The `tool_timeout_sec` Codex gives DeepBuild's MCP server, in seconds. */
-export function toolTimeoutS(): number {
-  const set = configTables()?.get(`mcp_servers.${MCP_SERVER}`)?.get('tool_timeout_sec');
+export function toolTimeoutS(file = codexConfig()): number {
+  const set = configTables(file)?.get(`mcp_servers.${MCP_SERVER}`)?.get('tool_timeout_sec');
   return set !== undefined && /^\d+(\.\d+)?$/.test(set) ? Number(set) : TOOL_TIMEOUT_S;
 }
 
 // ---- Health: what the file holds against what setup wrote, and the timing relations (design: Numbers, timing relations).
 
-const entriesFor = (event: string): Obj[] => {
-  const hooks = existsSync(codexHooks()) ? readJson(codexHooks())?.hooks : undefined;
+const recordedHome = (root: string): string => { const set = readJson(recordFile(root))?.home; return typeof set === 'string' && set ? set : home(); };
+const entriesFor = (root: string, event: string): Obj[] => {
+  const file = join(recordedHome(root), 'hooks.json');
+  const hooks = existsSync(file) ? readJson(file)?.hooks : undefined;
   const groups = isObj(hooks) && Array.isArray(hooks[event]) ? hooks[event] as unknown[] : [];
   return groups.flatMap((g) => (isObj(g) && Array.isArray(g.hooks) ? g.hooks.filter(isObj) : []));
 };
@@ -159,7 +278,7 @@ export const installedCodex = (root: string): boolean => recorded(root).length >
 /** Each entry of ours the file no longer holds as setup wrote it: named, with `removed` or `modified`. */
 export function modified(root: string): string[] {
   return recorded(root).flatMap(({ event, command, entry }) => {
-    const found = entriesFor(event).find((h) => h.command === command);
+    const found = entriesFor(root, event).find((h) => h.command === command);
     if (!found) return [`Codex's ${event} entry was removed from ${codexHooks()}, so that hook doesn't reach the hub`];
     return JSON.stringify(found) === JSON.stringify(entry) ? [] : [`Codex's ${event} entry was modified in ${codexHooks()}: it isn't what setup wrote, so Codex asks for trust again and holds may not fit`];
   });
@@ -168,7 +287,7 @@ export function modified(root: string): string[] {
 export function stopTimeoutS(root: string): number | undefined {
   const stop = recorded(root).find((e) => e.event === 'Stop');
   if (!stop) return undefined;
-  const found = entriesFor('Stop').find((h) => h.command === stop.command);
+  const found = entriesFor(root, 'Stop').find((h) => h.command === stop.command);
   if (!found) return undefined;
   // Codex's own default where an entry sets none.
   return typeof found.timeout === 'number' ? found.timeout : 600;
@@ -193,7 +312,7 @@ export function codexRelations(root: string): CodexRelation[] {
       ? { name: 'slow lane', holds: true, waitMs: 0, text: `slow lane holds: its expected ${words(slow)} ends at least 5 s before Codex's Stop hook timeout, ${words(timeoutS * 1000)}` }
       : { name: 'slow lane', holds: false, waitMs: 0, text: `slow lane broken: its expected ${words(slow)} must end at least 5 s before Codex's Stop hook timeout, which is ${timeoutS} s where setup set ${set}, so a stop with a slow check isn't held and its verdict comes with your next message; put the Stop entry's timeout back in ${codexHooks()}` });
   }
-  const toolS = toolTimeoutS();
+  const toolS = toolTimeoutS(join(recordedHome(root), 'config.toml'));
   const waitMs = toolS * 1000 - HOLD_MARGIN_MS;
   // Under 10 s leaves too little to wait in: deep_ask returns at once, and the agent waits with deep_wait.
   out.push(toolS >= 10
@@ -208,12 +327,20 @@ const trustFile = (root: string): string => join(root, 'codex-trust.json');
 /** Reads Codex's hook list and keeps DeepBuild's entries of it, for health and doctor; a list it can't get changes nothing. */
 export async function saveTrust(root: string, codex: string, cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
   const listed = await hookList(codex, cwd, env);
-  if (listed) writeFileSync(trustFile(root), `${JSON.stringify(listed.filter((h) => /deep-hook'? codex /.test(String(h.command))))}\n`);
+  if (listed) writeThrough(trustFile(root), `${JSON.stringify(listed.filter((h) => /deep-hook'? codex /.test(String(h.command))))}\n`);
 }
 export const readTrust = (root: string): Listed[] | undefined => {
-  const kept = existsSync(trustFile(root)) ? (JSON.parse(readFileSync(trustFile(root), 'utf8')) as unknown) : undefined;
+  let kept: unknown;
+  try { kept = JSON.parse(readFileSync(trustFile(root), 'utf8')); } catch { return undefined; }
   return Array.isArray(kept) ? (kept as Listed[]) : undefined;
 };
+/** Each of DeepBuild's entries Codex's hook list doesn't report as running: untrusted, disabled, or not on the list. Empty when the list was never read. */
+export function trustProblems(root: string): string[] {
+  const listed = readTrust(root);
+  if (!listed) return [];
+  const missing = recorded(root).filter((e) => !listed.some((h) => h.command === e.command)).map((e) => `${e.event} missing from the list`);
+  return [...listed.flatMap((h) => [...(h.trustStatus === 'trusted' ? [] : [`${h.eventName} ${h.trustStatus}`]), ...(h.enabled === false ? [`${h.eventName} disabled`] : [])]), ...missing];
+}
 /** Codex's own hook list, from `codex app-server`'s hooks/list; undefined when it gives none in time. */
 export function hookList(codex: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs = 10_000): Promise<Listed[] | undefined> {
   return new Promise((resolve) => {

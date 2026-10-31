@@ -17,6 +17,8 @@ const UNREACHABLE_MS = 1000;
 /** Longer than any call the hub holds open: deep_ask and deep_wait answer "still waiting" after 40 s. */
 // A held deep_ask answers just before the tool timeout Codex gives this server (#39), which this outlasts.
 const ANSWER_MS = 55_000;
+/** How long a call waits for the hub: Codex gives its MCP server's tool calls `tool_timeout_sec`, which is Codex's setting alone; any other client keeps ANSWER_MS. */
+export const answerWaitMs = (client: unknown, toolS: () => number = toolTimeoutS): number => (typeof client === 'string' && /codex/i.test(client) ? Math.max(ANSWER_MS, toolS() * 1000) : ANSWER_MS);
 const unreachable = (why: string): Refusal => refusal('unavailable', '', `The DeepBuild hub is unreachable (${why}); nothing was recorded. Call again once it is back.`, '', true);
 
 /** One connection to the hub as this process's deep mcp; undefined when the hub can't be reached in time. */
@@ -75,12 +77,14 @@ class Hub {
     return this.connecting;
   }
 
+  /** The client's own name, from its initialize. */
+  client: unknown;
   /** One deep_* call through the hub: its result, or the refusal or unreachability as error@2. */
   async call(tool: string, args: unknown): Promise<{ ok: boolean; value: unknown }> {
     if (!(await this.connect()) || !this.sock) return { ok: false, value: unreachable('no answer on its socket') };
     const id = `mcp#${++this.ids}`;
     const reply = await new Promise<Obj>((resolve) => {
-      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, Math.max(ANSWER_MS, toolTimeoutS() * 1000));
+      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
       this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
     });
@@ -108,6 +112,7 @@ export async function runMcp(): Promise<number> {
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
+        hub.client = (params.clientInfo as Obj | undefined)?.name;
         send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: 'deep', version: '0.0.0' } } });
         break;
       case 'ping':
