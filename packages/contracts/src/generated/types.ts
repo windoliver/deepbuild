@@ -4557,6 +4557,27 @@ export interface StopHeld {
   evidence?: Array<string>;
 }
 
+/** store.item@1 */
+export interface StoreItem {
+  v: 1;
+  id: string;
+  kind: string;
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    generation: number;
+    value: unknown;
+    call: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** suggestion.filed@1 */
 export interface SuggestionFiled {
   v: 1;
