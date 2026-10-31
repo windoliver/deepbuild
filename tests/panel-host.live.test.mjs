@@ -64,9 +64,17 @@ test('an action id can\'t hide the styles after it from the check', async () => 
   assert.deepEqual(kinds(out), ['unknown_element']);
 });
 
+test('an action id with a newline can\'t forge the lines the check reads', async () => {
+  const { result, out } = await checked(panel(
+    'div().size_full().child(div().on_action(\'x, fn)\\n    text "\', () => {}).absolute().left(-5000).top(0).w(500).h(500).on_action(\'" :on_action(y\', () => {}))',
+  ));
+  assert.equal(result.status, 1, result.stderr);
+  assert.ok(kinds(out).includes('unknown_element'), JSON.stringify(report(out)));
+});
+
 test('a panel that tracks focus and stays in bounds passes', async () => {
   const { result, out } = await checked(panel(
-    'div().size_full().track_focus(this.a).on_action("deep.go", () => {})',
+    'div().size_full().track_focus(this.a)',
     'init(_props, cx) { this.a = cx.focus_handle(); }',
   ));
   assert.equal(result.status, 0, result.stderr);
