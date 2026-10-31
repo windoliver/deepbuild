@@ -281,12 +281,26 @@ pub struct Planted {
     /// A seek restores the checkpoint nearest to t by distance, the earlier of two equally
     /// near, instead of the last one at or before t (#488's planted seek).
     pub checkpoint_nearest: bool,
+    /// A session's own frame merges the results of nodes run on several threads in the order
+    /// they finished, not the plan's node order (#857's planted merge); a revision's check and
+    /// its probe frame still merge in order, so the revision is accepted.
+    pub merge_by_finish: bool,
 }
 
 /// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
 /// operators and its item. The canvas core reads no clock; the cost model's micro-benchmark
 /// (issue #379) times operators through it.
 pub type Timing = fn(op: usize, item: Option<&str>, done: bool);
+
+/// The worker threads a host lends the scheduler (#857): the canvas core starts no thread and
+/// reads no machine, so the pool and the machine's core count are the host's.
+pub trait Pool: Send + Sync + std::fmt::Debug {
+    /// The machine's performance cores: the export class's thread count.
+    fn performance_cores(&self) -> usize;
+    /// Calls `job(k, thread)` once for every `k` in `0..count` on at most `threads` threads, the
+    /// caller's own among them as thread 0, and returns once every call has returned.
+    fn run(&self, threads: usize, count: usize, job: &(dyn Fn(usize, usize) + Sync));
+}
 
 /// A process's scheduling options.
 #[derive(Clone, Debug, Default)]
@@ -298,6 +312,11 @@ pub struct Options {
     pub shuffle: Option<u32>,
     pub planted: Planted,
     pub timing: Option<Timing>,
+    /// The threads independent nodes of one operator run on; without a pool, every node runs on
+    /// the scheduler's own thread.
+    pub pool: Option<Arc<dyn Pool>>,
+    /// Every session's thread count in place of its budget class's (a proof surface).
+    pub threads: Option<usize>,
 }
 
 /// A pass over values made to compute a key (the counting hash).
@@ -356,6 +375,9 @@ pub struct Scheduler<'s> {
     pub look_hook: Option<fn(&Tokens)>,
     /// Each array's writer, by index into the sealed set's operators.
     writer: BTreeMap<String, usize>,
+    /// Results released while a wave settles, freed after it on the pool: freeing a large
+    /// result costs about as much as making it.
+    released: Option<Vec<Vec<Val>>>,
 }
 
 impl<'s> Scheduler<'s> {
@@ -374,6 +396,7 @@ impl<'s> Scheduler<'s> {
             hashes: Vec::new(),
             look_hook: None,
             writer,
+            released: None,
         }
     }
 
@@ -409,22 +432,26 @@ impl<'s> Scheduler<'s> {
         Some((value, key))
     }
 
-    fn hold(&mut self, key: Key) {
-        if let Some(e) = self.cache.get_mut(&key) {
-            e.2 += 1;
+    /// Holds `key`'s result, if the cache has one.
+    fn hold(&mut self, key: Key) -> bool {
+        match self.cache.get_mut(&key) {
+            Some(e) => {
+                e.2 += 1;
+                true
+            }
+            None => false,
         }
     }
 
     fn release(&mut self, key: Key) {
-        let gone = match self.cache.get_mut(&key) {
-            Some(e) => {
-                e.2 = e.2.saturating_sub(1);
-                e.2 == 0
+        if let std::collections::btree_map::Entry::Occupied(mut e) = self.cache.entry(key) {
+            e.get_mut().2 = e.get().2.saturating_sub(1);
+            if e.get().2 == 0 {
+                let (out, _, _) = e.remove();
+                if let Some(list) = &mut self.released {
+                    list.push(out);
+                }
             }
-            None => false,
-        };
-        if gone {
-            self.cache.remove(&key);
         }
     }
 }
@@ -575,6 +602,8 @@ struct Node {
     visited: u64,
     /// The key the cache holds for it.
     held: Option<Key>,
+    /// The thread its operator last ran on: 0 the scheduler's own, else one of the pool's.
+    thread: usize,
 }
 
 impl Node {
@@ -593,6 +622,9 @@ impl Node {
 struct Group {
     op: usize,
     nodes: Vec<usize>,
+    /// Where each run of nodes with no edge between them starts in `nodes`: a node that reads
+    /// its parent's node starts a new one when that parent is in the current one.
+    waves: Vec<usize>,
     /// The arrays it reads and their contributions, by index into the plan's array epochs.
     arrays: Vec<usize>,
     terms: Terms,
@@ -624,6 +656,8 @@ struct Loaded {
     /// Each array's epoch of its last change, by the plan's index.
     array_at: Vec<u32>,
     array_names: Vec<String>,
+    /// Each operator's writes, by the plan's array index.
+    writes_at: Vec<Vec<usize>>,
 }
 
 /// One step as the log shows it.
@@ -664,6 +698,8 @@ pub struct NodeReport {
     pub key: String,
     pub result: String,
     pub run: Run,
+    /// The thread it ran on, when it ran.
+    pub thread: Option<usize>,
 }
 
 /// An input a perturbed clean evaluation changes (`eval`: `perturb`).
@@ -724,6 +760,14 @@ impl Target {
     }
 }
 
+/// What a node visited on the pool comes to: it keeps its result (its key, when the change test
+/// let one be computed), takes a cached one, or ran on a thread.
+enum Fate {
+    Kept(Option<Key>),
+    Hit(Key, Vec<Val>, Option<OpError>),
+    Ran(Key, Called, Vec<Access>, usize),
+}
+
 /// What one evaluation reports beside its nodes.
 #[derive(Clone, Debug, Default)]
 pub struct Report {
@@ -782,6 +826,8 @@ pub struct Session {
     pub report: Report,
     /// The operator's panic that froze this session, until a new revision loads.
     frozen: Option<OpIssue>,
+    /// The threads its independent nodes run on: its budget class's count.
+    threads: usize,
 }
 
 /// What a source perturbation's writer reads instead of its item or document.
@@ -862,7 +908,13 @@ impl Session {
             mode: Mode::Live,
             report: Report::default(),
             frozen: None,
+            threads: 1,
         }
+    }
+
+    /// The threads its independent nodes run on.
+    pub fn threads(&self) -> usize {
+        self.threads
     }
 
     /// The session's current epoch.
@@ -1095,6 +1147,7 @@ impl Session {
                         n.has_run = was.has_run;
                         n.run = was.run;
                         n.held = was.held;
+                        n.thread = was.thread;
                     }
                 }
                 for (a, name) in next.array_names.iter().enumerate() {
@@ -1118,6 +1171,7 @@ impl Session {
             }
         }
         self.generation += 1;
+        self.threads = threads_for(s, doc);
         self.loaded = Some(next);
         // A new revision is the way out of a panic: its operators run again.
         self.frozen = None;
@@ -1293,6 +1347,7 @@ impl Session {
         scratch.mode = Mode::Clean;
         scratch.t = t;
         scratch.group_run = vec![0; s.sealed.ops.len()];
+        scratch.threads = threads_for(s, doc);
         scratch.loaded = Some(compile(s, doc, None));
         if let Some(hook) = s.look_hook {
             hook(&scratch.look);
@@ -1334,6 +1389,13 @@ impl Session {
         };
         if s.sealed.ops[op].op.step.is_some() {
             self.visit_steps(s, g, frame, report);
+        } else if self.threads > 1 && nodes > 1 && !s.sealed.ops[op].op.serial {
+            let waves = self.loaded.as_ref().expect("loaded").groups[g].waves.len();
+            for w in 0..waves {
+                let group = &self.loaded.as_ref().expect("loaded").groups[g];
+                let (start, end) = (group.waves[w], group.waves.get(w + 1).copied());
+                self.visit_wave(s, g, start..end.unwrap_or(nodes), frame, report);
+            }
         } else {
             for k in 0..nodes {
                 let n = self.loaded.as_ref().expect("loaded").groups[g].nodes[k];
@@ -1415,6 +1477,134 @@ impl Session {
             s.cache.insert(key, (out.clone(), err.clone(), 0));
         }
         self.settle(s, n, key, out, err, Run::Ran, frame, report);
+        self.loaded.as_mut().expect("loaded").nodes[n].thread = 0;
+    }
+
+    /// Visits one wave of an operator's nodes, which have no edge between them: each node's
+    /// change test, key and cache lookup, and its operator when it must run, on the pool; then
+    /// every node settles in node order, so nothing a frame leaves depends on which thread
+    /// finished first.
+    fn visit_wave(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        g: usize,
+        wave: std::ops::Range<usize>,
+        frame: u64,
+        report: &mut Report,
+    ) {
+        let epoch = self.epoch;
+        // What didn't change keeps its result here: only the nodes whose inputs changed go to the
+        // pool, so a frame with one item changed pays for no thread.
+        let mut nodes: Vec<usize> = Vec::new();
+        for k in wave {
+            let n = self.loaded.as_ref().expect("loaded").groups[g].nodes[k];
+            let l = self.loaded.as_ref().expect("loaded");
+            if self.mode == Mode::Live && !self.node_dirty(l, &l.nodes[n]) {
+                let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
+                node.run = Run::Kept;
+                node.visited = frame;
+            } else {
+                nodes.push(n);
+            }
+        }
+        let Some(&first) = nodes.first() else {
+            return;
+        };
+        // One operator's nodes read the same tables.
+        self.tables_of(s, first);
+        let fates = self.fates(s, &nodes);
+        s.released = Some(Vec::new());
+        for (n, (fate, hashed)) in nodes.into_iter().zip(fates) {
+            s.hashes.extend(hashed);
+            match fate {
+                Fate::Kept(key) => {
+                    let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
+                    node.run = Run::Kept;
+                    node.visited = frame;
+                    if key.is_some() {
+                        node.last_run = epoch;
+                    }
+                }
+                Fate::Hit(key, out, err) => {
+                    self.settle(s, n, key, out, err, Run::Hit, frame, report);
+                }
+                Fate::Ran(key, (out, err, _, tails), access, thread) => {
+                    if s.options.access_log {
+                        report.access.extend(access);
+                    }
+                    self.tails.extend(tails);
+                    report.ran += 1;
+                    if self.mode == Mode::Live {
+                        s.cache.insert(key, (out.clone(), err.clone(), 0));
+                    }
+                    self.settle(s, n, key, out, err, Run::Ran, frame, report);
+                    self.loaded.as_mut().expect("loaded").nodes[n].thread = thread;
+                }
+            }
+        }
+        let released = s.released.take().unwrap_or_default();
+        if let Some(pool) = s.options.pool.as_deref().filter(|_| released.len() > 1) {
+            let per = released.len().div_ceil(self.threads);
+            let mut left = released.into_iter();
+            let parts: Vec<std::sync::Mutex<Vec<Vec<Val>>>> = (0..self.threads)
+                .map(|_| std::sync::Mutex::new(left.by_ref().take(per).collect()))
+                .collect();
+            pool.run(self.threads, parts.len(), &|k, _| {
+                drop(std::mem::take(&mut *parts[k].lock().expect("unpoisoned")));
+            });
+        }
+    }
+
+    /// Each node's fate, on the pool, in `nodes`' order; the planted merge stores them in the
+    /// order they finished instead, in a session's own frame.
+    fn fates(&self, s: &Scheduler<'_>, nodes: &[usize]) -> Vec<(Fate, Vec<Hashed>)> {
+        let pool = s.options.pool.as_deref();
+        let Some(pool) = pool.filter(|_| self.threads > 1 && nodes.len() > 1) else {
+            return nodes.iter().map(|&n| self.fate(s, n, 0)).collect();
+        };
+        let op = self.loaded.as_ref().expect("loaded").nodes[nodes[0]].op;
+        if s.options.planted.merge_by_finish
+            && self.mode == Mode::Live
+            && !is_check_phase(&s.sealed.ops[op].op.phase)
+        {
+            let finished = std::sync::Mutex::new(Vec::with_capacity(nodes.len()));
+            pool.run(self.threads, nodes.len(), &|k, thread| {
+                let fate = self.fate(s, nodes[k], thread);
+                finished.lock().expect("unpoisoned").push(fate);
+            });
+            return finished.into_inner().expect("unpoisoned");
+        }
+        let slots: Vec<std::sync::OnceLock<(Fate, Vec<Hashed>)>> =
+            nodes.iter().map(|_| std::sync::OnceLock::new()).collect();
+        pool.run(self.threads, nodes.len(), &|k, thread| {
+            let _ = slots[k].set(self.fate(s, nodes[k], thread));
+        });
+        slots
+            .into_iter()
+            .map(|slot| slot.into_inner().expect("every job ran"))
+            .collect()
+    }
+
+    /// What a node comes to this frame, as [`Session::visit`] decides it, touching nothing but
+    /// what it returns: its tables are built.
+    fn fate(&self, s: &Scheduler<'_>, n: usize, thread: usize) -> (Fate, Vec<Hashed>) {
+        let mut hashed = Vec::new();
+        let l = self.loaded.as_ref().expect("loaded");
+        let node = &l.nodes[n];
+        if self.mode == Mode::Live && !self.node_dirty(l, node) {
+            return (Fate::Kept(None), hashed);
+        }
+        let key = self.key_in(s, n, &mut hashed);
+        if self.mode == Mode::Live {
+            if node.has_run && node.key == key {
+                return (Fate::Kept(Some(key)), hashed);
+            }
+            if let Some((out, err, _)) = s.cache.get(&key) {
+                return (Fate::Hit(key, out.clone(), err.clone()), hashed);
+            }
+        }
+        let (called, access) = self.run_op(s, n, None);
+        (Fate::Ran(key, called, access, thread), hashed)
     }
 
     /// Stores a node's new result, stamps its arrays and reports its error; in a perturbed
@@ -1477,20 +1667,13 @@ impl Session {
         }
         if changed {
             node.changed_at = epoch;
-            for w in &sop.op.writes {
-                if let Some(a) = l.array_names.iter().position(|x| x == w) {
-                    l.array_at[a] = epoch;
-                }
+            for &a in &l.writes_at[l.nodes[n].op] {
+                l.array_at[a] = epoch;
             }
         }
         // The cache holds a result while a current node reads its key.
         if mode == Mode::Live && was_held != Some(key) {
-            if s.cache.contains_key(&key) {
-                l.nodes[n].held = Some(key);
-                s.hold(key);
-            } else {
-                l.nodes[n].held = None;
-            }
+            l.nodes[n].held = s.hold(key).then_some(key);
             if let Some(k) = was_held {
                 s.release(k);
             }
@@ -1499,6 +1682,26 @@ impl Session {
 
     /// The node's content key, from its declared reads in order; never an epoch.
     fn key_of(&self, s: &mut Scheduler<'_>, n: usize) -> Key {
+        self.tables_of(s, n);
+        let mut hashed = Vec::new();
+        let key = self.key_in(s, n, &mut hashed);
+        s.hashes.extend(hashed);
+        key
+    }
+
+    /// Builds the tables a node reads, so that reading them takes nothing mutable.
+    fn tables_of(&self, s: &mut Scheduler<'_>, n: usize) {
+        let l = self.loaded.as_ref().expect("loaded");
+        for b in &l.nodes[n].reads {
+            if let Bound::Table(name) = b {
+                s.table(name);
+            }
+        }
+    }
+
+    /// [`Session::key_of`] with the node's tables already built; the passes over values it
+    /// makes go to `hashed`.
+    fn key_in(&self, s: &Scheduler<'_>, n: usize, hashed: &mut Vec<Hashed>) -> Key {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
@@ -1552,7 +1755,7 @@ impl Session {
                                 bytes += b.len();
                                 h.bytes(&b);
                             }
-                            s.hashes.push(Hashed {
+                            hashed.push(Hashed {
                                 of: name.clone(),
                                 bytes,
                             });
@@ -1568,7 +1771,7 @@ impl Session {
                     h.text(name);
                 }
                 Bound::Table(name) => {
-                    let key = s.table(name).map(|(_, k)| k).unwrap_or_default();
+                    let key = s.tables.get(name).map(|(_, k)| *k).unwrap_or_default();
                     match &self.perturb {
                         Some(Target::Table(t)) if t == name => {
                             h.key(&Hasher::new("perturbed").key(&key).finish());
@@ -1634,17 +1837,33 @@ impl Session {
         step: Option<view::StepCtx<'_>>,
         report: &mut Report,
     ) -> Called {
+        self.tables_of(s, n);
+        let (called, access) = self.run_op(s, n, step);
+        if s.options.access_log {
+            report.access.extend(access);
+        }
+        called
+    }
+
+    /// Calls a node's operator on its view, with the tables it reads already built; touches
+    /// nothing outside the node, so nodes with no edge between them may run on several threads.
+    fn run_op(
+        &self,
+        s: &Scheduler<'_>,
+        n: usize,
+        step: Option<view::StepCtx<'_>>,
+    ) -> (Called, Vec<Access>) {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
         let Some(run) = sealed.ops[node.op].op.run else {
-            return (Vec::new(), None, None, Vec::new());
+            return ((Vec::new(), None, None, Vec::new()), Vec::new());
         };
         let mut tables = BTreeMap::new();
         for b in &node.reads {
             if let Bound::Table(name) = b {
-                if let Some((v, _)) = s.table(name) {
-                    tables.insert(name.clone(), v);
+                if let Some((v, _)) = s.tables.get(name) {
+                    tables.insert(name.clone(), v.clone());
                 }
             }
         }
@@ -1658,10 +1877,7 @@ impl Session {
             timing(node.op, item, true);
         }
         let (out, access, noted, tails) = view.finish();
-        if s.options.access_log {
-            report.access.extend(access);
-        }
-        match result {
+        let called = match result {
             Ok(Ok(())) => (out, None, noted, tails),
             Ok(Err(e)) => (out, Some(e), noted, tails),
             Err(_) => (
@@ -1670,7 +1886,8 @@ impl Session {
                 noted,
                 Vec::new(),
             ),
-        }
+        };
+        (called, access)
     }
 
     /// Every node of the current revision, as an `eval` reply lists them: the check phases'
@@ -1698,6 +1915,7 @@ impl Session {
                     key: node.key.hex(),
                     result: result_digest(&node.out, node.err.as_ref()),
                     run,
+                    thread: (run == Run::Ran).then_some(node.thread),
                 });
             }
         }
@@ -1753,6 +1971,21 @@ impl Session {
         let node = l.nodes.iter().find(|n| n.op == op && n.item == item)?;
         node.out.get(k).cloned()
     }
+}
+
+/// The threads a document's independent nodes run on: the options' count in place of its budget
+/// class's, the pool's performance cores for export, one for a document with no class or a
+/// scheduler with no pool.
+fn threads_for(s: &Scheduler<'_>, doc: &Value) -> usize {
+    let Some(pool) = &s.options.pool else {
+        return 1;
+    };
+    let class = crate::budget::of(doc).map_or(Some(1), |(c, _)| c.threads());
+    s.options
+        .threads
+        .or(class)
+        .unwrap_or_else(|| pool.performance_cores())
+        .max(1)
 }
 
 /// A node's result as `nodes` shows it: the SHA-256 of its outputs' bytes, each length-prefixed,
@@ -1984,6 +2217,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         let mut group = Group {
             op: o,
             nodes: Vec::new(),
+            waves: Vec::new(),
             arrays: Vec::new(),
             terms: Terms::default(),
         };
@@ -2004,6 +2238,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
                 run: Run::Kept,
                 visited: 0,
                 held: None,
+                thread: 0,
             });
         }
         groups.push(group);
@@ -2129,7 +2364,28 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         }
         node.reads = reads;
     }
+    // A group's nodes are consecutive, so a parent's node is in the current wave when its index
+    // is at or past the wave's first node.
+    for g in &mut groups {
+        let mut start = 0;
+        for (k, &n) in g.nodes.iter().enumerate() {
+            let first = g.nodes.get(start).copied().unwrap_or(n);
+            let in_wave = nodes[n].reads.iter().any(|b| match b {
+                Bound::Parent(Some(p)) => *p >= first,
+                _ => false,
+            });
+            if k == 0 || in_wave {
+                start = k;
+                g.waves.push(k);
+            }
+        }
+    }
     let array_at = vec![0; array_names.len()];
+    let writes_at = sealed
+        .ops
+        .iter()
+        .map(|o| o.op.writes.iter().filter_map(|w| array_index(w)).collect())
+        .collect();
     Loaded {
         doc: Arc::new(doc),
         doc_key,
@@ -2141,6 +2397,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         groups,
         array_at,
         array_names,
+        writes_at,
     }
 }
 

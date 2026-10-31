@@ -113,7 +113,8 @@ impl<'a> Hub<'a> {
             .map(|o| {
                 (
                     o.key.clone(),
-                    json!({"module": o.module, "phase": o.op.phase, "reads": o.op.reads, "writes": o.op.writes}),
+                    json!({"module": o.module, "phase": o.op.phase, "reads": o.op.reads, "writes": o.op.writes,
+                           "thread_safe": !o.op.serial}),
                 )
             })
             .collect();
@@ -224,6 +225,7 @@ impl<'a> Hub<'a> {
         }
         let targets = session.targets(&self.sched);
         let scratch;
+        let started = Instant::now();
         let evaluated: &DocSession = if e.clean {
             scratch = session.clean(&mut self.sched, t, &view, perturb.flatten());
             &scratch
@@ -231,12 +233,13 @@ impl<'a> Hub<'a> {
             session.frame(&mut self.sched, t, &view);
             session
         };
+        let frame_ms = started.elapsed().as_secs_f64() * 1000.0;
         let nodes: Vec<Value> = evaluated
             .nodes(&self.sched)
             .into_iter()
             .map(|n| {
                 json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
-                       "key": n.key, "result": n.result, "run": n.run.name()})
+                       "key": n.key, "result": n.result, "run": n.run.name(), "thread": n.thread})
             })
             .collect();
         let report = &evaluated.report;
@@ -245,6 +248,8 @@ impl<'a> Hub<'a> {
             "rev": rev,
             "t": t,
             "epoch": evaluated.epoch(),
+            "threads": evaluated.threads(),
+            "frame_ms": frame_ms,
             "nodes": nodes,
             "targets": targets.iter().map(|t| json!({"target": t.name(), "term": t.term()})).collect::<Vec<_>>(),
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
@@ -330,9 +335,34 @@ impl<'a> Hub<'a> {
             let (ran, allocs) =
                 crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
             let ms = started.elapsed().as_secs_f64() * 1000.0;
-            out.push(json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms}));
+            out.push(
+                json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms, "frame_ms": ms}),
+            );
         }
-        json!({ "frames": out })
+        // #857: each background job's frames from its start to this reply.
+        let background: Vec<Value> = self
+            .background
+            .iter()
+            .map(|(job, replica, frames)| {
+                let mut v = json!({"job": job, "frames": frames.load(Ordering::Relaxed)});
+                if let Some(r) = replica {
+                    v["replica"] = json!(r);
+                }
+                v
+            })
+            .collect();
+        json!({"threads": session.threads(), "frames": out, "background": background})
+    }
+
+    /// One frame of a background job's session at `t` (#857); false when it has no revision,
+    /// as when the check refused its document.
+    pub fn job_frame(&mut self, doc: &str, t: i64, over: &Map<String, Value>) -> bool {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return false;
+        };
+        let view = session_view(session, over);
+        session.frame(&mut self.sched, t, &view);
+        true
     }
 
     /// An item's interned handle in the session's current revision.

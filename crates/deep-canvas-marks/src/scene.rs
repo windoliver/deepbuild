@@ -1766,7 +1766,7 @@ pub fn status_marks(
 
 /// A mark with its item's order key and ID, which sort it within its layer.
 /// A mark in its layer's draw order: its item's order key, its row, its item's ID.
-type Ordered<'a> = (&'a str, usize, &'a str, Drawn);
+type Ordered<'a> = (String, usize, &'a str, Drawn);
 
 /// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
 const MASK_DEPTH: usize = 4;
@@ -2062,6 +2062,7 @@ fn frame_shown(
         zoom,
         planted,
         None,
+        &[],
     )?;
     if !wants_boxes {
         return Ok(frame);
@@ -2076,8 +2077,429 @@ fn frame_shown(
         zoom,
         planted,
         Some(&boxes),
+        &[],
     )?
     .0)
+}
+
+/// What one item draws, as a frame places it: its layer, its order key, and its marks with the
+/// clip and scopes each draws inside.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Placed {
+    pub layer: String,
+    pub order: String,
+    pub drawn: Vec<Drawn>,
+}
+
+/// What an item's marks read beyond the item: the document's items, the palette and paints,
+/// each item's scopes, what bound values show, the readings bound to mark sets' rows, and the
+/// planted program.
+struct ItemCtx<'a> {
+    items: &'a Map<String, Value>,
+    palette: &'a Palette,
+    paints: &'a Paints<'a>,
+    scopes: &'a BTreeMap<String, Vec<Scope>>,
+    bound: &'a BTreeMap<String, Shown>,
+    row_readings: &'a BTreeMap<String, data::BoundRows>,
+    planted: Planted,
+}
+
+/// What `item` draws; `None` for an item that draws nothing.
+fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>, Refused> {
+    let ItemCtx {
+        items,
+        palette,
+        paints,
+        scopes,
+        bound,
+        row_readings,
+        planted,
+    } = *ctx;
+    let path = format!("items/{id}");
+    if item.get("visible") == Some(&Value::Bool(false)) {
+        return Ok(None);
+    }
+    let Some(layer) = item.get("layer").and_then(Value::as_str) else {
+        return refuse("bad_doc", format!("{path}/layer"));
+    };
+    let empty = Map::new();
+    let params = item
+        .get("params")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let place = Place::of(item);
+    let pos = place.offset;
+    let paint = params
+        .get("paint")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let fill = paint.get("fill").and_then(Value::as_object);
+    let stroke = paint.get("stroke").and_then(Value::as_object);
+    let paint_path = format!("{path}/params/paint");
+    // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
+    let r1 = place.moves() && r1_paint(paint);
+    let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+    let adjust = Adjust::read(item, palette, id)?;
+    let mut marks: Vec<Mark> = match kind {
+        // A scale, a mask and a group draw nothing themselves, and a camera is the view a
+        // document is seen through, not a mark (#378: a 3D figure's camera). A graph, a
+        // salience level and a sheet are the graph, record and sheet modules' (#388), which
+        // lay them out and draw nothing yet.
+        "scale@1" | "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
+            return Ok(None)
+        }
+        "star@1" => {
+            let p = |k: &str| num(params.get(k));
+            let star = Star {
+                center: pair(params.get("center")).ok_or(Refused {
+                    code: "bad_doc",
+                    path: format!("{path}/params/center"),
+                })?,
+                points: p("points").unwrap_or(5.0),
+                outer_r: p("outer_r").unwrap_or(0.0),
+                inner_r: p("inner_r").unwrap_or(0.0),
+                outer_round: p("outer_round").unwrap_or(0.0),
+                inner_round: p("inner_round").unwrap_or(0.0),
+                polygon: params.get("polygon") == Some(&Value::Bool(true)),
+            };
+            let verbs = star.verbs(&format!("{path}/params"))?;
+            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+        }
+        "frame@1" => {
+            // A frame draws its background; its overflow mask scopes its children.
+            let Some(fill) = fill else { return Ok(None) };
+            let bounds = place.rect(frame_box(id, item)?);
+            vec![Mark::Rect {
+                item: id.clone(),
+                bounds,
+                radius: num(params.get("radius")).unwrap_or(0.0),
+                fill: paints.paint(
+                    id,
+                    fill,
+                    &format!("{paint_path}/fill"),
+                    bounds,
+                    Place::NONE,
+                    false,
+                )?,
+            }]
+        }
+        "circle@1" if params.get("arc").is_some() => {
+            let center = pair(params.get("center")).ok_or(Refused {
+                code: "bad_doc",
+                path: format!("{path}/params/center"),
+            })?;
+            let arc = params.get("arc");
+            let (Some(from), Some(to)) = (
+                num(arc.and_then(|a| a.get("from"))),
+                num(arc.and_then(|a| a.get("to"))),
+            ) else {
+                return refuse("bad_doc", format!("{path}/params/arc"));
+            };
+            let close = match (fill.is_some(), planted) {
+                (false, _) => outline::Close::Open,
+                (true, Planted::ArcClosedAlongChord) => outline::Close::Chord,
+                (true, Planted::None) => outline::Close::Filled,
+            };
+            let verbs = outline::arc(
+                center,
+                num(params.get("r")).unwrap_or(0.0),
+                num(params.get("inner_r")).unwrap_or(0.0),
+                from,
+                to,
+                close,
+            );
+            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+        }
+        "path@1"
+            if !r1
+                || [fill, stroke]
+                    .iter()
+                    .flatten()
+                    .any(|p| p.contains_key("gradient") || p.contains_key("steps")) =>
+        {
+            let Some(Value::String(d)) = params.get("d") else {
+                return refuse("bad_doc", format!("{path}/params/d"));
+            };
+            let verbs = path::parse(d).ok_or(Refused {
+                code: "bad_path_data",
+                path: format!("{path}/params/d"),
+            })?;
+            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+        }
+        "rect@1" | "circle@1"
+            if !r1
+                || stroke.is_some()
+                || (kind == "circle@1" && fill.is_some_and(|f| !f.contains_key("role"))) =>
+        {
+            let verbs = if kind == "rect@1" {
+                let Some(b) = four(params.get("box")) else {
+                    return refuse("bad_doc", format!("{path}/params/box"));
+                };
+                outline::rect(b, num(params.get("radius")).unwrap_or(0.0))
+            } else {
+                let center = pair(params.get("center")).ok_or(Refused {
+                    code: "bad_doc",
+                    path: format!("{path}/params/center"),
+                })?;
+                outline::circle(
+                    center,
+                    num(params.get("r")).unwrap_or(0.0),
+                    num(params.get("inner_r")).unwrap_or(0.0),
+                )
+            };
+            if fill.is_none() && stroke.is_none() {
+                return Ok(None);
+            }
+            vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+        }
+        "marks@1" => data::mark_set(
+            id,
+            item,
+            items,
+            palette,
+            pos,
+            row_readings
+                .get(id.as_str())
+                .unwrap_or(&data::BoundRows::new()),
+        )?,
+        "axis@1" => data::axis(id, item, items, palette, pos)?,
+        "image@1" => {
+            let Some(Value::String(asset)) = params.get("asset") else {
+                return refuse("bad_doc", format!("{path}/params/asset"));
+            };
+            if asset.len() != 64 || !asset.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return refuse("bad_asset", format!("{path}/params/asset"));
+            }
+            if params
+                .get("alt")
+                .and_then(Value::as_str)
+                .is_none_or(str::is_empty)
+            {
+                return refuse("alt_missing", format!("{path}/params/alt"));
+            }
+            let Some(bounds) = four(params.get("box")) else {
+                return refuse("bad_doc", format!("{path}/params/box"));
+            };
+            let fit = match params.get("fit").and_then(Value::as_str) {
+                None | Some("contain") => ImageFit::Contain,
+                Some("cover") => ImageFit::Cover,
+                Some("fill") => ImageFit::Fill,
+                Some("none") => ImageFit::None,
+                Some(_) => return refuse("bad_doc", format!("{path}/params/fit")),
+            };
+            let sampling = match params.get("sampling") {
+                None => ImageSampling::Linear,
+                Some(Value::String(s)) if s == "linear" => ImageSampling::Linear,
+                Some(Value::String(s)) if s == "nearest" => ImageSampling::Nearest,
+                Some(Value::String(s)) if s == "cubic" => ImageSampling::Cubic,
+                Some(_) => return refuse("bad_doc", format!("{path}/params/sampling")),
+            };
+            vec![Mark::Image {
+                item: id.clone(),
+                asset: asset.to_ascii_lowercase(),
+                bounds: place.rect(bounds),
+                fit,
+                sampling,
+                crop: four(params.get("crop")),
+                opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
+                adjust: Adjust::default(),
+            }]
+        }
+        _ => vec![match kind {
+            "rect@1" => {
+                let Some(Value::Array(b)) = params.get("box") else {
+                    return refuse("bad_doc", format!("{path}/params/box"));
+                };
+                let b: Option<Vec<f64>> = b.iter().map(|v| num(Some(v))).collect();
+                let Some([x, y, w, h]) = b.as_deref().and_then(|b| <[f64; 4]>::try_from(b).ok())
+                else {
+                    return refuse("bad_doc", format!("{path}/params/box"));
+                };
+                let Some(fill) = fill else { return Ok(None) };
+                let bounds = [x + pos[0], y + pos[1], w, h];
+                Mark::Rect {
+                    item: id.clone(),
+                    bounds,
+                    radius: num(params.get("radius")).unwrap_or(0.0),
+                    fill: paints.paint(
+                        id,
+                        fill,
+                        &format!("{paint_path}/fill"),
+                        bounds,
+                        Place::NONE,
+                        false,
+                    )?,
+                }
+            }
+            "circle@1" => {
+                let center = pair(params.get("center")).ok_or(Refused {
+                    code: "bad_doc",
+                    path: format!("{path}/params/center"),
+                })?;
+                let Some(fill) = fill else { return Ok(None) };
+                Mark::Circle {
+                    item: id.clone(),
+                    center: [center[0] + pos[0], center[1] + pos[1]],
+                    r: num(params.get("r")).unwrap_or(0.0),
+                    inner_r: num(params.get("inner_r")).unwrap_or(0.0),
+                    color: role(
+                        palette,
+                        fill.get("role"),
+                        &format!("{path}/params/paint/fill/role"),
+                    )?,
+                }
+            }
+            "path@1" => {
+                let Some(Value::String(d)) = params.get("d") else {
+                    return refuse("bad_doc", format!("{path}/params/d"));
+                };
+                let verbs = path::parse(d).ok_or(Refused {
+                    code: "bad_path_data",
+                    path: format!("{path}/params/d"),
+                })?;
+                // One color per path in R1: the stroke's role, else the fill's.
+                let color_role = stroke
+                    .and_then(|s| s.get("role"))
+                    .or(fill.and_then(|f| f.get("role")));
+                let color = role(palette, color_role, &format!("{path}/params/paint"))?;
+                Mark::Path {
+                    item: id.clone(),
+                    d: d.clone(),
+                    geometry: Geometry {
+                        verbs,
+                        stroke: stroke.map(|s| num(s.get("width")).unwrap_or(1.0)),
+                        fill: fill.is_some(),
+                    },
+                    offset: pos,
+                    color,
+                }
+            }
+            "text@1" => {
+                let shown = bound.get(id);
+                // A stale value greys out (Bound value).
+                let color_role = if shown.is_some_and(|s| s.stale) {
+                    Value::String("muted".into())
+                } else {
+                    fill.and_then(|f| f.get("role"))
+                        .cloned()
+                        .unwrap_or(Value::String("ink".into()))
+                };
+                Mark::Text {
+                    item: id.clone(),
+                    spec: text_spec(id, params, shown)?,
+                    origin: pos,
+                    color: role(
+                        palette,
+                        Some(&color_role),
+                        &format!("{path}/params/paint/fill/role"),
+                    )?,
+                    role: color_role.as_str().map(str::to_string),
+                    runs: text_runs(palette, params, &path)?,
+                }
+            }
+            _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
+        }],
+    };
+    let order = item.get("order").and_then(Value::as_str).unwrap_or("");
+    let mut scopes = scopes.get(id).cloned().unwrap_or_default();
+    if adjust.opacity < 1.0 {
+        scopes.push(Scope::Opacity {
+            item: format!("{id}#adjust"),
+            alpha: adjust.opacity,
+        });
+    }
+    let clip = clip_of(&scopes);
+    if !adjust.is_identity() {
+        marks.iter_mut().for_each(|m| m.adjust(&adjust));
+    }
+    Ok(Some(Placed {
+        layer: layer.to_string(),
+        order: order.to_string(),
+        drawn: marks
+            .into_iter()
+            .map(|mark| Drawn {
+                mark,
+                clip,
+                scopes: scopes.clone(),
+            })
+            .collect(),
+    }))
+}
+
+/// What `item` draws when it reads nothing beyond itself, the palette and what its bound value
+/// shows (#857: marks2d builds these on the scheduler's pool, an item to a node): an R1 rect,
+/// circle, path or text with no parent, painted by roles. `None` for any other item, and for
+/// one the check would refuse, which the frame builds itself; the frame also leaves out an item
+/// that is a parent, sits in a collection or names a layer the document lacks.
+pub fn item_placed(
+    id: &str,
+    item: &Value,
+    palette: &Palette,
+    shown: Option<&Shown>,
+) -> Option<Placed> {
+    let kind = item.get("kind").and_then(Value::as_str)?;
+    if !matches!(kind, "rect@1" | "circle@1" | "path@1" | "text@1") || item.get("parent").is_some()
+    {
+        return None;
+    }
+    let paint = item.get("params").and_then(|p| p.get("paint"));
+    let by_role = |p: Option<&Value>| {
+        p.and_then(Value::as_object)
+            .is_none_or(|p| !p.contains_key("gradient") && !p.contains_key("steps"))
+    };
+    if !by_role(paint.and_then(|p| p.get("fill"))) || !by_role(paint.and_then(|p| p.get("stroke")))
+    {
+        return None;
+    }
+    let empty = Map::new();
+    let paints = Paints {
+        doc: &empty,
+        items: &empty,
+        palette,
+        boxes: None,
+        wants_boxes: Cell::new(false),
+    };
+    let scopes = BTreeMap::new();
+    let bound: BTreeMap<String, Shown> = shown
+        .map(|s| (id.to_string(), s.clone()))
+        .into_iter()
+        .collect();
+    let ctx = ItemCtx {
+        items: &empty,
+        palette,
+        paints: &paints,
+        scopes: &scopes,
+        bound: &bound,
+        row_readings: &BTreeMap::new(),
+        planted: Planted::None,
+    };
+    let placed = placed(&ctx, &id.to_string(), item).ok()??;
+    (!paints.wants_boxes.get()).then_some(placed)
+}
+
+/// [`frame_with`] with `prebuilt` items placed as given and left out of `items`; `None` when a
+/// paint asks for boxes, which only a frame built from every item can give.
+pub fn frame_prebuilt(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    zoom: f64,
+    bound: &BTreeMap<String, Shown>,
+    record: &Record,
+    prebuilt: &[(&str, &Placed)],
+) -> Result<Option<Frame>, Refused> {
+    let row_readings = bound_rows(doc, record);
+    let (frame, wants_boxes) = build(
+        doc,
+        items,
+        palette,
+        (bound, &row_readings),
+        zoom,
+        Planted::None,
+        None,
+        prebuilt,
+    )?;
+    Ok((!wants_boxes).then_some(frame))
 }
 
 /// The frame, and whether a paint asked for boxes that `boxes` doesn't yet hold.
@@ -2090,6 +2512,7 @@ fn build(
     zoom: f64,
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
+    prebuilt: &[(&str, &Placed)],
 ) -> Result<(Frame, bool), Refused> {
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
@@ -2135,326 +2558,41 @@ fn build(
             layers.push((order, id.clone(), Vec::new()));
         }
     }
+    let ctx = ItemCtx {
+        items,
+        palette,
+        paints: &paints,
+        scopes: &scopes,
+        bound,
+        row_readings,
+        planted,
+    };
+    // Each item's marks, then each one prebuilt from the item alone (#857), each in its layer.
+    let mut built: Vec<(&str, Placed)> = Vec::new();
     for (id, item) in items {
-        let path = format!("items/{id}");
-        if item.get("visible") == Some(&Value::Bool(false)) {
+        let Some(placed) = placed(&ctx, id, item)? else {
             continue;
-        }
-        let Some(layer) = item.get("layer").and_then(Value::as_str) else {
-            return refuse("bad_doc", format!("{path}/layer"));
         };
-        let empty = Map::new();
-        let params = item
-            .get("params")
-            .and_then(Value::as_object)
-            .unwrap_or(&empty);
-        let place = Place::of(item);
-        let pos = place.offset;
-        let paint = params
-            .get("paint")
-            .and_then(Value::as_object)
-            .unwrap_or(&empty);
-        let fill = paint.get("fill").and_then(Value::as_object);
-        let stroke = paint.get("stroke").and_then(Value::as_object);
-        let paint_path = format!("{path}/params/paint");
-        // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
-        let r1 = place.moves() && r1_paint(paint);
-        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let adjust = Adjust::read(item, palette, id)?;
-        let mut marks: Vec<Mark> = match kind {
-            // A scale, a mask and a group draw nothing themselves, and a camera is the view a
-            // document is seen through, not a mark (#378: a 3D figure's camera). A graph, a
-            // salience level and a sheet are the graph, record and sheet modules' (#388), which
-            // lay them out and draw nothing yet.
-            "scale@1" | "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1"
-            | "sheet@1" => continue,
-            "star@1" => {
-                let p = |k: &str| num(params.get(k));
-                let star = Star {
-                    center: pair(params.get("center")).ok_or(Refused {
-                        code: "bad_doc",
-                        path: format!("{path}/params/center"),
-                    })?,
-                    points: p("points").unwrap_or(5.0),
-                    outer_r: p("outer_r").unwrap_or(0.0),
-                    inner_r: p("inner_r").unwrap_or(0.0),
-                    outer_round: p("outer_round").unwrap_or(0.0),
-                    inner_round: p("inner_round").unwrap_or(0.0),
-                    polygon: params.get("polygon") == Some(&Value::Bool(true)),
-                };
-                let verbs = star.verbs(&format!("{path}/params"))?;
-                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
-            }
-            "frame@1" => {
-                // A frame draws its background; its overflow mask scopes its children.
-                let Some(fill) = fill else { continue };
-                let bounds = place.rect(frame_box(id, item)?);
-                vec![Mark::Rect {
-                    item: id.clone(),
-                    bounds,
-                    radius: num(params.get("radius")).unwrap_or(0.0),
-                    fill: paints.paint(
-                        id,
-                        fill,
-                        &format!("{paint_path}/fill"),
-                        bounds,
-                        Place::NONE,
-                        false,
-                    )?,
-                }]
-            }
-            "circle@1" if params.get("arc").is_some() => {
-                let center = pair(params.get("center")).ok_or(Refused {
-                    code: "bad_doc",
-                    path: format!("{path}/params/center"),
-                })?;
-                let arc = params.get("arc");
-                let (Some(from), Some(to)) = (
-                    num(arc.and_then(|a| a.get("from"))),
-                    num(arc.and_then(|a| a.get("to"))),
-                ) else {
-                    return refuse("bad_doc", format!("{path}/params/arc"));
-                };
-                let close = match (fill.is_some(), planted) {
-                    (false, _) => outline::Close::Open,
-                    (true, Planted::ArcClosedAlongChord) => outline::Close::Chord,
-                    (true, Planted::None) => outline::Close::Filled,
-                };
-                let verbs = outline::arc(
-                    center,
-                    num(params.get("r")).unwrap_or(0.0),
-                    num(params.get("inner_r")).unwrap_or(0.0),
-                    from,
-                    to,
-                    close,
-                );
-                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
-            }
-            "path@1"
-                if !r1
-                    || [fill, stroke]
-                        .iter()
-                        .flatten()
-                        .any(|p| p.contains_key("gradient") || p.contains_key("steps")) =>
-            {
-                let Some(Value::String(d)) = params.get("d") else {
-                    return refuse("bad_doc", format!("{path}/params/d"));
-                };
-                let verbs = path::parse(d).ok_or(Refused {
-                    code: "bad_path_data",
-                    path: format!("{path}/params/d"),
-                })?;
-                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
-            }
-            "rect@1" | "circle@1"
-                if !r1
-                    || stroke.is_some()
-                    || (kind == "circle@1" && fill.is_some_and(|f| !f.contains_key("role"))) =>
-            {
-                let verbs = if kind == "rect@1" {
-                    let Some(b) = four(params.get("box")) else {
-                        return refuse("bad_doc", format!("{path}/params/box"));
-                    };
-                    outline::rect(b, num(params.get("radius")).unwrap_or(0.0))
-                } else {
-                    let center = pair(params.get("center")).ok_or(Refused {
-                        code: "bad_doc",
-                        path: format!("{path}/params/center"),
-                    })?;
-                    outline::circle(
-                        center,
-                        num(params.get("r")).unwrap_or(0.0),
-                        num(params.get("inner_r")).unwrap_or(0.0),
-                    )
-                };
-                if fill.is_none() && stroke.is_none() {
-                    continue;
-                }
-                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
-            }
-            "marks@1" => data::mark_set(
-                id,
-                item,
-                items,
-                palette,
-                pos,
-                row_readings
-                    .get(id.as_str())
-                    .unwrap_or(&data::BoundRows::new()),
-            )?,
-            "axis@1" => data::axis(id, item, items, palette, pos)?,
-            "image@1" => {
-                let Some(Value::String(asset)) = params.get("asset") else {
-                    return refuse("bad_doc", format!("{path}/params/asset"));
-                };
-                if asset.len() != 64 || !asset.bytes().all(|b| b.is_ascii_hexdigit()) {
-                    return refuse("bad_asset", format!("{path}/params/asset"));
-                }
-                if params
-                    .get("alt")
-                    .and_then(Value::as_str)
-                    .is_none_or(str::is_empty)
-                {
-                    return refuse("alt_missing", format!("{path}/params/alt"));
-                }
-                let Some(bounds) = four(params.get("box")) else {
-                    return refuse("bad_doc", format!("{path}/params/box"));
-                };
-                let fit = match params.get("fit").and_then(Value::as_str) {
-                    None | Some("contain") => ImageFit::Contain,
-                    Some("cover") => ImageFit::Cover,
-                    Some("fill") => ImageFit::Fill,
-                    Some("none") => ImageFit::None,
-                    Some(_) => return refuse("bad_doc", format!("{path}/params/fit")),
-                };
-                let sampling = match params.get("sampling") {
-                    None => ImageSampling::Linear,
-                    Some(Value::String(s)) if s == "linear" => ImageSampling::Linear,
-                    Some(Value::String(s)) if s == "nearest" => ImageSampling::Nearest,
-                    Some(Value::String(s)) if s == "cubic" => ImageSampling::Cubic,
-                    Some(_) => return refuse("bad_doc", format!("{path}/params/sampling")),
-                };
-                vec![Mark::Image {
-                    item: id.clone(),
-                    asset: asset.to_ascii_lowercase(),
-                    bounds: place.rect(bounds),
-                    fit,
-                    sampling,
-                    crop: four(params.get("crop")),
-                    opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
-                    adjust: Adjust::default(),
-                }]
-            }
-            _ => vec![match kind {
-                "rect@1" => {
-                    let Some(Value::Array(b)) = params.get("box") else {
-                        return refuse("bad_doc", format!("{path}/params/box"));
-                    };
-                    let b: Option<Vec<f64>> = b.iter().map(|v| num(Some(v))).collect();
-                    let Some([x, y, w, h]) =
-                        b.as_deref().and_then(|b| <[f64; 4]>::try_from(b).ok())
-                    else {
-                        return refuse("bad_doc", format!("{path}/params/box"));
-                    };
-                    let Some(fill) = fill else { continue };
-                    let bounds = [x + pos[0], y + pos[1], w, h];
-                    Mark::Rect {
-                        item: id.clone(),
-                        bounds,
-                        radius: num(params.get("radius")).unwrap_or(0.0),
-                        fill: paints.paint(
-                            id,
-                            fill,
-                            &format!("{paint_path}/fill"),
-                            bounds,
-                            Place::NONE,
-                            false,
-                        )?,
-                    }
-                }
-                "circle@1" => {
-                    let center = pair(params.get("center")).ok_or(Refused {
-                        code: "bad_doc",
-                        path: format!("{path}/params/center"),
-                    })?;
-                    let Some(fill) = fill else { continue };
-                    Mark::Circle {
-                        item: id.clone(),
-                        center: [center[0] + pos[0], center[1] + pos[1]],
-                        r: num(params.get("r")).unwrap_or(0.0),
-                        inner_r: num(params.get("inner_r")).unwrap_or(0.0),
-                        color: role(
-                            palette,
-                            fill.get("role"),
-                            &format!("{path}/params/paint/fill/role"),
-                        )?,
-                    }
-                }
-                "path@1" => {
-                    let Some(Value::String(d)) = params.get("d") else {
-                        return refuse("bad_doc", format!("{path}/params/d"));
-                    };
-                    let verbs = path::parse(d).ok_or(Refused {
-                        code: "bad_path_data",
-                        path: format!("{path}/params/d"),
-                    })?;
-                    // One color per path in R1: the stroke's role, else the fill's.
-                    let color_role = stroke
-                        .and_then(|s| s.get("role"))
-                        .or(fill.and_then(|f| f.get("role")));
-                    let color = role(palette, color_role, &format!("{path}/params/paint"))?;
-                    Mark::Path {
-                        item: id.clone(),
-                        d: d.clone(),
-                        geometry: Geometry {
-                            verbs,
-                            stroke: stroke.map(|s| num(s.get("width")).unwrap_or(1.0)),
-                            fill: fill.is_some(),
-                        },
-                        offset: pos,
-                        color,
-                    }
-                }
-                "text@1" => {
-                    let shown = bound.get(id);
-                    // A stale value greys out (Bound value).
-                    let color_role = if shown.is_some_and(|s| s.stale) {
-                        Value::String("muted".into())
-                    } else {
-                        fill.and_then(|f| f.get("role"))
-                            .cloned()
-                            .unwrap_or(Value::String("ink".into()))
-                    };
-                    Mark::Text {
-                        item: id.clone(),
-                        spec: text_spec(id, params, shown)?,
-                        origin: pos,
-                        color: role(
-                            palette,
-                            Some(&color_role),
-                            &format!("{path}/params/paint/fill/role"),
-                        )?,
-                        role: color_role.as_str().map(str::to_string),
-                        runs: text_runs(palette, params, &path)?,
-                    }
-                }
-                _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
-            }],
-        };
-        let order = item.get("order").and_then(Value::as_str).unwrap_or("");
-        let Some(slot) = layers.iter_mut().find(|l| l.1 == layer) else {
-            return refuse("ref_unresolved", format!("{path}/layer"));
-        };
-        let mut scopes = scopes.get(id).cloned().unwrap_or_default();
-        if adjust.opacity < 1.0 {
-            scopes.push(Scope::Opacity {
-                item: format!("{id}#adjust"),
-                alpha: adjust.opacity,
-            });
+        if !layers.iter().any(|l| l.1 == placed.layer) {
+            return refuse("ref_unresolved", format!("items/{id}/layer"));
         }
-        let clip = clip_of(&scopes);
-        if !adjust.is_identity() {
-            marks.iter_mut().for_each(|m| m.adjust(&adjust));
-        }
-        for (k, mark) in marks.into_iter().enumerate() {
+        built.push((id, placed));
+    }
+    let prebuilt = prebuilt.iter().map(|(id, p)| (*id, (*p).clone()));
+    for (id, placed) in built.into_iter().chain(prebuilt) {
+        let Some(slot) = layers.iter_mut().find(|l| l.1 == placed.layer) else {
+            return refuse("ref_unresolved", format!("items/{id}/layer"));
+        };
+        for (k, drawn) in placed.drawn.into_iter().enumerate() {
             // A generated row keeps its set's place, in row order.
-            slot.2.push((
-                order,
-                k,
-                id,
-                Drawn {
-                    mark,
-                    clip,
-                    scopes: scopes.clone(),
-                },
-            ));
+            slot.2.push((placed.order.clone(), k, id, drawn));
         }
     }
     layers.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     let layers = layers
         .into_iter()
         .map(|(_, id, mut marks)| {
-            marks.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+            marks.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
             let marks: Vec<Drawn> = marks.into_iter().map(|(_, _, _, m)| m).collect();
             let mut k = KeyBuilder::new("layer@marks2d.1");
             k.text(&id).number(size[0]).number(size[1]).number(zoom);
