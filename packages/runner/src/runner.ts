@@ -16,11 +16,14 @@ import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
-import type { Grant } from '@deepbuild/supervisor';
+import { after, badDeadline, type Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, Subagent, WindowReport } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** The kinds `fold` reads: its switch is on this type, so a case for a kind left out of the list fails to compile. */
+const FOLDED = ['job.recorded', 'job.ended', 'process.starting', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted'] as const;
+type Folded = (typeof FOLDED)[number];
 const MINUTE = 60_000;
 const DAY = 86_400_000;
 /** How long a CLI may keep running after its final result, or after its process ends without one. */
@@ -164,7 +167,8 @@ interface Job {
   finished?: boolean;
   /** Its checkout is still being written: nothing starts it before then. */
   preparing?: boolean;
-  timers: NodeJS.Timeout[];
+  /** Cancels its deadline and its quiet watch. */
+  timers: (() => void)[];
   /** Its own temp folder, removed when it ends. */
   temp?: string;
 }
@@ -202,14 +206,22 @@ class LocalRunner implements Runner {
     const event: EventInput = { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
     return this.o.record.append(CORE, event).then(() => undefined);
   }
+  /**
+   * What the log gained of the kinds `fold` reads, the rest never decoded. The cursor moves to the head read first, so
+   * a busy log's other events are scanned once, not again at every pump.
+   */
   private async events(): Promise<Event[]> {
+    const [row] = (await this.o.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+    const head = Number(row?.head ?? 0);
     const all: Event[] = [];
     for (;;) {
-      const page = await this.o.record.read({ after: this.cursor, limit: 1000 });
-      if (!page.length) return all;
+      const page = await this.o.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
       all.push(...page);
-      this.cursor = page[page.length - 1]!.log_pos;
+      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
+      if (page.length < 1000) break;
     }
+    this.cursor = Math.max(this.cursor, head);
+    return all;
   }
   /** What the record gained: the jobs a crash left, and answers to the runner's asks. */
   private async fold(opening: boolean): Promise<void> {
@@ -218,7 +230,7 @@ class LocalRunner implements Runner {
     const left = new Map<string, number[]>();
     for (const e of await this.events()) {
       const d = e.data as Obj;
-      switch (e.kind) {
+      switch (e.kind as Folded) {
         case 'job.recorded': {
           if (!opening || this.jobs.has(String(d.job))) break;
           const rec: JobRecord = { job: String(d.job), kind: d.kind as JobRecord['kind'], agent: d.agent as Agent, account: (d.account as string | null) ?? null, state: 'waiting', folder: String(d.folder) };
@@ -296,6 +308,10 @@ class LocalRunner implements Runner {
     if (this.closed) throw Error('the runner is closed');
     if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read or smoke, not ${String(isObj(spec) ? spec.kind : spec)}`);
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
+    for (const field of ['deadline_ms', 'output_timeout_ms'] as const) {
+      const bad = spec[field] !== undefined ? badDeadline(field, spec[field]) : null;
+      if (bad) throw Error(`a job's ${bad}`);
+    }
     const id = `run:${ulid(this.o.now())}`;
     const jobs = join(this.o.root, 'jobs');
     mkdirSync(jobs, { recursive: true, mode: 0o700 });
@@ -786,7 +802,7 @@ class LocalRunner implements Runner {
       return;
     }
     if (this.o.plant === 'records-launched-model') job.answered = launched;
-    if (job.spec.deadline_ms) job.timers.push(setTimeout(() => void this.stop(job, 'timed_out'), job.spec.deadline_ms));
+    if (job.spec.deadline_ms) job.timers.push(after(job.spec.deadline_ms, () => void this.stop(job, 'timed_out')));
     if (job.spec.output_timeout_ms) this.watchQuiet(job, job.spec.output_timeout_ms);
     job.exited = this.o.supervisor.wait(job.rec.job).then(() => {
       job.endedAt ??= Date.now();
@@ -830,7 +846,7 @@ class LocalRunner implements Runner {
     if (e.type === 'result') {
       job.resultAt ??= Date.now();
       // Its grace stops it from here; no deadline ends it twice.
-      for (const t of job.timers) clearTimeout(t);
+      for (const cancel of job.timers) cancel();
       if (typeof e.result === 'string') job.rec.result = e.result;
       if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
       if (!job.answered && isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
@@ -857,7 +873,7 @@ class LocalRunner implements Runner {
       });
     }, Math.min(ms, 1000));
     t.unref();
-    job.timers.push(t);
+    job.timers.push(() => clearInterval(t));
   }
 
   /**
@@ -888,7 +904,7 @@ class LocalRunner implements Runner {
     job.ending = true;
     job.rec.state = 'stopping';
     job.stopCause ??= cause;
-    for (const t of job.timers) clearTimeout(t);
+    for (const cancel of job.timers) cancel();
     const cleaned = await this.o.supervisor.cleanup(job.rec.job).catch(() => ({ left: ['unconfirmed'] }));
     if (refused) job.rec.refused = refused;
     await this.confirm(job, cleaned.left);
@@ -911,7 +927,7 @@ class LocalRunner implements Runner {
     }
     delete job.left;
     delete job.unconfirmed;
-    for (const t of job.timers) clearTimeout(t);
+    for (const cancel of job.timers) cancel();
     if (job.rec.ran) job.rec.ran.to = Date.now();
     job.rec.model = job.answered ?? 'unknown';
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
@@ -982,7 +998,7 @@ class LocalRunner implements Runner {
   async close(): Promise<void> {
     this.closed = true;
     clearInterval(this.timer);
-    for (const job of this.jobs.values()) for (const t of job.timers) clearTimeout(t);
+    for (const job of this.jobs.values()) for (const cancel of job.timers) cancel();
     await this.chain;
     await (await this.forwarder?.catch(() => undefined))?.close();
   }

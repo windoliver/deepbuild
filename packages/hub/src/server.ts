@@ -19,7 +19,7 @@ import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
-import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
@@ -50,6 +50,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
+  // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
+  ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   ['session.wait', ['cli']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
@@ -138,27 +140,29 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'overrun' | 'later' | 'line' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; close(): Promise<void> }
+/** `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded). */
+interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; close(): Promise<void> }
 
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; session?: string }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; session?: string; values?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
+    if (m.op === 'scrub') return onScrub(m.values ?? []);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -178,10 +182,10 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = new Core(options, onFrame, onAsking, onAcking);
+  const core = new Core(options, onFrame, onAsking, onAcking, onScrub);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -189,6 +193,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
     post: (message) => {
       if (message.op === 'hook') void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
       else if (message.op === 'waiter-gone') core.waiterGone(message.key);
+      else if (message.op === 'hook-gone') core.hookGone(message.id, message.session);
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
@@ -222,6 +227,7 @@ function parserPool(held: string[], plant: Plant | undefined): Parsers {
         worker.postMessage({ n, chunks, first });
       });
     },
+    scrub(values) { for (const worker of [small, big]) worker.postMessage({ scrub: values }); },
     close: async () => { await Promise.all([small, big].map((w) => w.terminate())); },
   };
 }
@@ -237,6 +243,7 @@ async function parserInline(held: string[], plant: Plant): Promise<Parsers> {
       if (parsed.kind === 'hook') scrubText(line.toString('utf8'), { held });
       return parsed;
     },
+    scrub(values) { held.push(...values); },
     close: async () => undefined,
   };
 }
@@ -338,10 +345,11 @@ class Hub {
     };
     const asking = (sessions: string[], judged: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); };
     const acking = (session: string) => { this.acking.add(session); };
+    const scrub = (values: string[]) => { this.parsers.scrub(values); };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES, generation: writerGeneration(this.root.ledger) });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking) : coreWorker(options, frame, fatal, asking, acking);
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
@@ -616,10 +624,14 @@ class Hub {
     const staged = meta.matched.find((n) => entries[n]?.match === STAGED_MATCH);
     const stage = staged !== undefined ? meta.stage?.[staged] ?? null
       : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? [meta.cwd] : undefined;
-    if (!authority.length && !mcp && !decided.length && stage === undefined) return undefined;
-    const label = mcp ? `${mcp.server} ${mcp.tool}` : typeof data.command === 'string' ? data.command : String(data.kind);
+    // A computer-use or Chrome step is checked against the screens and windows its session leases (#332).
+    const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
+    if (!authority.length && !mcp && !decided.length && stage === undefined && !screen) return undefined;
+    const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);
     const command = typeof data.command === 'string' ? { command: data.command } : {};
-    return { label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}) };
+    return {
+      label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}), ...(screen ? { screen } : {}),
+    };
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
@@ -714,11 +726,15 @@ class Hub {
   }
   /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
   private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
+    // A deep-hook that gave up on the hub before reading its reply has let the hook through: nothing is held for it (#27).
+    let replied = false;
+    conn.sock.once('close', () => { if (!replied) this.core.post({ op: 'hook-gone', id: meta.id, session: meta.session }); });
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string; message?: string } | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
+    replied = true;
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
@@ -904,12 +920,15 @@ class Hub {
     this.stopping = true;
     clearTimeout(this.waitTimer);
     this.server.close();
-    for (const conn of this.conns) conn.sock.destroy();
+    // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
+    const answers = this.plant === 'stop-answers-waiting';
+    if (!answers) for (const conn of this.conns) conn.sock.destroy();
     try {
       await Promise.race([this.core.request({ op: 'stop', reason }), new Promise((_, reject) => setTimeout(() => reject(Error('the core took over 20 s to stop')), 20_000))]);
     } catch (error) {
       process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`);
     }
+    if (answers) for (const conn of this.conns) conn.sock.destroy();
     this.exit(0);
   }
   private exit(code: number): void {

@@ -14,8 +14,8 @@ import { ulid } from '@deepbuild/record';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 
 export type ScopeKind = 'issue' | 'resource' | 'project' | 'work';
-/** A spending budget you approve. `ends` is in ms since the epoch. */
-export interface BudgetInput { scope: { kind: ScopeKind; ref: string }; cap_usd: number; ends: number }
+/** A spending budget you approve. `ends` is in ms since the epoch; `runs`, when given, is how many runs it covers. */
+export interface BudgetInput { scope: { kind: ScopeKind; ref: string }; runs?: number; cap_usd: number; ends: number }
 /** A paid run, asking to start. `inputs` is the digest of its inputs; `resource` the key of the resource it runs on. */
 export interface RunRequest { run: string; check: string; inputs: string; issue: string; resource?: string }
 export interface Reserved { budget: string; usd: number }
@@ -29,6 +29,9 @@ export interface BudgetView {
   budget: string;
   scope: { kind: ScopeKind; ref: string };
   cap_usd: number;
+  /** How many runs it covers, or null for any number; runs_used counts every run reserved against it, charged or not. */
+  runs: number | null;
+  runs_used: number;
   ends: number;
   reserved_usd: number;
   spent_usd: number;
@@ -82,7 +85,11 @@ const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 
 const RESOLVER = 'ext:resolver-decisions';
 const SCOPES = new Set<string>(['issue', 'resource', 'project', 'work']);
 /** The asks that close an ask; the first to append decides, and no agent closes one. */
-const CLOSES = new Set(['ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot']);
+const CLOSE_KINDS = ['ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot'] as const;
+const CLOSES = new Set<string>(CLOSE_KINDS);
+/** The kinds `fold` reads: its switch is on this type, so a case for a kind left out of the list fails to compile. */
+const FOLDED = ['spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'run.finished', 'ask.created', 'decision.applied', ...CLOSE_KINDS] as const;
+type Folded = (typeof FOLDED)[number];
 const RUN = /^run:[0-9A-Za-z]+$/;
 const DECISION = /^decision:[0-9A-Za-z]+$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -108,6 +115,10 @@ interface Budget {
   id: string;
   scope: { kind: ScopeKind; ref: string };
   cap: number;
+  /** How many runs it covers; unset covers any number. */
+  runs?: number;
+  /** Every run reserved against it, charged or not. */
+  started: Set<string>;
   ends: number;
   /** Held, unpriced, per run, until its cost reading lands. */
   reserved: Map<string, number>;
@@ -135,6 +146,13 @@ const reservedOf = (b: Budget): number => [...b.reserved.values()].reduce((sum, 
 const left = (b: Budget): number => b.cap - b.spent - reservedOf(b);
 /** What's left for one run: the room your yes holds for it is its own. */
 const roomFor = (b: Budget, run: string): number => left(b) + (b.held.has(run) ? b.reserved.get(run)! : 0);
+/** Runs reserved against it, and the runs your yes holds room for. */
+const runsUsed = (b: Budget): number => b.started.size + b.held.size;
+/** Whether one more run fits: its price in what's left, and a run left of those it covers, counting the room your yes holds for it. */
+const fits = (b: Budget, run: string, cost: number): boolean =>
+  roomFor(b, run) >= cost && (b.runs === undefined || runsUsed(b) - (b.held.has(run) ? 1 : 0) < b.runs);
+/** A budget's size as a raise names it: its runs, when it counts them, and its cap. */
+const size = (runs: number | undefined, cap: number): string => `${runs === undefined ? '' : `${runs} runs and `}${dollars(cap)}`;
 const sameInputs = (check: string, inputs: string): string => `${check}\u0000${inputs}`;
 // Your yes to run failed inputs again is for that ask's issue and resource, not another's.
 const sameAsked = (check: string, inputs: string, issue: string, resource?: string | null): string => `${sameInputs(check, inputs)}\u0000${issue}\u0000${resource ?? ''}`;
@@ -191,12 +209,13 @@ class BudgetLedger implements Ledger {
       if (via === undefined) throw new BudgetRefused(`only you approve a budget, on the card or from deep inbox, not ${connection.writer}`);
       if (!isObj(input) || !isObj(input.scope) || !SCOPES.has(input.scope.kind as string) || !isText(input.scope.ref)) throw new BudgetRefused('a budget names its scope: an issue, a resource, a project or a kind of work');
       if (!isPrice(input.cap_usd)) throw new BudgetRefused('a budget has a cap in dollars, zero or more');
+      if (input.runs !== undefined && !(Number.isSafeInteger(input.runs) && input.runs >= 1)) throw new BudgetRefused('a budget covers a whole number of runs, one or more');
       const now = this.options.now();
       if (!Number.isSafeInteger(input.ends) || input.ends <= now) throw new BudgetRefused('a budget ends after it is approved');
       const id = ulid(now);
       await this.append(this.core(connection), {
-        v: 1, id, kind: 'spend.approved', ts: now,
-        data: { scope: { kind: input.scope.kind, ref: input.scope.ref }, cap_usd: usd(microDown(input.cap_usd)), ends: input.ends, via },
+        v: 2, id, kind: 'spend.approved', ts: now,
+        data: { scope: { kind: input.scope.kind, ref: input.scope.ref }, ...(input.runs === undefined ? {} : { runs: input.runs }), cap_usd: usd(microDown(input.cap_usd)), ends: input.ends, via },
       });
       return id;
     });
@@ -233,10 +252,10 @@ class BudgetLedger implements Ledger {
         if (started?.ask === ask) return { run: run.run, status: 'started', reserved: started.budgets.map((b) => ({ ...b })) };
         return { run: run.run, status: 'asked', ask };
       }
-      const short = covering.filter((b) => roomFor(b, run.run) < cost);
+      const short = covering.filter((b) => !fits(b, run.run, cost));
       if (short.length > 0) {
-        // One ask raises every budget without room, each by the run's price, so each yes holds room for its own run.
-        const raises = short.map((b) => `${b.scope.ref} from ${dollars(b.cap)} to ${dollars(b.cap + cost)}`).join(' and ');
+        // One ask raises every budget without room, each by the run and its price, so each yes holds room for its own run.
+        const raises = short.map((b) => `${b.scope.ref} from ${size(b.runs, b.cap)} to ${size(b.runs === undefined ? undefined : b.runs + 1, b.cap + cost)}`).join(' and ');
         const ask = await this.wait(connection, { run, usd: cost, because: 'raise', budgets: short.map((b) => b.id) },
           `Raise the budget for ${raises}, to start ${run.check} (${run.run})?`, 'Raise it', 'Keep it as it is', 'budget.raise');
         return { run: run.run, status: 'BLOCKED', cause: 'budget', owner: 'you', budget: short[0]!.id, ask };
@@ -269,8 +288,11 @@ class BudgetLedger implements Ledger {
       if (!named) throw new BudgetRefused(`${String(answer.budget)} is no budget in force`, { run: waiting.run.run, budget: String(answer.budget) });
       // The named budget, and every budget that covers the run, must each have room for its price, counting reservations.
       const budgets = [named, ...this.covering(waiting.run, now).filter((b) => b !== named)];
-      const short = budgets.find((b) => roomFor(b, waiting.run.run) < waiting.usd);
-      if (short) throw new BudgetRefused(`budget ${short.id} has ${dollars(left(short))} left, not ${dollars(waiting.usd)} for ${waiting.run.run}`, { run: waiting.run.run, budget: short.id });
+      const short = budgets.find((b) => !fits(b, waiting.run.run, waiting.usd));
+      if (short) {
+        const why = roomFor(short, waiting.run.run) < waiting.usd ? `${dollars(left(short))} left, not ${dollars(waiting.usd)}` : `no run left of its ${String(short.runs)}`;
+        throw new BudgetRefused(`budget ${short.id} has ${why} for ${waiting.run.run}`, { run: waiting.run.run, budget: short.id });
+      }
       if (!recovering) await this.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask, ts: now, data: { decision: answer.decision, ask } });
       return this.reserve(connection, waiting.run, budgets.map((b) => b.id), waiting.usd, { ask, decision: answer.decision }, now);
     });
@@ -294,7 +316,7 @@ class BudgetLedger implements Ledger {
       const b = this.budgets.get(id);
       if (!b) throw new BudgetRefused(`${String(id)} is no budget`, { budget: id });
       return {
-        budget: b.id, scope: { ...b.scope }, cap_usd: usd(b.cap), ends: b.ends,
+        budget: b.id, scope: { ...b.scope }, cap_usd: usd(b.cap), runs: b.runs ?? null, runs_used: runsUsed(b), ends: b.ends,
         reserved_usd: usd(reservedOf(b)), spent_usd: usd(b.spent), left_usd: usd(left(b)),
         reservations: [...b.reserved].map(([r, m]) => ({ run: r, usd: usd(m) })),
       };
@@ -311,9 +333,10 @@ class BudgetLedger implements Ledger {
       const named = this.live(id, now);
       if (!named) throw new BudgetRefused(`${String(id)} is no budget in force`, { run: run.run, budget: String(id) });
       const cost = microUp(price);
-      if (roomFor(named, run.run) < cost) {
+      if (!fits(named, run.run, cost)) {
+        const runsLeft = named.runs === undefined ? '' : ` and ${Math.max(0, named.runs - runsUsed(named))} of its ${named.runs} runs`;
         const ask = await this.wait(connection, { run, usd: cost, because: 'raise', budgets: [named.id] },
-          `${run.check} costs ${dollars(cost)}, and the budget for ${named.scope.ref} has ${dollars(left(named))} left, counting what's reserved and not yet charged. Raise it from ${dollars(named.cap)} to ${dollars(named.cap + cost)}?`,
+          `${run.check} costs ${dollars(cost)}, and the budget for ${named.scope.ref} has ${dollars(left(named))}${runsLeft} left, counting what's reserved and not yet charged. Raise it from ${size(named.runs, named.cap)} to ${size(named.runs === undefined ? undefined : named.runs + 1, named.cap + cost)}?`,
           'Raise it', 'Keep it as it is', 'budget.raise', { ...step, cost: usd(cost) });
         return { run: run.run, status: 'BLOCKED', cause: 'budget', owner: 'you', budget: named.id, ask };
       }
@@ -396,26 +419,34 @@ class BudgetLedger implements Ledger {
     await this.sync();
   }
 
-  /** Reads what the log gained since the last call. */
+  /**
+   * Reads what the log gained since the last call, only the kinds `fold` reads, the rest never decoded. The cursor
+   * moves to the head read first, so a busy log's other events are scanned once.
+   */
   private async sync(): Promise<void> {
+    const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+    const head = Number(row?.head ?? 0);
     for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
+      const page = await this.options.record.read({ after: this.cursor, limit: PAGE, kinds: FOLDED });
       for (const e of page) {
         // A read in the raising request's turn can overlap another: each event is folded once.
         if (e.log_pos <= this.cursor) continue;
         this.fold(e);
         this.cursor = e.log_pos;
       }
-      if (page.length < PAGE) return;
+      if (page.length < PAGE) break;
     }
+    this.cursor = Math.max(this.cursor, head);
   }
 
   private fold(e: Event): void {
     const d = isObj(e.data) ? e.data : {};
-    switch (e.kind) {
+    switch (e.kind as Folded) {
       case 'spend.approved': {
         const scope = d.scope as { kind: ScopeKind; ref: string };
-        this.budgets.set(e.id, { id: e.id, scope, cap: micro(d.cap_usd as number), ends: d.ends as number, reserved: new Map(), held: new Set(), spent: 0 });
+        this.budgets.set(e.id, {
+          id: e.id, scope, cap: micro(d.cap_usd as number), ...(typeof d.runs === 'number' ? { runs: d.runs } : {}), started: new Set(), ends: d.ends as number, reserved: new Map(), held: new Set(), spent: 0,
+        });
         return;
       }
       case 'spend.reserved': {
@@ -425,7 +456,10 @@ class BudgetLedger implements Ledger {
           ask: typeof d.ask === 'string' ? d.ask : null, decision: typeof d.decision === 'string' ? d.decision : null });
         // Room held for this run by your yes becomes its reservation.
         for (const held of this.budgets.values()) if (held.held.delete(run)) held.reserved.delete(run);
-        for (const b of budgets) this.budgets.get(b.budget)?.reserved.set(run, micro(b.usd));
+        for (const b of budgets) {
+          this.budgets.get(b.budget)?.reserved.set(run, micro(b.usd));
+          this.budgets.get(b.budget)?.started.add(run);
+        }
         // Your yes to running failed inputs again covers one run.
         this.rerunYes.delete(sameAsked(String(d.check), String(d.inputs), String(d.issue), d.resource as string | null));
         return;
@@ -493,6 +527,7 @@ class BudgetLedger implements Ledger {
         const b = this.budgets.get(id);
         if (!b) continue;
         b.cap += waiting.usd;
+        if (b.runs !== undefined) b.runs += 1;
         if (this.runs.has(run) || b.reserved.has(run)) continue;
         b.reserved.set(run, waiting.usd);
         b.held.add(run);
@@ -501,7 +536,7 @@ class BudgetLedger implements Ledger {
       // Your yes to a run no budget covers approves a budget for that run alone, at its price.
       const id = ask.replace(/^ask:/, '');
       this.budgets.set(id, {
-        id, scope: { kind: 'issue', ref: waiting.run.issue }, cap: waiting.usd, ends: e.ts + ONE_RUN_ENDS, reserved: new Map(), held: new Set(), spent: 0, run: waiting.run.run,
+        id, scope: { kind: 'issue', ref: waiting.run.issue }, cap: waiting.usd, started: new Set(), ends: e.ts + ONE_RUN_ENDS, reserved: new Map(), held: new Set(), spent: 0, run: waiting.run.run,
       });
     }
   }

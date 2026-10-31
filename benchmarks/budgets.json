@@ -726,6 +726,50 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels. One process installs a plug-in with six panels, gives each a click and pops each out onto the second display with its click's serial through `deep-show run`, failing unless every window opens; p50 includes Node's and the binary's start. The issue's 300 ms a pop-out stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "terminal-60hz",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "terminal-60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #402 first measurement: the merge base has no terminals. One process installs a plug-in whose panel shows a terminal's cell grid, feeds the terminal 600 numbered lines, one every 1/60 s, through `deep-show run` on the virtual clock, and reads its updates, failing unless every update is presented in a frame of its own; p50 includes Node's and the binary's start. The issue's 60 updates a second stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "cell-grid-60hz",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "cell-grid-60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #402 first measurement: the merge base has no cell grid. One process feeds a terminal's cell grid 600 full-screen repaints of 36 rows, one every 1/60 s, through `deep-show run` on the virtual clock, failing unless every patch is presented in a frame of its own; p50 includes Node's and the binary's start. The cell grid's cost (under 5% of a core at 60 patches a second) stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hosted-terminal-60hz",
+      "command": [
+        "node",
+        "benchmarks/hosted-terminals.mjs",
+        "60hz"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #104 first measurement: the merge base hosts no terminal for a piece. One process installs a package that asks for run-as-you, approves it on the trusted path, opens one hosted terminal whose program writes 120 numbered lines, one every 1/60 s, through the supervisor's pseudo-terminal host process, and fails unless every line is in the terminal's output, in order, 250 ms after the last; then it revokes run-as-you. p50 includes Node's start and the 2 s the lines take. The issue's 5% of a core at 60 updates a second stays in tests/acceptance/104/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hosted-terminals-10",
+      "command": [
+        "node",
+        "benchmarks/hosted-terminals.mjs",
+        "ten"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #104 first measurement: the merge base hosts no terminal for a piece. One process installs a package that asks for run-as-you, approves it on the trusted path, opens 10 hosted terminals whose programs each write 10,000 lines of scrollback, and fails unless each terminal's output holds them all, in order; then it revokes run-as-you. The issue's 300 MB for 10 terminals stays in tests/acceptance/104/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

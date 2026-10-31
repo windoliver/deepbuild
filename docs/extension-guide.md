@@ -288,6 +288,33 @@ An outside call the hub makes for the package, only to a host its grant names an
 |---|---|---|
 | `request` | object | yes |
 
+### `deep.terminal.open`
+
+In R1 · preview · `d1:95eb23764a43d724a267df4616cd7c6c1d08a47498adb5cc957293fccbe42f51`
+
+Opens a terminal the hub hosts for the package under run-as-you: its program, folder, size and title; its input comes only from the panel you focused.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `spec` | object | yes |
+
+### `deep.terminal.list`
+
+In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
+
+The package's own hosted terminals, each with its run and process.
+
+### `deep.terminal.read`
+
+In R1 · preview · `d1:fa7a50bc188ddb120dbc0d0af0295f457bdc94c13e506b153d567cd02253e63a`
+
+Reads a hosted terminal's output from an offset, in pages.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `terminal` | string | yes |
+| `from` | integer | yes |
+
 ## Slots
 
 Each kind of thing a package registers fills a slot: its interface with a frozen digest, how many pieces may fill it, its kit in the conformance package and the planted wrong fills that kit must fail. A second fill of a slot that takes one is refused at install unless its manifest says it replaces the first.
