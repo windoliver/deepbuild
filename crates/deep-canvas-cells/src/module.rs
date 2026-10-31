@@ -22,6 +22,14 @@ pub struct Grid {
     pub rows: Vec<Row>,
 }
 
+deep_canvas::canonical_fields!(Grid {
+    origin,
+    cell,
+    font_size,
+    bg,
+    rows
+});
+
 /// One row: its text and the color of each run of cells that share one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -29,6 +37,8 @@ pub struct Row {
     pub runs: Vec<(usize, usize, [u8; 3])>,
     pub fills: Vec<(usize, usize, [u8; 3])>,
 }
+
+deep_canvas::canonical_fields!(Row { text, runs, fills });
 
 fn manifest() -> Manifest {
     Manifest {
@@ -275,8 +285,7 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
         bg,
         rows: out,
     };
-    let bytes = format!("{grid:?}").into_bytes();
-    v.write("cells.grid", Val::typed(grid, bytes))
+    v.write("cells.grid", Val::typed(grid))
 }
 
 fn board() -> Value {

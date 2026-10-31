@@ -10,9 +10,15 @@ publish = false
 # (technical design: Seeded and replayable).
 check_kinds = ["document.validate"]
 
+[features]
+# Issue #855: a test build whose Debug text for every typed value differs, as another compiler's
+# might; no digest may change with it.
+test-debug-alt = []
+
 [dependencies]
 libm = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
+blake3 = { version = "1", default-features = false, features = ["std"] }
 unicode-normalization = "0.1"

@@ -20,8 +20,8 @@ const envelope = { format: 1, profile: 'board', title: 'Bench board', descriptio
 const rect = (id, layer, i) => ({ id, kind: 'rect@1', layer, name: id, order: `b${i}`, params: { box: [0, 0, 8, 8], paint: { fill: { role: 'muted' } } }, at: { pos: [i % 600, 100, 0] } });
 const ulid = (n) => `01JB96P${String(n).padStart(19, '0')}`;
 
-function run(binary, subcommand, lines) {
-  const out = spawnSync(join(root, 'target', 'debug', binary), subcommand.split(' '), { input: `${lines.join('\n')}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
+function run(binary, subcommand, lines, profile = 'debug') {
+  const out = spawnSync(join(root, 'target', profile, binary), subcommand.split(' '), { input: `${lines.join('\n')}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
   if (out.status !== 0) throw Error(`${binary} ${subcommand} exited ${out.status}: ${out.stderr}`);
   return out.stdout.trim().split('\n').map((line) => JSON.parse(line));
 }
@@ -147,8 +147,9 @@ workloads['map-deepest-level'] = () => {
   }
 };
 
-// The cost model's micro-benchmark (issue #379): every operator the shipped build seals, timed by `deep-show`'s
-// `costs` call over generated boards, and scene3d's two passes timed by their timestamps on the device through
+// The cost model's micro-benchmark (issue #379): every operator the shipped build seals, timed by an optimized
+// `deep-show`'s `costs` call over generated boards (issue #855: the release build, whose profile and toolchain the
+// file records, since the cost model reads no file a debug build measured), and scene3d's two passes timed by their timestamps on the device through
 // `deep-gpu`'s live window at two sizes and two box counts. It prints the measured terms beside the declared ones
 // with this machine's fingerprint; `--write` on a reference Mac makes them the build's coefficients
 // (crates/deep-canvas/costs.json). Off macOS the passes keep their declared terms.
@@ -238,12 +239,14 @@ workloads.costs = () => {
   const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
   let answer;
   try {
-    [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, calls: [{ call: 'costs' }] })]);
+    const built = spawnSync('cargo', ['build', '--locked', '--release', '-p', 'deep-show'], { cwd: root, stdio: 'inherit' });
+    if (built.status !== 0) throw Error(`cargo build --release -p deep-show exited ${built.status}`);
+    [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, calls: [{ call: 'costs' }] })], 'release');
   } finally {
     rmSync(evidence, { recursive: true, force: true });
   }
   const measured = answer.replies?.[0];
-  if (!measured?.terms) throw Error(`deep-show costs answered ${JSON.stringify(answer).slice(0, 1500)}`);
+  if (!measured?.terms || !measured.build?.profile) throw Error(`deep-show costs answered ${JSON.stringify(answer).slice(0, 1500)}`);
   const declared = JSON.parse(readFileSync(COSTS, 'utf8'));
   const terms = { ...measured.terms };
   for (const [pass, bytes] of Object.entries({ ...PASS_BYTES, ...EFFECT_BYTES })) terms[pass] = { ...(declared.terms[pass] ?? {}), bytes_per_px: bytes };
@@ -268,11 +271,11 @@ workloads.costs = () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  const report = { fingerprint: machine, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
+  const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
     if (!['Mac15,7', 'Mac15,12'].includes(machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
-    writeFileSync(COSTS, `${JSON.stringify({ fingerprint: { model, chip, memoryBytes, macosBuild }, terms }, null, 2)}\n`);
+    writeFileSync(COSTS, `${JSON.stringify({ fingerprint: { model, chip, memoryBytes, macosBuild }, build: measured.build, terms }, null, 2)}\n`);
   }
   console.log(JSON.stringify(report));
 };
