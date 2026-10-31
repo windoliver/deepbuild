@@ -1,0 +1,21 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "doc.patched",
+  "subject": "doc:01K74G3A5C7E9G1J3M5P7R9T1V",
+  "writer": "mcp:3f0c2a9e-1b4d-4c8e-9a7f-2d6b8e1c5a30",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "doc": "doc:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "rev": 1,
+    "patch": null,
+    "writer": "agent",
+    "achieved": { "created": { "rect@1": 6 }, "updated": 0, "deleted": {}, "unchanged": false },
+    "hash": "4386140dfaa6518b756adec541fcf493770ad7312bddce3d6592a7195a720ae5",
+    "layer": "agent-cbdef1d2df05",
+    "thread": "3f0c2a9e-1b4d-4c8e-9a7f-2d6b8e1c5a30"
+  },
+  "evidence": ["4386140dfaa6518b756adec541fcf493770ad7312bddce3d6592a7195a720ae5"]
+}

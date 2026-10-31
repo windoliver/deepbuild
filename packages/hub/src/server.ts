@@ -50,6 +50,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
+  // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
+  ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   ['session.wait', ['cli']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
@@ -899,12 +901,15 @@ class Hub {
     this.stopping = true;
     clearTimeout(this.waitTimer);
     this.server.close();
-    for (const conn of this.conns) conn.sock.destroy();
+    // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
+    const answers = this.plant === 'stop-answers-waiting';
+    if (!answers) for (const conn of this.conns) conn.sock.destroy();
     try {
       await Promise.race([this.core.request({ op: 'stop', reason }), new Promise((_, reject) => setTimeout(() => reject(Error('the core took over 20 s to stop')), 20_000))]);
     } catch (error) {
       process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`);
     }
+    if (answers) for (const conn of this.conns) conn.sock.destroy();
     this.exit(0);
   }
   private exit(code: number): void {
