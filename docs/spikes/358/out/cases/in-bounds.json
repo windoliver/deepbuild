@@ -1,0 +1,102 @@
+{
+ "want": {
+  "pass": true,
+  "marker": "ran:132",
+  "area": [
+   101,
+   124,
+   500,
+   400
+  ],
+  "card": [
+   806,
+   341,
+   480,
+   240
+  ],
+  "question": "Ship build 9226?",
+  "updates": 3,
+  "fill": "#d414d8",
+  "escape": "#f311e2"
+ },
+ "status": 0,
+ "output": {
+  "result": "pass",
+  "origin": "agent_built",
+  "runtime": "panel_host",
+  "appPid": 78708,
+  "hostPid": 78881,
+  "trees": [
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:132",
+      "bounds": [
+       101,
+       124,
+       500,
+       26
+      ]
+     }
+    ],
+    "bounds": [
+     101,
+     124,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:132",
+      "bounds": [
+       101,
+       124,
+       500,
+       26
+      ]
+     }
+    ],
+    "bounds": [
+     101,
+     124,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:132",
+      "bounds": [
+       101,
+       124,
+       500,
+       26
+      ]
+     }
+    ],
+    "bounds": [
+     101,
+     124,
+     500,
+     400
+    ]
+   }
+  ],
+  "violations": [],
+  "card": {
+   "question": "Ship build 9226?"
+  }
+ }
+}
