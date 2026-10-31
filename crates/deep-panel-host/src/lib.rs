@@ -7,7 +7,7 @@ use std::{
     collections::VecDeque,
     io::{BufRead as _, Write as _},
     path::Path,
-    sync::{mpsc, Arc},
+    sync::{atomic::Ordering, mpsc, Arc},
     time::{Duration, Instant},
 };
 
@@ -223,6 +223,13 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
                         Ok((tree, nanos)) => say(&json!({ "tree": tree, "scriptNs": nanos })),
                         Err(error) => say(&json!({ "error": error })),
                     },
+                    "rebuild" => {
+                        deep_app::REBUILDS.fetch_add(1, Ordering::Relaxed);
+                        match panel.update() {
+                            Ok((tree, nanos)) => say(&json!({ "tree": tree, "scriptNs": nanos })),
+                            Err(error) => say(&json!({ "error": error })),
+                        }
+                    }
                     "jit" => say(&jit()),
                     "press" => {
                         // Whatever was already going to move focus isn't this press's.

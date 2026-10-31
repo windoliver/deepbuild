@@ -121,6 +121,11 @@ fn parse_line(line: &str) -> Result<Node, String> {
                 node.label = Some(label);
                 rest = after;
             }
+            // Which script handle an input is: the host's, and nothing this draws.
+            '#' => {
+                let digits = rest[1..].find(|c: char| !c.is_ascii_digit());
+                rest = digits.map_or("", |at| &rest[at + 1..]);
+            }
             '.' | ':' => {
                 let name_end = rest[1..]
                     .find(|c: char| !(c.is_alphanumeric() || c == '_'))

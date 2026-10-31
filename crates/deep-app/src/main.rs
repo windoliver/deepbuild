@@ -55,6 +55,7 @@ fn main() {
         match all.first().map(String::as_str) {
             Some("panel-check") => std::process::exit(deep_app::panel_check::check(&all[1..])),
             Some("panel-bench") => std::process::exit(deep_app::panel_check::bench(&all[1..])),
+            Some("panel-keys") => std::process::exit(deep_app::panel_keys::keys(&all[1..])),
             _ => {}
         }
     }

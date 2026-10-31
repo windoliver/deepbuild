@@ -46,7 +46,7 @@ const MAX_LINE: u64 = 32 << 20;
 const STUCK: Duration = Duration::from_secs(60);
 
 /// The panel host as a child process: nothing of the app's environment goes with it.
-struct Host {
+pub(crate) struct Host {
     child: Child,
     stdin: ChildStdin,
     lines: mpsc::Receiver<String>,
@@ -56,7 +56,7 @@ struct Host {
 }
 
 impl Host {
-    fn start(path: &Path, panel: &Path, draw: bool) -> Result<Self, String> {
+    pub(crate) fn start(path: &Path, panel: &Path, draw: bool) -> Result<Self, String> {
         let mut command = Command::new(path);
         command.env_clear().args(["serve", "--panel"]).arg(panel);
         if let Some(home) = std::env::var_os("HOME") {
@@ -105,7 +105,15 @@ impl Host {
         Ok(host)
     }
 
-    fn send(&mut self, command: Value) -> Result<(), String> {
+    pub(crate) fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    pub(crate) fn gone(&mut self) -> bool {
+        !matches!(self.child.try_wait(), Ok(None))
+    }
+
+    pub(crate) fn send(&mut self, command: Value) -> Result<(), String> {
         writeln!(self.stdin, "{command}")
             .and_then(|()| self.stdin.flush())
             .map_err(|_| "host_gone".to_owned())
@@ -124,7 +132,7 @@ impl Host {
 
     /// The host's answer to the last command, refusing any focus move on the way, since no press is in hand to carry
     /// a serial.
-    fn reply(&mut self) -> Result<Value, String> {
+    pub(crate) fn reply(&mut self) -> Result<Value, String> {
         loop {
             let reply = self.next()?;
             if !reply["move"].is_null() {
@@ -138,7 +146,7 @@ impl Host {
     }
 
     /// One invalidation: the tree's text and the host's nanoseconds.
-    fn update(&mut self) -> Result<(String, u64), String> {
+    pub(crate) fn update(&mut self) -> Result<(String, u64), String> {
         self.send(json!({ "cmd": "invalidate" }))?;
         let reply = self.reply()?;
         match (reply["tree"].as_str(), reply["scriptNs"].as_u64()) {
@@ -287,7 +295,7 @@ fn behavior(op: &crate::panel_tree::Op) -> bool {
 
 /// Everything a host may send that this app can draw. Behavior stays in the host; any other node or style, or a
 /// style with arguments this can't read, is refused, since the layout this app measures wouldn't be the panel's.
-fn unknown_element(node: &Node) -> Option<String> {
+pub(crate) fn unknown_element(node: &Node) -> Option<String> {
     const KINDS: [&str; 5] = ["div", "v_flex", "h_flex", "text", "Button"];
     const BARE: [&str; 10] = [
         "flex",
@@ -357,7 +365,7 @@ fn violations(
     Ok(found)
 }
 
-struct Check {
+pub(crate) struct Check {
     cx: HeadlessAppContext,
     window: AnyWindowHandle,
     root: Entity<Window358>,
@@ -368,7 +376,7 @@ struct Check {
 }
 
 impl Check {
-    fn open(args: &[String]) -> Result<Self, String> {
+    pub(crate) fn open(args: &[String]) -> Result<Self, String> {
         let area = rect(&flag(args, "--panel-area").ok_or("--panel-area x,y,w,h")?)?;
         let card = flag(args, "--card").map(|text| rect(&text)).transpose()?;
         let question = flag(args, "--question");
@@ -447,7 +455,7 @@ impl Check {
     }
 
     /// Lays out a tree in the window, and answers each node's box.
-    fn lay_out(&mut self, tree: Node) -> Result<Vec<Option<Rect>>, String> {
+    pub(crate) fn lay_out(&mut self, tree: Node) -> Result<Vec<Option<Rect>>, String> {
         let root = self.root.clone();
         self.cx.update(|cx| {
             root.update(cx, |root, cx| {
