@@ -1868,6 +1868,9 @@ export interface AskMootV2 {
   } | {
     because: "thread_replied";
     link: string;
+  } | {
+    because: "network_reached";
+    host: string;
   };
   evidence?: Array<string>;
 }

@@ -131,6 +131,25 @@
             "link"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "network_reached"
+            },
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The host:port a connection reached: the network task's check passing."
+            }
+          },
+          "required": [
+            "because",
+            "host"
+          ],
+          "additionalProperties": false
         }
       ]
     },
