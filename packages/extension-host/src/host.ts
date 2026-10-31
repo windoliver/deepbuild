@@ -877,7 +877,7 @@ class Host implements ExtensionHost {
   }
   async readings(source: string, window: { from: number; to: number }): Promise<Reading[]> {
     if (!SOURCE_NAME.test(source) || !Number.isSafeInteger(window?.from) || !Number.isSafeInteger(window?.to)) throw Error('readings takes a source\'s name and a window of two times in ms');
-    const rows = await this.options.record.raw(`SELECT value, unit, as_of, source FROM readings WHERE source = '${source}' AND as_of BETWEEN ${window.from} AND ${window.to} ORDER BY as_of, reading`) as { value: string; unit: string; as_of: number; source: string }[];
+    const rows = await this.options.record.raw('SELECT value, unit, as_of, source FROM readings WHERE source = ? AND as_of BETWEEN ? AND ? ORDER BY as_of, reading', [source, window.from, window.to]) as { value: string; unit: string; as_of: number; source: string }[];
     return rows.map((r) => ({ source: r.source, value: Number(r.value), unit: r.unit, as_of: r.as_of }));
   }
   async removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }> {
