@@ -328,7 +328,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   /** Builds the surfaces' stand-ins, each in `built` as soon as it's up, so a later failure still stops it. */
   const buildStandIns = async (dir: string, surfaces: DeclaredSurface[], built: StandIn[]): Promise<void> => {
     for (const s of surfaces) {
-      if (o.plant !== 'stands-in-always' && hasEntry(dir, s)) continue;
+      if (['service', 'page', 'command', 'module'].includes(s.kind) && o.plant !== 'stands-in-always' && hasEntry(dir, s)) continue;
       if (s.kind === 'service' || s.kind === 'page') {
         const form = FORMS[s.kind];
         const file = join(dir, '.deep-stand-in', `${s.check.replace(/[^\w-]/g, '-')}.mjs`);
