@@ -14,12 +14,15 @@ deep-app = { path = "../deep-app" }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
 serde_json = "1"
+sha2 = "0.10"
+crc32fast = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSSound"] }
 
 [[bin]]
 name = "deep-replica"
@@ -29,6 +32,11 @@ path = "src/main.rs"
 [[bin]]
 name = "deep-replica-canvas"
 path = "src/canvas.rs"
+
+# Issue #124: deep_drive's replica, one per process, driven over stdin by the hub or a check.
+[[bin]]
+name = "deep-drive"
+path = "src/deep_drive.rs"
 
 [[bin]]
 name = "deep-live"

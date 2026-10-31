@@ -1,6 +1,8 @@
 {
   "title": "ask.sources@1",
   "description": "Every place that raises an ask, one row each, naming the one kind of ask it raises (technical-design.md, Every ask ends). A place with no row can't raise an ask. Each row's fixture is an ask.created@1 data of the row's kind, and the decision it takes when its deadline passes on the virtual clock: an authority ask takes deny.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "pinned_to": {
       "oneOf": [

@@ -4,7 +4,12 @@
 //! measured on a reference Mac (`costs.json`, with that machine's environment fingerprint). The
 //! check sums them over a document into CPU time, GPU time and GPU memory per frame from those
 //! coefficients alone, so a refusal is the same on every machine, and names the items that cost
-//! the most.
+//! the most. A coefficient file names the build that measured it, its Cargo profile and its
+//! toolchain, and is read only when that profile is optimized (issue #855): a debug build's
+//! timings are of crates the shipped build optimizes.
+//! Issue #856: shaping's glyphs are measured cold and warm apart, `ns_per_glyph` and
+//! `ns_per_glyph_warm`: a frame is charged the warm cost, since a text is shaped once and its run
+//! reused from the shaped-run cache, and the cold cost decides whether shaping leaves the UI thread.
 
 use std::collections::BTreeMap;
 
@@ -21,15 +26,18 @@ pub struct Terms {
     pub ns_per_item: f64,
     pub ns_per_vertex: f64,
     pub ns_per_glyph: f64,
+    /// A glyph whose run is already shaped; 0 where warm and cold aren't measured apart.
+    pub ns_per_glyph_warm: f64,
     pub ns_per_px: f64,
     pub bytes_per_item: f64,
     pub bytes_per_px: f64,
 }
 
-const TERMS: [&str; 6] = [
+const TERMS: [&str; 7] = [
     "ns_per_item",
     "ns_per_vertex",
     "ns_per_glyph",
+    "ns_per_glyph_warm",
     "ns_per_px",
     "bytes_per_item",
     "bytes_per_px",
@@ -42,9 +50,19 @@ impl Terms {
             ns_per_item: n(TERMS[0]),
             ns_per_vertex: n(TERMS[1]),
             ns_per_glyph: n(TERMS[2]),
-            ns_per_px: n(TERMS[3]),
-            bytes_per_item: n(TERMS[4]),
-            bytes_per_px: n(TERMS[5]),
+            ns_per_glyph_warm: n(TERMS[3]),
+            ns_per_px: n(TERMS[4]),
+            bytes_per_item: n(TERMS[5]),
+            bytes_per_px: n(TERMS[6]),
+        }
+    }
+
+    /// A glyph's cost in a frame: warm where it is measured apart, since a run is shaped once.
+    pub fn ns_per_frame_glyph(&self) -> f64 {
+        if self.ns_per_glyph_warm > 0.0 {
+            self.ns_per_glyph_warm
+        } else {
+            self.ns_per_glyph
         }
     }
 
@@ -54,6 +72,7 @@ impl Terms {
             self.ns_per_item,
             self.ns_per_vertex,
             self.ns_per_glyph,
+            self.ns_per_glyph_warm,
             self.ns_per_px,
             self.bytes_per_item,
             self.bytes_per_px,
@@ -68,31 +87,67 @@ impl Terms {
     }
 }
 
-/// Every operator's and pass's terms and the fingerprint of the machine they were measured on.
+/// The Cargo profiles that optimize every crate: what a coefficient file's build must be.
+pub const OPTIMIZED: [&str; 2] = ["release", "bench"];
+
+/// Every operator's and pass's terms, the fingerprint of the machine they were measured on, and
+/// the build that measured them: `{profile, toolchain}`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Coefficients {
     pub fingerprint: Value,
+    pub build: Value,
     pub terms: BTreeMap<String, Terms>,
 }
 
+/// Why a coefficient file isn't read: the profile it names (`None` when it names none, or isn't
+/// a coefficient file at all) and what is wrong.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refused {
+    pub profile: Option<String>,
+    pub what: String,
+}
+
 impl Coefficients {
-    pub fn read(text: &str) -> Result<Coefficients, String> {
-        let v: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    pub fn read(text: &str) -> Result<Coefficients, Refused> {
+        let refused = |profile: Option<&str>, what: String| Refused {
+            profile: profile.map(str::to_string),
+            what,
+        };
+        let v: Value = serde_json::from_str(text).map_err(|e| refused(None, e.to_string()))?;
+        let profile = v["build"]["profile"].as_str();
+        match profile {
+            Some(p) if OPTIMIZED.contains(&p) => {}
+            Some(p) => {
+                return Err(refused(
+                    Some(p),
+                    format!("costs: measured by a `{p}` build, which isn't optimized; measure with `release`"),
+                ))
+            }
+            None => {
+                return Err(refused(
+                    None,
+                    "costs: names no build profile, so nothing says it was measured optimized"
+                        .into(),
+                ))
+            }
+        }
         let terms = v["terms"]
             .as_object()
-            .ok_or("costs: no terms")?
+            .ok_or_else(|| refused(profile, "costs: no terms".into()))?
             .iter()
             .map(|(k, t)| (k.clone(), Terms::read(t)))
             .collect();
         Ok(Coefficients {
             fingerprint: v["fingerprint"].clone(),
+            build: v["build"].clone(),
             terms,
         })
     }
 
-    /// The reference Mac's coefficients, which every check estimates with.
+    /// The reference Mac's coefficients, which every check estimates with unless the process
+    /// reads another file into its sealed set.
     pub fn reference() -> Coefficients {
-        Coefficients::read(REFERENCE).expect("costs.json is the build's own")
+        Coefficients::read(REFERENCE).expect("costs.json is the build's own, measured optimized")
     }
 
     /// Every term multiplied by `factor` (the planted check that estimates on its own machine).
@@ -102,12 +157,13 @@ impl Coefficients {
             t.ns_per_item *= factor;
             t.ns_per_vertex *= factor;
             t.ns_per_glyph *= factor;
+            t.ns_per_glyph_warm *= factor;
             t.ns_per_px *= factor;
         }
         out
     }
 
-    fn get(&self, name: &str) -> Terms {
+    pub fn get(&self, name: &str) -> Terms {
         self.terms.get(name).copied().unwrap_or_default()
     }
 }
@@ -210,7 +266,8 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
                 continue;
             }
             let c = counts(item);
-            let ns = t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_glyph * c.glyphs;
+            let ns =
+                t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_frame_glyph() * c.glyphs;
             cpu_ns += ns;
             bytes += t.bytes_per_item;
             *by_item.entry(id).or_default() += ns;
@@ -272,6 +329,21 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_from_a_build_that_isnt_optimized_is_refused_naming_its_profile() {
+        let file = |build: &str| format!(r#"{{"fingerprint": {{}}, {build} "terms": {{}}}}"#);
+        let dev = Coefficients::read(&file(
+            r#""build": {"profile": "dev", "toolchain": "rustc"},"#,
+        ));
+        assert_eq!(dev.map_err(|r| r.profile), Err(Some("dev".to_string())));
+        let none = Coefficients::read(&file(""));
+        assert_eq!(none.map_err(|r| r.profile), Err(None));
+        assert!(Coefficients::read(&file(
+            r#""build": {"profile": "release", "toolchain": "rustc"},"#
+        ))
+        .is_ok());
+    }
 
     #[test]
     fn a_path_counts_its_coordinate_pairs() {

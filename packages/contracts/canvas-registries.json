@@ -1,0 +1,40 @@
+[
+  {
+    "registry": "kind@1",
+    "owner": "core",
+    "fill": ["module", "first_party_pack", "pack"],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#200",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "pattern": "^([a-z][a-z0-9_]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*$" },
+        "module": { "type": "string", "minLength": 1 },
+        "minor": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["name", "module", "minor"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "registry": "check.kind.doc@1",
+    "owner": "core",
+    "fill": ["module"],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#200",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "machines": { "type": "string", "enum": ["any", "same"] },
+        "codes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "required": ["kind", "machines", "codes"],
+      "additionalProperties": false
+    }
+  }
+]

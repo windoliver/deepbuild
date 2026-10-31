@@ -1,6 +1,8 @@
 {
   "title": "ask.later@1",
   "description": "An ask was put off until a time before its deadline, by you; never by an agent.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

@@ -2,6 +2,8 @@
 //! predicate over the call as the shell reader reads it:
 //!
 //! - `shell:<glob>`: the shell command, whole, matches the glob (`*` any run, spaces included).
+//! - `word:<key>`: the shell command holds the key as a whole word: `graphql` reads `npm install graphql` and
+//!   `graphql@16`, not `graphql-tools`.
 //! - `run:<program> [<arg>…]`: a program the call runs, through any wrapper or nested shell, is `<program>`,
 //!   and its arguments that aren't options match the `<arg>` globs in order; an `<arg>` that starts with `-`
 //!   matches any of its arguments instead.
@@ -85,11 +87,21 @@ const EFFECTS: &[&str] = &[
 const HUB_LABEL: &str = "com.deepbuild.hub";
 const HUB_UNIT: &str = "deepbuild-hub";
 
+/// Whether `line` holds `key`, in any case, with no letter, digit, `_`, `-`, `.` or `/` against either end of it.
+fn holds_word(line: &str, key: &str) -> bool {
+    let word = |c: char| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/');
+    let (line, key) = (line.to_lowercase(), key.to_lowercase());
+    line.match_indices(&key).any(|(at, _)| {
+        !line[..at].chars().next_back().is_some_and(word)
+            && !line[at + key.len()..].chars().next().is_some_and(word)
+    })
+}
+
 /// Whether deep-hook can read `pattern`.
 pub fn known(pattern: &str) -> bool {
     let (kind, rest) = pattern.split_once(':').unwrap_or((pattern, ""));
     match kind {
-        "shell" | "write" => !rest.is_empty(),
+        "shell" | "write" | "word" => !rest.is_empty(),
         "run" => !rest.trim().is_empty(),
         "kill" => rest == "by-name" || rest == "hub",
         "dispatch" => rest == "workflow",
@@ -182,6 +194,11 @@ impl Call {
                 .command
                 .as_deref()
                 .filter(|c| glob(rest.as_bytes(), c.as_bytes()))
+                .and_then(|_| hit(None)),
+            "word" => self
+                .command
+                .as_deref()
+                .filter(|c| holds_word(c, rest))
                 .and_then(|_| hit(None)),
             "run" => {
                 let mut words = rest.split_whitespace();
@@ -1141,6 +1158,15 @@ mod tests {
             Path::new("/h"),
             Path::new("/h/.deepbuild/hub.sock"),
         )
+    }
+
+    #[test]
+    fn a_word_is_whole_and_no_part_of_a_path() {
+        let m = "word:kafka";
+        assert!(bash("npm install kafka").matches(m).is_some());
+        assert!(bash("npm install Kafka").matches(m).is_some());
+        assert!(bash("npm install kafka-lite").matches(m).is_none());
+        assert!(bash("cat src/kafka/a.ts").matches(m).is_none());
     }
 
     #[test]

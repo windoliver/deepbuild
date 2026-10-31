@@ -12,10 +12,12 @@ import { Worker } from 'node:worker_threads';
 import { shipped, type HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
+import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { hubAdapters } from './hookmap.js';
+import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
-import { installedRoot, rootOf, type Root } from './paths.js';
+import { reaches } from './memory.js';
+import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
@@ -46,13 +48,16 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
+  // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
+  ['memory.list', ['cli']], ['memory.act', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
   // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
   ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
-  ['session.wait', ['cli']],
+  // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
+  ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
@@ -76,6 +81,17 @@ const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/**
+ * The connection as one call of a deprecated method sees it: its reply line carries the notice beside its result.
+ * Every other property reads and writes through to the connection itself.
+ */
+function noticed<C extends object>(conn: C & { write(value: Obj): void }, id: unknown, notice: DeprecatedNotice): C {
+  const write = (value: Obj): void => conn.write(value.id === id && 'result' in value ? { ...value, deprecated: notice } : value);
+  return new Proxy(conn, {
+    get: (target, key) => (key === 'write' ? write : Reflect.get(target, key, target)),
+    set: (target, key, value) => Reflect.set(target, key, value, target),
+  });
+}
 const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
 /** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
 const warnings = (ruled: string): string[] =>
@@ -123,6 +139,8 @@ function withWaits(ruled: string, event: string, wait: WaitReply): string {
   if (wait.message) out.systemMessage = [out.systemMessage, wait.message].filter(Boolean).join('\n');
   return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
 }
+/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
+const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
@@ -270,7 +288,7 @@ class Conn {
  */
 interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
 /** What the hub reads of a guard@1 entry in rules.json. */
-interface Guard { match?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown; fail_closed?: unknown }
+interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown; fail_closed?: unknown }
 
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
@@ -289,6 +307,8 @@ class Hub {
   private readonly acking = new Set<string>();
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
+  /** The published JSON-RPC methods: a deprecated one is served through its replacement, with a notice (#139). */
+  private readonly adapter = contractAdapter(rpcTable());
   readonly start = ulid(Date.now());
   private helloLine = '';
   /** The long waits (#120): expected times, overruns and the lines they show; one timer for the earliest due. */
@@ -371,12 +391,12 @@ class Hub {
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
   private rewrites(agent: string): boolean {
-    try { return hubAdapters().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
+    try { return registry().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
   }
   /** Whether an agent's hooks include FileChanged, by its facts: the route a line takes while a call still runs. */
   private watches(agent: string): boolean {
     try {
-      const facts = hubAdapters().get(agent === 'claude-code' ? 'claude' : agent).facts;
+      const facts = registry().get(agent === 'claude-code' ? 'claude' : agent).facts;
       const versions = isObj(facts) && isObj(facts.events) && isObj(facts.events.versions) ? facts.events.versions : {};
       return Object.values(versions).some((hooks) => isObj(hooks) && 'FileChanged' in hooks);
     } catch { return false; }
@@ -679,10 +699,14 @@ class Hub {
    */
   private holdFor(meta: HookMeta): number | null {
     const now = Date.now();
+    // pi takes no context from a hook: what waits for it comes through the package's own wait (#40).
+    if (meta.agent === 'pi' && (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit')) return null;
     if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
     // A message typed while the agent works is acknowledged at the session's next tool call, the queue beside it (#340).
     if ((meta.event === 'PreToolUse' || meta.event === 'PostToolUse') && this.acking.delete(meta.session)) return now + CONTEXT_HOLD_MS;
     if (meta.event !== 'Stop') return null;
+    // A pi stop that did work is held for its line and a send-back; an open ask never holds it, since pi takes the answer as a turn of its own (#40).
+    if (meta.agent === 'pi') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
     if (meta.agent === 'codex') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session) || this.asking.has(meta.session)) ? now + STOP_HOLD_MS : null;
     const relation = this.stopHold();
@@ -703,7 +727,7 @@ class Hub {
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {
     const files = [claudeSettings(), join(this.root.dir, 'claude-hooks.json')];
-    const key = files.map((f) => { try { const s = statSync(f); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } }).join('|');
+    const key = files.map(fileKey).join('|');
     if (key !== this.settingsSeen.key) {
       const relation = relations(this.root.dir, readJson(files[0]!)).find((r) => r.name === 'stop hold');
       this.settingsSeen = { key, relation: relation ?? { name: 'stop hold', holds: true, timeoutS: 600, text: '' } };
@@ -756,7 +780,7 @@ class Hub {
     // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
     const matched = this.plant === 'matches-text'
       ? Object.keys(entries).filter((n) => { const m = String(entries[n]?.match ?? ''); return m.startsWith('run:') && (meta.command ?? '').includes(m.slice(4)); })
-      : meta.matched;
+      : meta.matched.filter((n) => reaches(n, entries[n]?.scope, repoOf(meta.cwd), meta.session));
     const mode = (n: string): unknown => (this.plant === 'warn-as-block' && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
     // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
@@ -778,11 +802,8 @@ class Hub {
   /** The entries of rules.json, read again only when the file changes. */
   private rules(): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    let key = 'none';
-    try {
-      const s = statSync(file);
-      key = `${s.ino}:${s.size}:${s.mtimeMs}`;
-    } catch { /* no rules.json: no entries */ }
+    // No rules.json: no entries.
+    const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
       let entries: Record<string, Guard | undefined> = {};
       try {
@@ -832,14 +853,20 @@ class Hub {
     conn.end();
   }
 
-  private method(conn: Conn, value: Obj): void {
+  private method(given: Conn, value: Obj): void {
+    let conn = given;
     const id = value.id ?? null;
     if (value.v !== 1) return conn.write({ id, error: versionRefusal(value) });
     if (!('method' in value)) {
       return conn.write({ id, error: refusal('role', '', `A hook request is read only as a connection's first line; this ${conn.name} connection can't send one.`, conn.name) });
     }
-    const method = value.method;
-    if (typeof method !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', method) });
+    const called = value.method;
+    if (typeof called !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', called) });
+    // A deprecated method is served through the adapter (#139): the method that replaced it runs, and the reply says so.
+    const replaced = this.adapter.replacing(called);
+    const method = replaced?.replaced_by ?? called;
+    const notice: DeprecatedNotice | undefined = replaced && this.plant !== 'silent-deprecated' ? this.adapter.serve(called, null, () => null).deprecated : undefined;
+    if (notice) conn = noticed(conn, id, notice);
     const allowed = ALLOWED.get(method);
     if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {
@@ -878,7 +905,7 @@ class Hub {
       }
       case 'session.wait':
         conn.waiter = true;
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
       default:
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
