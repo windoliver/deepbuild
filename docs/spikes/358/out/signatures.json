@@ -1,0 +1,12 @@
+{
+ "app": {
+  "entitlements": "",
+  "details": "Executable=/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-358-BC0i3a/app\nIdentifier=app-555549442de9347cb12c39b191864a3c5b4b04f6\nFormat=Mach-O thin (arm64)\nCodeDirectory v=20500 size=577965 flags=0x10002(adhoc,runtime) hashes=18055+2 location=embedded\nVersionPlatform=1\nVersionMin=720896\nVersionSDK=918784\nHash type=sha256 size=32\nCandidateCDHash sha256=5ac1c54b54ca9487a974ca8f093f59634a268d71\nCandidateCDHashFull sha256=5ac1c54b54ca9487a974ca8f093f59634a268d71371491b23c3c6a71823725ef\nHash choices=sha256\nCMSDigest=5ac1c54b54ca9487a974ca8f093f59634a268d71371491b23c3c6a71823725ef\nCMSDigestType=2\nExecutable Segment base=0\nExecutable Segment limit=52985856\nExecutable Segment flags=0x1\nPage size=4096\nCDHash=5ac1c54b54ca9487a974ca8f093f59634a268d71\nSignature=adhoc\nInfo.plist=not bound\nTeamIdentifier=not set\nRuntime Version=14.5.0\nSealed Resources=none\nInternal requirements count=0 size=12\n",
+  "verified": true
+ },
+ "host": {
+  "entitlements": "",
+  "details": "Executable=/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-358-BC0i3a/host\nIdentifier=host-555549443f1c103c373a3240b8134f8ecdec11cc\nFormat=Mach-O thin (arm64)\nCodeDirectory v=20500 size=564718 flags=0x10002(adhoc,runtime) hashes=17641+2 location=embedded\nVersionPlatform=1\nVersionMin=720896\nVersionSDK=918784\nHash type=sha256 size=32\nCandidateCDHash sha256=ccd44fc4d70729b4cbefd539e583d3c27d2fb8cd\nCandidateCDHashFull sha256=ccd44fc4d70729b4cbefd539e583d3c27d2fb8cd04664525ed91767528b4bce1\nHash choices=sha256\nCMSDigest=ccd44fc4d70729b4cbefd539e583d3c27d2fb8cd04664525ed91767528b4bce1\nCMSDigestType=2\nExecutable Segment base=0\nExecutable Segment limit=51773440\nExecutable Segment flags=0x1\nPage size=4096\nCDHash=ccd44fc4d70729b4cbefd539e583d3c27d2fb8cd\nSignature=adhoc\nInfo.plist=not bound\nTeamIdentifier=not set\nRuntime Version=14.5.0\nSealed Resources=none\nInternal requirements count=0 size=12\n",
+  "verified": true
+ }
+}

@@ -1,0 +1,191 @@
+{
+ "want": {
+  "pass": false,
+  "kinds": [
+   "outside_panel"
+  ],
+  "firstUpdate": 1,
+  "marker": "ran:108",
+  "area": [
+   121,
+   108,
+   500,
+   400
+  ],
+  "card": [
+   836,
+   331,
+   480,
+   240
+  ],
+  "question": "Ship build 7328?",
+  "updates": 3,
+  "fill": "#cd06da",
+  "escape": "#e116f5"
+ },
+ "status": 1,
+ "output": {
+  "result": "fail",
+  "origin": "agent_built",
+  "runtime": "panel_host",
+  "appPid": 79437,
+  "hostPid": 79448,
+  "trees": [
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:108",
+      "bounds": [
+       121,
+       108,
+       500,
+       26
+      ]
+     }
+    ],
+    "bounds": [
+     121,
+     108,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:108",
+      "bounds": [
+       121,
+       108,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "text",
+        "children": [],
+        "text": "esc:21",
+        "bounds": [
+         13,
+         118,
+         80,
+         26
+        ]
+       }
+      ],
+      "bounds": [
+       13,
+       118,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     121,
+     108,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:108",
+      "bounds": [
+       121,
+       108,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "text",
+        "children": [],
+        "text": "esc:21",
+        "bounds": [
+         13,
+         118,
+         80,
+         26
+        ]
+       }
+      ],
+      "bounds": [
+       13,
+       118,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     121,
+     108,
+     500,
+     400
+    ]
+   }
+  ],
+  "violations": [
+   {
+    "kind": "outside_panel",
+    "update": 1,
+    "bounds": [
+     13,
+     118,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 1,
+    "bounds": [
+     13,
+     118,
+     80,
+     26
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 2,
+    "bounds": [
+     13,
+     118,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 2,
+    "bounds": [
+     13,
+     118,
+     80,
+     26
+    ]
+   }
+  ],
+  "card": {
+   "question": "Ship build 7328?"
+  }
+ }
+}
