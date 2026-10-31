@@ -264,7 +264,7 @@ pub fn failure(code: &str, module: &str, part: &str, fields: Value) -> Value {
 /// A seed for one draw, from the kit's seed, a name and an index: replayable, and another seed,
 /// name or index gives another.
 pub fn derive(seed: u64, name: &str, k: u64) -> u64 {
-    let mut h = deep_canvas::schedule::Hasher::new("kit-seed");
+    let mut h = deep_canvas::schedule::Hasher::v1("kit-seed");
     h.int(seed as i64).text(name).int(k as i64);
     let key = h.finish();
     u64::from_le_bytes(key.0[..8].try_into().expect("8 bytes")) >> 11

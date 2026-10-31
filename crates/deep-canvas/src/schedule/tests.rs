@@ -15,7 +15,7 @@ fn register_boom(r: &mut Registrar) {
             if v.item()?.pointer("/params/boom") == Some(&json!(true)) {
                 panic!("an operator's bug");
             }
-            v.write("boom.out", Val::json(json!(1)))
+            v.write("boom.out", Val::typed(1.0f64))
         });
 }
 
