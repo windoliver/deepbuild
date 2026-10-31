@@ -1587,10 +1587,11 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
-                    // A plug-in's panel scripts run up to the call (#401), and terminals take
-                    // the output that arrived by then (#402).
+                    // A plug-in's panel scripts run up to the call (#401), terminals take the
+                    // output that arrived by then (#402), and captures the frames (#105).
                     self.advance_ring(at);
                     self.advance_terms(at);
+                    self.advance_capture(at);
                     self.now = at;
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);
