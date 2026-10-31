@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "ext.stocks.alert",
+  "writer": "ext:acme/stocks",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "key": "NVDA",
+    "generation": 1,
+    "value": { "symbol": "NVDA", "above": 200 },
+    "call": "01K74FKZVK8Q2X5R7M3N9P4T6Y"
+  }
+}

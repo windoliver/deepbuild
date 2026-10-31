@@ -1,0 +1,8 @@
+{
+  "id": "test/picky",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": [] },
+  "actions": ["ext.picky.ok", "ext.picky.min", "ext.picky.union"],
+  "requires": { "preview": ["deep.registerAction"] }
+}
