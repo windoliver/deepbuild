@@ -185,7 +185,7 @@ impl Call {
                 .and_then(|_| hit(None)),
             "run" => {
                 let mut words = rest.split_whitespace();
-                let program = words.next()?.to_lowercase();
+                let program = same_name(words.next()?).to_lowercase();
                 let wanted: Vec<&str> = words.collect();
                 self.runs
                     .iter()
@@ -714,9 +714,10 @@ fn args_match(run: &Run, wanted: &[&str]) -> bool {
         if want.starts_with('-') {
             words.iter().any(|w| glob(want.as_bytes(), w.as_bytes()))
         } else {
+            // A word may be a path, read as the Mac reads it; an option's case is its meaning.
             plain
                 .next()
-                .is_some_and(|w| glob(want.as_bytes(), w.as_bytes()))
+                .is_some_and(|w| glob(same_name(want).as_bytes(), same_name(w).as_bytes()))
         }
     })
 }
@@ -1223,6 +1224,46 @@ mod tests {
         assert!(bash("echo x > /nowhere/.deepbuild/other")
             .matches(sharp)
             .is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn each_letter_that_folds_to_ascii_reads_as_its_fold() {
+        for (guarded, spelled) in [
+            ("sa", "ſa"),
+            ("ka", "\u{212A}a"),
+            ("ssa", "ßa"),
+            ("ssb", "ẞb"),
+            ("ffa", "ﬀa"),
+            ("fia", "ﬁa"),
+            ("fla", "ﬂa"),
+            ("ffia", "ﬃa"),
+            ("ffla", "ﬄa"),
+            ("sta", "ﬅa"),
+            ("stb", "ﬆb"),
+        ] {
+            let m = format!("write:/nowhere/{guarded}");
+            assert!(
+                bash(&format!("echo x > /nowhere/{spelled}"))
+                    .matches(&m)
+                    .is_some(),
+                "{spelled}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_link_a_program_and_its_arguments_read_as_the_mac_reads_them() {
+        assert!(bash("ln -s ~/.deepbuild/config.json l; echo x > L")
+            .matches("write:.deepbuild/config.json")
+            .is_some());
+        assert!(bash("cat .DEEPBUILD/secret")
+            .matches("run:cat .deepbuild/secret")
+            .is_some());
+        assert!(bash("rm -R a").matches("run:rm -r").is_none());
+        assert!(bash("ſed x").matches("run:ſed").is_some());
+        assert!(bash("weiß x").matches("run:weiß").is_some());
     }
 
     #[test]

@@ -864,7 +864,10 @@ impl Ctx {
             self.links
                 .iter()
                 .rev()
-                .find(|(link, _)| lexical(link) == lexical(&path))
+                .find(|(link, _)| {
+                    same_name(&lexical(link).to_string_lossy())
+                        == same_name(&lexical(&path).to_string_lossy())
+                })
                 .map(|(_, target)| target.clone())
                 .unwrap_or(path),
         )
