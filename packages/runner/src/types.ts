@@ -4,7 +4,7 @@ import type { Ledger } from '@deepbuild/budget';
 import type { RecordStore } from '@deepbuild/record';
 import type { Supervisor } from '@deepbuild/supervisor';
 
-export type Agent = 'claude-code' | 'codex';
+export type Agent = 'claude-code' | 'codex' | 'pi';
 /** draft: the drafting job; review: the review check's second model; read: wiki reads and reading by reference;
  *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet. */
 export type JobKind = 'draft' | 'review' | 'read' | 'smoke';

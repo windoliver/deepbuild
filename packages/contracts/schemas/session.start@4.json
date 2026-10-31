@@ -1,0 +1,185 @@
+{
+  "title": "session.start@4",
+  "description": "A session started, with which billing keys its agent had set.",
+  "x-feeds": [
+    "sessions"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 4,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.start"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "hook",
+      "description": "Only the hook appends this kind: an adapter maps its agent's events from hook payloads."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "worktree": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192
+        },
+        "thread": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "billing": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Whether each billing key is set in the environment the agent gave deep-hook, by name: true or false, never a value."
+        },
+        "loads": {
+          "type": "array",
+          "description": "What the session loads at its start: the instruction files, skills, hook settings and MCP servers, each with the digest of its files, and each server with its tool list.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "instructions",
+                  "skill",
+                  "hooks",
+                  "mcp"
+                ],
+                "x-closure": {
+                  "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The skill's or server's name, or the file's name."
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Where it is loaded from: its file, or for a server the config that names it."
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "description": "The SHA-256 of its files, or of a server's config entry.",
+                "maxLength": 8192
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "description": "A server's tools, as the session's facts list them; absent when unknown."
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "source",
+              "digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "parent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The session this one replaced in the same process, where the agent says: the session tree keeps its lineage."
+        }
+      },
+      "required": [
+        "agent",
+        "worktree",
+        "branch",
+        "thread",
+        "loads"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
