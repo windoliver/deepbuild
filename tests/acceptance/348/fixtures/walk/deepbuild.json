@@ -2,5 +2,6 @@
   "id": "test/walk",
   "version": "1.0.0",
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
-  "checks": ["ext.walk.report", "ext.walk.other"]
+  "checks": ["ext.walk.report", "ext.walk.other"],
+  "requires": { "preview": ["deep.asks.create", "deep.config.get", "deep.evidence.put", "deep.lease", "deep.notices.send", "deep.on", "deep.provide", "deep.readNow", "deep.record.append", "deep.record.query", "deep.registerAction", "deep.registerAdapter", "deep.registerEnvironment", "deep.registerResolver", "deep.registerRoute", "deep.registerSource", "deep.registerView", "deep.schedule", "deep.secret", "deep.send", "deep.store", "deep.use"] }
 }

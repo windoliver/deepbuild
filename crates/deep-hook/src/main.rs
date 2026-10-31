@@ -22,8 +22,7 @@ use std::{env, io};
 
 use deep_contracts::{parse, Value};
 
-mod matcher;
-mod shell;
+use deep_hook::matcher;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -1658,7 +1657,7 @@ fn main() -> ExitCode {
 mod tests {
     use super::append;
     use super::pi_path;
-    use super::shell::glob;
+    use deep_hook::shell::glob;
     use std::fs;
 
     #[test]

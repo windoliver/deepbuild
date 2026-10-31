@@ -5,69 +5,88 @@
     "memoryBytes": 38654705664,
     "macosBuild": "25G241"
   },
+  "build": {
+    "profile": "release",
+    "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+  },
   "terms": {
     "core.lower": {
-      "ns_per_item": 6101,
-      "ns_per_vertex": 1.68,
-      "ns_per_glyph": 0.41
+      "ns_per_item": 7360
     },
     "motion.compile": {
-      "ns_per_item": 2190,
-      "ns_per_glyph": 2.15
+      "ns_per_item": 8013
+    },
+    "cells.grid": {
+      "ns_per_item": 8708
     },
     "core.fields": {
-      "ns_per_item": 1219,
-      "ns_per_vertex": 0.35,
-      "ns_per_glyph": 0.72
+      "ns_per_item": 195
+    },
+    "core.status": {
+      "ns_per_item": 229
     },
     "core.transform": {
-      "ns_per_item": 761,
-      "ns_per_glyph": 1.01
+      "ns_per_item": 592
     },
     "look.palette": {
-      "ns_per_item": 868,
-      "ns_per_glyph": 1.26
+      "ns_per_item": 260
     },
     "motion.channels": {
-      "ns_per_item": 20416
+      "ns_per_item": 6750
     },
     "core.world": {
-      "ns_per_item": 392,
-      "ns_per_vertex": 0.03,
-      "ns_per_glyph": 0.6
+      "ns_per_item": 161,
+      "ns_per_vertex": 0.1,
+      "ns_per_glyph": 0.1
+    },
+    "data.scale": {
+      "ns_per_item": 7250
+    },
+    "graph.layout": {
+      "ns_per_item": 10792
+    },
+    "motion.clock": {
+      "ns_per_item": 17
+    },
+    "record.salience": {
+      "ns_per_item": 4083
+    },
+    "sheet.place": {
+      "ns_per_item": 6125
     },
     "text.counter": {
-      "ns_per_item": 21583
+      "ns_per_item": 2833
     },
     "text.shape": {
-      "ns_per_item": 1,
-      "ns_per_glyph": 32503.37,
-      "ns_per_glyph_warm": 59.57
+      "ns_per_item": 14846,
+      "ns_per_glyph": 1661.45,
+      "ns_per_glyph_warm": 0.01
     },
     "text.animate": {
-      "ns_per_item": 14458
+      "ns_per_item": 3417
     },
     "marks2d.frame": {
-      "ns_per_item": 11818,
-      "ns_per_vertex": 327.37,
-      "ns_per_glyph": 19.15
+      "ns_per_item": 10711,
+      "ns_per_vertex": 112.06
+    },
+    "text.status": {
+      "ns_per_item": 13906
     },
     "scene3d.geometry": {
-      "ns_per_px": 0.0824,
-      "ns_per_vertex": 14.04,
+      "ns_per_px": 0.0001,
+      "ns_per_vertex": 15.04,
       "bytes_per_px": 16
     },
     "scene3d.output": {
       "ns_per_px": 0.0001,
-      "ns_per_vertex": 7.38,
       "bytes_per_px": 12
     },
     "effects.grid": {
-      "ns_per_px": 0.3052,
+      "ns_per_px": 0.1172,
       "bytes_per_px": 8
     },
     "effects.shadow": {
-      "ns_per_px": 0.3287,
+      "ns_per_px": 0.1266,
       "bytes_per_px": 8
     },
     "effects.particles": {
@@ -75,30 +94,12 @@
       "bytes_per_px": 8
     },
     "effects.outline": {
-      "ns_per_px": 0.1737,
+      "ns_per_px": 0.0775,
       "bytes_per_px": 8
     },
     "effects.glow": {
-      "ns_per_px": 0.2847,
+      "ns_per_px": 0.0001,
       "bytes_per_px": 11
-    },
-    "core.status": {
-      "ns_per_item": 500.0
-    },
-    "data.scale": {
-      "ns_per_item": 7375.0
-    },
-    "graph.layout": {
-      "ns_per_item": 29709.0
-    },
-    "record.salience": {
-      "ns_per_item": 23583.0
-    },
-    "sheet.place": {
-      "ns_per_item": 9625.0
-    },
-    "text.status": {
-      "ns_per_item": 322833.0
     }
   }
 }

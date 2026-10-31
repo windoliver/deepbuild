@@ -134,12 +134,16 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         continue;
       }
     }
-    if (!isObj(entry) || typeof entry.uuid !== 'string' || !isObj(entry.message)) continue;
+    if (!isObj(entry) || !isObj(entry.message)) continue;
+    // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
+    const id = typeof entry.uuid === 'string' ? entry.uuid : entry.type === 'message' && typeof entry.id === 'string' ? entry.id : typeof entry.role === 'string' ? `l${n}` : undefined;
+    if (id === undefined) continue;
+    const role = entry.message.role ?? entry.role;
     const content = entry.message.content;
     const parts: string[] = [];
     // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
     // and a subagent's run, whose prompt the agent composed.
-    let outside = entry.message.role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true;
+    let outside = role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true || entry.isMeta === true;
     // The tool whose result the entry holds ('' for one whose call the transcript doesn't hold).
     let called: string | undefined;
     let answers: string | undefined;
@@ -152,7 +156,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
           tools.set(block.id, block.name);
           // A shell command is quotable: the agent's own turn, which no first-hand source rests on alone (#356).
-          if (block.name === 'Bash' && isObj(block.input) && typeof block.input.command === 'string') { parts.push(block.input.command); calls.set(block.id, entry.uuid); }
+          if (block.name === 'Bash' && isObj(block.input) && typeof block.input.command === 'string') { parts.push(block.input.command); calls.set(block.id, id); }
         }
         if (block.type === 'tool_result') {
           // A result whose call the transcript doesn't hold is nobody's: no first-hand source either.
@@ -166,7 +170,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         }
       }
     }
-    entries.set(entry.uuid, { text: parts.join('\n'), outside, ...(typeof entry.message.role === 'string' ? { role: entry.message.role } : {}), ...(called === undefined ? {} : { tool: called }), ...(answers === undefined ? {} : { of: answers }), ...(failed === undefined ? {} : { error: failed }) });
+    entries.set(id, { text: parts.join('\n'), outside, ...(typeof role === 'string' ? { role } : {}), ...(called === undefined ? {} : { tool: called }), ...(answers === undefined ? {} : { of: answers }), ...(failed === undefined ? {} : { error: failed }) });
   }
   return entries;
 }
@@ -221,6 +225,8 @@ function projectsOf(db: Db, evidence: readonly Quote[]): Set<string> | undefined
     if (file) {
       const kept = q(db, "SELECT project_id FROM events WHERE kind = 'evidence.stored' AND json_extract(data, '$.sha256') = ? AND project_id IS NOT NULL ORDER BY log_pos DESC LIMIT 1").get(file) as { project_id: string } | undefined;
       if (kept) projects.add(kept.project_id);
+      // A memory file you keep for every repo (#111), as the core read it from your home: it covers all of them.
+      else if (q(db, "SELECT 1 FROM events WHERE kind = 'evidence.stored' AND writer = 'core' AND json_extract(data, '$.sha256') = ? AND json_extract(data, '$.kind') = 'user.memory' LIMIT 1").get(file)) projects.add(EVERY);
       continue;
     }
     const decision = /^decision:([0-9A-Za-z]+)$/.exec(at)?.[1];

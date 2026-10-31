@@ -1,6 +1,8 @@
 {
   "title": "hook.joined@1",
   "description": "Handlers' contributions joined: first-party extensions, then every other package, each group by extension ID. Every deny is kept whole; context fills the bound in that order, cut from the end.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "order": {

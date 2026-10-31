@@ -1,0 +1,69 @@
+Issue #124's acceptance tests on the base commit 6ba47cdb (origin/main), which has no deep_drive, no deep-drive binary,
+no scripts/drive-reading.mjs and no replica tasks in benchmarks/budgets.json.
+
+Commands, from the checkout's root, with Node 24.22.0 first on PATH (fnm's install), after `npm ci`:
+
+  npx tsc -p tests/acceptance/124/tsconfig.json          # exit 0: the suite type-checks
+  npx vitest run --root tests/acceptance/124 --no-file-parallelism --reporter=verbose
+
+Re-run after the October 30 redraft (spacers kept from shrinking in fixtures/panels/save-form and its twin; the strict-locator
+test moved to fixtures/panels/many-nodes): the same 32 tests with the same names, results and reasons.
+
+Re-run of ac2-isolation.test.ts after the second redraft (your record seeds an open choice ask; an authority ask is refused by
+the asks core without a plan, AskRefused at packages/asks/src/index.ts:572), with the CLI built (npm run build --workspaces):
+each of its 5 tests now seeds the record and starts `deep hub run`, then fails on the missing binary, with the same reason
+as before:
+  npx vitest run --root tests/acceptance/124 ac2-isolation --no-file-parallelism   ->  Tests 5 failed (5)
+  AssertionError: BLOCKED: the deep-drive binary can't be built (...): error: no bin target named `deep-drive` in `deep-replica` package
+
+Result: Test Files 5 failed | 2 skipped (7); Tests 20 failed | 4 passed | 8 skipped (32). Every failure is the missing
+surface, never a test error. The 4 that pass are the judges' own tests (they test the tests, on synthetic inputs and
+wrong programs written here). The 8 skipped are the two live files (DEEP_DRIVE_LIVE, DEEP_DRIVE_BUDGETS unset).
+Durations trimmed; one line per test, then each distinct failure reason.
+
+ × ac1-replay.test.ts > #124.b486fffb ... > #124.b486fffb every recorded call is a deep_drive call the hub's strict check takes, and deep mcp lists deep_drive
+ × ac1-replay.test.ts > #124.b486fffb ... > #124.b486fffb the claude-code run, replayed in a replica on the fixture panel, passes every assertion, and the journey check passes the claim
+ × ac1-replay.test.ts > #124.b486fffb ... > #124.b486fffb the same claude-code run on the twin panel, whose Save stays disabled, fails save-enabled and sends the claim back naming it
+ × ac1-replay.test.ts > #124.b486fffb ... > #124.b486fffb the codex run, replayed in a replica on the fixture panel, passes every assertion, and the journey check passes the claim
+ × ac1-replay.test.ts > #124.b486fffb ... > #124.b486fffb the same codex run on the twin panel, whose Save stays disabled, fails save-enabled and sends the claim back naming it
+ × ac1-replay.test.ts > #124.b486fffb ... > #124.b486fffb the same run with its assertions taken out, screenshots and snapshots only, ran nothing: the claim is never passed on pictures
+ × ac1-replay.test.ts > scope: strict locators and the 5,000 ms default timeout > a locator that matches two things answers an issue naming every match, and one that matches nothing names none; neither acts
+ × ac1-replay.test.ts > scope: strict locators and the 5,000 ms default timeout > a click on the twin's disabled Save waits 5,000 ms of the replica's clock by default for it to be enabled, then times out
+ × ac1-replay.test.ts > #124.b486fffb how often ... > #124.b486fffb scripts/drive-reading.mjs keeps the reading's rule
+ ✓ ac1-replay.test.ts > the reading's judge (no replica; it passes at the base) > fails each wrong reading, naming what it got wrong
+ × ac2-isolation.test.ts > #124.ca91d3c1 ... > #124.ca91d3c1 the fixture that tries reaches nothing of yours: the ask stays open, the pasteboard, the frontmost app and the audio out are untouched
+ × ac2-isolation.test.ts > #124.ca91d3c1 ... > #124.ca91d3c1 a replica planted to let one through (answers-your-record) fails the same fixture, named
+ × ac2-isolation.test.ts > #124.ca91d3c1 ... > #124.ca91d3c1 a replica planted to let one through (writes-clipboard) fails the same fixture, named
+ × ac2-isolation.test.ts > #124.ca91d3c1 ... > #124.ca91d3c1 a replica planted to let one through (moves-focus) fails the same fixture, named
+ × ac2-isolation.test.ts > #124.ca91d3c1 ... > #124.ca91d3c1 a replica planted to let one through (starts-sound) fails the same fixture, named
+ × ac3-repeat.test.ts > #124.3c201481 ... > #124.3c201481 two replicas on the virtual clock, one run each: every snapshot and every screenshot hash equal
+ × ac3-repeat.test.ts > #124.3c201481 ... > #124.3c201481 the same run on the real clock, twice, is not repeatable, and the judge names where
+ ✓ ac3-repeat.test.ts > criterion 3's judge (no replica; it passes at the base) > names a snapshot or a screenshot that differs, and passes two equal runs
+ × ac4-mask.test.ts > #124.46173b23 ... > #124.46173b23 every recorded frame, mid-scroll ones included, fills the field's box with the fill role and shows no pixel of the field; each click's point lies in its element's box
+ ✓ ac4-mask.test.ts > criterion 4's judge, on synthetic recordings (no replica; it passes at the base) > passes the right recording and fails each wrong one, naming its fault
+ ✓ ac4-mask.test.ts > criterion 4's judge, on synthetic recordings (no replica; it passes at the base) > passes an actions list with one entry per action and each click in its box, and fails one missing an entry or clicking outside
+ × ac5-lease.test.ts > #124.b8efd107 the local preflight compares ... > #124.b8efd107 the perf lane's budgets hold a task for each of launch, action round trip, 2,000-node snapshot and memory, each running deep-drive
+ × ac5-lease.test.ts > #124.b8efd107 at most two replicas ... > #124.b8efd107 through deep_drive over deep mcp, two launches hold the machine's replicas, a third is refused naming the lease, and gets one once a replica closes
+ × ac5-lease.test.ts > #124.b8efd107 at most two replicas ... > #124.b8efd107 a hub planted to launch replicas without the lease fails the same judge
+ ↓ ac1-agents.live.test.ts (4 tests, skipped: DEEP_DRIVE_LIVE unset)
+ ↓ ac5-budgets.live.test.ts (4 tests, skipped: DEEP_DRIVE_BUDGETS unset)
+
+The failure reasons:
+
+AssertionError: deep mcp lists deep_drive (it lists deep_ask, deep_wait, deep_open_item, deep_status, deep_search, deep_claim, deep_evidence, deep_run, deep_show, deep_env, deep_propose): expected undefined to be defined
+    (the strict-check test: no deep_drive tool)
+
+AssertionError: BLOCKED: the deep-drive binary can't be built (cargo build --locked -p deep-replica --bin deep-drive): error: no bin target named `deep-drive` in `deep-replica` package
+    (16 tests: every test that drives a replica, ac1 to ac5)
+
+Error: Cannot find module '<checkout>/scripts/drive-reading.mjs' imported from <checkout>/tests/acceptance/124/ac1-replay.test.ts
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+    (the reading's rule: no scripts/drive-reading.mjs)
+
+AssertionError: benchmarks/budgets.json has the task replica-launch: expected undefined to be defined
+    (the perf lane has no replica tasks)
+
+Not run at the base: the two live files (they need a built deep-drive too, and would fail with the same BLOCKED once
+opted in). The planted programs (DEEP_DRIVE_PLANT=answers-your-record | writes-clipboard | moves-focus | starts-sound,
+DEEP_HUB_PLANT=deep-drive-no-lease) can only run once the implementation exists; at the base their tests fail on the
+missing binary like the rest.

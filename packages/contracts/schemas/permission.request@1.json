@@ -1,6 +1,8 @@
 {
   "title": "permission.request@1",
   "description": "The agent asks before a call, a plan, a question or a mode change; the session waits on a person.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions",
     "asks"

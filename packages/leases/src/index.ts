@@ -11,7 +11,7 @@
 import { execFile } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import { validate } from '@deepbuild/contracts';
-import { ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { readSince, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 
 /** lease.kind@1: a resource kind, as data a plug-in's manifest (or the core) declares. */
 export interface LeaseKind {
@@ -163,15 +163,7 @@ class Table implements LeaseTable {
    */
   sync(): Promise<void> {
     const next = this.reading.then(async () => {
-      const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
-      const head = Number(row?.head ?? 0);
-      for (;;) {
-        const page = await this.options.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
-        for (const e of page) this.fold(e);
-        if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-        if (page.length < 1000) break;
-      }
-      this.cursor = Math.max(this.cursor, head);
+      this.cursor = await readSince(this.options.record, this.cursor, FOLDED, (e) => this.fold(e));
     });
     this.reading = next.catch(() => undefined);
     return next;

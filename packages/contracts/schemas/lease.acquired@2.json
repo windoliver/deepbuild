@@ -1,6 +1,8 @@
 {
   "title": "lease.acquired@2",
   "description": "A lease was granted. It names the run whose recorded processes hold it open until proven gone, and the holder session's agent process by ID and start time, so the lease table opened on the log ends it on the same proof.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "leases"
   ],

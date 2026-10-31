@@ -1,6 +1,8 @@
 {
   "title": "tool.before@1",
   "description": "A tool call is about to run.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "session_files",
     "returns"

@@ -1,6 +1,8 @@
 {
   "title": "action.reported@1",
   "description": "A plug-in action reported what it changed.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "returns"
   ],
