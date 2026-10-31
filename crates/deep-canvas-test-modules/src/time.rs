@@ -5,22 +5,15 @@
 
 use deep_canvas::registry::{Module, Registrar};
 use deep_canvas::schedule::{OpError, Val, View};
-use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 
-use super::{box_param, has_kind, kind, manifest, of_kind};
+use super::{box_param, count_of, has_kind, kind, manifest, moved_by, of_kind};
 
 /// The document frame at 60 fps: the tick's step, and the cache's frame.
 const FRAME: i64 = 11_760_000;
 
 fn as_i64(v: Option<Val>) -> Option<i64> {
-    match v? {
-        Val::Json(j) => j.as_i64(),
-        _ => None,
-    }
-}
-
-fn moved_by(dx: f64) -> Val {
-    Val::json(json!([{"op": "add", "path": ["pos"], "value": [dx, 0.0, 0.0]}]))
+    count_of(&v?)
 }
 
 fn register_tick(r: &mut Registrar) {
@@ -41,7 +34,7 @@ fn register_tick(r: &mut Registrar) {
         .run(|v| {
             let count = as_i64(v.carried("test.tick.count")).unwrap_or(0) + 1;
             v.note_step(count, 0);
-            v.write("test.tick.count", Val::json(json!(count)))
+            v.write("test.tick.count", Val::typed(count))
         });
     r.operator(
         "offset",
@@ -52,7 +45,10 @@ fn register_tick(r: &mut Registrar) {
     .applies(|_, _, item| of_kind(item, "test.tick@1"))
     .run(|v| {
         let count = as_i64(v.array("test.tick.count")?).unwrap_or(0);
-        v.write("test.tick.offset", moved_by(count.rem_euclid(48) as f64))
+        v.write(
+            "test.tick.offset",
+            moved_by([count.rem_euclid(48) as f64, 0.0, 0.0]),
+        )
     });
 }
 
@@ -88,20 +84,21 @@ fn register_cache(r: &mut Registrar) {
 fn cache_offset(v: &mut View<'_>) -> Result<(), OpError> {
     let t = v.t()?;
     let frame = t.div_euclid(FRAME).to_string();
-    let mut memo: Map<String, Value> = match v.tail("test.cache.memo") {
-        Some(Val::Json(j)) => j.as_object().cloned().unwrap_or_default(),
-        _ => Map::new(),
-    };
-    let dx = match memo.get(&frame).and_then(Value::as_f64) {
-        Some(dx) => dx,
+    let mut memo: BTreeMap<String, f64> = v
+        .tail("test.cache.memo")
+        .and_then(|m| m.as_typed::<BTreeMap<String, f64>>())
+        .map(|m| (*m).clone())
+        .unwrap_or_default();
+    let dx = match memo.get(&frame) {
+        Some(dx) => *dx,
         None => {
             let dx = (t.rem_euclid(FRAME) / 490_000) as f64;
-            memo.insert(frame, json!(dx));
-            v.set_tail("test.cache.memo", Val::json(Value::Object(memo)))?;
+            memo.insert(frame, dx);
+            v.set_tail("test.cache.memo", Val::typed(memo))?;
             dx
         }
     };
-    v.write("test.cache.offset", moved_by(dx))
+    v.write("test.cache.offset", moved_by([dx, 0.0, 0.0]))
 }
 
 /// `test.cache` 1.0.0: its items move with the exact time inside the document frame, from a
