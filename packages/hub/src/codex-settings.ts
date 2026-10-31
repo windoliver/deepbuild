@@ -252,7 +252,7 @@ export function withServer(text: string, node: string, cli: string): string {
   if ('refused' in read) throw Error(`${codexConfig()} ${read.refused}`);
   if (read.tables.has(`mcp_servers.${MCP_SERVER}`)) return text;
   const lead = text && !text.endsWith('\n') ? '\n' : '';
-  return `${text}${lead}${text ? '\n' : ''}[mcp_servers.${MCP_SERVER}]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify([cli, 'mcp'])}\n`;
+  return `${text}${lead}${text ? '\n' : ''}[mcp_servers.${MCP_SERVER}]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify([cli, 'mcp'])}\ndefault_tools_approval_mode = "approve"\n`;
 }
 /** `text` with the server's table taken out, from its header to the next not under it, your additions too, when its command and args are what setup wrote. */
 export function withoutServer(text: string, node: string, cli: string): string {
