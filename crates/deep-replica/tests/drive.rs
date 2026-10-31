@@ -157,3 +157,22 @@ fn a_launch_names_the_locale_it_ran_and_refuses_one_that_is_no_tag() {
         "refused for its locale: {refused}"
     );
 }
+
+#[test]
+fn an_action_with_its_target_in_a_drags_drop_field_is_refused_naming_locator() {
+    let (mut drive, _) = Drive::launch("to", json!({"from": "fixture", "panel": PANEL}));
+    let typed = drive.call(
+        json!({"call": "act", "act": {"kind": "type", "text": "x", "to": {"item": "script-line"}}}),
+    );
+    assert_eq!(typed["error"]["code"], "refused", "{typed}");
+    let message = typed["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("locator"),
+        "the refusal says where the target goes: {typed}"
+    );
+    let dropped = drive.call(json!({"call": "act", "locator": {"item": "script-line"}, "act": {"kind": "drag", "to_point": [10, 10]}}));
+    assert_eq!(
+        dropped["ok"], true,
+        "a drag still takes its drop target: {dropped}"
+    );
+}
