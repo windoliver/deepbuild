@@ -104,11 +104,11 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
             text: text[byte(pair[0])..byte(pair[1])].to_string(),
             ..label.clone()
         });
-        for g in piece.glyphs {
+        for g in &piece.glyphs {
             out.glyphs.push(deep_text::Glyph {
                 x: g.x + out.width,
                 grapheme: g.grapheme + pair[0],
-                ..g
+                ..g.clone()
             });
         }
         out.width += piece.width;
@@ -221,7 +221,7 @@ impl Painter<'_> {
                 let label = label_of(spec)
                     .ok_or_else(|| refused("bad_font", &format!("items/{item}/params/font")))?;
                 let shaped = if self.spans_apart && !runs.is_empty() {
-                    shaped_apart(&label, runs)
+                    std::sync::Arc::new(shaped_apart(&label, runs))
                 } else {
                     deep_text_gpui::shape(&label)
                 };
