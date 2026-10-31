@@ -124,7 +124,8 @@ impl ComponentMaterializer for CanvasMaterializer {
             .payload()
             .downcast_ref::<CanvasPayload>()
             .ok_or_else(|| anyhow::anyhow!("Canvas received an incompatible payload"))?;
-        let color = payload.color.unwrap_or_else(|| rgb(0x2563eb).into());
+        // A script that names no color draws its line in the look's line role.
+        let color = payload.color;
         let scene = request.with_state::<Entity<Scene>, _>(&payload.scene, Clone::clone)?;
         let items: Vec<(String, Vec<f64>)> = request.with_window_app(|_, cx| {
             Ok(scene
@@ -138,6 +139,7 @@ impl ComponentMaterializer for CanvasMaterializer {
             canvas(
                 |_, _, _| (),
                 move |bounds, _, window, _| {
+                    let color = color.unwrap_or_else(|| crate::chrome::of(window).session_line);
                     for (id, values) in &items {
                         record(id, json!(values), bounds);
                         paint_line(bounds, values, color, window);

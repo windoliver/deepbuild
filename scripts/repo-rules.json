@@ -105,6 +105,10 @@
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #327: the question card's digests (an ask thread's fold key, a confirmed answer's bytes), the same SHA-256 crate deep-hook already uses."
         }
       },
       "dev-dependencies": {
@@ -293,6 +297,10 @@
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #348: checkManifest, the manifest contract conformance runs before a load, the canonical JSON a package digest reads its manifest as, and the contract fixtures the host's kit plants."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #364: scrubValues, the Privacy scrub that strips every secret the hub holds from a source call's headers and body before the parser or the record sees them."
         },
         "@deepbuild/leases": {
           "spec": "0.0.0",

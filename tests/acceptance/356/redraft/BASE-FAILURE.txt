@@ -1,7 +1,7 @@
 # Base c733840f, once: node node_modules/vitest/vitest.mjs run --root tests/acceptance/356 --no-file-parallelism redraft/merge.test.ts
 # Trimmed: the duplicated 'Received' array is cut; the first line of the third case's error is kept.
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/issue-356-blind/tests/acceptance/356
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-356-blind/tests/acceptance/356
 
  ❯ redraft/merge.test.ts (3 tests | 2 failed) 32111ms
    ❯ #356.482272ce merges on exact keys, an unclear merge comes to you (3)

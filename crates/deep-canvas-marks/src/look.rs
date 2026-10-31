@@ -8,6 +8,12 @@
 //! ground (without an outline that does) or no label color keeps 4.5:1 on it, naming the theme and
 //! the state. A theme may change palette and roles only, the legend is always automatic, and every
 //! font must be a bundled face that may be embedded.
+//!
+//! The app's chrome draws from the look's roles too (#882): ground, raised and divider; the one ink
+//! at four tiers, and hover and selected fills, each the ink at an alpha (`#rrggbbaa`); accent; and
+//! the session readout and line. The guard holds each ink tier to its contrast floor on the ground,
+//! the raised ground and hover over either, and every role, an alpha role blended over the ground and
+//! the raised ground, to the status distance.
 
 use std::collections::BTreeMap;
 
@@ -16,6 +22,17 @@ use deep_canvas::ops;
 use serde_json::{json, Map, Value};
 
 use crate::scene::{Palette, Rgb};
+
+/// A color at an alpha: sRGB-encoded bytes, the alpha last.
+pub type Rgba = [u8; 4];
+
+/// The ink tiers and the contrast each keeps on the ground, the raised ground and hover (#882).
+const INK_TIERS: [(&str, f64); 4] = [
+    ("ink_primary", 4.5),
+    ("ink_secondary", 4.5),
+    ("ink_tertiary", 3.0),
+    ("ink_disabled", 0.0),
+];
 
 /// The states of the status map, in the legend's order (Status binding).
 pub const STATES: [&str; 9] = [
@@ -110,6 +127,9 @@ impl Status {
 pub struct Look {
     pub light: Palette,
     pub dark: Palette,
+    /// Each theme's roles at an alpha: the one ink's color with the alpha it's drawn at.
+    pub light_alpha: BTreeMap<String, Rgba>,
+    pub dark_alpha: BTreeMap<String, Rgba>,
     pub status: Option<Status>,
 }
 
@@ -118,11 +138,21 @@ pub struct Look {
 pub enum Refusal {
     /// The status guard: two states share a glyph.
     GlyphShared([&'static str; 2]),
-    /// A data role within the look's `min_distance` of a status color, in a theme.
+    /// A data role within the look's `min_distance` of a status color, in a theme, at `distance`.
     Distance {
         theme: &'static str,
         role: String,
         state: &'static str,
+        distance: f64,
+    },
+    /// A role at an alpha that isn't the one ink's color.
+    NotInk { theme: &'static str, role: String },
+    /// An ink tier under its contrast floor on a surface (`ground`, `raised`, `hover over ...`).
+    InkContrast {
+        theme: &'static str,
+        role: String,
+        on: &'static str,
+        ratio: f64,
     },
     /// A status color under 3:1 against the ground, or with no label color at 4.5:1 on it.
     Contrast {
@@ -142,8 +172,25 @@ impl Refusal {
             Refusal::GlyphShared(pair) => {
                 json!({"ok": false, "code": "status_glyph_shared", "pair": pair})
             }
-            Refusal::Distance { theme, role, state } => json!({
+            Refusal::Distance {
+                theme,
+                role,
+                state,
+                distance,
+            } => json!({
                 "ok": false, "code": "status_distance", "theme": theme, "role": role, "state": state,
+                "distance": distance,
+            }),
+            Refusal::NotInk { theme, role } => {
+                json!({"ok": false, "code": "chrome_not_ink", "theme": theme, "role": role})
+            }
+            Refusal::InkContrast {
+                theme,
+                role,
+                on,
+                ratio,
+            } => json!({
+                "ok": false, "code": "ink_contrast", "theme": theme, "role": role, "on": on, "ratio": ratio,
             }),
             Refusal::Contrast {
                 theme,
@@ -168,12 +215,31 @@ pub fn shipped(id: &str) -> Option<Value> {
 
 /// `#rrggbb` as sRGB-encoded bytes.
 fn hex(value: Option<&Value>) -> Option<Rgb> {
+    hex_alpha(value)
+        .filter(|c| c[3] == 255)
+        .map(|c| [c[0], c[1], c[2]])
+}
+
+/// `#rrggbb` (opaque) or `#rrggbbaa` as sRGB-encoded bytes with the alpha.
+fn hex_alpha(value: Option<&Value>) -> Option<Rgba> {
     let text = value?.as_str()?.strip_prefix('#')?;
-    if text.len() != 6 || !text.is_ascii() {
+    if !matches!(text.len(), 6 | 8) || !text.is_ascii() {
         return None;
     }
     let byte = |i: usize| u8::from_str_radix(&text[i..i + 2], 16).ok();
-    Some([byte(0)?, byte(2)?, byte(4)?])
+    let alpha = if text.len() == 8 { byte(6)? } else { 255 };
+    Some([byte(0)?, byte(2)?, byte(4)?, alpha])
+}
+
+/// `color` over an opaque `base`, blended in sRGB-encoded values as GPUI's renderer blends.
+fn over(color: Rgba, base: Rgb) -> Rgb {
+    let a = f64::from(color[3]) / 255.0;
+    let mix = |c: u8, b: u8| (f64::from(c) * a + f64::from(b) * (1.0 - a)).round() as u8;
+    [
+        mix(color[0], base[0]),
+        mix(color[1], base[1]),
+        mix(color[2], base[2]),
+    ]
 }
 
 fn object<'a>(
@@ -187,8 +253,12 @@ fn object<'a>(
     }
 }
 
-/// One theme's roles: the look's palette and roles with the theme's own over them.
-fn theme(def: &Map<String, Value>, name: &'static str) -> Result<Palette, Refusal> {
+/// One theme's roles, the look's palette and roles with the theme's own over them: the opaque ones,
+/// and those at an alpha.
+fn theme(
+    def: &Map<String, Value>,
+    name: &'static str,
+) -> Result<(Palette, BTreeMap<String, Rgba>), Refusal> {
     let over = object(
         def.get("themes").and_then(|t| t.get(name)),
         &format!("themes/{name}"),
@@ -218,16 +288,19 @@ fn theme(def: &Map<String, Value>, name: &'static str) -> Result<Palette, Refusa
         Ok(out)
     };
     let (palette, roles) = (merged("palette")?, merged("roles")?);
-    roles
-        .iter()
-        .map(|(role, entry)| {
-            let color = entry
-                .as_str()
-                .and_then(|name| hex(palette.get(name)))
-                .ok_or_else(|| Refusal::Bad(format!("roles/{role}")))?;
-            Ok((role.clone(), color))
-        })
-        .collect()
+    let (mut opaque, mut alpha) = (Palette::new(), BTreeMap::new());
+    for (role, entry) in &roles {
+        let color = entry
+            .as_str()
+            .and_then(|name| hex_alpha(palette.get(name)))
+            .ok_or_else(|| Refusal::Bad(format!("roles/{role}")))?;
+        if color[3] == 255 {
+            opaque.insert(role.clone(), [color[0], color[1], color[2]]);
+        } else {
+            alpha.insert(role.clone(), color);
+        }
+    }
+    Ok((opaque, alpha))
 }
 
 /// An sRGB-encoded color in OKLab.
@@ -385,7 +458,7 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
     let attention_glyph = attention
         .and_then(|a| a.get("glyph"))
         .and_then(Value::as_str);
-    let (light, dark) = (theme(def, "light")?, theme(def, "dark")?);
+    let ((light, light_alpha), (dark, dark_alpha)) = (theme(def, "light")?, theme(def, "dark")?);
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         let named = |role: &str, path: &str| {
             palette
@@ -432,20 +505,89 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
     // Data colors keep the look's distance from every status color; the ground sits behind them.
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         for (role, color) in palette.iter().filter(|(r, _)| *r != "ground") {
-            if let Some((state, _)) = clash(*color, &status) {
+            if let Some((state, distance)) = clash(*color, &status) {
                 return Err(Refusal::Distance {
                     theme: name,
                     role: role.clone(),
                     state,
+                    distance,
                 });
             }
         }
     }
+    for (name, palette, alpha) in [
+        ("light", &light, &light_alpha),
+        ("dark", &dark, &dark_alpha),
+    ] {
+        chrome(name, palette, alpha, &status)?;
+    }
     Ok(Look {
         light,
         dark,
+        light_alpha,
+        dark_alpha,
         status: Some(status),
     })
+}
+
+/// The chrome's half of the guard for one theme (#882): a role at an alpha is the one ink's color,
+/// and keeps the status distance over the ground and the raised ground; each ink tier keeps its
+/// contrast floor on the ground, the raised ground and hover over either. A look without chrome
+/// roles has nothing here to hold.
+fn chrome(
+    theme: &'static str,
+    palette: &Palette,
+    alpha: &BTreeMap<String, Rgba>,
+    status: &Status,
+) -> Result<(), Refusal> {
+    let (Some(&ground), Some(&ink)) = (palette.get("ground"), palette.get("ink")) else {
+        return Ok(());
+    };
+    let raised = palette.get("raised").copied().unwrap_or(ground);
+    let color = |role: &str| {
+        alpha
+            .get(role)
+            .copied()
+            .or_else(|| palette.get(role).map(|c| [c[0], c[1], c[2], 255]))
+    };
+    for (role, c) in alpha {
+        if c[..3] != ink {
+            return Err(Refusal::NotInk {
+                theme,
+                role: role.clone(),
+            });
+        }
+        for base in [ground, raised] {
+            if let Some((state, distance)) = clash(over(*c, base), status) {
+                return Err(Refusal::Distance {
+                    theme,
+                    role: role.clone(),
+                    state,
+                    distance,
+                });
+            }
+        }
+    }
+    let mut surfaces = vec![("ground", ground), ("raised", raised)];
+    if let Some(hover) = color("hover") {
+        surfaces.push(("hover over ground", over(hover, ground)));
+        surfaces.push(("hover over raised", over(hover, raised)));
+    }
+    for (role, floor) in INK_TIERS {
+        let Some(tier) = color(role) else { continue };
+        for (on, surface) in &surfaces {
+            let ratio = contrast(over(tier, *surface), *surface);
+            if ratio < floor {
+                return Err(Refusal::InkContrast {
+                    theme,
+                    role: role.into(),
+                    on,
+                    ratio,
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -466,7 +608,8 @@ mod tests {
             Err(Refusal::Distance {
                 theme: "light",
                 role: "muted".into(),
-                state: "idle"
+                state: "idle",
+                distance: distance([0x63, 0x64, 0x65], [0x63, 0x64, 0x64]),
             })
         );
     }
