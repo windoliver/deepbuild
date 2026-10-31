@@ -25,6 +25,8 @@ const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 const FOLDED = ['job.recorded', 'job.ended', 'process.starting', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted'] as const;
 type Folded = (typeof FOLDED)[number];
 const MINUTE = 60_000;
+/** A Codex window this long or longer is its weekly one (adapters/loops.facts.json: windows.weeklyMinutes). */
+const WEEKLY_MINUTES = 10_080;
 const DAY = 86_400_000;
 /** How long a CLI may keep running after its final result, or after its process ends without one. */
 const GRACE_MS = 5000;
@@ -81,6 +83,21 @@ interface AgentParts {
   /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
   expires(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<number | undefined>;
 }
+/** The version a binary shows: its suffix kept where the facts list exact builds, so a stable build is never its alpha. */
+export const shownVersion = (text: string, exact: boolean): string | undefined => (exact ? /(\d+\.\d+\.\d+(?:-[\w.]+)?)/ : /(\d+\.\d+\.\d+)/).exec(text)?.[1];
+/** Codex's plan windows, each named by its length as the hub's row reads it, or by its slot where a snapshot gives none. Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows. */
+export function codexWindows(limits: unknown): Map<string, { used: number; resets: number | null }> {
+  const out = new Map<string, { used: number; resets: number | null }>();
+  if (!isObj(limits) || (limits.limit_id !== undefined && limits.limit_id !== 'codex')) return out;
+  for (const [slot, name] of [['primary', 'five_hour'], ['secondary', 'seven_day']] as const) {
+    const w = limits[slot];
+    if (!isObj(w) || typeof w.used_percent !== 'number') continue;
+    const named = typeof w.window_minutes === 'number' ? (w.window_minutes >= WEEKLY_MINUTES ? 'seven_day' : 'five_hour') : name;
+    out.set(named, { used: w.used_percent, resets: typeof w.resets_at === 'number' ? w.resets_at * 1000 : null });
+  }
+  return out;
+}
+
 const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
     facts: new URL('../../../adapters/claude-code.facts.json', import.meta.url),
@@ -140,16 +157,7 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
     },
     signIn: (home, env) => [join(codexHome(home, env), 'auth.json')],
     // Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows.
-    windows: (limits) => {
-      const out = new Map<string, { used: number; resets: number | null }>();
-      if (!isObj(limits) || (limits.limit_id !== undefined && limits.limit_id !== 'codex')) return out;
-      for (const [slot, name] of [['primary', 'five_hour'], ['secondary', 'seven_day']] as const) {
-        const w = limits[slot];
-        if (!isObj(w) || typeof w.used_percent !== 'number') continue;
-        out.set(name, { used: w.used_percent, resets: typeof w.resets_at === 'number' ? w.resets_at * 1000 : null });
-      }
-      return out;
-    },
+    windows: codexWindows,
     hosts: ['api.openai.com:443', 'chatgpt.com:443'],
     // A home of its own in its temp folder, so it writes no rollout or state into yours and your history never counts
     // it as a session of yours, with your sign-in linked in place. The sandbox refuses every write under a folder named
@@ -494,7 +502,7 @@ class LocalRunner implements Runner {
     const facts = this.facts(job.spec.agent);
     const binary = await this.binary(job, facts);
     if ('refused' in binary) return binary;
-    const covered = AGENTS[job.spec.agent]!.exactVersions ? facts.versions.some((v) => v === binary.version || v.startsWith(`${binary.version}-`)) : this.covers(facts, binary.version);
+    const covered = AGENTS[job.spec.agent]!.exactVersions ? facts.versions.includes(binary.version) : this.covers(facts, binary.version);
     if (!covered && job.spec.kind !== 'smoke') {
       return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover, ${facts.versions[0]} to ${facts.versions[facts.versions.length - 1]}` };
     }
@@ -563,7 +571,7 @@ class LocalRunner implements Runner {
       const shown = await this.step([path, '--version'], job.rec.folder, { read: this.programs(real) }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
-      const version = /(\d+\.\d+\.\d+)/.exec(shown.stdout.toString('utf8'))?.[1];
+      const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
       if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
