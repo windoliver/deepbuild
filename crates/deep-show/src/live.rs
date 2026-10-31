@@ -19,6 +19,7 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
+use crate::window::refused;
 
 /// How long each presented frame shows before the next.
 const HOLD: Duration = Duration::from_secs(6);
@@ -267,10 +268,6 @@ fn nodes(
     (out, unboxed)
 }
 
-fn refused(code: &str) -> Value {
-    json!({"ok": false, "code": code})
-}
-
 /// Plays the scenario's calls, then shows the panel the first document on screen sits in.
 pub fn show(hub: &mut Hub<'_>) -> Value {
     let Some((doc, panel_id)) = hub
@@ -289,10 +286,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
     let panel = hub
         .slot(&panel_id)
         .expect("a document's panel is in the scenario");
-    let px_size = [
-        panel[2].round().clamp(1., 8192.) as u16,
-        panel[3].round().clamp(1., 8192.) as u16,
-    ];
+    let px_size = crate::snapshot::px([panel[2], panel[3]]);
     let palette = hub.look.light.clone();
     let ground = palette.get("ground").copied().unwrap_or([255; 3]);
     let ink = palette.get("ink").copied().unwrap_or([0; 3]);
@@ -305,16 +299,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         let (Some(rev), Some(vsync)) = (frame["rev"].as_u64(), frame["vsync"].as_i64()) else {
             continue;
         };
-        let hidden: Vec<String> = frame
-            .get("hidden")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let hidden = crate::access::hidden_of(&frame);
         if last.as_ref() == Some(&(rev, hidden.clone())) {
             continue;
         }
@@ -336,8 +321,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         ) else {
             return refused("not_drawn");
         };
-        let [dw, dh] = drawn.frame.size;
-        let scale = (f64::from(px_size[0]) / dw).min(f64::from(px_size[1]) / dh);
+        let scale = drawn.scale(px_size);
         let boxes: Vec<(String, [f64; 4])> = drawn
             .boxes()
             .into_iter()
@@ -351,13 +335,8 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
                 (id, at)
             })
             .collect();
-        let mut rgba = hub.renderer.raster(&drawn, px_size, Some(ground));
-        for p in rgba.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
-        let Some(image) =
-            image::RgbaImage::from_raw(u32::from(px_size[0]), u32::from(px_size[1]), rgba)
-        else {
+        let rgba = hub.renderer.raster(&drawn, px_size, Some(ground));
+        let Some(picture) = crate::window::picture(rgba, px_size) else {
             return refused("no_picture");
         };
         let (nodes, unboxed) = nodes(&revision, &hidden, &boxes, panel);
@@ -368,7 +347,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
             "unboxed": unboxed,
         }));
         frames.push(Frame {
-            picture: Arc::new(RenderImage::new([image::Frame::new(image)])),
+            picture,
             panel: bounds(panel),
             nodes,
         });
