@@ -5,31 +5,31 @@
    "outside_panel",
    "over_card"
   ],
-  "marker": "ran:96",
+  "marker": "ran:88",
   "area": [
-   122,
-   117,
+   106,
+   112,
    500,
    400
   ],
   "card": [
-   841,
-   306,
+   811,
+   331,
    480,
    240
   ],
-  "question": "Ship build 3121?",
+  "question": "Ship build 5127?",
   "updates": 3,
-  "fill": "#e306e4",
-  "escape": "#e907e1"
+  "fill": "#d720dc",
+  "escape": "#dc19e4"
  },
  "status": 1,
  "output": {
   "result": "fail",
   "origin": "agent_built",
   "runtime": "panel_host",
-  "appPid": 79330,
-  "hostPid": 79336,
+  "appPid": 72637,
+  "hostPid": 72644,
   "trees": [
    {
     "kind": "div",
@@ -37,10 +37,10 @@
      {
       "kind": "text",
       "children": [],
-      "text": "ran:96",
+      "text": "ran:88",
       "bounds": [
-       122,
-       117,
+       106,
+       112,
        500,
        26
       ]
@@ -51,26 +51,26 @@
        {
         "kind": "text",
         "children": [],
-        "text": "esc:20",
+        "text": "esc:19",
         "bounds": [
-         849,
-         318,
+         819,
+         342,
          440,
          26
         ]
        }
       ],
       "bounds": [
-       849,
-       318,
+       819,
+       342,
        440,
        200
       ]
      }
     ],
     "bounds": [
-     122,
-     117,
+     106,
+     112,
      500,
      400
     ]
@@ -81,10 +81,10 @@
      {
       "kind": "text",
       "children": [],
-      "text": "ran:96",
+      "text": "ran:88",
       "bounds": [
-       122,
-       117,
+       106,
+       112,
        500,
        26
       ]
@@ -95,26 +95,26 @@
        {
         "kind": "text",
         "children": [],
-        "text": "esc:20",
+        "text": "esc:19",
         "bounds": [
-         849,
-         318,
+         819,
+         342,
          440,
          26
         ]
        }
       ],
       "bounds": [
-       849,
-       318,
+       819,
+       342,
        440,
        200
       ]
      }
     ],
     "bounds": [
-     122,
-     117,
+     106,
+     112,
      500,
      400
     ]
@@ -125,10 +125,10 @@
      {
       "kind": "text",
       "children": [],
-      "text": "ran:96",
+      "text": "ran:88",
       "bounds": [
-       122,
-       117,
+       106,
+       112,
        500,
        26
       ]
@@ -139,26 +139,26 @@
        {
         "kind": "text",
         "children": [],
-        "text": "esc:20",
+        "text": "esc:19",
         "bounds": [
-         849,
-         318,
+         819,
+         342,
          440,
          26
         ]
        }
       ],
       "bounds": [
-       849,
-       318,
+       819,
+       342,
        440,
        200
       ]
      }
     ],
     "bounds": [
-     122,
-     117,
+     106,
+     112,
      500,
      400
     ]
@@ -169,8 +169,8 @@
     "kind": "outside_panel",
     "update": 0,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      200
     ]
@@ -179,8 +179,8 @@
     "kind": "over_card",
     "update": 0,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      200
     ]
@@ -189,8 +189,8 @@
     "kind": "outside_panel",
     "update": 0,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      26
     ]
@@ -199,8 +199,8 @@
     "kind": "over_card",
     "update": 0,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      26
     ]
@@ -209,8 +209,8 @@
     "kind": "outside_panel",
     "update": 1,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      200
     ]
@@ -219,8 +219,8 @@
     "kind": "over_card",
     "update": 1,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      200
     ]
@@ -229,8 +229,8 @@
     "kind": "outside_panel",
     "update": 1,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      26
     ]
@@ -239,8 +239,8 @@
     "kind": "over_card",
     "update": 1,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      26
     ]
@@ -249,8 +249,8 @@
     "kind": "outside_panel",
     "update": 2,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      200
     ]
@@ -259,8 +259,8 @@
     "kind": "over_card",
     "update": 2,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      200
     ]
@@ -269,8 +269,8 @@
     "kind": "outside_panel",
     "update": 2,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      26
     ]
@@ -279,15 +279,15 @@
     "kind": "over_card",
     "update": 2,
     "bounds": [
-     849,
-     318,
+     819,
+     342,
      440,
      26
     ]
    }
   ],
   "card": {
-   "question": "Ship build 3121?"
+   "question": "Ship build 5127?"
   }
  }
 }
