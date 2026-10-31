@@ -56,6 +56,51 @@ test('a state style is refused: it would move a node the app never measured', as
   assert.deepEqual(kinds(out), ['unknown_element']);
 });
 
+test('an action id can\'t hide the styles after it from the check', async () => {
+  const { result, out } = await checked(panel(
+    'div().size_full().child(div().on_action(\'"\', () => {}).absolute().left(-5000).w(500).h(500).on_action(\'"\', () => {}))',
+  ));
+  assert.equal(result.status, 1, result.stderr);
+  assert.deepEqual(kinds(out), ['unknown_element']);
+});
+
+test('a panel that tracks focus and stays in bounds passes', async () => {
+  const { result, out } = await checked(panel(
+    'div().size_full().track_focus(this.a).on_action("deep.go", () => {})',
+    'init(_props, cx) { this.a = cx.focus_handle(); }',
+  ));
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(kinds(out), []);
+});
+
+test('a check that stops on a later update keeps the failure it already found', async () => {
+  const { result, out } = await checked(panel(
+    'div().size_full()',
+    'render() { if (this.n++ >= 1) throw new Error("late"); return div().absolute().left(-500).top(0).w(50).h(50); } n = 0;',
+  ).replace('  render() { return div().size_full(); }\n', ''), { updates: 2 });
+  assert.equal(result.status, 1, result.stderr);
+  assert.deepEqual(kinds(out), ['outside_panel']);
+  assert.equal(report(out).result, 'fail');
+});
+
+test('a check that stops with nothing found leaves no earlier pass beside it', async () => {
+  const { record, bins } = spike();
+  const out = join(scratch(), 'report.json');
+  const good = writePanel(panel('div().size_full()'));
+  assert.equal((await check(record, bins, good, { area, updates: 1, out })).status, 0);
+  const bad = writePanel(panel('div()', 'render() { throw new Error("no"); }').replace('  render() { return div(); }\n', ''));
+  assert.equal((await check(record, bins, bad, { area, updates: 1, out })).status, 2);
+  assert.equal(report(out).result, 'inconclusive');
+});
+
+test('trees served after the first report reach it when the client closes', async () => {
+  const { session, out } = await opened(panel('div().size_full()'));
+  assert.ok((await session.send({ cmd: 'invalidate' }))?.tree);
+  session.child.stdin.end();
+  assert.equal(await session.exited, 0);
+  assert.equal(report(out).trees.length, 2);
+});
+
 const nested = (levels) => `(() => { let node = div(); for (let i = 0; i < ${levels}; i++) node = div().child(node); return node; })()`;
 
 test('a tree too deep is a check that could not tell', async () => {
@@ -65,7 +110,7 @@ test('a tree too deep is a check that could not tell', async () => {
 });
 
 test('a tree at the depth limit lays out without taking the app down', async () => {
-  const { result, out } = await checked(panel(nested(127)));
+  const { result, out } = await checked(panel(nested(128)));
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(kinds(out), []);
 });
