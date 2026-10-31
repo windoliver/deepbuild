@@ -14,7 +14,7 @@ import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { hubAdapters } from './hookmap.js';
+import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
@@ -136,6 +136,8 @@ function withWaits(ruled: string, event: string, wait: WaitReply): string {
   if (wait.message) out.systemMessage = [out.systemMessage, wait.message].filter(Boolean).join('\n');
   return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
 }
+/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
+const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
@@ -386,12 +388,12 @@ class Hub {
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
   private rewrites(agent: string): boolean {
-    try { return hubAdapters().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
+    try { return registry().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
   }
   /** Whether an agent's hooks include FileChanged, by its facts: the route a line takes while a call still runs. */
   private watches(agent: string): boolean {
     try {
-      const facts = hubAdapters().get(agent === 'claude-code' ? 'claude' : agent).facts;
+      const facts = registry().get(agent === 'claude-code' ? 'claude' : agent).facts;
       const versions = isObj(facts) && isObj(facts.events) && isObj(facts.events.versions) ? facts.events.versions : {};
       return Object.values(versions).some((hooks) => isObj(hooks) && 'FileChanged' in hooks);
     } catch { return false; }
@@ -722,7 +724,7 @@ class Hub {
   /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
   private stopHold(): Relation {
     const files = [claudeSettings(), join(this.root.dir, 'claude-hooks.json')];
-    const key = files.map((f) => { try { const s = statSync(f); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } }).join('|');
+    const key = files.map(fileKey).join('|');
     if (key !== this.settingsSeen.key) {
       const relation = relations(this.root.dir, readJson(files[0]!)).find((r) => r.name === 'stop hold');
       this.settingsSeen = { key, relation: relation ?? { name: 'stop hold', holds: true, timeoutS: 600, text: '' } };
@@ -797,11 +799,8 @@ class Hub {
   /** The entries of rules.json, read again only when the file changes. */
   private rules(): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    let key = 'none';
-    try {
-      const s = statSync(file);
-      key = `${s.ino}:${s.size}:${s.mtimeMs}`;
-    } catch { /* no rules.json: no entries */ }
+    // No rules.json: no entries.
+    const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
       let entries: Record<string, Guard | undefined> = {};
       try {
