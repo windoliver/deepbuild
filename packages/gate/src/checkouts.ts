@@ -72,13 +72,13 @@ const inside = (path: string): boolean => !isAbsolute(path) && !normalize(path).
 /** The deadline a check names in `asserts`, as `deadline:5s`. */
 const namesDeadline = (asserts: string[] | undefined): boolean => asserts?.some((a) => a.startsWith('deadline:')) ?? false;
 /** A failure at an assertion its check names: one of `asserts`, or with no such list any assertion in its own files. */
-function atNamed(f: Failure, c: ClaimCheckInput): boolean {
+function atNamed(f: Failure, c: Pick<ClaimCheckInput, 'own' | 'asserts'>): boolean {
   if (!f.assertion) return false;
   if (c.asserts?.length) return c.asserts.includes(`${f.file}:${f.line}`);
   return !c.own.length || c.own.some((o) => f.file === o || f.file.startsWith(`${o}/`));
 }
 /** Whether a run on the base proves the fix, and why not: only a test that started and failed at a named assertion, or overran a named deadline. */
-export function baseProof(r: CheckResult, c: ClaimCheckInput, plant?: CheckoutPlant): { on_assertion: boolean; why: string | null } {
+export function baseProof(r: CheckResult, c: Pick<ClaimCheckInput, 'own' | 'asserts'>, plant?: CheckoutPlant): { on_assertion: boolean; why: string | null } {
   if (r.outcome === 'passed') return { on_assertion: false, why: 'passes on the merge base, so it can\'t prove the fix' };
   if (plant === 'any-nonzero-base-exit') return { on_assertion: true, why: null };
   const started = r.testsRun > 0 || r.failures.some((f) => f.test !== '(run)' && f.file !== '.') && r.outcome === 'overran';

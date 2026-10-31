@@ -20,6 +20,9 @@ const show = (repo: string, rev: string, path: string): string | null => {
   try { return gitIn(repo, ['show', `${rev}:${path}`]); } catch { return null; }
 };
 
+/** Whether a file a check's run read is its own: one under the repo's test, fixture and script folders. */
+export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).some((part) => OWN_FOLDERS.has(part));
+
 /** What a script target runs, from a file's text: a package.json script, or a Makefile or justfile recipe. */
 export function targetBody(file: string, text: string | null, target: string): string | null {
   if (text === null) return null;
@@ -43,7 +46,7 @@ export function checkSource(check: ApprovedCheck, diff: { repo: string; from: st
   const own = (path: string): boolean => {
     if (declared.some((g) => matches(g, path))) return true;
     if (plant === 'declared-only' || !reads.has(path)) return false;
-    return plant === 'every-read-file-is-own' || path.split('/').slice(0, -1).some((part) => OWN_FOLDERS.has(part));
+    return plant === 'every-read-file-is-own' || ownRead(path);
   };
   if (changed.some(own)) return 'own';
   const script = d.script;

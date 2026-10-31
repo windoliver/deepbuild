@@ -54,6 +54,8 @@ export type Plant =
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
+  // #875's: a fix check's base run counted as its proof whatever way it failed, as an opaque script's is.
+  | 'any-nonzero-base-exit'
   // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
   // where the part already starts, and a pass on a stand-in taken as proof.
   | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves';
@@ -91,6 +93,7 @@ const PLANTS: readonly string[] = [
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
+  'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

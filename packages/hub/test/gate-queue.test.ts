@@ -23,12 +23,12 @@ describe('the slow lane', () => {
     const gate = new GateRunner({
       raw: async () => [{ ms: 1000 }], now: () => 0, append: async () => undefined, core: {} as GateOptions['core'],
       start: async (r) => { started.push(r.check); return `run:${started.length}`; },
-      ended: () => new Promise<string>(() => undefined),
+      ended: () => new Promise<string>(() => undefined), report: () => undefined,
       slots: () => ({ free: 4 }), budget_ms: 0, hold_ms: 0,
       checkouts: () => checkouts as unknown as ReturnType<GateOptions['checkouts']>,
       invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
     });
-    const check = (name: string) => ({ check: name, approved: 'a', on_base: 'passes' as const });
+    const check = (name: string) => ({ check: name, approved: 'a', on_base: 'passes' as const, asserts: [] });
     await gate.stop({ session: 's', claim: 'claim:1', cwd: '/w', base: 'b', checks: [check('e1'), check('e2')], stopAt: 0 });
     await tick();
     gate.turnEnded('claim:1');

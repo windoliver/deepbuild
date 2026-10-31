@@ -333,7 +333,7 @@ export class AskTasks {
         });
       }
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
-      const checks = stored.flatMap((r): ClaimCheck[] => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' : 'fails', req: r.id, surface: r.surface ?? null }] : []));
+      const checks = stored.flatMap((r): ClaimCheck[] => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' : 'fails', asserts: r.asserts, req: r.id, surface: r.surface ?? null }] : []));
       await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, checks });
       } catch (error) {
         process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
