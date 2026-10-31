@@ -1,0 +1,427 @@
+# #363 acceptance tests on the base commit 6ba47cdb, 2026-10-31T02:27Z, Node v24.22.0
+# Expected: every test fails, each for the missing #363 surface (no deep.store and its item methods, no
+# ActionCall.request, no actions(), no record grant by text or '*', no deep mcp actions server, no action.entered or
+# action.reported from callAction, no install rules, no plants record-by-grant-words, copies-report-changed or
+# keeps-malformed-verified); tsc fails on the same missing names.
+
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/363 --no-file-parallelism
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-363-d6e35a/agent-a9d4e170c1b0bd047/tests/acceptance/363
+
+ ❯ actions.test.ts (4 tests | 4 failed) 70163ms
+   ❯ AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` (2)
+     × AC1 at install, the actions whose input schemas use minimum and oneOf are left out, each with a reason naming its keyword; the plug-in loads and its other action is exposed 783ms
+     × AC1 a session lists deep_ask and deep_claim from deep, while deep-actions finds the plug-in's good action and neither left-out one, and calls neither 11359ms
+   ❯ AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools (2)
+     × AC5 deep-actions finds each stocks action typed from its schema; a read runs; input its schema refuses is an error; a change raises an ask and a send raises an ask, neither handler running 12641ms
+     × AC5 the deep server lists only the core tools: the same list as a hub with no plug-in, with no action, plug-in or deep-actions tool in it 40348ms
+ ❯ install.test.ts (4 tests | 4 failed) 31562ms
+   ❯ AC6 #363.18d8b91c At install a test plug-in is refused, naming the rule, when a change action changes a store kind no action or reading lets an agent read, when one field name has two types across its schemas, or when an action's output is only a success flag and a message; with each fixed it installs, and an error the action raises reaches the agent as an error (4)
+     × AC6 refused when a change action changes a store kind no action or reading lets an agent read, naming the rule; fixed, it installs and its actions run 2931ms
+     × AC6 refused when one field name has two types across its schemas, naming the rule; fixed, it installs and its actions run 1064ms
+     × AC6 refused when an action's output is only a success flag and a message, naming the rule; fixed, it installs and its actions run 1564ms
+     × AC6 an error the fixed plug-in's action raises reaches the agent through deep-actions as an error 25228ms
+ ❯ changed.test.ts (7 tests | 7 failed) 19221ms
+   ❯ AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call (7)
+     × AC8 set-alert NVDA at 200 while the alert exists records one action.entered, then one action.reported with changed: []; the call that made it names the one item 1702ms
+     × AC8 a planted handler that writes nothing but reports the alert as changed still gets changed: [] 2138ms
+     × AC8 a handler that returns no report gets verified: unverified, and changed from the record 3711ms
+     × AC8 a handler that returns a string for its report gets verified: unverified, and changed from the record 1179ms
+     × AC8 a handler that returns verified: "yes" gets verified: unverified, and changed from the record 5177ms
+     × AC8 (wrong program) a hub that copies the report into changed fails this test, naming the call 2062ms
+     × AC8 (wrong program) a hub that keeps a malformed verified fails this test, naming the call 2438ms
+ ❯ reads.test.ts (3 tests | 3 failed) 8048ms
+   ❯ AC2 #363.2d03fd41 A sandboxed plug-in granted only content-free fields gets no transcript text from `deep.record.query` (1)
+     × AC2 granted user.ask and tool.before with no text, the reader gets both events and none of their text; granted text, it gets it 3872ms
+   ❯ AC3 #363.41b82a9b A sandboxed plug-in granted the record for every event kind queries another test plug-in's store kind `ext.stocks.alert` with `deep.record.query` and gets a refusal naming the kind, its plug-in and the use to declare, with no rows; a hub that filters only by the grant's words returns the rows and fails this test, naming the kind (2)
+     × AC3 the reader, granted every kind, reads a core kind but is refused ext.stocks.alert, naming the kind, test/stocks and the use to declare, with no rows 1570ms
+     × AC3 (wrong program) a hub that filters only by the grant's words returns the rows and fails this test, naming the kind 581ms
+ ❯ retries.test.ts (2 tests | 2 failed) 3876ms
+   ❯ AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected (2)
+     × AC7 an identical retry of a request ID has no second effect; the same ID with different input is refused before anything is written or run 2103ms
+     × AC7 a call's target is the one it names, never the focused window, and its authority is its own caller's, never the last agent's 1506ms
+ ❯ store.test.ts (2 tests | 2 failed) 2413ms
+   ❯ AC4 #363.b6b1737b Rolling a plug-in's code back keeps its store readable, and its data migrations only move forward (2)
+     × AC4 1.0.0 → 2.0.0 migrates the alert forward; rolling the code back to 1.0.0 reads it as generation 2 left it, and nothing is written back 751ms
+     × AC4 a version whose migration runs from generation 2 back to 1 never moves the data back: refused naming the store kind, or the items stay as generation 2 left them 1368ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  actions.test.ts > AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` > AC1 at install, the actions whose input schemas use minimum and oneOf are left out, each with a reason naming its keyword; the plug-in loads and its other action is exposed
+TypeError: h.actions is not a function
+ ❯ actions.test.ts:32:28
+     30|     const h = await openHost(w);
+     31|     await installAndLoad(h, await pkg('picky'));
+     32|     const listed = await h.actions();
+       |                            ^
+     33|     const of = (action: string) => listed.find((l) => l.action === act…
+     34|     expect(of('ext.picky.ok'), `the action whose schema every model AP…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  actions.test.ts > AC1 #363.126cded2 A plug-in action whose schema uses a keyword one model API rejects is left out at install with the reason, and every session still lists `deep_ask` and `deep_claim` > AC1 a session lists deep_ask and deep_claim from deep, while deep-actions finds the plug-in's good action and neither left-out one, and calls neither
+Error: the agent stand-in failed mcp: Error: the deep-actions server (~/dev/claude-worktrees/github-issue-363-d6e35a/agent-a9d4e170c1b0bd047/packages/cli/dist/main.js mcp actions) exited 2: Unsupported command. Run deep --help for available commands.
+
+    at check (file://~/dev/claude-worktrees/github-issue-363-d6e35a/agent-a9d4e170c1b0bd047/tests/acceptance/363/fixtures/agent.mjs:105:64)
+    at ChildProcess.<anonymous> (file://~/dev/claude-worktrees/github-issue-363-d6e35a/agent-a9d4e170c1b0bd047/tests/acceptance/363/fixtures/agent.mjs:87:69)
+    at ChildProcess.emit (node:events:514:28)
+    at maybeClose (node:internal/child_process:1172:16)
+    at Socket.<anonymous> (node:internal/child_process:527:11)
+    at Socket.emit (node:events:514:28)
+    at Pipe.<anonymous> (node:net:362:12)
+ ❯ check fixtures/agent.mjs:105:64
+ ❯ ChildProcess.<anonymous> fixtures/agent.mjs:87:69
+ ❯ hub.ts:210:33
+    208|         clearTimeout(timer);
+    209|         this.pending.delete(n);
+    210|         if (line.failed) reject(Error(`the agent stand-in failed ${com…
+       |                                 ^
+    211|         else resolve(line);
+    212|       });
+ ❯ Socket.<anonymous> hub.ts:187:73
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  actions.test.ts > AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools > AC5 deep-actions finds each stocks action typed from its schema; a read runs; input its schema refuses is an error; a change raises an ask and a send raises an ask, neither handler running
+Error: deep install /private/tmp/dh363-pkg-stocks-lIGnYt exited 1: Source: /private/tmp/dh363-pkg-stocks-lIGnYt
+  test/stocks@1.0.0, digest d1:ec6d808f21912b96ced77745329fcad5cd4b56a656c3150f44ca98881ad07463, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: ext.stocks.set_alert, ext.stocks.list_alerts, ext.stocks.send_digest, ext.stocks.runs
+  check kinds: none
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+Installed test/stocks@1.0.0
+It is not loaded: it failed conformance: its code didn't register in the platform sandbox: deep.store is not a function
+
+ ❯ hubWorld hub.ts:269:29
+    267|   for (const dir of packages) {
+    268|     const r = await run(['install', dir], home);
+    269|     if (r.code !== 0) throw Error(`deep install ${dir} exited ${r.code…
+       |                             ^
+    270|   }
+    271|   await agent.establish(hub, session);
+ ❯ actions.test.ts:62:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  actions.test.ts > AC5 #363.f25b4886 A declared action reaches agents through `deep-actions`, typed from its schema: a read runs, a change without a standing rule raises an ask, and a send always asks; the `deep` server lists only the core tools > AC5 the deep server lists only the core tools: the same list as a hub with no plug-in, with no action, plug-in or deep-actions tool in it
+Error: deep install /private/tmp/dh363-pkg-stocks-Xb9CeK exited 1: Source: /private/tmp/dh363-pkg-stocks-Xb9CeK
+  test/stocks@1.0.0, digest d1:ec6d808f21912b96ced77745329fcad5cd4b56a656c3150f44ca98881ad07463, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: ext.stocks.set_alert, ext.stocks.list_alerts, ext.stocks.send_digest, ext.stocks.runs
+  check kinds: none
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+Installed test/stocks@1.0.0
+It is not loaded: it failed conformance: its code didn't register in the platform sandbox: deep.store is not a function
+
+ ❯ hubWorld hub.ts:269:29
+    267|   for (const dir of packages) {
+    268|     const r = await run(['install', dir], home);
+    269|     if (r.code !== 0) throw Error(`deep install ${dir} exited ${r.code…
+       |                             ^
+    270|   }
+    271|   await agent.establish(hub, session);
+ ❯ actions.test.ts:112:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 set-alert NVDA at 200 while the alert exists records one action.entered, then one action.reported with changed: []; the call that made it names the one item
+AssertionError: /private/tmp/dh363-pkg-stocks-Jbzcfx wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:36:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 a planted handler that writes nothing but reports the alert as changed still gets changed: []
+AssertionError: /private/tmp/dh363-pkg-stocks-8E4cZu wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:56:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 a handler that returns no report gets verified: unverified, and changed from the record
+AssertionError: /private/tmp/dh363-pkg-stocks-DtkX8Z wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:65:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 a handler that returns a string for its report gets verified: unverified, and changed from the record
+AssertionError: /private/tmp/dh363-pkg-stocks-TBmpoV wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:65:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 a handler that returns verified: "yes" gets verified: unverified, and changed from the record
+AssertionError: /private/tmp/dh363-pkg-stocks-dE8b1f wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:65:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 (wrong program) a hub that copies the report into changed fails this test, naming the call
+AssertionError: /private/tmp/dh363-pkg-stocks-mngVvr wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:75:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  changed.test.ts > AC8 #363.33062d5b What changed comes from the record: an agent's call to a test stocks plug-in's `set-alert` for NVDA at 200 while that alert exists records one `action.entered` and then one `action.reported` with `changed: []`. A planted handler that writes nothing but reports the alert as changed still gets `changed: []`, and handlers that return no report, a string, or `verified: "yes"` each get `verified: unverified`; a hub that copies the report into `changed` or keeps a malformed `verified` fails this test, naming the call > AC8 (wrong program) a hub that keeps a malformed verified fails this test, naming the call
+AssertionError: /private/tmp/dh363-pkg-stocks-Jydgsm wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ stocksWorld changed.test.ts:18:3
+ ❯ changed.test.ts:82:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  install.test.ts > AC6 #363.18d8b91c At install a test plug-in is refused, naming the rule, when a change action changes a store kind no action or reading lets an agent read, when one field name has two types across its schemas, or when an action's output is only a success flag and a message; with each fixed it installs, and an error the action raises reaches the agent as an error > AC6 refused when a change action changes a store kind no action or reading lets an agent read, naming the rule; fixed, it installs and its actions run
+AssertionError: the refusal names ext.rules.alert: expected 'its code didn\'t register in the plat…' to contain 'ext.rules.alert'
+
+Expected: "ext.rules.alert"
+Received: "its code didn't register in the platform sandbox: deep.store is not a function"
+
+ ❯ install.test.ts:49:79
+     47|       expect(refused.ok, `the plug-in where ${c.what} is refused at in…
+     48|       const reason = refused.ok ? '' : refused.reason;
+     49|       for (const name of c.names) expect(reason, `the refusal names ${…
+       |                                                                               ^
+     50|       expect(reason, `the refusal names the rule: ${c.what}`).toMatch(…
+     51|       expect((await h.loaded()).some((l) => l.id === RULES), 'nothing …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  install.test.ts > AC6 #363.18d8b91c At install a test plug-in is refused, naming the rule, when a change action changes a store kind no action or reading lets an agent read, when one field name has two types across its schemas, or when an action's output is only a success flag and a message; with each fixed it installs, and an error the action raises reaches the agent as an error > AC6 refused when one field name has two types across its schemas, naming the rule; fixed, it installs and its actions run
+AssertionError: the refusal names above: expected 'its code didn\'t register in the plat…' to contain 'above'
+
+Expected: "above"
+Received: "its code didn't register in the platform sandbox: deep.store is not a function"
+
+ ❯ install.test.ts:49:79
+     47|       expect(refused.ok, `the plug-in where ${c.what} is refused at in…
+     48|       const reason = refused.ok ? '' : refused.reason;
+     49|       for (const name of c.names) expect(reason, `the refusal names ${…
+       |                                                                               ^
+     50|       expect(reason, `the refusal names the rule: ${c.what}`).toMatch(…
+     51|       expect((await h.loaded()).some((l) => l.id === RULES), 'nothing …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  install.test.ts > AC6 #363.18d8b91c At install a test plug-in is refused, naming the rule, when a change action changes a store kind no action or reading lets an agent read, when one field name has two types across its schemas, or when an action's output is only a success flag and a message; with each fixed it installs, and an error the action raises reaches the agent as an error > AC6 refused when an action's output is only a success flag and a message, naming the rule; fixed, it installs and its actions run
+AssertionError: the refusal names ext.rules.set_alert: expected 'its code didn\'t register in the plat…' to contain 'ext.rules.set_alert'
+
+Expected: "ext.rules.set_alert"
+Received: "its code didn't register in the platform sandbox: deep.store is not a function"
+
+ ❯ install.test.ts:49:79
+     47|       expect(refused.ok, `the plug-in where ${c.what} is refused at in…
+     48|       const reason = refused.ok ? '' : refused.reason;
+     49|       for (const name of c.names) expect(reason, `the refusal names ${…
+       |                                                                               ^
+     50|       expect(reason, `the refusal names the rule: ${c.what}`).toMatch(…
+     51|       expect((await h.loaded()).some((l) => l.id === RULES), 'nothing …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  install.test.ts > AC6 #363.18d8b91c At install a test plug-in is refused, naming the rule, when a change action changes a store kind no action or reading lets an agent read, when one field name has two types across its schemas, or when an action's output is only a success flag and a message; with each fixed it installs, and an error the action raises reaches the agent as an error > AC6 an error the fixed plug-in's action raises reaches the agent through deep-actions as an error
+Error: deep install /private/tmp/dh363-pkg-rules-QDI6aF exited 1: Source: /private/tmp/dh363-pkg-rules-QDI6aF
+  test/rules@1.0.0, digest d1:fe1ae4ceb2abe69e85871e4ce3c56a61e814dc252b3244ab225c413a0722379e, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: ext.rules.set_alert, ext.rules.list_alerts, ext.rules.boom
+  check kinds: none
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+Installed test/rules@1.0.0
+It is not loaded: it failed conformance: its code didn't register in the platform sandbox: deep.store is not a function
+
+ ❯ hubWorld hub.ts:269:29
+    267|   for (const dir of packages) {
+    268|     const r = await run(['install', dir], home);
+    269|     if (r.code !== 0) throw Error(`deep install ${dir} exited ${r.code…
+       |                             ^
+    270|   }
+    271|   await agent.establish(hub, session);
+ ❯ install.test.ts:62:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  reads.test.ts > AC2 #363.2d03fd41 A sandboxed plug-in granted only content-free fields gets no transcript text from `deep.record.query` > AC2 granted user.ask and tool.before with no text, the reader gets both events and none of their text; granted text, it gets it
+AssertionError: no transcript text crossed into the sandbox: expected '[{"v":2,"id":"01M67WN0BBS2QD83BY0BQEV…' not to contain 'zebra-marmalade-mvtvck'
+
+Expected: "zebra-marmalade-mvtvck"
+Received: "[{"v":2,"id":"01M67WN0BBS2QD83BY0BQEVHYR","kind":"user.ask","writer":"hook","actor":"you","scope":"you","ts":1793413775723,"log_pos":1,"data":{"msg":3,"text":"zebra-marmalade-mvtvck","tasks":["task:01K74FX2B4D6F8H0K2M4P6R8T0"],"from":"person","disposition":"handled"},"evidence":[],"session":"01M67WN0B8PRC1H859J9SNNP0M","agent":"claude-code"},{"v":2,"id":"01M67WN0ENFTYV45P024P0ATF2","kind":"tool.before","writer":"hook","actor":"you","scope":"you","ts":1793413775829,"log_pos":2,"data":{"kind":"shell","paths":[],"command":"echo zebra-marmalade-mvtvck","late":true,"matched":["no-kill-by-name"]},"evidence":[],"session":"01M67WN0B8PRC1H859J9SNNP0M","agent":"claude-code"}]"
+
+ ❯ reads.test.ts:38:73
+     36|     const rows = JSON.parse(out.rows ?? '[]') as { kind: string }[];
+     37|     expect(rows.map((r) => r.kind).sort(), 'the content-free fields st…
+     38|     expect(out.rows, 'no transcript text crossed into the sandbox').no…
+       |                                                                         ^
+     39|
+     40|     // The control: the same events, granted with text, carry it, so t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  reads.test.ts > AC3 #363.41b82a9b A sandboxed plug-in granted the record for every event kind queries another test plug-in's store kind `ext.stocks.alert` with `deep.record.query` and gets a refusal naming the kind, its plug-in and the use to declare, with no rows; a hub that filters only by the grant's words returns the rows and fails this test, naming the kind > AC3 the reader, granted every kind, reads a core kind but is refused ext.stocks.alert, naming the kind, test/stocks and the use to declare, with no rows
+AssertionError: /private/tmp/dh363-pkg-stocks-1mPz9z wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ foreignQuery reads.test.ts:52:3
+ ❯ reads.test.ts:63:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  reads.test.ts > AC3 #363.41b82a9b A sandboxed plug-in granted the record for every event kind queries another test plug-in's store kind `ext.stocks.alert` with `deep.record.query` and gets a refusal naming the kind, its plug-in and the use to declare, with no rows; a hub that filters only by the grant's words returns the rows and fails this test, naming the kind > AC3 (wrong program) a hub that filters only by the grant's words returns the rows and fails this test, naming the kind
+AssertionError: /private/tmp/dh363-pkg-stocks-SkVlum wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ foreignQuery reads.test.ts:52:3
+ ❯ reads.test.ts:70:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  retries.test.ts > AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected > AC7 an identical retry of a request ID has no second effect; the same ID with different input is refused before anything is written or run
+AssertionError: /private/tmp/dh363-pkg-stocks-VkVLsE wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ retries.test.ts:16:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  retries.test.ts > AC7 #363.4e75de68 Retrying an identical request ID has no second effect, the same ID with different input is refused before any write or cursor move, and an action's target and authority never come from the focused window, the current folder or the last agent selected > AC7 a call's target is the one it names, never the focused window, and its authority is its own caller's, never the last agent's
+AssertionError: /private/tmp/dh363-pkg-stocks-0BbF8t wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ retries.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  store.test.ts > AC4 #363.b6b1737b Rolling a plug-in's code back keeps its store readable, and its data migrations only move forward > AC4 1.0.0 → 2.0.0 migrates the alert forward; rolling the code back to 1.0.0 reads it as generation 2 left it, and nothing is written back
+AssertionError: /private/tmp/dh363-pkg-stocks-SqGKms wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ store.test.ts:15:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+ FAIL  store.test.ts > AC4 #363.b6b1737b Rolling a plug-in's code back keeps its store readable, and its data migrations only move forward > AC4 a version whose migration runs from generation 2 back to 1 never moves the data back: refused naming the store kind, or the items stay as generation 2 left them
+AssertionError: /private/tmp/dh363-pkg-stocks-ThqXXV wasn't installed and loaded: refused at check: its code didn't register in the platform sandbox: deep.store is not a function
+ ❯ installAndLoad helpers.ts:201:25
+    199| export async function installAndLoad(h: ExtensionHost, from: string, g…
+    200|   const tried = await tryInstall(h, from, grant);
+    201|   if (!tried.ok) expect.fail(`${from} wasn't installed and loaded: ref…
+       |                         ^
+    202|   return tried.installed;
+    203| }
+ ❯ store.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/22]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  22 failed (22)
+   Start at  19:27:25
+   Duration  150.19s (tests 92%, import 8%)
+
+exit 1
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/363/tsconfig.json
+
+tests/acceptance/363/actions.test.ts(32,28): error TS2339: Property 'actions' does not exist on type 'ExtensionHost'.
+tests/acceptance/363/actions.test.ts(33,49): error TS7006: Parameter 'l' implicitly has an 'any' type.
+tests/acceptance/363/changed.test.ts(75,67): error TS2345: Argument of type '"copies-report-changed"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/363/changed.test.ts(82,63): error TS2345: Argument of type '"keeps-malformed-verified"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/363/helpers.ts(211,20): error TS2353: Object literal may only specify known properties, and 'request' does not exist in type 'ActionCall'.
+tests/acceptance/363/reads.test.ts(51,31): error TS2345: Argument of type '{ plant: "record-by-grant-words"; } | {}' is not assignable to parameter of type '{ plant?: Plant; } | undefined'.
+  Type '{ plant: "record-by-grant-words"; }' is not assignable to type '{ plant?: Plant; }'.
+    Types of property 'plant' are incompatible.
+      Type '"record-by-grant-words"' is not assignable to type 'Plant'.
+exit 2
