@@ -1,0 +1,56 @@
+// The rules plug-in (#363 AC6): a store kind, a change action that changes it, a read action that reads it, and an
+// action that raises an error. probe.json's `case` breaks one install rule, or none:
+// - unread-change: no read action reads ext.rules.alert (its manifest leaves list-alerts out too)
+// - two-types: the field `above` is a number in set-alert's input and a string in list-alerts' output
+// - flag-message: set-alert's output is only a success flag and a message
+// - fixed (or no probe): every rule holds
+import { existsSync, readFileSync } from 'node:fs';
+
+const PROBE = new URL('./probe.json', import.meta.url);
+const probe: { case?: string } = existsSync(PROBE) ? JSON.parse(readFileSync(PROBE, 'utf8')) : {};
+const ALERT = 'ext.rules.alert';
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  await deep.store(ALERT, {
+    generation: 1,
+    schema: { type: 'object', properties: { symbol: { type: 'string' }, above: { type: 'number' } }, required: ['symbol', 'above'] },
+  });
+
+  const setOutput = probe.case === 'flag-message'
+    ? strict({ ok: { type: 'boolean' }, message: { type: 'string' } })
+    : strict({ symbol: { type: 'string' }, above: { type: 'number' }, created: { type: 'boolean' } });
+  deep.registerAction('ext.rules.set_alert', {
+    declares: 'change',
+    changes: [ALERT],
+    input: strict({ symbol: { type: 'string' }, above: { type: 'number' } }),
+    output: setOutput,
+  }, async (input: { symbol: string; above: number }) => {
+    const existing = await deep.store.get(ALERT, input.symbol);
+    const created = !existing || existing.above !== input.above;
+    if (created) await deep.store.put(ALERT, input.symbol, { symbol: input.symbol, above: input.above });
+    const output = probe.case === 'flag-message' ? { ok: true, message: `alert set for ${input.symbol}` } : { symbol: input.symbol, above: input.above, created };
+    return { output, report: { verified: true, checked: `read ${input.symbol} back from ${ALERT}` } };
+  });
+
+  if (probe.case !== 'unread-change') {
+    const above = probe.case === 'two-types' ? { type: 'string' } : { type: 'number' };
+    deep.registerAction('ext.rules.list_alerts', {
+      declares: 'read',
+      reads: [ALERT],
+      input: strict({}),
+      output: strict({ alerts: { type: 'array', items: strict({ symbol: { type: 'string' }, above }) } }),
+    }, async () => {
+      const items: { key: string; value: { symbol: string; above: number } }[] = await deep.store.list(ALERT);
+      return { alerts: items.map((i) => ({ symbol: i.value.symbol, above: probe.case === 'two-types' ? String(i.value.above) : i.value.above })) };
+    });
+  }
+
+  deep.registerAction('ext.rules.boom', {
+    declares: 'read',
+    input: strict({ symbol: { type: 'string' } }),
+    output: strict({ symbol: { type: 'string' }, price: { type: 'number' } }),
+  }, async (input: { symbol: string }) => {
+    throw Error(`the price feed for ${input.symbol} is down`);
+  });
+}
