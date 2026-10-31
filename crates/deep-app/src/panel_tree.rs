@@ -52,16 +52,30 @@ impl Node {
     }
 }
 
+/// How deep and how large a tree may be: what walks it recurses, in the app, so a hostile tree mustn't take it down.
+const MAX_DEPTH: usize = 128;
+const MAX_NODES: usize = 1 << 16;
+
 /// Parses a snapshot's text: one node a line, two spaces of indent a level.
 pub fn parse(text: &str) -> Result<Node, String> {
     let mut stack: Vec<(usize, Node)> = Vec::new();
-    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+    for (at, line) in text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .enumerate()
+    {
+        if at >= MAX_NODES {
+            return Err(format!("a tree of over {MAX_NODES} nodes"));
+        }
         let body = line.trim_start_matches(' ');
         let indent = line.len() - body.len();
         if indent % 2 != 0 {
             return Err(format!("odd indent: {line:?}"));
         }
         let depth = indent / 2;
+        if depth > MAX_DEPTH {
+            return Err(format!("a tree over {MAX_DEPTH} levels deep"));
+        }
         let node = parse_line(body)?;
         if depth > stack.len() || (depth == 0 && !stack.is_empty()) {
             return Err(format!("a node out of place: {line:?}"));
@@ -194,6 +208,7 @@ pub fn number(args: &str) -> Option<f32> {
         .next()?
         .parse()
         .ok()
+        .filter(|value: &f32| value.is_finite())
 }
 
 /// A `#rrggbb` color as a number, and nothing else.
@@ -236,6 +251,18 @@ mod tests {
 
     #[test]
     fn what_it_cant_read_is_an_error() {
+        let deep = |levels: usize| {
+            (0..levels)
+                .map(|level| format!("{}div\n", "  ".repeat(level)))
+                .collect::<String>()
+        };
+        assert!(parse(&deep(MAX_DEPTH + 1)).is_ok());
+        assert!(parse(&deep(MAX_DEPTH + 2)).is_err());
+        let wide = format!("div\n{}", "  div\n".repeat(MAX_NODES));
+        assert!(parse(&wide).is_err());
+        for bad in ["Number(NaN)", "Number(inf)"] {
+            assert_eq!(number(bad), None, "{bad}");
+        }
         for bad in [
             "",
             "div\ndiv",

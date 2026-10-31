@@ -4,6 +4,7 @@
 //! reported, and undone unless the app grants the move.
 
 use std::{
+    collections::VecDeque,
     io::{BufRead as _, Write as _},
     path::Path,
     sync::{mpsc, Arc},
@@ -103,6 +104,8 @@ impl Panel {
                 window.render_frame(cx);
             })
             .map_err(|error| error.to_string())?;
+        // Work the render deferred is the update's too.
+        self.cx.run_until_parked();
         let nanos = started.elapsed().as_nanos() as u64;
         let tree = self.cx.update(|cx| {
             let view = view.read(cx);
@@ -119,12 +122,10 @@ impl Panel {
         self.cx.run_until_parked();
     }
 
-    fn focused(&mut self) -> bool {
+    fn focused(&mut self) -> Option<FocusHandle> {
         self.cx
-            .update_window(self.window.into(), |_, window, cx| {
-                window.focused(cx).is_some()
-            })
-            .unwrap_or(false)
+            .update_window(self.window.into(), |_, window, cx| window.focused(cx))
+            .unwrap_or(None)
     }
 
     fn blur(&mut self) {
@@ -138,10 +139,15 @@ impl Panel {
         self.cx
             .update_window(self.window.into(), |_, window, cx| {
                 window.render_frame(cx);
+                // A panel can take away what's being pressed; the click would panic on it.
+                if window.try_find(id.clone()).is_none() {
+                    return Err(format!("no element {id:?}"));
+                }
                 window.click(id, cx);
                 window.render_frame(cx);
+                Ok(())
             })
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())??;
         self.cx.run_until_parked();
         Ok(())
     }
@@ -201,9 +207,14 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
     let mut last = Instant::now();
     // The serial of the latest press the app told this host of: what a focus move is attributed to.
     let mut serial = Value::Null;
-    let mut held = false;
+    let mut held = None;
+    // Commands that arrived while this host waited on a verdict.
+    let mut pending = VecDeque::new();
     loop {
-        match inbox.recv_timeout(tick) {
+        let next = pending
+            .pop_front()
+            .map_or_else(|| inbox.recv_timeout(tick), Ok);
+        match next {
             Ok(line) => {
                 let command: Value =
                     serde_json::from_str(&line).map_err(|error| error.to_string())?;
@@ -214,16 +225,23 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
                     },
                     "jit" => say(&jit()),
                     "press" => {
+                        // Whatever was already going to move focus isn't this press's.
+                        panel.pump(last.elapsed());
+                        last = Instant::now();
+                        held = report_move(&mut panel, &inbox, &mut pending, &serial, held)?;
                         serial = command["serial"].clone();
                         match panel.press(command["id"].as_str().unwrap_or_default()) {
-                            Ok(()) => held = report_move(&mut panel, &inbox, &serial, held)?,
+                            Ok(()) => {
+                                held =
+                                    report_move(&mut panel, &inbox, &mut pending, &serial, held)?;
+                                say(&json!({ "pressed": true }));
+                            }
                             Err(error) => say(&json!({ "error": error })),
                         }
-                        say(&json!({ "pressed": true }));
                     }
                     "blur" => {
                         panel.blur();
-                        held = false;
+                        held = None;
                         say(&json!({ "blurred": true }));
                     }
                     other => say(&json!({ "error": format!("no command {other}") })),
@@ -232,32 +250,43 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 panel.pump(last.elapsed());
                 last = Instant::now();
-                held = report_move(&mut panel, &inbox, &serial, held)?;
+                held = report_move(&mut panel, &inbox, &mut pending, &serial, held)?;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
         }
     }
 }
 
-/// Focus the panel took since the last look is a request: the app answers it, and a refusal is undone here.
+/// Focus that went somewhere new since the last look is a request: the app answers it, and a refusal is undone here.
+/// Focus the panel let go of is only told. A command that crosses the request waits for the verdict.
 fn report_move(
     panel: &mut Panel,
     inbox: &mpsc::Receiver<String>,
+    pending: &mut VecDeque<String>,
     serial: &Value,
-    held: bool,
-) -> Result<bool, String> {
+    held: Option<FocusHandle>,
+) -> Result<Option<FocusHandle>, String> {
     let focused = panel.focused();
-    if !focused || held {
-        return Ok(focused);
+    if focused == held {
+        return Ok(held);
+    }
+    if focused.is_none() {
+        say(&json!({ "released": true }));
+        return Ok(None);
     }
     say(&json!({ "move": { "serial": serial } }));
-    let line = inbox.recv().map_err(|error| error.to_string())?;
-    let verdict: Value = serde_json::from_str(&line).map_err(|error| error.to_string())?;
-    if verdict["granted"] == true {
-        return Ok(true);
+    loop {
+        let line = inbox.recv().map_err(|error| error.to_string())?;
+        let reply: Value = serde_json::from_str(&line).map_err(|error| error.to_string())?;
+        match reply["granted"].as_bool() {
+            Some(true) => return Ok(focused),
+            Some(false) => {
+                panel.blur();
+                return Ok(None);
+            }
+            None => pending.push_back(line),
+        }
     }
-    panel.blur();
-    Ok(false)
 }
 
 /// The process's command line, shared by the host and its control.

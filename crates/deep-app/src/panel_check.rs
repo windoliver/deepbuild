@@ -5,7 +5,7 @@
 
 use std::{
     cell::RefCell,
-    io::{BufRead as _, BufReader, Write as _},
+    io::{BufRead as _, BufReader, Read as _, Write as _},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     rc::Rc,
@@ -28,12 +28,22 @@ fn flag(args: &[String], name: &str) -> Option<String> {
 }
 
 fn rect(text: &str) -> Result<Rect, String> {
+    let wrong = || format!("{text} isn't x,y,w,h");
     let parts: Vec<f64> = text
         .split(',')
-        .filter_map(|part| part.parse().ok())
-        .collect();
-    <Rect>::try_from(parts).map_err(|_| format!("{text} isn't x,y,w,h"))
+        .map(|part| part.parse().map_err(|_| wrong()))
+        .collect::<Result<_, _>>()?;
+    <Rect>::try_from(parts)
+        .ok()
+        .filter(|[x, y, w, h]| x.is_finite() && y.is_finite() && w.is_finite() && h.is_finite())
+        .filter(|[_, _, w, h]| *w >= 0. && *h >= 0.)
+        .ok_or_else(wrong)
 }
+
+/// The longest line a host may send, and how long it may keep the app waiting: a script is interrupted long before
+/// this, so only a stuck or stopped host gets here.
+const MAX_LINE: u64 = 32 << 20;
+const STUCK: Duration = Duration::from_secs(60);
 
 /// The panel host as a child process: nothing of the app's environment goes with it.
 struct Host {
@@ -62,7 +72,15 @@ impl Host {
         let stdout = child.stdout.take().expect("piped");
         let (send, lines) = mpsc::channel();
         std::thread::spawn(move || {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            let mut reader = BufReader::new(stdout);
+            loop {
+                let mut line = String::new();
+                let read = (&mut reader).take(MAX_LINE).read_line(&mut line);
+                // An unfinished line is one over the limit, or a host that died writing it.
+                if !matches!(read, Ok(n) if n > 0) || !line.ends_with('\n') {
+                    break;
+                }
+                line.pop();
                 if send.send(line).is_err() {
                     break;
                 }
@@ -91,24 +109,36 @@ impl Host {
     }
 
     fn next(&mut self) -> Result<Value, String> {
-        let line = self.lines.recv().map_err(|_| "host_gone".to_owned())?;
+        let line = self
+            .lines
+            .recv_timeout(STUCK)
+            .map_err(|error| match error {
+                mpsc::RecvTimeoutError::Timeout => "host_stuck".to_owned(),
+                mpsc::RecvTimeoutError::Disconnected => "host_gone".to_owned(),
+            })?;
         serde_json::from_str(&line).map_err(|_| format!("the panel host wrote {line:?}"))
     }
 
-    /// One invalidation: the tree's text and the host's nanoseconds, refusing any focus move on the way, since an
-    /// update carries no serial.
-    fn update(&mut self) -> Result<(String, u64), String> {
-        self.send(json!({ "cmd": "invalidate" }))?;
+    /// The host's answer to the last command, refusing any focus move on the way, since no press is in hand to carry
+    /// a serial.
+    fn reply(&mut self) -> Result<Value, String> {
         loop {
             let reply = self.next()?;
             if !reply["move"].is_null() {
                 self.send(json!({ "granted": false }))?;
-                continue;
+            } else if reply["released"].is_null() {
+                return Ok(reply);
             }
-            return match (reply["tree"].as_str(), reply["scriptNs"].as_u64()) {
-                (Some(tree), Some(nanos)) => Ok((tree.to_owned(), nanos)),
-                _ => Err(format!("the panel failed: {}", reply["error"])),
-            };
+        }
+    }
+
+    /// One invalidation: the tree's text and the host's nanoseconds.
+    fn update(&mut self) -> Result<(String, u64), String> {
+        self.send(json!({ "cmd": "invalidate" }))?;
+        let reply = self.reply()?;
+        match (reply["tree"].as_str(), reply["scriptNs"].as_u64()) {
+            (Some(tree), Some(nanos)) => Ok((tree.to_owned(), nanos)),
+            _ => Err(format!("the panel failed: {}", reply["error"])),
         }
     }
 }
@@ -179,8 +209,9 @@ fn element(node: &Node, bounds: &Rc<RefCell<Vec<Option<Rect>>>>, at: &mut usize)
             _ => el,
         };
     }
-    if node.kind == "text" {
-        el = el.child(node.label.clone().unwrap_or_default());
+    let text = (node.kind == "text").then(|| node.label.clone().unwrap_or_default());
+    if let Some(text) = &text {
+        el = el.child(text.clone());
     }
     for child in &node.children {
         el = el.child(element(child, bounds, at));
@@ -188,10 +219,13 @@ fn element(node: &Node, bounds: &Rc<RefCell<Vec<Option<Rect>>>>, at: &mut usize)
     let sink = bounds.clone();
     el.child(
         canvas(
-            move |frame, _, _| {
-                if let Some(slot) = sink.borrow_mut().get_mut(index) {
+            move |frame, window, _| {
+                let size = match &text {
+                    Some(text) => text_extent(text, frame.size, window),
+                    None => Some(frame.size),
+                };
+                if let (Some(slot), Some(size)) = (sink.borrow_mut().get_mut(index), size) {
                     let origin = frame.origin;
-                    let size = frame.size;
                     *slot = Some(
                         [origin.x, origin.y, size.width, size.height]
                             .map(|value| f64::from(f32::from(value))),
@@ -207,6 +241,32 @@ fn element(node: &Node, bounds: &Rc<RefCell<Vec<Option<Rect>>>>, at: &mut usize)
         .size_full(),
     )
     .into_any_element()
+}
+
+/// What a text node covers: its box, or its text where that spills past the box. None if the text won't shape.
+fn text_extent(text: &str, frame: Size<Pixels>, window: &Window) -> Option<Size<Pixels>> {
+    let style = window.text_style();
+    // A pixel's grace, so a box laid out to fit its text exactly doesn't wrap here.
+    let wrap = (frame.width > px(0.)).then_some(frame.width + px(1.));
+    let lines = window
+        .text_system()
+        .shape_text(
+            text.to_owned().into(),
+            style.font_size.to_pixels(window.rem_size()),
+            &[style.to_run(text.len())],
+            wrap,
+            None,
+        )
+        .ok()?;
+    let mut extent = frame;
+    let mut height = px(0.);
+    for line in &lines {
+        let size = line.size(window.line_height());
+        extent.width = extent.width.max(size.width);
+        height += size.height;
+    }
+    extent.height = extent.height.max(height);
+    Some(extent)
 }
 
 /// Everything a host may send that this app can draw. Behavior stays in the host; any other node or style, or a
@@ -232,7 +292,8 @@ fn unknown_element(node: &Node) -> Option<String> {
     }
     let drawable = |op: &&crate::panel_tree::Op| {
         let name = op.name.as_str();
-        !op.style
+        // A `:` call is behavior, a callback that stays in the host. A state style prints the same way, and isn't one.
+        (!op.style && (op.args.ends_with("fn") || op.args == "registered"))
             || BARE.contains(&name)
             || (SIZES.contains(&name) && number(&op.args).is_some())
             || (COLORS.contains(&name) && color(&op.args).is_some())
@@ -262,13 +323,15 @@ fn violations(
     bounds: &[Option<Rect>],
     area: Rect,
     card: Option<Rect>,
-) -> Vec<Value> {
+) -> Result<Vec<Value>, String> {
     let mut found = Vec::new();
-    for rect in bounds
-        .iter()
-        .flatten()
-        .filter(|rect| rect[2] > 0. && rect[3] > 0.)
-    {
+    for rect in bounds {
+        let rect = rect
+            .as_ref()
+            .ok_or("a node was never measured, so this can't tell")?;
+        if rect[2] <= 0. || rect[3] <= 0. {
+            continue;
+        }
         if !inside(*rect, area) {
             found.push(json!({ "kind": "outside_panel", "update": update, "bounds": rect }));
         }
@@ -276,7 +339,7 @@ fn violations(
             found.push(json!({ "kind": "over_card", "update": update, "bounds": rect }));
         }
     }
-    found
+    Ok(found)
 }
 
 struct Check {
@@ -294,6 +357,9 @@ impl Check {
         let area = rect(&flag(args, "--panel-area").ok_or("--panel-area x,y,w,h")?)?;
         let card = flag(args, "--card").map(|text| rect(&text)).transpose()?;
         let question = flag(args, "--question");
+        if question.is_some() && card.is_none() {
+            return Err("--question needs --card: a card that isn't drawn can't be checked".into());
+        }
         let (w, h) = flag(args, "--window")
             .and_then(|size| {
                 let (w, h) = size.split_once('x')?;
@@ -410,7 +476,8 @@ fn run_check(args: &[String]) -> Result<i32, String> {
     let out = flag(args, "--out").ok_or("--out FILE")?;
     let updates: usize = flag(args, "--updates")
         .and_then(|n| n.parse().ok())
-        .ok_or("--updates N")?;
+        .filter(|n| *n > 0)
+        .ok_or("--updates N, at least one: no tree checked is no pass")?;
     let serving = args.iter().any(|arg| arg == "--serve");
     let png = flag(args, "--png");
     let mut check = Check::open(args)?;
@@ -449,10 +516,11 @@ fn run_check(args: &[String]) -> Result<i32, String> {
             continue;
         }
         let bounds = check.lay_out(tree.clone())?;
-        found.extend(violations(update, &bounds, check.area, check.card));
+        found.extend(violations(update, &bounds, check.area, check.card)?);
         trees.push(tree.to_json(&bounds));
     }
     let failed = !found.is_empty();
+    let host_pid = host.pid;
     write(
         if failed { "fail" } else { "pass" },
         Some(host.pid),
@@ -463,20 +531,37 @@ fn run_check(args: &[String]) -> Result<i32, String> {
         check.png(png)?;
     }
     if serving {
-        return serve(check, host, app_pid);
+        let held = Held { trees, found };
+        return serve(check, host, app_pid, held, |trees, found| {
+            write("fail", Some(host_pid), trees, found)
+        });
     }
     Ok(i32::from(failed))
 }
 
 enum Event {
     Command(Value),
+    Closed,
     HostLine(String),
     HostGone,
 }
 
+/// What the report holds, which a served tree can still turn to a failure.
+struct Held {
+    trees: Vec<Value>,
+    found: Vec<Value>,
+}
+
 /// The check held open, on JSON lines. The app owns the gesture serials: it mints one per press, and grants a focus
-/// move only on the newest serial, once.
-fn serve(mut check: Check, mut host: Host, app_pid: u32) -> Result<i32, String> {
+/// move only on the newest serial, once, and only until that press has been answered. A tree served later is checked
+/// like the first ones: a failure goes in the report and the exit code, which comes when stdin closes.
+fn serve(
+    mut check: Check,
+    mut host: Host,
+    app_pid: u32,
+    mut held: Held,
+    fail: impl Fn(&[Value], &[Value]) -> Result<(), String>,
+) -> Result<i32, String> {
     let (events, inbox) = mpsc::channel();
     let commands = events.clone();
     std::thread::spawn(move || {
@@ -485,7 +570,7 @@ fn serve(mut check: Check, mut host: Host, app_pid: u32) -> Result<i32, String> 
                 let _ = commands.send(Event::Command(value));
             }
         }
-        std::process::exit(0);
+        let _ = commands.send(Event::Closed);
     });
     let host_lines = std::mem::replace(&mut host.lines, mpsc::channel().1);
     std::thread::spawn(move || {
@@ -507,12 +592,12 @@ fn serve(mut check: Check, mut host: Host, app_pid: u32) -> Result<i32, String> 
     let mut moves: Vec<Value> = Vec::new();
     // The command waiting on the host; others wait behind it.
     let mut waiting: Option<Value> = None;
+    let mut since = Instant::now();
     let mut queue: std::collections::VecDeque<Value> = Default::default();
     loop {
         if waiting.is_none() {
             while let Some(command) = queue.pop_front() {
                 match command["cmd"].as_str().unwrap_or_default() {
-                    "ping" => say(json!({ "pong": command["seq"] })),
                     "focus_owner" => say(json!({ "owner": if owner { "panel" } else { "app" } })),
                     "focus_log" => say(json!({ "moves": moves })),
                     "invalidate" if !gone => {
@@ -536,12 +621,18 @@ fn serve(mut check: Check, mut host: Host, app_pid: u32) -> Result<i32, String> 
                     other => say(json!({ "error": format!("no command {other}") })),
                 }
                 if waiting.is_some() {
+                    since = Instant::now();
                     break;
                 }
             }
         }
         match inbox.recv_timeout(Duration::from_millis(20)) {
+            // Liveness is the app's own, so a ping passes whatever waits on the host.
+            Ok(Event::Command(command)) if command["cmd"] == "ping" => {
+                say(json!({ "pong": command["seq"] }))
+            }
             Ok(Event::Command(command)) => queue.push_back(command),
+            Ok(Event::Closed) => return Ok(i32::from(!held.found.is_empty())),
             Ok(Event::HostGone) => {
                 gone = true;
                 if waiting.take().is_some() {
@@ -557,9 +648,16 @@ fn serve(mut check: Check, mut host: Host, app_pid: u32) -> Result<i32, String> 
                     if granted {
                         spent = true;
                         owner = true;
+                    } else {
+                        // A refusal blurs the panel, whatever it held.
+                        owner = false;
                     }
                     moves.push(json!({ "serial": serial, "result": if granted { "moved" } else { "refused" } }));
                     let _ = host.send(json!({ "granted": granted }));
+                    continue;
+                }
+                if !reply["released"].is_null() {
+                    owner = false;
                     continue;
                 }
                 match waiting
@@ -568,24 +666,52 @@ fn serve(mut check: Check, mut host: Host, app_pid: u32) -> Result<i32, String> 
                     .and_then(|command| command["cmd"].as_str())
                 {
                     Some("invalidate") => match reply["tree"].as_str().map(parse) {
-                        Some(Ok(tree)) => match unknown_element(&tree) {
-                            Some(kind) => {
-                                say(json!({ "error": format!("unknown_element {kind}") }))
+                        Some(Ok(tree)) => {
+                            let update = held.trees.len();
+                            held.trees.push(tree.to_json(&[]));
+                            match unknown_element(&tree) {
+                                Some(kind) => {
+                                    held.found.push(json!({ "kind": "unknown_element", "update": update, "element": kind }));
+                                    fail(&held.trees, &held.found)?;
+                                    say(json!({ "error": format!("unknown_element {kind}") }));
+                                }
+                                None => {
+                                    let bounds = check.lay_out(tree.clone())?;
+                                    let found =
+                                        violations(update, &bounds, check.area, check.card)?;
+                                    if !found.is_empty() {
+                                        held.found.extend(found.iter().cloned());
+                                        fail(&held.trees, &held.found)?;
+                                    }
+                                    say(
+                                        json!({ "tree": tree.to_json(&bounds), "violations": found }),
+                                    );
+                                }
                             }
-                            None => {
-                                let bounds = check.lay_out(tree.clone())?;
-                                say(json!({ "tree": tree.to_json(&bounds) }));
-                            }
-                        },
+                        }
                         Some(Err(error)) => say(json!({ "error": error })),
                         None => say(json!({ "error": reply["error"] })),
                     },
-                    Some("press") => say(json!({ "serial": newest })),
+                    Some("press") => {
+                        spent = true;
+                        say(if reply["pressed"] == true {
+                            json!({ "serial": newest })
+                        } else {
+                            json!({ "error": reply["error"] })
+                        });
+                    }
                     Some("blur") => say(json!({})),
                     _ => {}
                 }
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if waiting.is_some() && since.elapsed() > STUCK {
+                    let _ = host.child.kill();
+                    gone = true;
+                    waiting = None;
+                    say(json!({ "error": "host_stuck" }));
+                }
+            }
             Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(0),
         }
     }
@@ -635,7 +761,7 @@ fn run_bench(args: &[String]) -> Result<(), String> {
         reports
             .push(json!({ "warmup": WARMUP, "scriptNs": script, "ipcNs": ipc, "totalNs": total }));
         host.send(json!({ "cmd": "jit" }))?;
-        let jit = host.next()?;
+        let jit = host.reply()?;
         last = Some((jit, host.pid, tree));
     }
     let (jit, host_pid, tree) = last.ok_or("--runs is 0")?;
