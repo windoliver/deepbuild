@@ -4146,6 +4146,33 @@ export interface SandboxDenied {
   evidence?: Array<string>;
 }
 
+/** schedule.run@1 */
+export interface ScheduleRun {
+  v: 1;
+  id: string;
+  kind: "schedule.run";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    schedule: string;
+    plugin: string;
+    phase: "queued" | "dispatched" | "ended";
+    due: number;
+    resumed?: boolean;
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID" | "uncounted";
+    cause?: string | null;
+    stopped?: boolean;
+    changes?: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** seed.cloned@1 */
 export interface SeedCloned {
   v: 1;
@@ -4166,6 +4193,35 @@ export interface SeedCloned {
     migration: string;
     template: string;
     cloned_at: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** send.made@1 */
+export interface SendMade {
+  v: 1;
+  id: string;
+  kind: "send.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    piece: string;
+    phase: "asked" | "claimed" | "answered" | "refused";
+    kind: string;
+    to: Array<string>;
+    plan: string;
+    schedule: string | null;
+    run: string | null;
+    call: string | null;
+    rule: string | null;
+    ask: string | null;
+    status?: number;
   };
   evidence?: Array<string>;
 }
