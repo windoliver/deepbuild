@@ -1,6 +1,8 @@
 {
   "title": "session.end@1",
   "description": "A session ended, as its agent's SessionEnd hook said.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

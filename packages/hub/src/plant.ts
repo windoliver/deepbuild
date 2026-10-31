@@ -51,7 +51,9 @@ export type Plant =
   // #823's: deep_wait reading its ask every 100 ms, and a stopping hub answering waiting calls as a success.
   | 'deep-wait-polls' | 'stop-answers-waiting'
   // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
-  | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app';
+  | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
+  // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
+  | 'silent-deprecated';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -85,6 +87,7 @@ const PLANTS: readonly string[] = [
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
+  'silent-deprecated',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

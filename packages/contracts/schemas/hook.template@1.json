@@ -1,6 +1,8 @@
 {
   "title": "hook.template@1",
   "description": "A hook context template an extension's manifest declares, under its `templates`: an extension outside DeepBuild's signed release adds context for the agent, and gives a deny's reason, only by filling one of these with typed values. Its text names each field as {field}.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "name": {

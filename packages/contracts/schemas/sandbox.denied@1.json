@@ -1,6 +1,8 @@
 {
   "title": "sandbox.denied@1",
   "description": "The platform sandbox refused something a run's process tried.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

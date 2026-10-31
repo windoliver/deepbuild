@@ -1,6 +1,8 @@
 {
   "title": "evidence.removed@1",
   "description": "The evidence store's retention pass removed a file.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "evidence"
   ],
