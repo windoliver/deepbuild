@@ -184,6 +184,15 @@ export async function runAddedTests(check: CommandCheck, tests: string[]): Promi
   return runs;
 }
 
+/**
+ * Why this kind can't read `command` in `checkout`, before any run of it: it starts no program, its exit is masked, or
+ * it starts one the tracers can't see into; null when its runs can say where each test failed (#875).
+ */
+export function unreadable(command: string, checkout: string): string | null {
+  if (!programsIn(command).length) return 'no program';
+  return maskIn(command) ?? untraced(command, checkout, pathOf(NODE_BIN));
+}
+
 /** The check.kind@1 fill (#13, kit from #314) for the kind `command`, on `host`. */
 export function commandCheckKind(host: Host): CheckRunnerFill {
   return {

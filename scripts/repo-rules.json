@@ -350,6 +350,14 @@
           "spec": "0.0.0",
           "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
         },
+        "@deepbuild/checks-command": {
+          "spec": "0.0.0",
+          "why": "Issue #875: the hub runs a claim's checks through the shipped command check kind, so a base run says where it failed; the hub imports it until the extension slots (#349) register it."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #875: the check.kind@1 types, CheckSpec and CheckResult, of the runs the hub hands the command check kind and the base-run rule reads."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
