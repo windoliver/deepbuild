@@ -1,6 +1,8 @@
 {
   "title": "adapter.event@1",
   "description": "One event an adapter mapped from a hook payload, before the hub stamps its own fields.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "agent": {

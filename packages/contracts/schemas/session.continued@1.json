@@ -1,6 +1,8 @@
 {
   "title": "session.continued@1",
   "description": "The core sent a stopped session's turn back by itself: once after a dropped connection or a rate limit, once after a context overflow (compacted first), or when the one task its stop raised closed. Only the core appends it; the hub routes the continue when it reads the event.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

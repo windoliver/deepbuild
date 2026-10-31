@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { claudeSettings, commands, installed, readJson } from './claude-settings.js';
+import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
 import { hubAddress, installedRoot } from './paths.js';
 import { activePlant as plant } from './plant.js';
@@ -123,6 +124,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   for (const where of hooksOff(file, settings, options.cwd, env)) add('claude.hooks_enabled', 'claude-code', 'hooks_disabled', 'fail', where.evidence, where.fix);
   if (record) for (const order of hookOrders(settings, commands(record))) add('claude.hook_order', 'claude-code', 'healthy', 'ok', order, 'Nothing to do: Claude Code starts a hook\'s entries together, so none waits on another; this is the order it reads them in.');
   items.push(...relationItems());
+  items.push(...deprecatedItems(root));
   const user = readJson(join(homedir(), '.claude.json'));
   const server = isObj(user?.mcpServers) ? user.mcpServers.deepbuild : undefined;
   if (isObj(server) && Array.isArray(server.args) && server.args.includes('mcp')) add('claude.mcp', 'claude-code', 'healthy', 'ok', `DeepBuild's MCP server is registered at user scope in ~/.claude.json (${String(server.command)} ${server.args.join(' ')})`, 'Nothing to do.');
@@ -259,6 +261,30 @@ function hookOrders(settings: Obj | undefined, ours: Set<string>): string[] {
     out.push(`${event}, in the order Claude Code reads its entries (it starts them together): ${listed.map((c, i) => `${i + 1}. ${theirs.includes(c) ? `another tool's ${c}` : `DeepBuild's ${c}`}`).join('; ')}`);
   }
   return out;
+}
+
+/**
+ * Each installed package whose manifest calls a deprecated method (#139): named with the method, what replaced it and
+ * the release that stops serving it, so the package is updated before it stops working.
+ */
+function deprecatedItems(root: string): Item[] {
+  const installed = readJson(join(root, 'extensions', 'installed.json'));
+  if (!installed) return [];
+  const table = rpcTable();
+  const items: Item[] = [];
+  for (const entry of Object.values(installed)) {
+    if (!isObj(entry) || typeof entry.folder !== 'string') continue;
+    const manifest = readJson(join(entry.folder, 'deepbuild.json'));
+    if (!manifest) continue;
+    for (const e of deprecatedCalls(manifest, table)) {
+      items.push({
+        item: `extensions.deprecated`, agent: 'deepbuild', code: 'deprecated_used', level: 'warn',
+        evidence: `${String(entry.id)} calls ${e.method}, deprecated since ${e.deprecated_since} and served through ${e.replaced_by}${e.stops_serving ? ` until ${e.stops_serving}` : ''}`,
+        fix: `Update ${String(entry.id)} to call ${e.replaced_by}${e.stops_serving ? ` before ${e.stops_serving}` : ''}.`,
+      });
+    }
+  }
+  return items;
 }
 
 /**

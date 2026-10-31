@@ -1,6 +1,8 @@
 {
   "title": "capability.refused@1",
   "description": "Capabilities refused a call, for its grant, its quota or its schema: the writer from the caller's connection, never the call's arguments or headers; the clause or limit it broke; and a digest of the call, never its values.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

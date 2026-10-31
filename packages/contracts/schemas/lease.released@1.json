@@ -1,6 +1,8 @@
 {
   "title": "lease.released@1",
   "description": "A lease was released.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "leases"
   ],
