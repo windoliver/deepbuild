@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+use super::core_ops::Edits;
 use super::{Access, Bound, Loaded, Node, OpError, Outside, Session, Tokens, Val, VIEW_INPUTS};
 use crate::registry::{Sealed, SealedOp, TableValue};
 
@@ -254,22 +255,18 @@ impl<'a> View<'a> {
         own: impl Iterator<Item = &'c (String, usize)>,
     ) -> Result<Val, OpError> {
         let l = self.l;
-        let mut val = self.output(&l.nodes[w], array)?;
-        let mut folded: Option<Value> = None;
+        let val = self.output(&l.nodes[w], array)?;
+        let mut edits = Vec::new();
         for (c, cn) in own {
             self.note(c);
-            if let Val::Json(edits) = self.output(&l.nodes[*cn], c)? {
-                let base = folded.get_or_insert_with(|| match &val {
-                    Val::Json(v) => (**v).clone(),
-                    _ => Value::Null,
-                });
-                apply_edits(base, &edits);
+            if let Some(e) = self.output(&l.nodes[*cn], c)?.as_typed::<Edits>() {
+                edits.push(e);
             }
         }
-        if let Some(v) = folded {
-            val = Val::json(v);
+        if edits.is_empty() {
+            return Ok(val);
         }
-        Ok(val)
+        Ok(super::core_ops::fold_edits(&val, &edits))
     }
 
     /// An array the operator declared, on its item (or per document, the document's), with
@@ -295,10 +292,7 @@ impl<'a> View<'a> {
 
     /// A typed array the operator declared; `None` where nothing wrote it.
     pub fn typed<T: Any + Send + Sync>(&mut self, name: &str) -> Result<Option<Arc<T>>, OpError> {
-        Ok(match self.array(name)? {
-            Some(Val::Any(v, _)) => v.downcast::<T>().ok(),
-            _ => None,
-        })
+        Ok(self.array(name)?.and_then(|v| v.as_typed::<T>()))
     }
 
     /// Per document: an item array the operator declared, on every item that has it, in ID
@@ -437,39 +431,8 @@ impl<'a> View<'a> {
     }
 }
 
-/// Applies a contribution's edits to the owner's value: each `{op: set | add, path, value}`,
-/// a `set` writing the value at the path and an `add` adding numbers (element by element for
-/// an array) there.
-pub fn apply_edits(base: &mut Value, edits: &Value) {
-    let Some(list) = edits.as_array() else {
-        return;
-    };
-    for e in list {
-        let path: Vec<String> = e
-            .get("path")
-            .and_then(Value::as_array)
-            .map(|p| {
-                p.iter()
-                    .map(|s| match s {
-                        Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let value = e.get("value").cloned().unwrap_or(Value::Null);
-        let add = e.get("op").and_then(Value::as_str) == Some("add");
-        let slot = slot_at(base, &path);
-        if add {
-            add_into(slot, &value);
-        } else {
-            *slot = value;
-        }
-    }
-}
-
 /// The value at `path` inside `base`, made where missing.
-fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value {
+pub(super) fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value {
     let mut at = base;
     for step in path {
         let index = step
@@ -492,7 +455,7 @@ fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value {
     at
 }
 
-fn add_into(slot: &mut Value, value: &Value) {
+pub(super) fn add_into(slot: &mut Value, value: &Value) {
     match (slot, value) {
         (Value::Array(xs), Value::Array(ys)) => {
             for (x, y) in xs.iter_mut().zip(ys) {
