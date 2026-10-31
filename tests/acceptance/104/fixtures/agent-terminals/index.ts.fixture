@@ -1,0 +1,92 @@
+// The plug-in built from one sentence (#104 AC1): "Host my agents' terminals in tabs, and keep them running when I
+// quit the app". Its manifest asks for run-as-you and declares its host process: it runs terminals, lives past the
+// app, and owns them. Each tab is one terminal the hub hosts for it; the tabs come from `deep.terminal.list()`, so
+// a later launch shows again the terminals an earlier one opened.
+//
+// Actions (what its panel and your words call):
+// - open: opens a terminal running `argv` in `cwd`, titled `title`; answers {opened: {terminal, run, pid}}, or
+//   {refused: the host's message} when the hub refuses the command
+// - tabs: its tabs, one per open terminal: {tabs: [{terminal, title, pid, run}]}
+// - read: a terminal's output from a byte offset: {text, next}
+//
+// Its own tests, registered as check kinds of its own and run by `host.runCheck`:
+// - hosts: opens a terminal titled `heartbeat` (a shell printing "beat 1", "beat 2", ... every 0.1 s) and passes
+//   once its tab shows three beats, in order
+// - shows_again: run at a later launch: its tabs show the heartbeat terminal exactly once, its output holds every
+//   beat from 1 with no gap or repeat, and at least 5 more come within 1.5 s: it kept running and is shown again
+const HEARTBEAT = ['/bin/sh', '-c', 'i=0; while :; do i=$((i+1)); echo "beat $i"; sleep 0.1; done'];
+
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const beats = (text: string): number[] => [...String(text).matchAll(/beat (\d+)/g)].map((m) => Number(m[1]));
+const inOrder = (seen: number[]): boolean => seen.every((b, i) => b === i + 1);
+const passed = (testsRun: number) => ({ outcome: 'passed', testsRun, failures: [], evidence: [], read: [], mask: null });
+const failed = (test: string, why: string) => ({
+  outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+  failures: [{ test, file: 'index.ts', line: 1, stack: null, assertion: true, message: why }],
+});
+
+export default function (deep: any): void {
+  deep.registerAction('ext.agent-terminals.open', {
+    declares: 'change',
+    input: {
+      type: 'object',
+      properties: { argv: { type: 'array', items: { type: 'string' }, minItems: 1 }, cwd: { type: 'string' }, title: { type: 'string' } },
+      required: ['argv', 'cwd', 'title'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    try {
+      const t = await deep.terminal.open({ argv: input.argv, cwd: input.cwd, cols: 120, rows: 36, title: input.title });
+      return { opened: { terminal: t.terminal, run: t.run, pid: t.pid } };
+    } catch (e) {
+      return { refused: message(e) };
+    }
+  });
+
+  deep.registerAction('ext.agent-terminals.tabs', { declares: 'read', input: { type: 'object' } }, async () => {
+    const terminals: any[] = await deep.terminal.list();
+    return { tabs: terminals.map((t) => ({ terminal: t.terminal, title: t.title, pid: t.pid, run: t.run })) };
+  });
+
+  deep.registerAction('ext.agent-terminals.read', {
+    declares: 'read',
+    input: {
+      type: 'object',
+      properties: { terminal: { type: 'string' }, from: { type: 'integer', minimum: 0 } },
+      required: ['terminal', 'from'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    const r = await deep.terminal.read(input.terminal, input.from);
+    return { text: r.text, next: r.next };
+  });
+
+  deep.registerCheck('ext.agent-terminals.hosts', async (_spec: unknown, ctx: any) => {
+    let t: any;
+    try {
+      t = await deep.terminal.open({ argv: HEARTBEAT, cwd: ctx.checkout, cols: 80, rows: 24, title: 'heartbeat' });
+    } catch (e) {
+      return failed('hosts', `opening the heartbeat terminal was refused: ${message(e)}`);
+    }
+    const until = Date.now() + 10_000;
+    for (;;) {
+      const seen = beats((await deep.terminal.read(t.terminal, 0)).text);
+      if (seen.length >= 3) return inOrder(seen) ? passed(1) : failed('hosts', `the heartbeat's tab shows beats out of order: ${seen.slice(0, 20).join(', ')}`);
+      if (Date.now() > until) return failed('hosts', `the heartbeat's tab showed ${seen.length} beats in 10 s`);
+      await sleep(100);
+    }
+  });
+
+  deep.registerCheck('ext.agent-terminals.shows_again', async () => {
+    const tabs: any[] = (await deep.terminal.list()).filter((t: any) => t.title === 'heartbeat');
+    if (tabs.length !== 1) return failed('shows_again', `its tabs show ${tabs.length} heartbeat terminals, not 1`);
+    const first = beats((await deep.terminal.read(tabs[0].terminal, 0)).text);
+    await sleep(1500);
+    const later = beats((await deep.terminal.read(tabs[0].terminal, 0)).text);
+    if (!first.length || !inOrder(first)) return failed('shows_again', `the heartbeat's tab doesn't show every beat from 1 in order: ${first.slice(0, 20).join(', ')}`);
+    if (!inOrder(later)) return failed('shows_again', `the heartbeat's beats lost or repeated one after the first read: ${later.slice(first.length - 1, first.length + 20).join(', ')}`);
+    if (later.length < first.length + 5) return failed('shows_again', `the heartbeat isn't running: ${first.length} beats, then ${later.length} 1.5 s later`);
+    return passed(2);
+  });
+}

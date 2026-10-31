@@ -2275,6 +2275,36 @@ export interface DocPatched {
   evidence?: Array<string>;
 }
 
+/** doc.patched@2 */
+export interface DocPatchedV2 {
+  v: 2;
+  id: string;
+  kind: "doc.patched";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    doc: string;
+    rev: number;
+    patch: string | null;
+    writer: "you" | "shell" | "record" | "agent" | "plugin";
+    achieved: {
+      created: { [key: string]: number };
+      updated: number;
+      deleted: { [key: string]: number };
+      unchanged: boolean;
+    };
+    hash: string;
+    layer: string;
+    thread: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** doctor.item@1 */
 export interface DoctorItem {
   code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "unknown";
@@ -2396,6 +2426,15 @@ export type ExitCode = "0" | "1" | "2" | "3";
 export interface ExtensionEdges {
   conflicts?: Array<string>;
   kernel?: Array<string>;
+}
+
+/** extension.host@1 */
+export interface ExtensionHost {
+  host?: {
+    runs: "terminals";
+    lives: "past_app";
+    owns: Array<"terminals">;
+  };
 }
 
 /** extension.manifest@1 */
@@ -3682,6 +3721,24 @@ export interface RunFinished {
     points_to: string | null;
     findings: Array<string>;
     environment: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.kept@1 */
+export interface RunKept {
+  v: 1;
+  id: string;
+  kind: "run.kept";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
   };
   evidence?: Array<string>;
 }
