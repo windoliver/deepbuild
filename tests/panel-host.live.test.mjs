@@ -176,6 +176,54 @@ test('a served panel that stays in bounds exits 0 when its client closes', async
   assert.equal(await session.exited, 0);
 });
 
+test('a served tree that couldn\'t be checked ends inconclusive, never in a pass', async () => {
+  const { session, out } = await opened(panel(
+    'div().size_full()',
+    'render() { if (this.n++ >= 1) throw new Error("late"); return div().size_full(); } n = 0;',
+  ).replace('  render() { return div().size_full(); }\n', ''));
+  assert.equal(report(out).result, 'pass');
+  assert.ok((await session.send({ cmd: 'invalidate' }))?.error);
+  assert.equal(report(out).result, 'inconclusive');
+  session.child.stdin.end();
+  assert.equal(await session.exited, 2);
+});
+
+test('a host that dies leaves the check inconclusive, and a command crossing its death is still answered', async () => {
+  const { record, bins } = spike();
+  const out = join(scratch(), 'report.json');
+  const session = serve(record, bins, writePanel(panel('div().size_full()')), { area, updates: 1, out });
+  const ready = await session.next(60_000);
+  process.kill(ready.hostPid, 'SIGKILL');
+  assert.equal((await session.send({ cmd: 'invalidate' }, 5000))?.error, 'host_gone');
+  session.child.stdin.end();
+  assert.equal(await session.exited, 2);
+  assert.equal(report(out).result, 'inconclusive');
+});
+
+test('closing stdin right after a command still checks what that command brings', async () => {
+  const { session, out } = await opened(panel(
+    'this.n++ >= 1 ? div().absolute().left(-500).top(0).w(50).h(50) : div().size_full()',
+    'n = 0;',
+  ));
+  session.child.stdin.end(`${JSON.stringify({ cmd: 'invalidate' })}\n`);
+  assert.equal(await session.exited, 1);
+  const written = report(out);
+  assert.equal(written.result, 'fail');
+  assert.deepEqual(written.trees.at(-1).bounds, written.violations[0].bounds);
+});
+
+test('a card with no question, a window of no size and an area outside the window are refused', async () => {
+  const { bins } = spike();
+  const dir = writePanel(panel('div()'));
+  const argv = (extra) => [bins.app, 'panel-check', '--host', bins.host, '--panel', dir, '--origin', 'agent_built', '--updates', '1', '--out', join(scratch(), 'r.json'), ...extra];
+  const size = ['--window', '800x600'];
+  for (const extra of [
+    [...size, '--panel-area', '0,0,10,10', '--card', '20,20,10,10'],
+    ['--window', 'NaNxNaN', '--panel-area', '0,0,10,10'],
+    [...size, '--panel-area', '700,0,200,10'],
+  ]) assert.equal((await run(argv(extra))).status, 2, extra.join(' '));
+});
+
 test('a ping is answered while the host is busy with a render', async () => {
   const { session } = await opened(panel(
     'div().size_full()',
