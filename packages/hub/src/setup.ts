@@ -101,7 +101,8 @@ async function install(cli: string, quiet = false): Promise<number> {
     if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
     const user = planned.get(userFile)!;
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] } } });
+    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools.
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: process.execPath, args: [cli, 'mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -237,6 +238,7 @@ async function undo(): Promise<number> {
   const mcpOut = edited(userFile, (v) => {
     const servers = isObj(v.mcpServers) ? { ...v.mcpServers } : {};
     delete servers.deepbuild;
+    delete servers['deep-actions'];
     return { ...v, mcpServers: servers };
   });
   // The planted wrong program takes our entries out and writes the JSON again, whatever you had.
