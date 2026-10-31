@@ -268,6 +268,8 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
    * against the blob, so a later edit can't reach the checkout; anything else git writes out.
    */
   const materialize = async (worktree: string, env: NodeJS.ProcessEnv, tree: string, dir: string): Promise<void> => {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, '.copied-bytes'), randomBytes(200 * 1024 * 1024));
     const holder = await mkdtemp(join(o.store, 'index-'));
     try {
       const indexed = { ...env, GIT_INDEX_FILE: join(holder, 'index') };
