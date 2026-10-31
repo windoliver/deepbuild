@@ -210,6 +210,20 @@ pub enum Planted {
     TabRedrawsAt30hz,
     /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
     TabDrawsCapture,
+    /// #105: the capture gate takes any press of the chord, synthetic ones too, as the hold.
+    RecordsWithoutHold,
+    /// #105: the recorder ignores `max` and keeps frames for as long as the chord is held.
+    RecordsPastMax,
+    /// #105: a saved bug capture is attached to its ask with no check drafted.
+    DraftsNoCheck,
+    /// #105: each frame, as it arrives, is appended to the record holding its bytes in base64.
+    FramesToRecord,
+    /// #105: the frames so far are stored as an asset by hash each time a frame arrives.
+    KeepsAssetAfterCrash,
+    /// #105: the saved capture is labelled redaction `complete`.
+    LabelsRedactionComplete,
+    /// #105: a send delivers its files at once, unasked.
+    SendsWithoutApproval,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -574,6 +588,8 @@ pub enum Call {
     Ring(Box<crate::ring::RingCall>),
     /// Terminals, streams and the session page's terminal tab (#402).
     Term(Box<crate::terminal::TermCall>),
+    /// A capture for a bug report, its ask and its send (#105).
+    Capture(Box<crate::capture::CaptureCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -632,6 +648,8 @@ pub struct Scenario {
     pub quotas: BTreeMap<String, Quota>,
     pub clock: Option<Clock>,
     pub commit_fault: Option<CommitFault>,
+    /// The hub ends at this time as SIGKILL would (#105).
+    pub kill_at: Option<i64>,
     /// Each document session's epoch counter starts here (#387: a long run without running it).
     pub epoch_start: u32,
     /// Ties break by a shuffle from this seed instead of by name and order (#387).
@@ -721,6 +739,8 @@ pub struct Hub<'a> {
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
     pub terms: crate::terminal::Terms,
+    /// Captures for bug reports, their asks and sends (#105).
+    pub capturing: crate::capture::Capturing,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -798,10 +818,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         shuffle: scenario.shuffle,
         planted,
         timing: None,
-        pool: Some(Arc::new(Workers {
-            priority: Priority::Frame,
-            performance_cores: crate::workers::performance_cores(),
-        })),
+        pool: Some(Arc::new(Workers::at(Priority::Frame))),
         threads: scenario.threads,
         hash: scenario.hash,
     }
@@ -855,6 +872,10 @@ impl<'a> Hub<'a> {
                 scenario.placement_planted,
             ),
             terms: crate::terminal::Terms::default(),
+            capturing: crate::capture::Capturing::restore(
+                scenario.state.as_deref(),
+                scenario.planted,
+            ),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -1315,6 +1336,7 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Capture(c) => self.capture_call(c),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {

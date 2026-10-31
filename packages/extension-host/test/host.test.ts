@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CheckSpec } from '@deepbuild/conformance';
 import { openAsks } from '@deepbuild/asks';
 import { d1Digest, fixtures } from '@deepbuild/contracts';
-import { openRecord, type RecordStore } from '@deepbuild/record';
+import { openRecord, ulid, type RecordStore } from '@deepbuild/record';
 import { openSupervisor, type Supervisor } from '@deepbuild/supervisor';
 import { peer } from '../runtime/deep.mjs';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '../src/index.js';
@@ -878,5 +878,89 @@ describe('#351 the kernel contract versions a package runs on', () => {
     const now = await h.install({ from: pkgOf('test/present', none, { kernel: ['extension.manifest@1', 'hook.request@3'] }), builtBy: null });
     expect((await h.check(now)).passed, 'its kernel declaration passes conformance').toBe(true);
     expect((await h.installed()).map((p) => p.id)).toEqual(['test/present']);
+  }, 60_000);
+});
+// #363's sentences the blind suite reaches no fixture for: the repos or workspaces a record grant names, a release
+// package's full access, the notices a call sends in its `changed`, a failed call naming its entered call, and a
+// request ID retried after the host restarts.
+describe('#363 record grants and action calls', () => {
+  let opened = 0;
+  beforeEach(() => { opened = closing.length; });
+  afterEach(async () => { for (const c of closing.splice(opened).reverse()) await c.close(); }, 60_000);
+  const all = (record: RecordStore) => record.read({ after: 0, limit: 10_000 });
+  async function enable(h: ExtensionHost, from: string, grant?: { record: string[]; projects?: string[] }): Promise<void> {
+    const p = await h.install({ from, builtBy: null, ...(grant ? { grant } : {}) });
+    const checked = await h.check(p);
+    expect(checked.passed, checked.reasons.join('; ')).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+  }
+  const READER = "export default function (deep: any): void {\n  deep.registerAction('ext.reader.tasks', { declares: 'read', input: { type: 'object' } }, async () => deep.record.query({ kinds: ['task.created'] }));\n}\n";
+  const task = (title: string) => ({ v: 1, id: ulid(Date.now()), kind: 'task.created', ts: Date.now(), data: { task_ref: `task:${ulid(Date.now())}`, thread: ulid(Date.now()), owner: 'you', title } });
+  const tasksOf = async (h: ExtensionHost, id: string): Promise<{ project?: string; data: { title: string } }[]> => {
+    const r = await h.callAction({ action: 'ext.reader.tasks', target: { handle: `ext:${id}`, version: '1.0.0' }, input: {}, caller: YOU });
+    expect(r.status, JSON.stringify(r)).toBe('done');
+    return (r as { output: { project?: string; data: { title: string } }[] }).output;
+  };
+
+  it('a record grant that names a repo or workspace reads only that project\'s events', async () => {
+    const { h, record } = await world();
+    await record.append({ writer: 'core', actor: 'you', scope: 'you', project: 'repo-a' }, task('in a'));
+    await record.append({ writer: 'core', actor: 'you', scope: 'you', project: 'repo-b' }, task('in b'));
+    await enable(h, pkgOf('test/reader', READER, { access: { words: ['record'] }, actions: ['ext.reader.tasks'] }), { record: ['task.created'], projects: ['repo-a'] });
+    expect((await tasksOf(h, 'test/reader')).map((e) => e.project)).toEqual(['repo-a']);
+  }, 60_000);
+
+  it('events delivered to a subscriber are filtered by its grant, as a query is', async () => {
+    const { h, record } = await world();
+    const done = (title: string) => ({ v: 1, id: ulid(Date.now()), kind: 'task.completed', subject: 'session:01K74G1Z3X5V7T9R1P3N5M7K9H', ts: Date.now(), data: { agent_task: '1', title } });
+    await record.append({ writer: 'hook', actor: 'you', scope: 'you', project: 'repo-a' }, done('secret a'));
+    await record.append({ writer: 'hook', actor: 'you', scope: 'you', project: 'repo-b' }, done('secret b'));
+    const code = "const got: any[] = [];\nexport default function (deep: any): void {\n  deep.on('task.completed', (e: any) => { got.push(e); });\n  deep.registerAction('ext.reader.tasks', { declares: 'read', input: { type: 'object' } }, async () => got);\n}\n";
+    await enable(h, pkgOf('test/reader', code, { access: { words: ['record'] }, actions: ['ext.reader.tasks'] }), { record: ['task.completed'], projects: ['repo-a'] });
+    await h.deliver((await all(record)).filter((e) => e.kind === 'task.completed'));
+    expect((await tasksOf(h, 'test/reader')).map((e) => ({ project: e.project, title: e.data.title }))).toEqual([{ project: 'repo-a', title: '-' }]);
+  }, 60_000);
+
+  it('a release package in the hub reads every event whole, past its grant', async () => {
+    const folder = pkgOf('test/reader', READER, { access: { words: ['record'] }, actions: ['ext.reader.tasks'] });
+    const { h, record } = await world({ release: [{ id: 'test/reader', version: '1.0.0', digest: packageDigest(folder) }] });
+    await record.append({ writer: 'core', actor: 'you', scope: 'you', project: 'repo-a' }, task('kept whole'));
+    await enable(h, folder, { record: [] });
+    expect((await tasksOf(h, 'test/reader')).map((e) => e.data.title)).toEqual(['kept whole']);
+  }, 60_000);
+
+  it('the notices a send action sends are in its changed, read from the record', async () => {
+    const { h, record } = await world();
+    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => ({ output: { sent: await deep.notices.send({ readings: [] }) }, report: { verified: true, checked: 'sent' } }));";
+    await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${send}\n}\n`, { actions: ['ext.acts.tell'], notices: ['ext.acts.alert'] }));
+    const r = await h.callAction({ action: 'ext.acts.tell', target: { handle: 'ext:test/acts', version: '1.0.0' }, input: {}, caller: YOU, request: 'r1' });
+    expect(r.status, JSON.stringify(r)).toBe('done');
+    const notice = (r as { output: { sent: string } }).output.sent;
+    const reported = (await all(record)).filter((e) => e.kind === 'action.reported').map((e) => (e.data as { changed: string[] }).changed);
+    expect(reported).toEqual([[notice]]);
+  }, 60_000);
+
+  it('a change whose handler fails is refused as started, naming the call it was entered under', async () => {
+    const { h, record } = await world();
+    const boom = "deep.registerAction('ext.acts.boom', { declares: 'change', input: { type: 'object' } }, async () => { throw Error('broke'); });";
+    await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${boom}\n}\n`, { actions: ['ext.acts.boom'] }));
+    const r = await h.callAction({ action: 'ext.acts.boom', target: { handle: 'ext:test/acts', version: '1.0.0' }, input: {}, caller: YOU, request: 'r1' });
+    const [entered] = (await all(record)).filter((e) => e.kind === 'action.entered');
+    expect(r).toMatchObject({ status: 'refused', started: true, call: (entered!.data as { call: string }).call });
+  }, 60_000);
+
+  it('a request ID retried after the host restarts runs nothing again, and other input under it is refused', async () => {
+    const { h, record, again } = await world();
+    const bump = "deep.registerAction('ext.acts.bump', { declares: 'change', input: { type: 'object', properties: { n: { type: 'integer' } } } }, async (input: any) => ({ output: { n: input.n }, report: { verified: true, checked: 'n' } }));";
+    await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${bump}\n}\n`, { actions: ['ext.acts.bump'] }));
+    const target = { handle: 'ext:test/acts', version: '1.0.0' };
+    expect((await h.callAction({ action: 'ext.acts.bump', target, input: { n: 1 }, caller: YOU, request: 'r1' })).status).toBe('done');
+    await h.close();
+    const restarted = await again();
+    const [listed] = await restarted.installed();
+    expect((await restarted.load(listed!)).status).toBe('loaded');
+    expect((await restarted.callAction({ action: 'ext.acts.bump', target, input: { n: 1 }, caller: YOU, request: 'r1' })).status).toBe('done');
+    expect((await restarted.callAction({ action: 'ext.acts.bump', target, input: { n: 2 }, caller: YOU, request: 'r1' })).status).toBe('refused');
+    expect((await all(record)).filter((e) => e.kind === 'action.entered')).toHaveLength(1);
   }, 60_000);
 });

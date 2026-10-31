@@ -646,6 +646,30 @@ function judgeEfficiency(current) {
   console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
 }
 
+// #105: a bug capture of the second display through `deep-show run` on the virtual clock: picked, the chord held for
+// 119.5 s, released and saved; fails unless the saved asset holds every frame of the hold.
+workloads['capture-save'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const displays = RING_DISPLAYS.map((d) => ({ ...d, feed: `feed-${d.uuid}` }));
+    const down = 3 * SEC, up = down + 119.5 * SEC;
+    const calls = [
+      { call: 'capture', at: 2 * SEC, session: 'alpha', source: 'screen', words: 'The legend overlaps the chart' },
+      { call: 'pick', at: 2.5 * SEC, display: 'B' },
+      { call: 'shortcut', at: down, phase: 'down', source: 'hid' },
+      { call: 'shortcut', at: up, phase: 'up', source: 'hid' },
+      { call: 'captures', at: up + SEC },
+    ];
+    const sessions = { alpha: { thread: 'thread-alpha', name: 'Alpha', process: { pid: 4100, start: 1_000 } } };
+    const [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, sessions, clock: { lead: 1_411_200, check: 352_800 }, displays, window: [1200, 700], panels: {}, calls })]);
+    const frames = answer.replies?.[4]?.captures?.[0]?.frames;
+    // B's vsyncs in [down, up): 60 Hz for 119.5 s.
+    if (answer.ok !== true || frames !== 119.5 * 60) throw Error(`the capture didn't keep every frame: ${JSON.stringify(answer).slice(0, 2000)}`);
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
+
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
 await workloads[task]();

@@ -83,49 +83,40 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
 }
 
 /**
+ * Rewrites `<dir>/rules.json` with the members `change` returns, keeping every other, and only when it returns some. No
+ * rules.json, or one deep-hook can't read either, has nothing to change.
+ */
+function rewriteRules(dir: string, change: (current: Obj & { entries: Obj }) => Obj | undefined): void {
+  const file = join(dir, 'rules.json');
+  let current: Obj;
+  try {
+    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
+  } catch {
+    return;
+  }
+  const changed = isObj(current.entries) ? change(current as Obj & { entries: Obj }) : undefined;
+  if (changed) writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, ...changed }, null, 2)}\n`));
+}
+
+/**
  * Copies your standing rules for cloud resources into `<dir>/rules.json` (#23), keeping every other member, so
  * deep-hook lets a call one covers through with the hub down. Written only when they changed.
  */
 export function writeStanding(dir: string, standing: readonly unknown[]): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    // No rules.json, or one deep-hook can't read either: nothing to add a rule to.
-    return;
-  }
-  if (!isObj(current.entries) || JSON.stringify(current.standing ?? []) === JSON.stringify(standing)) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, standing }, null, 2)}\n`));
+  rewriteRules(dir, (current) => (JSON.stringify(current.standing ?? []) === JSON.stringify(standing) ? undefined : { standing }));
 }
 
 /** Takes the entries `drops` names out of `<dir>/rules.json` (#111), keeping every other. */
 export function dropEntries(dir: string, drops: (name: string) => boolean): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    return;
-  }
-  if (!isObj(current.entries) || !Object.keys(current.entries).some(drops)) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries: Object.fromEntries(Object.entries(current.entries).filter(([name]) => !drops(name))) }, null, 2)}\n`));
+  rewriteRules(dir, ({ entries }) => (Object.keys(entries).some(drops) ? { entries: Object.fromEntries(Object.entries(entries).filter(([name]) => !drops(name))) } : undefined));
 }
 
 /** Copies the directions you rejected into `<dir>/rules.json` as `rejected-*` entries (#111), keeping every other. */
 export function writeRejected(dir: string, rejected: Obj): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    return;
-  }
-  if (!isObj(current.entries)) return;
-  const others = Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-')));
-  const entries = { ...others, ...rejected };
-  if (JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort())) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries }, null, 2)}\n`));
+  rewriteRules(dir, (current) => {
+    const entries = { ...Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-'))), ...rejected };
+    return JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort()) ? undefined : { entries };
+  });
 }
 
 const USAGE = 'Usage: deep guard add <file>';
