@@ -297,13 +297,7 @@ impl<'a> Hub<'a> {
         let drawn = self
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| {
-            let [w, h] = drawn.frame.size;
-            [
-                w.round().clamp(1.0, 8192.0) as u16,
-                h.round().clamp(1.0, 8192.0) as u16,
-            ]
-        });
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
         let rgba = self.renderer.raster(&drawn, size, Some(ground));
         let png = snapshot::png(rgba, size);

@@ -218,8 +218,7 @@ export class Holds {
       let held: { ask: string; tools: string[] } | undefined;
       if (before.length && watched) {
         // Held by an earlier update's ask already, a tool waits on that one: one ask per server update.
-        const changed = list.tools.filter((t) => !this.reads(list.server, t.name, t.hints, cwd)
-          && !before.some((l) => l.held?.tools.includes(t.name) && l.tools.some((u) => u.name === t.name && u.digest === t.digest)));
+        const changed = list.tools.filter((t) => !this.reads(list.server, t.name, t.hints, cwd) && !this.coveredBy(before, t.name, t.digest));
         const fresh = [];
         for (const t of changed) if (!await this.trusted(before, t.name, t.digest)) fresh.push(t);
         if (fresh.length) {

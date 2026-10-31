@@ -98,6 +98,11 @@ fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
 }
 
+/// A refusal's code.
+fn refused(code: &str) -> Value {
+    json!({"code": code})
+}
+
 /// Standard base64 (RFC 4648, with padding) to bytes; `None` for anything else.
 fn base64(text: &str) -> Option<Vec<u8>> {
     let value = |c: u8| -> Option<u32> {
@@ -208,6 +213,19 @@ fn entries<T>(
     }
 }
 
+/// An optional `[w, h]` in whole px, each one `ok` keeps; absent is `Some(None)`.
+fn px_size(value: Option<&Value>, ok: impl Fn(&u16) -> bool) -> Option<Option<[u16; 2]>> {
+    let Some(v) = value else {
+        return Some(None);
+    };
+    let s: Vec<u16> = v
+        .as_array()?
+        .iter()
+        .map(|n| n.as_u64().and_then(|n| u16::try_from(n).ok()).filter(&ok))
+        .collect::<Option<_>>()?;
+    Some(Some(<[u16; 2]>::try_from(s.as_slice()).ok()?))
+}
+
 fn strings(value: Option<&Value>) -> Option<Vec<String>> {
     match value {
         None => Some(Vec::new()),
@@ -262,6 +280,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             None => Some(default),
             Some(t) => flicks(t.as_str()?),
         }
+    };
+    let flag = |k: &str| match c.get(k) {
+        None => Some(false),
+        Some(b) => b.as_bool(),
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
@@ -360,10 +382,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "ask" => {
             let pointer = match c.get("pointer") {
                 None => None,
-                Some(p) => {
-                    let a = p.as_array().filter(|a| a.len() == 2)?;
-                    Some([a[0].as_f64()?, a[1].as_f64()?])
-                }
+                Some(p) => Some(input::point(p)?),
             };
             return Some(Call::Ask {
                 panel: c.get("panel")?.as_str()?.to_string(),
@@ -374,27 +393,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "messages" => return Some(Call::Messages(c.get("session")?.as_str()?.to_string())),
         "render_back" => {
-            let size = match c.get("size") {
-                None => None,
-                Some(v) => {
-                    let s: Vec<u16> = v
-                        .as_array()?
-                        .iter()
-                        .map(|n| {
-                            n.as_u64()
-                                .and_then(|n| u16::try_from(n).ok())
-                                .filter(|n| *n > 0)
-                        })
-                        .collect::<Option<_>>()?;
-                    Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
-                }
-            };
             return Some(Call::RenderBack {
                 session: c.get("session")?.as_str()?.to_string(),
                 doc: doc()?,
                 t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
-                size,
+                size: px_size(c.get("size"), |n| *n > 0)?,
             });
         }
         "screen" => return Some(Call::Screen),
@@ -420,21 +424,6 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             if view.keys().any(|k| k != "locale" && k != "reduced_motion") {
                 return None;
             }
-            let size = match c.get("size") {
-                None => None,
-                Some(v) => {
-                    let s: Vec<u16> = v
-                        .as_array()?
-                        .iter()
-                        .map(|n| n.as_u64().and_then(|n| u16::try_from(n).ok()))
-                        .collect::<Option<_>>()?;
-                    Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
-                }
-            };
-            let flag = |k: &str| match c.get(k) {
-                None => Some(false),
-                Some(b) => b.as_bool(),
-            };
             return Some(Call::Eval(Box::new(Eval {
                 doc: doc()?,
                 t: crate::time::eval_time(c.get("t"))?,
@@ -445,14 +434,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                     Some(p) => Some(p.as_str()?.to_string()),
                 },
                 pixels: flag("pixels")?,
-                size,
+                size: px_size(c.get("size"), |_| true)?,
             })));
         }
         "frames" => {
-            let flag = |k: &str| match c.get(k) {
-                None => Some(false),
-                Some(b) => b.as_bool(),
-            };
             // #856: a whole revision arriving at a frame's latch.
             let revise = match c.get("revise") {
                 None => None,
@@ -619,21 +604,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
             .collect::<Option<_>>()?,
     };
-    let size = match c.get("size") {
-        None => None,
-        Some(v) => {
-            let s: Vec<u16> = v
-                .as_array()?
-                .iter()
-                .map(|n| {
-                    n.as_u64()
-                        .and_then(|n| u16::try_from(n).ok())
-                        .filter(|n| (1..=8192).contains(n))
-                })
-                .collect::<Option<_>>()?;
-            Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
-        }
-    };
+    let size = px_size(c.get("size"), |n| (1..=8192).contains(n))?;
     Some(Call::Show(Box::new(Show {
         via,
         doc: c.get("doc")?.as_str()?.to_string(),
