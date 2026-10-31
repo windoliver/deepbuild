@@ -14970,11 +14970,47 @@ impl Contract for AskMootV2DataThreadReplied {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AskMootV2DataNetworkReachedBecause;
+
+impl Contract for AskMootV2DataNetworkReachedBecause {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"network_reached\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"network_reached\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskMootV2DataNetworkReached {
+    pub because: AskMootV2DataNetworkReachedBecause,
+    pub host: String,
+}
+
+impl Contract for AskMootV2DataNetworkReached {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["because", "host"])?;
+        deep_contracts::check_member(members, at, "host", &RULE_9)?;
+        Ok(Self {
+            because: deep_contracts::required(members, at, "because")?,
+            host: deep_contracts::required(members, at, "host")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("because".to_string(), self.because.to_json()));
+        members.push(("host".to_string(), self.host.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum AskMootV2Data {
     CheckPassed(AskMootV2DataCheckPassed),
     AttemptReplaced(AskMootV2DataAttemptReplaced),
     WindowReset(AskMootV2DataWindowReset),
     ThreadReplied(AskMootV2DataThreadReplied),
+    NetworkReached(AskMootV2DataNetworkReached),
 }
 
 impl Contract for AskMootV2Data {
@@ -14984,6 +15020,7 @@ impl Contract for AskMootV2Data {
             "\"attempt_replaced\"" => Ok(Self::AttemptReplaced(<AskMootV2DataAttemptReplaced as Contract>::from_json(value, at)?)),
             "\"window_reset\"" => Ok(Self::WindowReset(<AskMootV2DataWindowReset as Contract>::from_json(value, at)?)),
             "\"thread_replied\"" => Ok(Self::ThreadReplied(<AskMootV2DataThreadReplied as Contract>::from_json(value, at)?)),
+            "\"network_reached\"" => Ok(Self::NetworkReached(<AskMootV2DataNetworkReached as Contract>::from_json(value, at)?)),
             other => Err(format!("{at}{}: {other} is not a listed tag", "/because")),
         }
     }
@@ -14993,6 +15030,7 @@ impl Contract for AskMootV2Data {
             Self::AttemptReplaced(inner) => inner.to_json(),
             Self::WindowReset(inner) => inner.to_json(),
             Self::ThreadReplied(inner) => inner.to_json(),
+            Self::NetworkReached(inner) => inner.to_json(),
         }
     }
 }
