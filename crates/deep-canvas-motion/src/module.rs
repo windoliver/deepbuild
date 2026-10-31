@@ -7,7 +7,9 @@
 
 use std::sync::Arc;
 
+use deep_canvas::canon::{canonical_value, NoShape};
 use deep_canvas::registry::{Module, Registrar};
+use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
@@ -179,12 +181,15 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
-    let Value::Object(doc) = v.document()? else {
+    // Compiled from the canonical form, members in name order, so a program's layout (its items'
+    // slots among them) is the same however the document lists them.
+    let canonical = canonical_value(v.document()?, &NoShape)
+        .map_err(|e| OpError::new("out_of_range", e.path))?;
+    let Value::Object(doc) = &canonical else {
         return Err(OpError::new("bad_doc", ""));
     };
     let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
-    let bytes = format!("{program:?}").into_bytes();
-    v.write("motion.program", Val::typed(Arc::new(program), bytes))
+    v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
 /// The frame's `valid_until` at t: when anything motion moves changes next.
@@ -195,7 +200,7 @@ fn clock(v: &mut View<'_>) -> Result<(), OpError> {
     };
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
-    v.write("motion.next", Val::json(json!(state.valid_until)))
+    v.write("motion.next", Val::typed(state.valid_until))
 }
 
 /// The item's own transform and fields at t, as the core's contributions.
@@ -214,17 +219,22 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     let Some((transform, fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
-    let at = json!([
-        {"op": "set", "path": ["pos"], "value": &transform[0..3]},
-        {"op": "set", "path": ["rot"], "value": &transform[3..6]},
-        {"op": "set", "path": ["scale"], "value": &transform[6..9]},
-    ]);
-    let edits: Vec<Value> = fields
+    let set = |name: &str, from: usize| Edit {
+        add: false,
+        path: vec![name.to_string()],
+        value: Datum::Nums(transform[from..from + 3].to_vec()),
+    };
+    let at = Edits(vec![set("pos", 0), set("rot", 3), set("scale", 6)]);
+    let edits = fields
         .into_iter()
-        .map(|(path, value)| json!({"op": "set", "path": path, "value": value}))
+        .map(|(path, value)| Edit {
+            add: false,
+            path,
+            value,
+        })
         .collect();
-    v.write("motion.at", Val::json(at))?;
-    v.write("motion.fields", Val::json(Value::Array(edits)))
+    v.write("motion.at", Val::typed(at))?;
+    v.write("motion.fields", Val::typed(Edits(edits)))
 }
 
 /// The motion module's fixture: a box a clip slides, a child riding it, and a caption.
