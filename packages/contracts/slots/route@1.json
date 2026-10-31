@@ -1,6 +1,8 @@
 {
   "title": "route@1",
   "description": "An inbound route, METHOD and path, served only once you turned the package on and chose it; its handler answers a status and a body.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

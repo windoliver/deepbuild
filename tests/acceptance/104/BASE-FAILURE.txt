@@ -1,0 +1,98 @@
+The #104 acceptance tests at the base, 7d7eea3a ("Merge pull request #838 from windoliver/feat/402-terminals"),
+on macOS 26 (Darwin 25.6.0, arm64), Node 24.22.0, after `npm ci` and `npm run build --workspaces`:
+
+  npx vitest run --root tests/acceptance/104 --no-file-parallelism
+
+ Test Files  4 failed (4)
+      Tests  15 failed (15)
+
+Every test fails, each at the first piece of the new surface it needs. None passes.
+
+install.test.ts (AC1)
+ x AC1 it installs with run-as-you, passes conformance and its own tests; its terminals keep running after the app
+   quits, and its tabs show them again at the next launch
+   Error: test/agent-terminals failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {"runs":"terminals","lives":"past_app","owns":["terminals"]}
+ x AC1 (wrong program) close-stops-every-host: a host that stops a piece's terminals when the app quits fails, naming
+   the terminal that stopped
+   Error: test/agent-terminals failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {...}   (the scenario can't reach its plant)
+ x AC1 its copy whose manifest leaves out run-as-you (no words, or only narrower ones) installs and loads, and is
+   refused at its first command naming run_as_you; nothing runs
+   AssertionError: the extension API schema lists deep.terminal.open, needing run_as_you:
+   expected undefined to be 'run_as_you'
+ x AC1 (wrong program) narrower-grant-implies-run-as-you: a host that lets files or programs stand in for run-as-you
+   fails, naming the copy whose command ran
+   Error: test/agent-terminals failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {...}   (the scenario can't reach its plant)
+
+revoke.test.ts (AC2)
+ x AC2 revoking stops both terminals' programs and everything they started (a child, a setsid grandchild, an orphan,
+   one that ignores SIGTERM, a shell's background job), leaves a decoy it never started running, and refuses its next
+   command naming run_as_you
+ x AC2 the same after the app quit and launched again: the terminals opened before the quit are still the piece's,
+   and the revoke stops every process in them
+ x AC2 (wrong program) revoke-keeps-running: a revoke that only refuses later commands fails, naming each process left
+   running
+ x AC2 (wrong program) revoke-stops-programs-only: a revoke that stops each terminal's program but nothing it started
+   fails, naming the setsid grandchild and the orphan
+   each: Error: test/agent-terminals failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {"runs":"terminals","lives":"past_app","owns":["terminals"]}
+
+input.test.ts (AC3)
+ x AC3 your keys from the app reach the hosted terminal's program; raw input from an agent (its MCP server, its hooks,
+   a deep command in its tree) or a piece is refused, naming the writer, and none of it reaches the program
+ x AC3 (wrong program) input-from-any-writer: a hub that takes a hosted terminal's raw input from any writer fails,
+   naming the agent's session
+   each: Error: test/agent-terminals failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {...}
+ x AC3 an agent can't have a piece type for it: a piece with run-as-you that tries every terminal and raw-input method
+   its deep has, for an agent's action call, gets nothing to the program
+ x AC3 (wrong program) piece-writes-input: a host whose API lets a piece write a terminal's input (deep.terminal.write)
+   fails, naming the agent's session
+   each: Error: test/relay failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {"runs":"terminals","lives":"past_app","owns":["terminals"]}
+
+budgets.test.ts (AC4)
+ x AC4 a hosted terminal keeps up at 60 updates a second under 5% of a core: 600 lines at 60 a second, the hosting's
+   CPU less the same with none, as a share of one core
+ x AC4 10 hosted terminals, each with 10,000 lines of scrollback, stay under 300 MB
+   each: Error: test/agent-terminals failed its conformance: its manifest fails extension.manifest@1 at /host:
+   unlisted_field {...}   (no reading taken; this Mac would also make them INCONCLUSIVE)
+ x AC4 the perf lane has a task for a hosted terminal at 60 updates a second and one for 10 hosted terminals, each a
+   #104 first measurement, valid against the merge base's budgets
+   AssertionError: budgets.json has a task hosted-terminal-60hz: expected undefined to be defined
+
+The next missing pieces, past the manifest. While drafting, a throwaway probe (not kept) installed both fixtures at the
+base with `host` taken out of their manifests: each passed conformance and loaded in the sandbox, and then
+ - agent-terminals' open action answered {"refused":"Cannot read properties of undefined (reading 'open')"}: the
+   extension API has no deep.terminal, and no capability.refused was recorded;
+ - its own test ext.agent-terminals.hosts read failed: "opening the heartbeat terminal was refused: Cannot read
+   properties of undefined (reading 'open')";
+ - relay's type action found every method it tries missing (deep.terminal.write/input/send/type/rawInput,
+   deep.rawInput, deep.input);
+ - the tree program noted all five PIDs and the helpers' ps reads saw each run and then stop.
+ExtensionHost has no approve, revoke or rawInput, and close stops every process a package started.
+
+The type check at the base fails only for the surface these tests add:
+
+  npx tsc -p tests/acceptance/104/tsconfig.json
+
+tests/acceptance/104/budgets.test.ts(58,13): error TS2339: Property 'revoke' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/budgets.test.ts(86,13): error TS2339: Property 'revoke' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/helpers.ts(209,32): error TS2339: Property 'approve' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/input.test.ts(41,11): error TS2339: Property 'rawInput' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/input.test.ts(45,15): error TS2339: Property 'rawInput' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/input.test.ts(61,11): error TS2339: Property 'rawInput' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/input.test.ts(85,46): error TS2345: Argument of type '"input-from-any-writer"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/104/input.test.ts(90,43): error TS2345: Argument of type '"piece-writes-input"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/104/install.test.ts(85,12): error TS2339: Property 'revoke' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/install.test.ts(103,13): error TS2339: Property 'approve' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/install.test.ts(119,41): error TS2345: Argument of type '"close-stops-every-host"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/104/install.test.ts(132,41): error TS2345: Argument of type '"narrower-grant-implies-run-as-you"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/104/revoke.test.ts(46,11): error TS2339: Property 'revoke' does not exist on type 'ExtensionHost'.
+tests/acceptance/104/revoke.test.ts(66,45): error TS2322: Type '"revoke-keeps-running"' is not assignable to type 'Plant | undefined'.
+tests/acceptance/104/revoke.test.ts(71,46): error TS2322: Type '"revoke-stops-programs-only"' is not assignable to type 'Plant | undefined'.
+
+No test ran against an implementation (none exists), so no test has been seen to pass; the scenarios past the manifest
+step are unexercised until the surface exists.

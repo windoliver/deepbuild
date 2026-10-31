@@ -1,6 +1,8 @@
 {
   "title": "mcp.tools_listed@1",
   "description": "The tool list an MCP server a session loads gave at the session's start, synced by DeepBuild or added by you: each tool with its input schema's digest and the hints the server gives, which are its own claims. A new or changed tool that can change or destroy, against the server's first list and what you approved, is held at PreToolUse by the one authority ask this event names.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

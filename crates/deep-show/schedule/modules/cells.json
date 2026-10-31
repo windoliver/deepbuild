@@ -1,0 +1,21 @@
+{
+  "module": "cells",
+  "phases": {
+    "items": [
+      {
+        "operator": "cells.grid",
+        "module": "cells",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look"
+        ],
+        "writes": [
+          "cells.grid"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

@@ -1,6 +1,8 @@
 {
   "title": "decision.created@1",
   "description": "A decision was saved from an answer. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "decisions"
   ],

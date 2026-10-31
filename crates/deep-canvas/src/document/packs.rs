@@ -387,11 +387,12 @@ fn check_recipe(
         .get("version")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let (major, minor) = match version.split_once('.') {
-        Some((a, b)) if a.parse::<u64>().is_ok() && b.parse::<u64>().is_ok() => {
-            (a.parse().unwrap_or(0), b.parse().unwrap_or(0))
-        }
-        _ => {
+    let parsed = version
+        .split_once('.')
+        .and_then(|(a, b)| Some((a.parse::<u64>().ok()?, b.parse::<u64>().ok()?)));
+    let (major, minor) = match parsed {
+        Some(pair) => pair,
+        None => {
             issues.push(bad("version", json!(version), "not major.minor"));
             (0, 0)
         }
@@ -641,25 +642,22 @@ fn input_fault(input: &Input, value: &Value) -> Option<String> {
         },
         "integer" => match value.as_f64() {
             Some(n) if n.fract() == 0.0 => range(n),
-            Some(_) => Some("not an integer".into()),
-            None => Some("not an integer".into()),
+            _ => Some("not an integer".into()),
         },
         "bool" => (!value.is_boolean()).then(|| "not a bool".to_string()),
         "choice" => match value.as_str() {
             Some(s) if input.options.iter().any(|o| o == s) => None,
             _ => Some(format!("not one of {}", input.options.join(", "))),
         },
-        "vec3" => {
+        "vec3" | "range" => {
+            let (len, what) = match input.ty.as_str() {
+                "vec3" => (3, "not three numbers"),
+                _ => (2, "not two numbers"),
+            };
             let ok = value.as_array().is_some_and(|a| {
-                a.len() == 3 && a.iter().all(|v| v.as_f64().is_some_and(f64::is_finite))
+                a.len() == len && a.iter().all(|v| v.as_f64().is_some_and(f64::is_finite))
             });
-            (!ok).then(|| "not three numbers".to_string())
-        }
-        "range" => {
-            let ok = value.as_array().is_some_and(|a| {
-                a.len() == 2 && a.iter().all(|v| v.as_f64().is_some_and(f64::is_finite))
-            });
-            (!ok).then(|| "not two numbers".to_string())
+            (!ok).then(|| what.to_string())
         }
         "text" | "ID" => (!value.is_string()).then(|| "not a string".to_string()),
         _ => None,
@@ -681,10 +679,8 @@ pub struct Packs {
 impl Packs {
     pub fn new(planted: Planted) -> Packs {
         Packs {
-            by_id: BTreeMap::new(),
-            refused: BTreeMap::new(),
-            checks: BTreeMap::new(),
             planted,
+            ..Packs::default()
         }
     }
 
@@ -803,16 +799,10 @@ pub fn resolve<'a>(
     let mut seen: BTreeMap<String, String> = BTreeMap::new();
     for (i, entry) in entries.iter().enumerate() {
         let path = format!("packs/{i}");
-        let Some(text) = entry.as_str() else {
-            issues.push(Issue::envelope(
-                "out_of_range",
-                path,
-                entry.clone(),
-                "not `owner/name@version`",
-            ));
-            continue;
-        };
-        let Some(id) = PackId::parse(text) else {
+        let Some((text, id)) = entry
+            .as_str()
+            .and_then(|text| Some((text, PackId::parse(text)?)))
+        else {
             issues.push(Issue::envelope(
                 "out_of_range",
                 path,
@@ -1203,7 +1193,7 @@ fn expand_one(
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));
     }
-    let key = Hasher::new("recipe.key")
+    let key = Hasher::v1("recipe.key")
         .text(&pack.id.text())
         .text(&format!("{}@{}.{}", recipe.id, recipe.major, recipe.minor))
         .bytes(&canonical(&Value::Object(inputs.clone())))
@@ -1410,7 +1400,7 @@ fn at_path(id: &str, step: &str) -> String {
 /// The seed of a derived item: `(instance, step, index)`, so adding an item never reseeds the
 /// others.
 pub fn seed_of(instance: &str, step: &str, index: Option<u64>) -> u64 {
-    let mut h = Hasher::new("recipe.seed");
+    let mut h = Hasher::v1("recipe.seed");
     h.text(instance).text(step);
     match index {
         Some(i) => h.int(i as i64),
@@ -1542,18 +1532,9 @@ impl Expr {
                     '+' => a + b,
                     '-' => a - b,
                     '*' => a * b,
-                    '/' => {
-                        if b == 0.0 {
-                            return Err("division by zero".into());
-                        }
-                        a / b
-                    }
-                    _ => {
-                        if b == 0.0 {
-                            return Err("division by zero".into());
-                        }
-                        a % b
-                    }
+                    _ if b == 0.0 => return Err("division by zero".into()),
+                    '/' => a / b,
+                    _ => a % b,
                 }
             }
             Expr::Call(name, args) => {

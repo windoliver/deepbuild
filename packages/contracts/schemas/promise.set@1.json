@@ -1,6 +1,8 @@
 {
   "title": "promise.set@1",
   "description": "A check the agent promised for later became a wake-up (#120): the quote it came from, when it is due, how many times this promise has been set, and its end. A wake-up never sets itself again; only the agent promising again does.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {
