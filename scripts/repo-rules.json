@@ -105,6 +105,10 @@
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
+        },
+        "chrono": {
+          "spec": "^0.4",
+          "why": "Issue #883: a notification gives the default's time as a clock time in your time zone; already in gpui's tree with its clock."
         }
       },
       "dev-dependencies": {
@@ -125,6 +129,10 @@
         "objc2-foundation": {
           "spec": "^0.3",
           "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
+        },
+        "objc2-user-notifications": {
+          "spec": "^0.3",
+          "why": "Issue #883: the app reads what Notification Center still holds from it on start, so it can withdraw one whose ask closed; `--notification-center` prints it for the Proof. Already in gpui's tree."
         },
         "objc2-core-foundation": {
           "spec": "^0.3",
