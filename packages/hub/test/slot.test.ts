@@ -2,10 +2,10 @@
 // CPU cores run checks; the slot it holds shows in the lease table), and gives it back once it has ended.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
-import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { client } from './hub.js';
 
 const MAIN = new URL('../../cli/dist/main.js', import.meta.url).pathname;
 let dir: string;
@@ -14,26 +14,6 @@ afterEach(async () => {
   if (hub && hub.exitCode === null) { hub.kill('SIGTERM'); await new Promise((done) => hub!.once('exit', done)); }
   rmSync(dir, { recursive: true, force: true });
 });
-
-/** A line client of the hub's socket, as the CLI is. */
-async function client(socket: string, token: string): Promise<(method: string, params: object) => Promise<Record<string, unknown>>> {
-  const s = net.connect(socket);
-  let buf = '';
-  const lines: Record<string, unknown>[] = [];
-  s.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
-  const until = async <T>(f: () => T | undefined): Promise<T> => { for (let i = 0; i < 600; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw Error('no answer from the hub'); };
-  await until(() => lines[0]);
-  s.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
-  await until(() => lines.find((l) => l.role));
-  let n = 0;
-  return async (method, params) => {
-    const id = `c${++n}`;
-    s.write(`${JSON.stringify({ v: 1, id, method, params })}\n`);
-    const reply = await until(() => lines.find((l) => l.id === id));
-    if (reply.error) throw Error(JSON.stringify(reply.error));
-    return reply.result as Record<string, unknown>;
-  };
-}
 
 it('a check run holds a cpu.slot lease while it runs and releases it once it has ended', async () => {
   dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-slot-')));
