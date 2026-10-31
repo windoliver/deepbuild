@@ -1,0 +1,34 @@
+{
+  "panels": [
+    {
+      "panel": "deepbuild/home",
+      "entry": "crates/deep-app/src/views.rs",
+      "roles": [],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/line",
+      "entry": "crates/deep-app/src/views.rs",
+      "roles": [],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/needs-you",
+      "entry": "crates/deep-app/src/views.rs",
+      "roles": [],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/session",
+      "entry": "crates/deep-app/src/views.rs",
+      "roles": [],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/sidebar",
+      "entry": "crates/deep-app/src/views.rs",
+      "roles": [],
+      "literals": []
+    }
+  ]
+}
