@@ -4,7 +4,7 @@
 export { API as EXTENSION_API, type ApiMethod } from '../runtime/deep.mjs';
 export { packageDigest } from './digest.js';
 export {
-  openExtensionHost, type ActionCall, type ActionResult, type ActionTarget, type Conformance, type Delivered, type ExtensionHost, type ExtensionHostOptions, type HookReply, type HookRequest,
+  openExtensionHost, type ActionCall, type ActionListing, type ActionResult, type ActionTarget, type Conformance, type Delivered, type ExtensionHost, type ExtensionHostOptions, type HookReply, type HookRequest,
   type HostGrant, type IndexFill, type Installed, type InstallFrom, type KitRun, type Load, type Loaded, type Plant, type Refused, type ReleaseEntry, type Route,
 } from './host.js';
 export { keychainStore, type HttpAnswer, type HttpClient, type HttpRequest, type KeyTest, type Reading, type RecordedCall, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';

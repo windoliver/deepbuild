@@ -69,6 +69,28 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
   }),
 };
 
+/**
+ * The tools of deep-actions (#363), the second server entry, which serves plug-in actions so that one bad schema
+ * can't make a client drop the deep_* tools: one finds actions and returns their schemas, one calls an action by name
+ * with a request ID. An action's input travels as its JSON text, since the strict schemas take no free-form object.
+ */
+export const ACTION_SCHEMAS: Readonly<Record<string, Schema>> = {
+  find_actions: object({ query: maybe(str('Words an action\'s name or its plug-in\'s must hold; null for every action.')) }),
+  call_action: object({
+    action: str('The action, by the name find_actions gave, ext.<plugin>.<name>.'),
+    request: str('A request ID of your own for this call: a retry with the same ID and input runs nothing twice, and the same ID with other input is refused.'),
+    input: str('The action\'s input as one string holding its JSON text, held to the input schema find_actions gave.'),
+  }),
+};
+const ACTION_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  find_actions: 'Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.',
+  call_action: 'Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in\'s report and what the hub recorded it changed; the report is the plug-in\'s statement, never a check result.',
+};
+/** The tools as deep mcp actions lists them. */
+export function actionToolList(): { name: string; description: string; inputSchema: Schema }[] {
+  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema }));
+}
+
 let described: Record<string, string> | undefined;
 /** Each tool's description, as scripts/skill.mjs generated it from the Building blocks table. */
 export function descriptions(): Record<string, string> {
@@ -89,7 +111,7 @@ export function toolList(): { name: string; description: string; inputSchema: Sc
  * missing required one or a wrong type is refused at its path. A nullable field left out reads as null.
  */
 export function checkArguments(tool: string, args: unknown): Obj {
-  const schema = SCHEMAS[tool];
+  const schema = SCHEMAS[tool] ?? ACTION_SCHEMAS[tool];
   if (!schema) throw refuse('not_found', '/params/tool', `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   return check(schema, args ?? {}, '/params/arguments') as Obj;
 }
