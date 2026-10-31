@@ -184,9 +184,14 @@ export interface AsksOptions {
   /**
    * The read-only connector to your chat app's threads: how a chat-app task's check reads the thread, once per tick
    * while such a task is open. The link is the task's own words, so the connector holds it to the chat app it serves
-   * and fetches nothing else. Left out (as the hub leaves it until a channel exists), no thread is read.
+   * and fetches nothing else. Left out, no thread is read.
    */
   threads?: { read(link: string): Promise<ThreadMessage[]> };
+  /**
+   * A network task's check, once per tick while one is open: a try's result, with when it started, when one has finished
+   * since the last call, and null otherwise. Left out, a network task closes only on a verdict.
+   */
+  network?: { read(): { host: string; reached: boolean; at: number } | null };
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -205,6 +210,8 @@ export interface InboxRow {
   request: { to: string; block: string } | null;
   /** For an ask decided for you, the decision it reused; null otherwise. */
   decision: string | null;
+  /** On an open task whose check ran and still fails: what's missing, as its card says. null otherwise. */
+  missing: Missing | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -406,7 +413,7 @@ const CONTINUE_WINDOW = 10 * 60_000;
 /** The causes that pass by themselves when the service owns the block: a dropped connection, an overloaded service. */
 const TRANSIENT = new Set(['timed_out', 'rate_limited']);
 /** The ask.moot reasons ask.moot@2 added. */
-const MOOT_V2 = new Set(['window_reset', 'thread_replied']);
+const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached']);
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
@@ -861,7 +868,7 @@ class AsksCore implements Asks {
       return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
-        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null,
+        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null,
       }));
     });
   }
@@ -1761,6 +1768,7 @@ class AsksCore implements Asks {
     const seen = new Set(this.open().filter((a) => this.inSight(a)).map((a) => a.handle));
     // Each open chat-app task's thread, read once a call through the connector.
     await this.readThreads();
+    this.readNetwork();
     for (let acted = true; acted;) {
       // A block someone else owns gets its request drafted first, so the request shows when the block is raised.
       acted = false;
@@ -1931,6 +1939,19 @@ class AsksCore implements Asks {
     await this.sync();
   }
 
+  /** Each open network task's check: a failed try is what's missing; the first that succeeds closes the task. */
+  private readNetwork(): void {
+    const tasks = [...this.blockTasks.values()].filter((t) => [...t.block!.stops.values()].some((id) => this.stopIds.get(id)?.cause === 'timed_out'));
+    const tried = tasks.length ? this.options.network?.read() : null;
+    if (!tried) return;
+    for (const task of tasks) {
+      // A try from before the task says nothing of the block that raised it.
+      if (tried.at < task.created) continue;
+      if (tried.reached) task.pending.moot ??= { because: 'network_reached', host: tried.host };
+      else task.missing = { check: String(task.data.proves), reasons: [`${tried.host} can't be reached yet`], link: null };
+    }
+  }
+
   /**
    * Each open chat-app task's thread, read through the read-only connector: a reply from someone other than you, after
    * your post, whose text contains what the task expects closes it; before you post nothing changes; after it, no reply
@@ -1950,9 +1971,11 @@ class AsksCore implements Asks {
         ask.missing = { check, reasons: [`the thread couldn't be read through the connector: ${(error as Error)?.message ?? String(error)}`], link: thread.link };
         continue;
       }
-      const posted = messages.findIndex((m) => m.from === ask.who.actor);
-      if (posted < 0) continue;
-      const replies = messages.slice(posted + 1).filter((m) => m.from !== ask.who.actor);
+      const you = String(ask.data.owner);
+      // Only your post since the task was raised: an old exchange in the thread never closes a new task.
+      const posted = messages.findIndex((m) => m.from === you && m.at >= ask.created);
+      if (posted < 0) { delete ask.missing; continue; }
+      const replies = messages.slice(posted + 1).filter((m) => m.from !== you);
       if (replies.some((m) => typeof m.text === 'string' && m.text.includes(thread.expect))) {
         ask.pending.moot = { because: 'thread_replied', link: thread.link };
         continue;

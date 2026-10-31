@@ -24,7 +24,8 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     steps: maybe({ type: 'array', items: str(), description: 'A task\'s steps, in order; null for a question.' }),
     where: maybe(str('Where the person does the task, such as their own terminal.')),
     why: maybe(str('What the task unblocks.')),
-    check: maybe(str('The check in the repo\'s spec that will prove the task done. A task without one is refused.')),
+    check: maybe(str('The check in the repo\'s spec that will prove the task done. A task without one is refused, unless thread names its check.')),
+    thread: maybe({ ...object({ link: str('The Slack thread, by its link.'), expect: str('The bot reply the task expects.') }), description: 'A step in a chat app: the thread whose reply closes the task; null otherwise.' }),
     subject: maybe({
       ...object({
         point: maybe(str('A choice\'s requirement, by its handle (req:<id>).')),
