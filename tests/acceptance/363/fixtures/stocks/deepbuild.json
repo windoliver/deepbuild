@@ -1,0 +1,9 @@
+{
+  "id": "test/stocks",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": [] },
+  "stores": ["ext.stocks.alert"],
+  "actions": ["ext.stocks.set_alert", "ext.stocks.list_alerts", "ext.stocks.send_digest", "ext.stocks.runs"],
+  "requires": { "preview": ["deep.registerAction", "deep.store", "deep.store.put", "deep.store.get", "deep.store.list"] }
+}

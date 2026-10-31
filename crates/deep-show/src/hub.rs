@@ -37,6 +37,7 @@ use crate::frames::{op_issue, overflows, unfit_issue};
 use crate::placement::{self, Placement};
 use crate::shared::{self, Clock, CommitFault, Quota, Shared};
 use crate::snapshot::{self, Drawn, Renderer, Unfit};
+use crate::workers::{Priority, Workers};
 
 /// deep_show answers within 2 s: a snapshot whose frame hasn't settled by then is not presented
 /// (Admission and latch; Render-back).
@@ -159,6 +160,10 @@ pub enum Planted {
     PacksKeyedByName,
     /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
     CheckpointNearestInDistance,
+    /// #857: results of nodes run on several threads merge in the order they finished.
+    MergesInFinishOrder,
+    /// #857: the background jobs' threads run at the live view's priority.
+    BackgroundAtLivePriority,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
     AcceptsEverySampleRate8To192k,
     /// #488: `rate`'s index forms t × p in i64.
@@ -201,6 +206,20 @@ pub enum Planted {
     TabRedrawsAt30hz,
     /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
     TabDrawsCapture,
+    /// #105: the capture gate takes any press of the chord, synthetic ones too, as the hold.
+    RecordsWithoutHold,
+    /// #105: the recorder ignores `max` and keeps frames for as long as the chord is held.
+    RecordsPastMax,
+    /// #105: a saved bug capture is attached to its ask with no check drafted.
+    DraftsNoCheck,
+    /// #105: each frame, as it arrives, is appended to the record holding its bytes in base64.
+    FramesToRecord,
+    /// #105: the frames so far are stored as an asset by hash each time a frame arrives.
+    KeepsAssetAfterCrash,
+    /// #105: the saved capture is labelled redaction `complete`.
+    LabelsRedactionComplete,
+    /// #105: a send delivers its files at once, unasked.
+    SendsWithoutApproval,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -561,6 +580,8 @@ pub enum Call {
     Ring(Box<crate::ring::RingCall>),
     /// Terminals, streams and the session page's terminal tab (#402).
     Term(Box<crate::terminal::TermCall>),
+    /// A capture for a bug report, its ask and its send (#105).
+    Capture(Box<crate::capture::CaptureCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -619,6 +640,8 @@ pub struct Scenario {
     pub quotas: BTreeMap<String, Quota>,
     pub clock: Option<Clock>,
     pub commit_fault: Option<CommitFault>,
+    /// The hub ends at this time as SIGKILL would (#105).
+    pub kill_at: Option<i64>,
     /// Each document session's epoch counter starts here (#387: a long run without running it).
     pub epoch_start: u32,
     /// Ties break by a shuffle from this seed instead of by name and order (#387).
@@ -635,6 +658,18 @@ pub struct Scenario {
     pub machine: Option<Map<String, Value>>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// Every session's pool in place of its budget class's (#857).
+    pub threads: Option<usize>,
+    /// Work that isn't a frame, running from before the first call to after the last (#857).
+    pub background: Vec<Job>,
+}
+
+/// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
+/// one, each evaluated frame after frame at the background priority.
+pub struct Job {
+    pub kind: &'static str,
+    pub replicas: usize,
+    pub document: Value,
 }
 
 /// One revision of a document (Revision).
@@ -664,6 +699,8 @@ pub struct Hub<'a> {
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
+    /// The scenario's background jobs' progress (#857).
+    pub background: Vec<crate::jobs::Progress>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -694,6 +731,8 @@ pub struct Hub<'a> {
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
     pub terms: crate::terminal::Terms,
+    /// Captures for bug reports, their asks and sends (#105).
+    pub capturing: crate::capture::Capturing,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -762,6 +801,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
     };
     Options {
@@ -769,6 +809,11 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         shuffle: scenario.shuffle,
         planted,
         timing: None,
+        pool: Some(Arc::new(Workers {
+            priority: Priority::Frame,
+            performance_cores: crate::workers::performance_cores(),
+        })),
+        threads: scenario.threads,
         hash: scenario.hash,
     }
 }
@@ -799,6 +844,7 @@ impl<'a> Hub<'a> {
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
+            background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
             pending3d: None,
@@ -820,6 +866,10 @@ impl<'a> Hub<'a> {
                 scenario.placement_planted,
             ),
             terms: crate::terminal::Terms::default(),
+            capturing: crate::capture::Capturing::restore(
+                scenario.state.as_deref(),
+                scenario.planted,
+            ),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -1278,6 +1328,7 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Capture(c) => self.capture_call(c),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {

@@ -13,6 +13,19 @@ const str = (description?: string, pattern?: string): Schema => ({ type: 'string
 const maybe = (schema: Schema): Schema => ({ ...schema, type: [schema.type as string, 'null'] });
 const object = (properties: Record<string, Schema>): Schema => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 const HANDLE = (scheme: string) => `^${scheme}:[0-9A-Za-z]+$`;
+/** One of `values`, or null: a nullable enum lists null. */
+const oneOf = (values: string[], description?: string): Schema => ({ type: ['string', 'null'], enum: [...values, null], ...(description ? { description } : {}) });
+const INT = { type: 'integer' };
+const PAIR = maybe({ type: 'array', items: INT });
+/** deep_drive's locator: one form, matching exactly one thing, except in a count assertion. */
+const LOCATOR = object({
+  role: maybe(str('With name, or alone.')),
+  name: maybe(str('The accessible name.')),
+  item: maybe(str('A canvas item, ID[#sub].')),
+  handle: maybe(str()),
+  text: maybe(str('The innermost element whose drawn text is exactly this.')),
+  label: maybe(str('The form control whose accessible name, or else visible label, is this.')),
+});
 
 /** Each tool's input schema, by name, in the order deep mcp lists them. */
 export const SCHEMAS: Readonly<Record<string, Schema>> = {
@@ -62,6 +75,59 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     include: maybe({ type: 'array', items: { type: 'string', enum: ['issues', 'audit', 'timing', 'pixels'] }, description: 'What the reply carries; pixels asks for a snapshot. null for issues.' }),
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
   }),
+  deep_drive: object({
+    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'screenshot', 'record', 'expect', 'close'] },
+    replica: maybe(str('The replica, as launch answered it; null only for launch.', HANDLE('replica'))),
+    launch: maybe(object({
+      from: oneOf(['fixture', 'record_copy', 'empty'], 'null for fixture.'),
+      panel: maybe(str('A panel package, by its absolute path, mounted in the sidebar.')),
+      size: PAIR,
+      scale: maybe(INT),
+      theme: oneOf(['light', 'dark']),
+      reduced_motion: maybe({ type: 'boolean' }),
+      locale: maybe(str()),
+      clock: oneOf(['virtual', 'real']),
+      packs: maybe({ type: 'array', items: str('name@version') }),
+    })),
+    locator: maybe({ ...LOCATOR, description: 'The call\'s target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element.' }),
+    act: maybe(object({
+      kind: { type: 'string', enum: ['click', 'double_click', 'type', 'press', 'drag', 'scroll', 'hover', 'set'] },
+      text: maybe(str()),
+      keys: maybe(str('Space-separated keystrokes, such as enter, tab or cmd-enter.')),
+      to: maybe({ ...LOCATOR, description: 'drag only: where it drops. The thing acted on goes in locator.' }),
+      to_point: { ...PAIR, description: 'drag only: where it drops, [x, y] in device pixels.' },
+      dx: maybe(INT),
+      dy: maybe(INT),
+      control: maybe(str()),
+      value: maybe(str()),
+    })),
+    wait_for: maybe(object({
+      state: oneOf(['visible', 'hidden', 'enabled', 'text', 'value', 'settled']),
+      value: maybe(str()),
+      event: maybe(str()),
+      t: maybe({ type: 'integer', description: 'Flicks since launch.' }),
+    })),
+    timeout: maybe({ type: 'integer', description: 'Milliseconds of the replica\'s clock; null for 5000.' }),
+    see: maybe(object({
+      scope: oneOf(['window', 'panel', 'locator']),
+      include: maybe({ type: 'array', items: { type: 'string', enum: ['roles', 'names', 'values', 'bounds', 'items'] } }),
+    })),
+    screenshot: maybe(object({ target: oneOf(['window', 'panel', 'locator']), highlight: maybe({ type: 'array', items: LOCATOR }), mask: maybe({ type: 'array', items: LOCATOR }) })),
+    record: maybe(object({
+      action: { type: 'string', enum: ['start', 'stop'] },
+      fps: maybe(INT),
+      marks: oneOf(['per_action']),
+      mask: maybe({ type: 'array', items: LOCATOR }),
+      mask_kind: oneOf(['fill', 'blur']),
+    })),
+    expect: maybe(object({
+      name: maybe(str('The assertion\'s name, which a failure names.')),
+      assert: { type: 'string', enum: ['visible', 'text', 'value', 'count', 'state'] },
+      value: maybe(str()),
+      count: maybe(INT),
+      state: maybe(str('Such as enabled, disabled, focused or checked.')),
+    })),
+  }),
   deep_env: object({ action: { type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
@@ -69,6 +135,28 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     evidence: maybe({ type: 'array', items: object({ at: str('A record handle, such as session:<id>#<message>.'), quote: str('The exact words there.') }), description: 'What the change rests on; null for none.' }),
   }),
 };
+
+/**
+ * The tools of deep-actions (#363), the second server entry, which serves plug-in actions so that one bad schema
+ * can't make a client drop the deep_* tools: one finds actions and returns their schemas, one calls an action by name
+ * with a request ID. An action's input travels as its JSON text, since the strict schemas take no free-form object.
+ */
+export const ACTION_SCHEMAS: Readonly<Record<string, Schema>> = {
+  find_actions: object({ query: maybe(str('Words an action\'s name or its plug-in\'s must hold; null for every action.')) }),
+  call_action: object({
+    action: str('The action, by the name find_actions gave, ext.<plugin>.<name>.'),
+    request: str('A request ID of your own for this call: a retry with the same ID and input runs nothing twice, and the same ID with other input is refused.'),
+    input: str('The action\'s input as one string holding its JSON text, held to the input schema find_actions gave.'),
+  }),
+};
+const ACTION_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  find_actions: 'Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.',
+  call_action: 'Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in\'s report and what the hub recorded it changed; the report is the plug-in\'s statement, never a check result.',
+};
+/** The tools as deep mcp actions lists them. */
+export function actionToolList(): { name: string; description: string; inputSchema: Schema }[] {
+  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema }));
+}
 
 let described: Record<string, string> | undefined;
 /** Each tool's description, as scripts/skill.mjs generated it from the Building blocks table. */
@@ -90,7 +178,7 @@ export function toolList(): { name: string; description: string; inputSchema: Sc
  * missing required one or a wrong type is refused at its path. A nullable field left out reads as null.
  */
 export function checkArguments(tool: string, args: unknown): Obj {
-  const schema = SCHEMAS[tool];
+  const schema = SCHEMAS[tool] ?? ACTION_SCHEMAS[tool];
   if (!schema) throw refuse('not_found', '/params/tool', `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   return check(schema, args ?? {}, '/params/arguments') as Obj;
 }
@@ -117,10 +205,13 @@ function check(schema: Schema, value: unknown, at: string): unknown {
     case 'integer':
       if (!Number.isSafeInteger(value)) throw wrong();
       return value;
+    case 'boolean':
+      if (typeof value !== 'boolean') throw wrong();
+      return value;
     case 'string': {
       if (typeof value !== 'string') throw wrong();
-      const allowed = schema.enum as string[] | undefined;
-      if (allowed && !allowed.includes(value)) throw refuse('enum', at, `Give one of ${allowed.join(', ')}.`, value);
+      const allowed = schema.enum as (string | null)[] | undefined;
+      if (allowed && !allowed.includes(value)) throw refuse('enum', at, `Give one of ${allowed.filter((v) => v !== null).join(', ')}.`, value);
       if (typeof schema.pattern === 'string' && !new RegExp(schema.pattern).test(value)) throw refuse('pattern', at, `Give ${at.split('/').pop()} in the form ${schema.pattern}.`, value);
       return value;
     }

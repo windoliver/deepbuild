@@ -38,13 +38,17 @@ sha2 = "0.10"
 objc2 = "0.6"
 # Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
 # menu-bar template from the kit's bytes.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFCGTypes", "CFData"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
 block2 = "0.6"
 raw-window-handle = "0.6"
 image = { version = "0.25", default-features = false, features = ["png"] }
+# Issue #105: the bug capture: ScreenCaptureKit's system picker, its stream and its recording
+# output (one MP4), and the sample buffers its frames arrive in.
+objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std", "SCContentSharingPicker", "SCRecordingOutput", "SCShareableContent", "SCStream", "bitflags", "block2", "dispatch2", "objc2-core-foundation", "objc2-core-graphics", "objc2-core-media"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMSampleBuffer"] }
 # Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot.
 gpui-pre-apple = "=0.3.9"
 
