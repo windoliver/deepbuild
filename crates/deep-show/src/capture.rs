@@ -131,6 +131,8 @@ impl State {
 }
 
 struct Capture {
+    /// Its number in `capture:<n>`, kept across a restart.
+    n: usize,
     session: String,
     words: String,
     state: State,
@@ -160,6 +162,69 @@ pub struct Capturing {
     held: bool,
     tasks: Vec<(String, Task)>,
     sends: Vec<Send>,
+}
+
+/// The check a saved capture drafts into its ask's definition of done: it reproduces the bug,
+/// and the fix must pass it.
+fn drafted(id: &str, sha: &str, planted: Option<Planted>) -> Vec<Value> {
+    match planted {
+        Some(Planted::DraftsNoCheck) => vec![],
+        _ => vec![json!({
+            "id": format!("check:{id}-reproduces"),
+            "state": "drafted",
+            "reproduces": sha,
+            "required": true,
+        })],
+    }
+}
+
+impl Capturing {
+    /// The saved captures and the asks they opened, from the `capture.saved` events of the
+    /// record in `state`, as #96's documents restart from it. A hold a crash cut short wrote no
+    /// event, so it isn't there.
+    pub fn restore(state: Option<&Path>, planted: Option<Planted>) -> Self {
+        let mut capturing = Capturing::default();
+        let Some(text) = state.and_then(|s| fs::read_to_string(s.join("record.jsonl")).ok()) else {
+            return capturing;
+        };
+        for line in text.lines() {
+            let Ok(entry) = serde_json::from_str::<Value>(line) else {
+                continue;
+            };
+            let (event, data) = (&entry["event"], &entry["event"]["data"]);
+            if event["kind"] != "capture.saved" {
+                continue;
+            }
+            let n =
+                (data["capture"].as_str()).and_then(|id| id.strip_prefix("capture:")?.parse().ok());
+            let (Some(n), Some(session), Some(sha), Some(ask)) = (
+                n,
+                data["session"].as_str(),
+                event["evidence"][0].as_str(),
+                data["ask"].as_str(),
+            ) else {
+                continue;
+            };
+            let words = data["words"].as_str().unwrap_or_default().to_string();
+            capturing.captures.push(Capture {
+                n,
+                session: session.to_string(),
+                words: words.clone(),
+                state: State::Saved,
+                frames: data["frames"].as_u64().unwrap_or_default(),
+                asset: Some(sha.to_string()),
+                ask: Some(ask.to_string()),
+            });
+            let task = Task {
+                session: session.to_string(),
+                words,
+                asset: sha.to_string(),
+                checks: drafted(&format!("capture:{n}"), sha, planted),
+            };
+            capturing.tasks.push((ask.to_string(), task));
+        }
+        capturing
+    }
 }
 
 fn redaction(planted: Option<Planted>) -> &'static str {
@@ -241,7 +306,9 @@ impl Hub<'_> {
                     return refused("no_session");
                 }
                 let c = &mut self.capturing.captures;
+                let n = c.last().map_or(0, |c| c.n) + 1;
                 c.push(Capture {
+                    n,
                     session: session.clone(),
                     words: words.clone(),
                     state: State::Picking,
@@ -249,7 +316,7 @@ impl Hub<'_> {
                     asset: None,
                     ask: None,
                 });
-                json!({"capture": format!("capture:{}", c.len()), "state": "picking"})
+                json!({"capture": format!("capture:{n}"), "state": "picking"})
             }
             CaptureCall::Pick(display) => {
                 let display = match display {
@@ -306,10 +373,10 @@ impl Hub<'_> {
             }
             CaptureCall::Captures => {
                 let red = redaction(planted);
-                let list: Vec<Value> = (self.capturing.captures.iter().enumerate())
-                    .map(|(i, c)| {
+                let list: Vec<Value> = (self.capturing.captures.iter())
+                    .map(|c| {
                         json!({
-                            "capture": format!("capture:{}", i + 1),
+                            "capture": format!("capture:{}", c.n),
                             "session": c.session,
                             "state": c.state.name(),
                             "frames": c.frames,
@@ -401,6 +468,7 @@ impl Hub<'_> {
         let state = self.scenario.state.clone();
         let mut ended = Vec::new();
         for (i, c) in self.capturing.captures.iter_mut().enumerate() {
+            let n = c.n;
             let State::Recording {
                 display,
                 down,
@@ -422,7 +490,7 @@ impl Hub<'_> {
                 frames.extend_from_slice(frame.as_bytes());
                 c.frames += 1;
                 if let (Some(Planted::FramesToRecord), Some(state)) = (planted, &state) {
-                    let data = json!({"capture": format!("capture:{}", i + 1), "vsync": *next,
+                    let data = json!({"capture": format!("capture:{n}"), "vsync": *next,
                         "bytes": base64(frame.as_bytes())});
                     append(state, &c.session, "capture.frame", "capture", data, &[]);
                 }
@@ -465,26 +533,18 @@ impl Hub<'_> {
             c.state = State::Cancelled;
             return;
         };
-        let id = format!("capture:{}", i + 1);
-        let handle = format!("task:{}-capture-{}", c.session, i + 1);
+        let id = format!("capture:{}", c.n);
+        let handle = format!("task:{}-capture-{}", c.session, c.n);
         if let Some(state) = &self.scenario.state {
             let data = json!({
                 "capture": id, "session": c.session, "source": "screen", "via": "picker",
                 "type": "application/x-deep-frames", "size": frames.len(), "frames": c.frames,
                 "held": [down, at], "redaction": redaction(planted), "origin": "deepbuild",
-                "ask": handle,
+                "ask": handle, "words": c.words,
             });
             append(state, &c.session, "capture.saved", &id, data, &[&sha]);
         }
-        let checks = match planted {
-            Some(Planted::DraftsNoCheck) => vec![],
-            _ => vec![json!({
-                "id": format!("check:{}-reproduces", id),
-                "state": "drafted",
-                "reproduces": sha,
-                "required": true,
-            })],
-        };
+        let checks = drafted(&id, &sha, planted);
         c.asset = Some(sha.clone());
         c.ask = Some(handle.clone());
         let task = Task {

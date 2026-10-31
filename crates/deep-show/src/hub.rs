@@ -866,7 +866,10 @@ impl<'a> Hub<'a> {
                 scenario.placement_planted,
             ),
             terms: crate::terminal::Terms::default(),
-            capturing: crate::capture::Capturing::default(),
+            capturing: crate::capture::Capturing::restore(
+                scenario.state.as_deref(),
+                scenario.planted,
+            ),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
