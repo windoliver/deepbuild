@@ -13,6 +13,7 @@ pub mod arming;
 pub mod canvas;
 pub mod card;
 pub mod cells;
+pub mod chrome;
 pub mod confirm;
 pub mod events;
 pub mod gpu_view;
@@ -37,6 +38,8 @@ use gpui_shell::{
 };
 
 pub mod trusted_input;
+
+pub mod capture;
 
 pub mod brand;
 
@@ -381,7 +384,8 @@ impl Spike {
 }
 
 impl Render for Spike {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let chrome = *chrome::of(window);
         let sessions = self.sessions.clone();
         let selected = self.selected;
         let list = uniform_list(
@@ -404,7 +408,7 @@ impl Render for Spike {
                             .flex()
                             .items_center()
                             .gap_2()
-                            .when(selected == Some(index), |row| row.bg(rgb(0xdbeafe)))
+                            .when(selected == Some(index), |row| row.bg(chrome.selected))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected = Some(index);
                                 cx.notify();
@@ -431,8 +435,8 @@ impl Render for Spike {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(0x111111))
+            .bg(chrome.ground)
+            .text_color(chrome.ink_primary)
             .text_sm()
             .child(title_bar())
             .child(
@@ -448,7 +452,7 @@ impl Render for Spike {
                             .flex()
                             .flex_col()
                             .border_r_1()
-                            .border_color(rgb(0xe5e7eb))
+                            .border_color(chrome.divider)
                             .child(
                                 div()
                                     .p_2()
@@ -468,7 +472,7 @@ impl Render for Spike {
                                             .test_support()
                                             .px_2()
                                             .rounded_md()
-                                            .bg(rgb(0xf3f4f6))
+                                            .bg(chrome.raised)
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 match write_report(
                                                     &this.sessions,
