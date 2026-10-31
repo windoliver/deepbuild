@@ -24,35 +24,40 @@ export function apiHost(): string {
   return 'api.anthropic.com:443';
 }
 
-/** Whether a TCP connection to the host opens within the try's limit. It sends nothing. */
+const trying = new Map<string, Promise<boolean>>();
+/** Whether a TCP connection to the host opens within the try's limit, one try at a time per host. It sends nothing. */
 export function reachable(host: string): Promise<boolean> {
+  const running = trying.get(host);
+  if (running) return running;
   const at = host.lastIndexOf(':');
-  return new Promise((resolve) => {
+  const attempt = new Promise<boolean>((resolve) => {
     const socket = net.connect({ host: host.slice(0, at).replace(/^\[|\]$/g, ''), port: Number(host.slice(at + 1)), timeout: TRY_MS });
     const done = (reached: boolean) => { socket.destroy(); resolve(reached); };
     socket.once('connect', () => done(true));
     socket.once('timeout', () => done(false));
     socket.once('error', () => done(false));
-  });
+  }).finally(() => trying.delete(host));
+  trying.set(host, attempt);
+  return attempt;
 }
 
 /**
  * A network task's check: called on every tick while one is open, it starts a try at most once every 5 s and hands
- * each result over once, so no earlier result ever closes a later task.
+ * each result over once, with when its try started, so the core can refuse one from before a task. Never waits.
  */
-export function networkCheck(): { read(): { host: string; reached: boolean } | null } {
-  let result: { host: string; reached: boolean } | null = null;
-  let trying = false;
+export function networkCheck(): { read(): { host: string; reached: boolean; at: number } | null } {
+  let result: { host: string; reached: boolean; at: number } | null = null;
+  let busy = false;
   let last = 0;
   return {
     read() {
       const done = result;
       result = null;
-      if (!done && !trying && Date.now() - last >= CHECK_MS) {
-        trying = true;
-        last = Date.now();
+      if (!done && !busy && Date.now() - last >= CHECK_MS) {
+        busy = true;
+        const at = last = Date.now();
         const host = apiHost();
-        void reachable(host).then((reached) => { result = { host, reached }; trying = false; });
+        void reachable(host).then((reached) => { result = { host, reached, at }; busy = false; });
       }
       return done;
     },
@@ -82,10 +87,15 @@ export function slackThread(link: string): { channel: string; ts: string } | nul
   return { channel: path[1]!, ts: inThread && /^\d{10}\.\d{6}$/.test(inThread) ? inThread : `${path[2]}.${path[3]}` };
 }
 
-/** The read-only connector: conversations.replies, each thread at most once every 5 s. A failure's text never holds what Slack echoed. */
+/**
+ * The read-only connector: conversations.replies, each thread at most once every 5 s, in the background, so a read
+ * answers at once with what the last one found and a hung Slack never holds the asks core. What a failure says is
+ * this file's own text: never what Slack sent, or an error that could quote the token.
+ */
 export function slackThreads(root: string): { read(link: string): Promise<{ from: string; text: string; at: number }[]> } {
   type Messages = { from: string; text: string; at: number }[];
-  const seen = new Map<string, { at: number; read: Promise<Messages> }>();
+  interface Seen { at: number; busy: boolean; found: Messages; failed: string | null }
+  const seen = new Map<string, Seen>();
   const fetched = async (link: string): Promise<Messages> => {
     const slack = slackConfig(root);
     const thread = slackThread(link);
@@ -93,9 +103,9 @@ export function slackThreads(root: string): { read(link: string): Promise<{ from
     const out: Messages = [];
     for (let cursor = '';;) {
       const query = new URLSearchParams({ channel: thread.channel, ts: thread.ts, limit: '200', ...(cursor ? { cursor } : {}) });
-      const reply = await fetch(`${slack.api}/conversations.replies?${query}`, { headers: { authorization: `Bearer ${slack.token}` }, redirect: 'error', signal: AbortSignal.timeout(CHECK_MS) });
+      const reply = await fetch(`${slack.api}/conversations.replies?${query}`, { headers: { authorization: `Bearer ${slack.token}` }, redirect: 'error', signal: AbortSignal.timeout(CHECK_MS) }).catch(() => { throw new Error('Slack could not be reached with this token'); });
       if (!reply.ok) throw new Error(`Slack answered HTTP ${reply.status}`);
-      const body = (await reply.json()) as { ok?: boolean; error?: unknown; messages?: { user?: string; bot_id?: string; text?: string; ts?: string }[]; response_metadata?: { next_cursor?: string } };
+      const body = await reply.json().catch(() => { throw new Error('Slack answered with something other than JSON'); }) as { ok?: boolean; error?: unknown; messages?: { user?: string; bot_id?: string; text?: string; ts?: string }[]; response_metadata?: { next_cursor?: string } };
       if (body.ok !== true) throw new Error(`Slack refused the read: ${typeof body.error === 'string' && /^[a-z_]{1,64}$/.test(body.error) ? body.error : 'no reason it gave can be shown'}`);
       for (const m of body.messages ?? []) out.push({ from: m.user === slack.you ? 'you' : m.user ?? m.bot_id ?? 'someone', text: m.text ?? '', at: Math.round(Number(m.ts) * 1000) });
       cursor = body.response_metadata?.next_cursor ?? '';
@@ -103,12 +113,16 @@ export function slackThreads(root: string): { read(link: string): Promise<{ from
     }
   };
   return {
-    read(link) {
-      const before = seen.get(link);
-      if (before && Date.now() - before.at < CHECK_MS) return before.read;
-      const read = fetched(link);
-      seen.set(link, { at: Date.now(), read });
-      return read;
+    async read(link) {
+      const s = seen.get(link) ?? { at: 0, busy: false, found: [], failed: null };
+      seen.set(link, s);
+      if (!s.busy && Date.now() - s.at >= CHECK_MS) {
+        s.busy = true;
+        s.at = Date.now();
+        void fetched(link).then((found) => { s.found = found; s.failed = null; }, (error: Error) => { s.failed = error.message; }).finally(() => { s.busy = false; });
+      }
+      if (s.failed !== null) throw new Error(s.failed);
+      return s.found;
     },
   };
 }

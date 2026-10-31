@@ -189,10 +189,10 @@ export interface AsksOptions {
    */
   threads?: { read(link: string): Promise<ThreadMessage[]> };
   /**
-   * A network task's check, once per tick while one is open: a try's result when one has finished since the last call,
-   * and null otherwise. Left out, a network task closes only on a verdict.
+   * A network task's check, once per tick while one is open: a try's result, with when it started, when one has finished
+   * since the last call, and null otherwise. Left out, a network task closes only on a verdict.
    */
-  network?: { read(): { host: string; reached: boolean } | null };
+  network?: { read(): { host: string; reached: boolean; at: number } | null };
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -1946,6 +1946,8 @@ class AsksCore implements Asks {
     const tried = tasks.length ? this.options.network?.read() : null;
     if (!tried) return;
     for (const task of tasks) {
+      // A try from before the task says nothing of the block that raised it.
+      if (tried.at < task.created) continue;
       if (tried.reached) task.pending.moot ??= { because: 'network_reached', host: tried.host };
       else task.missing = { check: String(task.data.proves), reasons: [`${tried.host} can't be reached yet`], link: null };
     }
@@ -1971,8 +1973,9 @@ class AsksCore implements Asks {
         continue;
       }
       const you = String(ask.data.owner);
-      const posted = messages.findIndex((m) => m.from === you);
-      if (posted < 0) continue;
+      // Only your post since the task was raised: an old exchange in the thread never closes a new task.
+      const posted = messages.findIndex((m) => m.from === you && m.at >= ask.created);
+      if (posted < 0) { delete ask.missing; continue; }
       const replies = messages.slice(posted + 1).filter((m) => m.from !== you);
       if (replies.some((m) => typeof m.text === 'string' && m.text.includes(thread.expect))) {
         ask.pending.moot = { because: 'thread_replied', link: thread.link };

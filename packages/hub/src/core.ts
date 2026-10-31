@@ -10,7 +10,7 @@ import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { availableParallelism, homedir, networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ADAPTERS, shipped, type AdapterRegistry } from '@deepbuild/adapters';
+import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
@@ -676,7 +676,12 @@ export class Core {
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
     const replayed = this.replaying ?? Promise.resolve();
-    return replayed.then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+    // A network stop's try runs before it queues, so it holds no other hook of any session (#85).
+    const stamped = drafts[0]?.ts ?? 0;
+    const tried = (meta.agent === 'claude-code' || meta.agent === 'claude') && meta.fields?.error === 'server_error' && this.now() - stamped < 10 * 60_000
+      ? (() => { const host = apiHost(); return reachable(host).then((reached) => { meta.network = { host, reached }; }); })()
+      : undefined;
+    return replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
   }
   /**
    * A hook reaching the running hub shows it answers again: what deep-hook spooled while the hub was late is
@@ -1404,11 +1409,8 @@ export class Core {
     data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
     // Who clears it. A spend limit reads as a rate limit, but only you can raise it (#85).
     data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' || meta.fields?.error === 'billing_error' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' || cause === 'timed_out' ? 'service' : 'agent';
-    // The payload can't tell a dropped connection from a network you must reconnect, so the hub tries it (#85).
-    if (cause === 'timed_out' && ADAPTERS[meta.agent] === 'claude' && this.now() - draft.ts < 10 * 60_000) {
-      const host = apiHost();
-      if (!(await reachable(host))) { data.owner = 'you'; data.signature = signature('stop:network', host); }
-    }
+    // The payload can't tell a dropped connection from a network you must reconnect, so the hub tried it (#85).
+    if (cause === 'timed_out' && meta.network && !meta.network.reached) { data.owner = 'you'; data.signature = signature('stop:network', meta.network.host); }
   }
 
   /**
