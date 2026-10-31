@@ -362,7 +362,7 @@ async function run({ cli, home, cycles }) {
     clearTimeout(killing);
   }
 }
-/** The merge base's hub through these same cycles, side by side with this one, or why it can't be. */
+/** The merge base's hub through these same cycles, side by side with this one; without it there is no comparison, so BLOCKED. */
 async function mergeBaseSide() {
   const git = (...args) => execFileSync('/usr/bin/git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
   const commit = git('merge-base', 'HEAD', 'origin/main');
@@ -376,7 +376,8 @@ async function mergeBaseSide() {
     if (spawnSync('npm', ['run', 'build', '--workspaces'], { cwd: copy, stdio: 'ignore' }).status) execFileSync('npm', ['run', 'build', '--workspaces'], { cwd: copy, stdio: 'ignore' });
     return { copy, commit, done };
   } catch (error) {
-    return { commit, done, initial: `the merge base can't be built here: ${error.message}` };
+    done({});
+    throw new Blocked(`the merge base ${commit} can't be built here: ${error.message}`);
   }
 }
 function runBase(side, cycles) {
@@ -394,9 +395,9 @@ function runBase(side, cycles) {
     child.on('close', () => {
       rmSync(scratch, { recursive: true, force: true });
       const line = out.split('\n').find((text) => text.startsWith('{"bench"'));
-      if (!line) return resolve(side.done({ initial: `the merge base can't run the cycles: ${out.split('\n').find((text) => text.startsWith('BLOCKED')) ?? 'it printed no readings'}` }));
-      const { heapGrowthBytes, rssGrowthBytes, heapGrowthPer1000Bytes, rssGrowthPer1000Bytes, open } = JSON.parse(line);
-      resolve(side.done({ heapGrowthBytes, rssGrowthBytes, heapGrowthPer1000Bytes, rssGrowthPer1000Bytes, open }));
+      if (!line) return resolve(side.done({ blocked: `the merge base ${side.commit} can't run the cycles: ${out.split('\n').find((text) => text.startsWith('BLOCKED')) ?? 'it printed no readings'}` }));
+      const { readings, heapGrowthBytes, rssGrowthBytes, heapGrowthPer1000Bytes, rssGrowthPer1000Bytes, open } = JSON.parse(line);
+      resolve(side.done({ readings, heapGrowthBytes, rssGrowthBytes, heapGrowthPer1000Bytes, rssGrowthPer1000Bytes, open }));
     });
   });
 }
@@ -410,9 +411,10 @@ if (!given) leaving.add(() => rmSync(join(home, '..'), { recursive: true, force:
 let base, beside;
 try {
   base = process.argv.includes('--merge-base') ? await mergeBaseSide() : undefined;
-  beside = base?.copy ? runBase(base, cycles) : base ? Promise.resolve(base.done({ initial: base.initial })) : undefined;
+  beside = base && runBase(base, cycles);
   const line = await run({ cli: flag('cli') ?? join(ROOT, 'packages/cli/dist/main.js'), home: realpathSync(home), cycles });
   if (beside) line.mergeBase = await beside;
+  if (line.mergeBase?.blocked) throw new Blocked(line.mergeBase.blocked);
   console.log(JSON.stringify(line));
   const failures = [];
   const heapLimit = (HEAP_PER_1000 * cycles) / 1000;
