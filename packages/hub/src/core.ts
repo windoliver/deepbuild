@@ -21,6 +21,7 @@ import { openRecord, RecordError, type Connection, type EventInput, type RecordS
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { headTrust, slot, validityGate, type SessionLog } from '@deepbuild/gate';
+import { piAcceptsReplaced } from './plant.js';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { after, openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
@@ -205,6 +206,8 @@ interface Routes {
   cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined; handed?: string[];
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
+  /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
+  places?: boolean; placing?: Set<string>;
 }
 /** An answered ask, as a route delivers it. */
 interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
@@ -767,6 +770,8 @@ export class Core {
     const session = this.sessions.get(meta.session);
     if (session && (verified || this.options.plant === 'ends-binding')) {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
+      // pi resumes a session it replaced in the same process, so the same session can start again.
+      if (meta.event === 'SessionStart' && meta.agent === 'pi') session.ended = false;
       if (meta.event === 'SessionEnd') {
         session.ended = true;
         this.endStacks(session.id);
@@ -918,6 +923,7 @@ export class Core {
   }
   /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
   private mapped(meta: HookMeta, draft: Draft, payload: Obj, transcript: readonly Obj[]): Obj | undefined {
+    if (meta.agent === 'pi') return undefined;
     const name = meta.agent === 'codex' ? 'codex' : 'claude';
     const adapter = this.registry().get(name);
     const version = ((adapter.facts as Obj).versions as string[]).at(-1)!;
@@ -1641,12 +1647,14 @@ export class Core {
       // A continue parked for the next prompt goes with the first prompt after a resume (#85); a clear or a
       // compaction starts a new session ID, and the cleared one's continues end with it.
       if (old) fresh.later = [...(old.handed ?? []), ...old.later];
+      if (old?.places) fresh.places = true;
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
     }
     const r = this.routesOf(meta.session, meta.cwd);
     r.covered = !meta.watchOnly;
     if (r.covered && !(this.options.plant === 'routes-kept-across-sessions' && r.shown.size)) r.shown.add(meta.event);
+    if (meta.parent) void this.queue(() => this.placeOrRefuse(meta.parent!)).catch(() => undefined);
     if (meta.event === 'PreToolUse') {
       if (this.options.plant !== 'stop-count-never-resets') r.continued = 0;
       r.capped = false;
@@ -1657,6 +1665,8 @@ export class Core {
       // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
       // it as the folder's last session.
       if (r.later.length || r.handed?.length) this.routesOf(meta.session).later = [...(r.handed ?? []), ...r.later];
+      // A call running as its session quit returns to nobody: its answer waits for the session's resume.
+      for (const [ask, waiting] of this.askWaits) if (waiting === meta.session) this.stopAskWait(ask);
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
@@ -1710,6 +1720,8 @@ export class Core {
     });
     return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
   }
+  /** The asks a running deep_ask or deep_wait of a session whose package places answers will return itself. */
+  private readonly askWaits = new Map<string, string>();
   private outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced'): Promise<void> {
     return this.appendCore('delivery.outcome', { delivery: `ask:${ask}`, via, outcome }, { subject: `ask:${ask}` }).catch(() => undefined);
   }
@@ -1725,6 +1737,10 @@ export class Core {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
+    const asker = this.sessions.get(delivery.session);
+    if (asker?.agent === 'pi' || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    // One the restarted hub hasn't heard from may be a pi session replaced before it, or any idle session whose waiter asked again.
+    if (!asker) void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
     else this.offer(delivery.session);
   }
@@ -1769,6 +1785,7 @@ export class Core {
   private offer(session: string): void {
     const r = this.routes.get(session);
     if (!r) return;
+    if (r.places) return void this.queue(() => this.placeOrRefuse(session)).catch(() => undefined);
     const idle = () => r.waiter !== undefined && !r.holding && r.busy < Math.max(r.waiter.since, r.ended);
     if (!r.covered || !r.shown.has('waiter') || r.capped || r.wakes === false || !idle()) return;
     void this.queue(async () => {
@@ -2174,12 +2191,13 @@ export class Core {
     let proceeded = false;
     try {
       // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
-      const proceed = await this.holds.proceed(meta, until);
+      // pi's package places its own answers: a reply here would hand them over a second time.
+      const proceed = r.places ? undefined : await this.holds.proceed(meta, until);
       if (proceed) {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold'));
         block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
-      } else block = lane?.sendBack ?? await this.stopHold(meta, r, until);
+      } else block = lane?.sendBack ?? (r.places ? undefined : await this.stopHold(meta, r, until));
     } finally {
       this.abandoned.delete(meta.id);
       r.holding--;
@@ -2294,6 +2312,10 @@ export class Core {
     if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping; ask again once it is back.', session, true);
     if (this.options.plant === 'waiter-gives-up-at-600s' && this.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
+    if (params.push === true || context.role === 'mcp') {
+      if (context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Wait only on the pi session this connection is bound to.', session);
+      r.places = true;
+    }
     if (params.poll === true) {
       // The planted Node waiter (waiter-polls) asks each time instead of being told.
       const rows = !r.holding ? await this.queue(() => this.waitingFor(session)) : [];
@@ -2313,6 +2335,75 @@ export class Core {
       this.offer(session);
     });
   }
+  /** The session that replaced this one in its process, if it hasn't itself been resumed since: its answers are bound to the old generation. */
+  private async replacedBy(session: string): Promise<string | undefined> {
+    const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'session.start' AND json_extract(data, '$.parent') = '${sql(session)}'
+      AND log_pos > (SELECT COALESCE(MAX(log_pos), 0) FROM events WHERE kind = 'session.start' AND session_id = '${sql(session)}') ORDER BY log_pos DESC LIMIT 1`)) as { session_id: string }[];
+    // Replaced in its own process: a start naming it as parent from anywhere else replaces nothing.
+    const [was, now] = [this.sessions.get(session), row && this.sessions.get(row.session_id)];
+    // A hub restarted since knows the old one by no process: the start that named it is what's left.
+    return now && (!was || was.pid === 0 || (was.pid === now.pid && was.start === now.start)) ? row!.session_id : undefined;
+  }
+  /**
+   * An answer of a session whose package places them (#40): refused when another session has replaced it, so it never
+   * reaches the replacement; else handed to the package, unless the deep_ask or deep_wait still running returns it.
+   */
+  private async placeOrRefuse(session: string): Promise<void> {
+    // A refusal is final: a session resumed later doesn't take what was refused for it.
+    const refused = (await this.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
+    // Its own: a fork shares its thread, and only the session that asked takes an answer or reports on it.
+    const rows = (await this.waitingFor(session)).filter((row) => row.session === session && !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
+    if (!rows.length) return;
+    const successor = await this.replacedBy(session);
+    const r = this.routes.get(successor && piAcceptsReplaced() ? successor : session);
+    if (successor && !piAcceptsReplaced()) {
+      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'replaced');
+      return;
+    }
+    if (!r?.places || !r.waiter) return;
+    const placing = (r.placing ??= new Set());
+    const fresh = rows.filter((row) => !placing.has(row.id));
+    const waiter = r.waiter;
+    if (!fresh.length) return;
+    r.waiter = undefined;
+    for (const row of fresh) placing.add(row.id);
+    waiter.give({ session, text: this.answerText(fresh), asks: fresh.map((row) => row.id) });
+  }
+  /** What the package did with the answers it took: only the session that raised an ask reports on it. */
+  private async placed(params: Obj, context: CallContext): Promise<Obj> {
+    const session = String(params.session);
+    if (!context.session || context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Report only on the pi session this connection is bound to.', session);
+    const via = String(params.via);
+    const outcome = String(params.outcome);
+    if (!['steer', 'next_prompt'].includes(via)) throw refuse('enum', '/params/via', 'Say steer or next_prompt.', via);
+    if (!['delivered', 'replaced'].includes(outcome)) throw refuse('enum', '/params/outcome', 'Say delivered or replaced.', outcome);
+    const asks = Array.isArray(params.asks) ? params.asks.map(String) : [];
+    for (const ask of asks) {
+      const [row] = (await this.record.raw(`SELECT session_id, status FROM asks WHERE id = '${sql(ask)}'`)) as { session_id: string | null; status: string }[];
+      if (!piAcceptsReplaced()) {
+        if (row?.session_id !== session || row.status !== 'answered') throw refuse('not_found', '/params/asks', 'Report only on an answered ask this session raised.', ask);
+        // Delivered is a word about what the hub handed over, or what a running call returned.
+        if (outcome === 'delivered' && !this.routes.get(session)?.placing?.has(ask) && !this.askWaits.has(ask)) throw refuse('not_found', '/params/asks', 'Report only on an answer handed to this session.', ask);
+      }
+      this.askWaits.delete(ask);
+      const [done] = (await this.record.raw(`SELECT 1 AS yes FROM deliveries WHERE delivery = '${sql(ask)}' AND outcome IN ('delivered', 'replaced')`)) as unknown[];
+      if (done) continue;
+      await this.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
+    }
+    return { reported: asks.length };
+  }
+  /** Ends a running call's hold on its ask, and wakes the call: nothing about the ask landed to wake it (#823). */
+  private stopAskWait(ask: string): void {
+    this.askWaits.delete(ask);
+    for (const wake of this.settling.get(`ask:${ask}`) ?? []) wake();
+  }
+  /** Stops this session's running deep_ask and deep_wait: the call was aborted, and its answer comes as a message of its own. */
+  private stopWaiting(context: CallContext): Obj {
+    for (const [ask, session] of [...this.askWaits]) if (session === context.session) this.stopAskWait(ask);
+    // One answered as it was aborted: the call's reply went unread.
+    if (context.session && this.sessions.get(context.session)?.agent === 'pi') { const session = context.session; void this.queue(() => this.placeOrRefuse(session)).catch(() => undefined); }
+    return {};
+  }
   /** The hooks whose deep-hook let them through before reading the hub's reply, by event ID: none of them is held. */
   private readonly abandoned = new Set<string>();
   /** A held hook whose deep-hook is gone: its stop hold ends at once and delivers nothing, so the answer waits for the waiter or the next prompt. */
@@ -2323,7 +2414,12 @@ export class Core {
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
     if (this.options.plant === 'delivered-to-dead-waiter') return;
-    for (const r of this.routes.values()) if (r.waiter?.key === key) r.waiter = undefined;
+    for (const [session, r] of this.routes) {
+      if (r.waiter?.key !== key) continue;
+      r.waiter = undefined;
+      // The running deep_ask went with it: its answer waits for the next waiter.
+      if (r.places) for (const [ask, waiting] of this.askWaits) if (waiting === session) this.stopAskWait(ask);
+    }
   }
   // ---- The verdict in the chat, and status from the record (#83; design: The verdict in the chat).
 
@@ -2774,7 +2870,8 @@ export class Core {
     if (!meta.session || !meta.cwd || (!none && !isAbsolute(meta.transcript))) return false;
     const home = meta.agent === 'codex' ? join(homedir(), '.codex', 'sessions') : join(homedir(), '.claude', 'projects');
     const transcript = none ? '' : resolve(meta.transcript);
-    if (!none && !isUnder(transcript, home)) return false;
+    // pi's --session-dir puts a session's file anywhere; its package runs inside pi, and pi's process is what is checked.
+    if (!none && meta.agent !== 'pi' && !isUnder(transcript, home)) return false;
     const start = await this.startOf(meta.ppid);
     if (!start) return false;
     const session = this.sessions.get(meta.session);
@@ -2788,6 +2885,16 @@ export class Core {
       this.sessions.set(meta.session, { id: meta.session, thread: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map(), prompts: new Map(), entries: [] });
       // A session's first cursor is written at once: a restart before it would read the session from its end.
       this.writeCursors();
+      return true;
+    }
+    // pi resumes a session from a new process, by its file: its start takes the session over once the old process is gone.
+    const gone = async () => {
+      if (!session.pid) return true;
+      const was = await this.startOf(session.pid, true);
+      return was === undefined ? !running(session.pid) : was !== session.start;
+    };
+    if (meta.agent === 'pi' && session.agent === 'pi' && meta.event === 'SessionStart' && transcript === session.transcript && await gone()) {
+      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd });
       return true;
     }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
@@ -2818,6 +2925,8 @@ export class Core {
     switch (method) {
       case 'hub.health': return this.health();
       case 'session.wait': return this.waitAnswer(params, context);
+      case 'session.delivered': return this.placed(params, context);
+      case 'session.stop_waiting': return this.stopWaiting(context);
       case 'session.note': return this.note(params);
       case 'test.send_back': return this.sendBack(params);
       case 'test.verdict': return this.testVerdict(params);
@@ -3591,22 +3700,37 @@ export class Core {
   }
   private async waitFor(session: string, handle: string): Promise<Obj> {
     const until = Date.now() + this.askWait();
+    const places = this.routes.get(session)?.places === true;
+    if (places) {
+      const [own] = (await this.record.raw(`SELECT session_id FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null }[];
+      if (own?.session_id === session) this.askWaits.set(handle.slice(4), session);
+    }
     // The deep-wait-polls plant reads the ask every 100 ms, as the hub did before #823.
     const polls = this.options.plant === 'deep-wait-polls';
     for (;;) {
-      // The ask is read again only once an event about it lands, the hub stops or the wait runs out (#823).
+      // The ask is read again only once an event about it lands, its call is stopped, the hub stops or the wait runs out (#823).
       const wait = polls ? { woken: new Promise((done) => setTimeout(done, 100)), cancel: () => undefined } : this.wakeable(this.settling, handle, until - Date.now());
       try {
         const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
         if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
+        // Aborted: the answer goes as a message of its own.
+        if (places && !this.askWaits.has(handle.slice(4))) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
         // Decided for you (#27): the answer is the one the decision that closed it saved.
         if (row.status === 'decided' && row.answer === null) {
+          if (places) this.askWaits.delete(handle.slice(4));
           const [d] = (await this.record.raw(`SELECT d.answer AS answer FROM events e JOIN decisions d ON 'decision:' || d.id = json_extract(e.data, '$.decision') WHERE e.kind = 'decision.applied' AND json_extract(e.data, '$.ask') = '${sql(handle)}' ORDER BY e.log_pos DESC LIMIT 1`)) as { answer: string | null }[];
           return { ask: handle, status: row.status, answer: d?.answer ? JSON.parse(d.answer) : null };
         }
-        if (row.status !== 'open' && row.status !== 'later') return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
+        if (row.status !== 'open' && row.status !== 'later') {
+          // The running call carries it into the turn; the package says when it has, and till then nothing else hands it over.
+          if (places && row.status !== 'answered') this.askWaits.delete(handle.slice(4));
+          return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
+        }
         if (this.stopping && this.options.plant !== 'stop-answers-waiting') throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
-        if (this.stopping || Date.now() >= until) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+        if (this.stopping || Date.now() >= until) {
+          if (places) this.askWaits.delete(handle.slice(4));
+          return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+        }
         await wait.woken;
       } finally {
         wait.cancel();
