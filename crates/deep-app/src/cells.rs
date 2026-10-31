@@ -131,6 +131,7 @@ pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
                     "text": screen.rows.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
                     "sprites": sprites,
                 }),
+                bounds,
             );
         },
     )

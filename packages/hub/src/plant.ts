@@ -54,6 +54,8 @@ export type Plant =
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
+  // #124's: deep_drive launching replicas without the replica lease.
+  | 'deep-drive-no-lease'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything';
 const PLANTS: readonly string[] = [
@@ -90,6 +92,7 @@ const PLANTS: readonly string[] = [
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
+  'deep-drive-no-lease',
   'signature-covers-anything',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

@@ -78,6 +78,7 @@ Never: A process stopped that DeepBuild can't prove it started.
 
 - deep_propose. Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it.
 - deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
+- deep_drive. Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.
 
 Never: Drawn over the question card, run past its grant, painted in the status colors except through a status binding, pushed to you, or taken as proof.
 
