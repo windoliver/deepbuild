@@ -47,6 +47,8 @@ test-leave-out-logic = []
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
 test-accent = []
+# Issue #857: `test.serial` (not thread-safe) and the planted `test.racy`, which touches a static.
+test-threads = []
 test-peek = ["dep:deep-canvas-test-modules"]
 test-up-1-0 = ["dep:deep-canvas-test-modules"]
 test-up-1-1 = ["dep:deep-canvas-test-modules"]
