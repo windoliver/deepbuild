@@ -14,7 +14,7 @@ import { shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
-import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, contextBoundFor, fixtures, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
@@ -249,6 +249,8 @@ export class Core {
   private asks!: Asks;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
+  /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
+  private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
   /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
@@ -3482,8 +3484,10 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show'));
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'find_actions'));
       switch (tool) {
+        case 'find_actions': return await this.findActions(args.query as string | null);
+        case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context);
@@ -3647,6 +3651,67 @@ export class Core {
   private agentConnection(session: string): Connection {
     const agent = this.sessions.get(session)?.agent;
     return this.connection(`mcp:${session}`, { session, ...(agent ? { agent } : {}) });
+  }
+
+  /** find_actions (deep-actions, #363): the actions the loaded plug-ins offer agents, each typed from its input schema. */
+  private async findActions(query: string | null): Promise<Obj> {
+    const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const offered = (await this.extensions?.actions() ?? []).filter((a) => a.exposed && words.every((w) => `${a.action} ${a.extension}`.toLowerCase().includes(w)));
+    return { actions: offered.map(({ action, extension, declares, input }) => ({ action, extension, declares, input })) };
+  }
+  /**
+   * call_action (deep-actions, #363): a plug-in action for the session, its input held to the action's schema before
+   * anything else. A read runs. A change runs on your standing rule or your yes to its ask, and a send on your yes
+   * alone: until you answer, the call returns held with the ask, and the same request ID called again runs it once you
+   * said yes. The target is the plug-in that registered the action, at its loaded version, and the authority the
+   * session's own connection, never a window, a folder or another session.
+   */
+  private async callPluginAction(session: string, args: Obj): Promise<Obj> {
+    const name = String(args.action);
+    const request = String(args.request);
+    const listed = (await this.extensions?.actions() ?? []).find((a) => a.action === name);
+    if (!listed) throw refuse('not_found', '/params/arguments/action', 'Call an action find_actions lists, by its name.', name);
+    if (!listed.exposed) throw refuse('not_found', '/params/arguments/action', `${name} isn't offered to agents: ${listed.reason}.`, name);
+    let input: unknown;
+    try {
+      input = JSON.parse(String(args.input));
+    } catch {
+      throw refuse('type', '/params/arguments/input', 'Give the input as one string holding its JSON text.', args.input);
+    }
+    const held = schemas([{ name, schema: listed.input as Schema }]).validate(name, input);
+    if (!held.ok) throw refuse('type', `/params/arguments/input${held.issues[0]!.path}`, `Give input that ${name}'s input schema takes: ${held.issues[0]!.remediation}`, input);
+    if (listed.declares !== 'read') {
+      const s = this.sessions.get(session)!;
+      const key = `${session}|${request}`;
+      let ask = this.actionAsks.get(key);
+      if (!ask) {
+        // A send's ask names its request, so no saved decision ever answers it; a change's is answered by a standing rule.
+        const about: About = {
+          source: `action.${listed.declares}`,
+          subject: { effect: `action.${listed.declares}`, target: { kind: 'action', ref: listed.declares === 'send' ? `${name}#${request}` : name, owner: listed.extension }, change: null },
+          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}'s ${name}, given ${JSON.stringify(input).slice(0, 500)}?`,
+          options: [listed.declares === 'send' ? 'Send it' : 'Change it', 'Don\'t'],
+        };
+        ask = (await this.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)).ask;
+        this.actionAsks.set(key, ask);
+      }
+      const [row] = (await this.record.raw('SELECT decision FROM asks WHERE id = ?', [ask.slice(4)])) as { decision: string | null }[];
+      if (row?.decision === 'deny') return { status: 'declined', ask };
+      if (row?.decision !== 'allow') return { status: 'held', ask, reason: `DeepBuild is holding ${name}: it waits for your answer to ${ask}; once you say yes, call it again with the same request ID.` };
+    }
+    const result = await this.extensions!.callAction({
+      action: name, target: { handle: `ext:${listed.extension}`, version: listed.version }, input, caller: this.agentConnection(session), request,
+    });
+    // Refused before its handler started, it did not run; one that started and failed reaches the agent as an error,
+    // with what the hub wrote for it on record as unverified.
+    if (result.status === 'refused' && !result.started) throw refuse('unavailable', '/params/arguments/action', `${result.reason}; nothing ran.`, name);
+    if (listed.declares === 'read') return result.status === 'refused' ? { status: 'failed', reason: result.reason } : result;
+    // A change or send's report, and what the hub wrote for it, as its action.reported holds them.
+    const [reported] = (await this.record.raw(`SELECT r.data AS data FROM events e JOIN events r ON r.kind = 'action.reported' AND json_extract(r.data, '$.call') = json_extract(e.data, '$.call')
+      WHERE e.kind = 'action.entered' AND e.session_id = ? AND json_extract(e.data, '$.request') = ? ORDER BY r.log_pos DESC LIMIT 1`, [session, request])) as { data: string }[];
+    const { error: _error, ...report } = reported ? JSON.parse(reported.data) as Obj : {};
+    if (result.status === 'refused') return { status: 'failed', reason: result.reason, call: result.call, report: reported ? report : null };
+    return { ...result, report: reported ? report : null };
   }
 
   /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
