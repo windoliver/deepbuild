@@ -1,0 +1,29 @@
+The #884 acceptance suite run on the base commit, before any implementation.
+
+Base commit:  0f7fb686 (origin/main, "Merge pull request #873 from windoliver/worktree-github-issue-363-d6e35a")
+Date:         2026-10-31
+Node:         v24.22.0 (fnm exec --using=24), vitest 5.0.5, macOS (Darwin 25.6.0)
+Setup:        npm ci; npm run build --workspaces
+Command:      fnm exec --using=24 npx vitest run tests/acceptance/884 --reporter=verbose
+Exit code:    1
+Result:       Test Files 1 failed (1); Tests 2 failed | 2 passed (4); about 4 s
+Type check:   fnm exec --using=24 npx tsc -p tests/acceptance/884  -> exit 0
+
+Trimmed to each test's first failure.
+
+FAIL #884.2b9cea3f a Chinese wiki claim is found by a word inside it, and a mixed query needs every word
+  (the twin passed first: "billing" finds wiki:notes/cache-billing#zh2 and wiki:notes/billing#en1 through the
+  default index, so the claims are in the index the hub searches)
+  AssertionError: "缓存" finds the page holding "提示缓存失效时重新计费" (wiki:notes/cache#zh1) through the default
+  index; it found: []: expected [] to include 'wiki:notes/cache#zh1'
+
+PASS #884.3f957841 "Größe" finds the decision holding "größe" and not the one holding "grosse"
+PASS #884.3f957841 "café" finds the decision holding "Café"
+  (Expected on the base: its a-to-z word rule cuts "Größe" to "gr" and "e" and "café" to "caf", the same pieces as
+  the text, so both match by accident. They guard the fix against the wrong programs named in the README.)
+
+FAIL #884.9b8cbcf7 a query of only punctuation returns no hits and says it had no words to search for
+  AssertionError: deep_search "?! … — ,.;:() 「」" says it had no words to search for:
+  {"content":[{"type":"text","text":"{\"hits\":[],\"more\":0}"}],"isError":false,"structuredContent":{"hits":[],"more":0}}:
+  expected '{"content":[…' to match /\bno\b(\s+\S+){0,2}\s+words?\b/i
+  (the base returns no hits, silently: the case the criterion forbids)

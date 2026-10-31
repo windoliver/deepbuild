@@ -105,6 +105,10 @@
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #327: the question card's digests (an ask thread's fold key, a confirmed answer's bytes), the same SHA-256 crate deep-hook already uses."
         }
       },
       "dev-dependencies": {
@@ -142,6 +146,14 @@
           "spec": "^0.25",
           "why": "Issue #339: the captured frame as gpui's RenderImage, and the held run's frame written as a PNG. Already in gpui's tree."
         },
+        "objc2-screen-capture-kit": {
+          "spec": "^0.3",
+          "why": "Issue #105: the bug capture through ScreenCaptureKit: the system picker, the stream and its recording output, which writes the MP4. Same objc2 family and version as gpui's tree."
+        },
+        "objc2-core-media": {
+          "spec": "^0.3",
+          "why": "Issue #105: CMSampleBuffer, the type each captured frame arrives in, so the capture counts its frames and times the first. Same objc2 family and version as gpui's tree."
+        },
         "block2": {
           "spec": "^0.6",
           "why": "Issue #339: the block the NSEvent local monitor takes. Already in gpui's tree."
@@ -169,6 +181,18 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #338: the snapshot, kit, parity and canvas files the record points at; already in gpui-kit's tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #124: deep_drive names its snapshots, screenshots, frames and trace by SHA-256, as the evidence store does. Already in the workspace tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #124: masks, highlight strips and PNG encoding of deep_drive's screenshots and recorded frames, on GPUI's own RgbaImage. Already in gpui's tree."
+        },
+        "crc32fast": {
+          "spec": "^1",
+          "why": "Issue #124: the chunk checksums of a deep_drive recording's animated PNG, assembled from its frames. Already in the png crate's tree."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -273,6 +297,10 @@
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #348: checkManifest, the manifest contract conformance runs before a load, the canonical JSON a package digest reads its manifest as, and the contract fixtures the host's kit plants."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #364: scrubValues, the Privacy scrub that strips every secret the hub holds from a source call's headers and body before the parser or the record sees them."
         },
         "@deepbuild/leases": {
           "spec": "0.0.0",

@@ -114,7 +114,7 @@ export default class StocksView extends View {
         div()
           .w(90)
           .text_right()
-          .text_color(change >= 0 ? "#16803c" : color.destructive)
+          .text_color(change >= 0 ? color.primary : color.destructive)
           .child(changeText),
       );
   }
