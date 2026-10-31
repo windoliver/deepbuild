@@ -234,17 +234,14 @@ pub fn mount_panel(
     runtime.mount_application(&loaded, window, cx)
 }
 
-/// The first dependency a panel's gpui-shell manifest fetches from a repository, by name.
+/// The first dependency a panel's manifest names. Every form gpui-shell takes, object or shorthand, fetches from a
+/// repository, so any entry counts. A manifest that doesn't parse fetches nothing: gpui-shell refuses it too.
 pub fn fetched_dependency(dir: &Path) -> Option<String> {
     // #358: a package's own manifest is read as well; what it asks for is never granted either way.
     ["gpui-shell.json", "package.json"].iter().find_map(|file| {
         let text = std::fs::read_to_string(dir.join(file)).ok()?;
         let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
-        manifest["dependencies"]
-            .as_object()?
-            .iter()
-            .find(|(_, dependency)| dependency.get("git").is_some())
-            .map(|(name, _)| name.clone())
+        manifest["dependencies"].as_object()?.keys().next().cloned()
     })
 }
 
