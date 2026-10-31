@@ -1,0 +1,98 @@
+// The test stocks plug-in (#363 AC3, AC4, AC5, AC7, AC8): its store kind ext.stocks.alert, one item per symbol, and
+// four actions:
+// - set-alert (change, changes ext.stocks.alert): puts the alert { symbol, above } unless the store already holds that
+//   alert, in which case it writes nothing; returns { output, report }, the report { verified, checked }
+// - list-alerts (read, reads ext.stocks.alert): every item of the store, its value as the store holds it, as JSON text
+// - send-digest (send): a digest of the alerts to a recipient; counts its runs and sends nothing itself
+// - runs (read): how many times set-alert and send-digest ran in this load
+// probe.json, written per test, picks the store's generation (1, or 2 with a forward migration from 1), a backward
+// migration (`backward`: generation 1 declaring a migration from 2), and a planted set-alert handler (`plant`):
+// - claims-changed: writes nothing, and reports the alert as changed
+// - no-report: writes as set-alert does, and returns no report
+// - string-report: writes as set-alert does, and returns a string for its report
+// - yes-report: writes as set-alert does, and reports verified: "yes"
+import { existsSync, readFileSync } from 'node:fs';
+
+const PROBE = new URL('./probe.json', import.meta.url);
+const probe: { generation?: number; backward?: boolean; plant?: string } = existsSync(PROBE) ? JSON.parse(readFileSync(PROBE, 'utf8')) : {};
+const ALERT = 'ext.stocks.alert';
+const GEN1 = {
+  type: 'object',
+  properties: { symbol: { type: 'string' }, above: { type: 'number' } },
+  required: ['symbol', 'above'],
+};
+const GEN2 = {
+  type: 'object',
+  properties: { symbol: { type: 'string' }, above: { type: 'number' }, note: { type: ['string', 'null'] } },
+  required: ['symbol', 'above', 'note'],
+};
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  const generation = probe.generation ?? 1;
+  if (probe.backward) {
+    // A migration back: generation 1, migrating items from generation 2.
+    await deep.store(ALERT, { generation: 1, schema: GEN1, migrates: [2] }, (_from: number, value: any) => ({ symbol: value.symbol, above: value.above }));
+  } else if (generation === 2) {
+    await deep.store(ALERT, { generation: 2, schema: GEN2, migrates: [1] }, (_from: number, value: any) => ({ ...value, note: null }));
+  } else {
+    await deep.store(ALERT, { generation: 1, schema: GEN1 });
+  }
+
+  const runs = { set_alert: 0, send_digest: 0 };
+  const alertInput = strict({ symbol: { type: 'string' }, above: { type: 'number' } });
+
+  deep.registerAction('ext.stocks.set_alert', {
+    declares: 'change',
+    changes: [ALERT],
+    input: alertInput,
+    output: strict({ symbol: { type: 'string' }, above: { type: 'number' }, created: { type: 'boolean' } }),
+  }, async (input: { symbol: string; above: number }) => {
+    runs.set_alert++;
+    const { symbol, above } = input;
+    const existing = await deep.store.get(ALERT, symbol);
+    const same = existing !== null && existing !== undefined && existing.above === above;
+    if (probe.plant === 'claims-changed') {
+      return {
+        output: { symbol, above, created: true },
+        report: { verified: true, checked: `set ${symbol} above ${above}`, changed: [`${ALERT}:${symbol}`, `${ALERT}/${symbol}`, symbol] },
+      };
+    }
+    if (!same) await deep.store.put(ALERT, symbol, generation === 2 ? { symbol, above, note: existing?.note ?? null } : { symbol, above });
+    const now = await deep.store.get(ALERT, symbol);
+    const output = { symbol, above, created: !same };
+    const checked = `read ${symbol} back from ${ALERT}: above ${now?.above}`;
+    switch (probe.plant) {
+      case 'no-report': return { output };
+      case 'string-report': return { output, report: `${symbol} alerts above ${above}` };
+      case 'yes-report': return { output, report: { verified: 'yes', checked } };
+      default: return { output, report: { verified: now?.above === above, checked } };
+    }
+  });
+
+  deep.registerAction('ext.stocks.list_alerts', {
+    declares: 'read',
+    reads: [ALERT],
+    input: strict({}),
+    output: strict({ alerts: { type: 'array', items: strict({ key: { type: 'string' }, value: { type: 'string' } }) } }),
+  }, async () => {
+    const items: { key: string; value: unknown }[] = await deep.store.list(ALERT);
+    return { alerts: items.map((i) => ({ key: i.key, value: JSON.stringify(i.value) })) };
+  });
+
+  deep.registerAction('ext.stocks.send_digest', {
+    declares: 'send',
+    input: strict({ to: { type: 'string' } }),
+    output: strict({ to: { type: 'string' }, alerts: { type: 'integer' } }),
+  }, async (input: { to: string }) => {
+    runs.send_digest++;
+    const items: unknown[] = await deep.store.list(ALERT);
+    return { output: { to: input.to, alerts: items.length }, report: { verified: 'unverified', checked: 'the digest was handed over; no answer read' } };
+  });
+
+  deep.registerAction('ext.stocks.runs', {
+    declares: 'read',
+    input: strict({}),
+    output: strict({ set_alert: { type: 'integer' }, send_digest: { type: 'integer' } }),
+  }, async () => ({ ...runs }));
+}

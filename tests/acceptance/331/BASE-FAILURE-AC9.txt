@@ -17,7 +17,7 @@ acknowledged, and the base hub records session.child_started@1 (writer core, ver
 data.child are session:<the two UUIDs with dashes dropped>, as the test's matcher reads them. So the passing side
 is unverified only past the deep_env calls: the ports leased, the stacks, the lease holders and the downs.
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-aca6492c5ff87332d/tests/acceptance/331
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-aca6492c5ff87332d/tests/acceptance/331
 
  ❯ child.test.ts (1 test | 1 failed) 3365ms
    ❯ AC9 #331.b23ec100 a child agent in its own worktree can't use a port its parent leased (1)

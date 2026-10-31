@@ -9,6 +9,7 @@
 
 mod access;
 mod ask;
+mod capture;
 mod costs;
 mod efficiency;
 mod evidence;
@@ -614,6 +615,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(t) = terminal::parse_call(name, c) {
         return Some(Call::Term(Box::new(t)));
     }
+    if let Some(t) = capture::parse_call(name, c) {
+        return Some(Call::Capture(Box::new(t)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -761,6 +765,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                             .as_i64()
                             .filter(|n| (1..=shared::FLICKS).contains(n))?,
                         next_vsync: d.get("next_vsync")?.as_i64().filter(|n| *n >= 0)?,
+                        feed: match d.get("feed") {
+                            None => None,
+                            Some(f) => Some(f.as_str()?.to_string()),
+                        },
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -889,9 +897,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         )),
         _ => None,
     };
+    // #105: the hub ends at this time as SIGKILL would.
+    let kill_at = match input.get("fault").and_then(|f| f.get("kill_at")) {
+        None => None,
+        Some(t) => Some(t.as_i64().filter(|t| *t >= 0)?),
+    };
     let fault = match input.get("fault") {
         None => None,
-        Some(_) if commit_fault.is_some() => None,
+        Some(_) if commit_fault.is_some() || kill_at.is_some() => None,
         Some(f) => Some(HoldFault {
             holds: match f.get("holds")?.as_str()? {
                 "fallback_pipeline" => Hold::FallbackPipeline,
@@ -1036,6 +1049,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "tab_draws_text" => Planted::TabDrawsText,
             "tab_redraws_at_30hz" => Planted::TabRedrawsAt30hz,
             "tab_draws_capture" => Planted::TabDrawsCapture,
+            "records_without_hold" => Planted::RecordsWithoutHold,
+            "records_past_max" => Planted::RecordsPastMax,
+            "drafts_no_check" => Planted::DraftsNoCheck,
+            "frames_to_record" => Planted::FramesToRecord,
+            "keeps_asset_after_crash" => Planted::KeepsAssetAfterCrash,
+            "labels_redaction_complete" => Planted::LabelsRedactionComplete,
+            "sends_without_approval" => Planted::SendsWithoutApproval,
             _ => return None,
         }),
     };
@@ -1151,6 +1171,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         quotas,
         clock,
         commit_fault,
+        kill_at,
         epoch_start: epoch_start.unwrap_or(0),
         shuffle,
         threads,

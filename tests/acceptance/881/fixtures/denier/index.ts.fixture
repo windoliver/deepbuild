@@ -1,0 +1,28 @@
+// A test package from outside DeepBuild's signed release (#881): it denies every tool.before with its `why` template.
+// With probe.json's `note` set, each call first appends a task.created titled "<its id> asked <n>" and waits for it,
+// so the record shows every call its handler took, even after it is unloaded.
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+
+const ID: string = JSON.parse(readFileSync(new URL('./deepbuild.json', import.meta.url), 'utf8')).id;
+const probeFile = new URL('./probe.json', import.meta.url);
+const probe: { note?: boolean } = existsSync(probeFile) ? JSON.parse(readFileSync(probeFile, 'utf8')) : {};
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const base32 = (value: bigint, length: number): string => {
+  let s = '';
+  for (let i = 0; i < length; i++) { s = CROCKFORD[Number(value & 31n)] + s; value >>= 5n; }
+  return s;
+};
+const ulid = (ms: number): string => base32(BigInt(ms), 10) + base32(BigInt(`0x${randomBytes(10).toString('hex')}`), 16);
+
+export default function (deep: any): void {
+  let call = 0;
+  deep.on('tool.before', async () => {
+    const n = ++call;
+    if (probe.note) {
+      const ts = Date.now();
+      await deep.record.append({ v: 1, id: ulid(ts), kind: 'task.created', ts, data: { task_ref: `task:${ulid(ts)}`, thread: ulid(ts), owner: 'you', title: `${ID} asked ${n}` } });
+    }
+    return { deny: { template: 'why', values: { handle: 'claim:01K74G1Z3X5V7T9R1P3N5M7K9H' } } };
+  });
+}

@@ -771,6 +771,17 @@
       "initialReason": "Issue #402 first measurement: the merge base has no cell grid. One process feeds a terminal's cell grid 600 full-screen repaints of 36 rows, one every 1/60 s, through `deep-show run` on the virtual clock, failing unless every patch is presented in a frame of its own; p50 includes Node's and the binary's start. The cell grid's cost (under 5% of a core at 60 patches a second) stays in tests/acceptance/402/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "capture-save",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "capture-save"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #105 first measurement: the merge base has no screen capture. One process starts a bug capture, picks the second display and holds the capture chord for 119.5 s through `deep-show run` on the virtual clock, then releases it, failing unless the saved asset holds every frame of the hold; p50 includes Node's and the binary's start. The issue's save within 1 s stays in tests/acceptance/105/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "hosted-terminal-60hz",
       "command": [
         "node",
@@ -852,6 +863,54 @@
         "first_settled_ms": 300
       },
       "initialReason": "Issue #854 first measurement: the merge base times no replica's cold start. Each run spawns a fresh release deep-gpu on a fixture document in the app's headless window and reads, from the process's own start time, when its first settled frame was drawn, and which pipelines it compiled during that frame, five runs after a warm-up one. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-launch",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "launch"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "p50Ms": 2000
+      },
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process spawns target/debug/deep-drive, launches a replica on #124's fixture panel, waits for launch's answer, then ends the replica's stdin and waits for it to exit. The issue's 2 s launch caps p50; the run also holds Node's start and the replica's exit, so the cap is no looser than the issue's, which tests/acceptance/124/ac5-budgets.live.test.ts times from spawn to launch's answer. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-action",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "action"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process launches a replica on #124's fixture panel and clicks its Email field 101 times, each once it is visible, enabled and still. The issue's 50 ms round trip less its wait stays in tests/acceptance/124/ac5-budgets.live.test.ts, since this lane times whole processes, launch included. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-snapshot-2000",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "snapshot-2000"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process launches a replica on #124's 2,000-button panel and takes 101 text snapshots of its window. The issue's 20 ms snapshot stays in tests/acceptance/124/ac5-budgets.live.test.ts, since this lane times whole processes, launch included. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-memory",
+      "command": [
+        "node",
+        "benchmarks/replica.mjs",
+        "memory"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "peakBytes": 500000000
+      },
+      "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process replays #124's recorded Claude Code run in a replica on the fixture panel, its launch to its close. The issue's 500 MB per replica caps the peak resident memory /usr/bin/time reads, the larger of Node's and the replica's. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

@@ -34,6 +34,12 @@ export const API = Object.freeze([
   { method: 'deep.provide', needs: null },
   { method: 'deep.use', needs: null },
   { method: 'deep.read', needs: null },
+  // #363: the piece's store, its items kept in the record under kinds its manifest declares. `deep.store` comes before
+  // its methods, which hang off it.
+  { method: 'deep.store', needs: null },
+  { method: 'deep.store.put', needs: null },
+  { method: 'deep.store.get', needs: null },
+  { method: 'deep.store.list', needs: null },
   // #44: a lease from the kernel's one table, held by the package itself.
   { method: 'deep.lease', needs: null },
   // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
@@ -56,6 +62,8 @@ export function extensionSide(call, load) {
   const routes = new Map();
   const actions = new Map();
   const outputs = new Map();
+  // Each store's migration to the generation it declares (#363), asked by the host at its load.
+  const migrations = new Map();
   // Its environments by name (#331): their up and down stay here, asked by the host at the kit and at a stack's start.
   const environments = new Map();
   const scope = new AsyncLocalStorage();
@@ -73,6 +81,7 @@ export function extensionSide(call, load) {
     'deep.registerRoute': keeper(routes),
     'deep.registerAction': (name, _declared, fn) => keeper(actions)(name, fn),
     'deep.provide': (name, _kind, _schema, fn) => keeper(outputs)(name, fn),
+    'deep.store': (kind, _declared, migrate) => (typeof migrate === 'function' ? keeper(migrations)(kind, migrate) : undefined),
     'deep.registerResolver': (resolver) => { resolvers = [...resolvers, resolver]; return () => { resolvers = resolvers.filter((r) => r !== resolver); }; },
     'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
@@ -167,6 +176,11 @@ export function extensionSide(call, load) {
         const fn = actions.get(params?.name);
         if (!fn) throw Error(`no action ${params?.name} is registered here`);
         return (await scope.run(params.scope, () => fn(params.input, params.ctx))) ?? null;
+      }
+      if (method === 'migrate') {
+        const fn = migrations.get(params?.kind);
+        if (!fn) throw Error(`no migration of ${params?.kind} is declared here`);
+        return (await fn(params.from, params.value)) ?? null;
       }
       if (method === 'source.parse' || method === 'source.read') {
         const source = sources.get(params?.name);
