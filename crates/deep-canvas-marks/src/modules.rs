@@ -692,7 +692,11 @@ impl Canonical for Status {
     }
 }
 
-deep_canvas::canonical_fields!(LookValue { palette, status });
+impl deep_canvas::schedule::Canonical for LookValue {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
+    }
+}
 
 fn register_look(r: &mut Registrar) {
     r.array("look.palette", "palette", "document", "shading", "items");
@@ -822,12 +826,14 @@ pub struct ScaleValue {
     pub ticks: Vec<(f64, String)>,
 }
 
-deep_canvas::canonical_fields!(ScaleValue {
-    domain,
-    range,
-    step,
-    ticks
-});
+impl deep_canvas::schedule::Canonical for ScaleValue {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.domain, &self.range, &self.step, &self.ticks),
+            out,
+        );
+    }
+}
 
 /// A scale's nice domain, range, step and labelled ticks.
 fn scale(v: &mut View<'_>) -> Result<(), OpError> {
@@ -897,11 +903,11 @@ impl Canonical for Frame {
     }
 }
 
-deep_canvas::canonical_fields!(Drawing {
-    frame,
-    runs,
-    animated
-});
+impl deep_canvas::schedule::Canonical for Drawing {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.frame, &self.runs, &self.animated), out);
+    }
+}
 
 fn register_marks2d(r: &mut Registrar) {
     r.array(

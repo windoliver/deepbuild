@@ -57,7 +57,11 @@ pub struct Shown {
     pub reasons: Vec<&'static str>,
 }
 
-deep_canvas::canonical_fields!(Shown { id, rank, reasons });
+impl deep_canvas::schedule::Canonical for Shown {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.id, &self.rank, &self.reasons), out);
+    }
+}
 
 /// The one count item the rest fold into.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,7 +70,11 @@ pub struct Fold {
     pub line: String,
 }
 
-deep_canvas::canonical_fields!(Fold { items, line });
+impl deep_canvas::schedule::Canonical for Fold {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.items, &self.line), out);
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Level {
@@ -76,7 +84,11 @@ pub struct Level {
     pub new: usize,
 }
 
-deep_canvas::canonical_fields!(Level { shown, fold, new });
+impl deep_canvas::schedule::Canonical for Level {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.shown, &self.fold, &self.new), out);
+    }
+}
 
 fn reasons(item: &Item) -> Vec<&'static str> {
     let mut keys: Vec<&'static str> = RANK

@@ -98,7 +98,7 @@ pub struct DebugDigested {
 #[cfg(feature = "test-debug-digest")]
 impl deep_canvas::schedule::Canonical for DebugDigested {
     fn encode(&self, out: &mut Vec<u8>) {
-        out.extend_from_slice(deep_canvas::schedule::debug_text(self).as_bytes());
+        out.extend_from_slice(crate::frames::debug_text(self).as_bytes());
     }
 }
 

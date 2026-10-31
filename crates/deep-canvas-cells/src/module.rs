@@ -22,13 +22,20 @@ pub struct Grid {
     pub rows: Vec<Row>,
 }
 
-deep_canvas::canonical_fields!(Grid {
-    origin,
-    cell,
-    font_size,
-    bg,
-    rows
-});
+impl deep_canvas::schedule::Canonical for Grid {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(
+                &self.origin,
+                &self.cell,
+                &self.font_size,
+                &self.bg,
+                &self.rows,
+            ),
+            out,
+        );
+    }
+}
 
 /// One row: its text and the color of each run of cells that share one.
 #[derive(Clone, Debug, PartialEq)]
@@ -38,7 +45,11 @@ pub struct Row {
     pub fills: Vec<(usize, usize, [u8; 3])>,
 }
 
-deep_canvas::canonical_fields!(Row { text, runs, fills });
+impl deep_canvas::schedule::Canonical for Row {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.text, &self.runs, &self.fills), out);
+    }
+}
 
 fn manifest() -> Manifest {
     Manifest {

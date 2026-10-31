@@ -196,6 +196,10 @@
           "spec": "^1",
           "why": "Issue #389: the document JSON and the canonical bytes a revision hashes; already in the workspace tree."
         },
+        "blake3": {
+          "spec": "^1",
+          "why": "Issue #855: hash@2, the BLAKE3 content keys and result digests."
+        },
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #389: the revision hash over the canonical bytes and hash@1 content keys and seeds."

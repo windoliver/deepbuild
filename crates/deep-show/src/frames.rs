@@ -609,10 +609,24 @@ pub(crate) fn drawing_of(
     })
 }
 
+/// A value's Debug text, as a diagnostic shows it; never a digest's input. A test build with
+/// `test-debug-alt` prints every value another way, as another compiler might (#855).
+pub(crate) fn debug_text(value: &dyn std::fmt::Debug) -> String {
+    if cfg!(feature = "test-debug-alt") {
+        format!("{value:#?} (alt)")
+    } else {
+        format!("{value:?}")
+    }
+}
+
 /// The SHA-256 of the Debug text of the typed values a node wrote, in the order it wrote them;
 /// `null` when it wrote none. A diagnostic only: no key or digest reads it.
 fn debug_digest(values: &[Val]) -> Value {
-    let texts: Vec<String> = values.iter().filter_map(Val::debug).collect();
+    let texts: Vec<String> = values
+        .iter()
+        .filter_map(Val::debug)
+        .map(debug_text)
+        .collect();
     if texts.is_empty() {
         return Value::Null;
     }
