@@ -208,11 +208,22 @@ export function entries(settings: Line): Entry[] {
     (Array.isArray(group?.hooks) ? group.hooks : []).map((hook: Line, index: number) => ({ event, group: g, index, matcher: group.matcher, hook }))));
 }
 export const deepEntries = (settings: Line): Entry[] => entries(settings).filter((e) => isDeepBuild(e.hook.command));
-/** DeepBuild's waiter: its one entry with asyncRewake (design: "A background asyncRewake waiter exits with code 2"). */
-export function waiterEntry(settings: Line): Entry {
+/**
+ * DeepBuild's waiter entries: its entries with asyncRewake, one under Stop and one under StopFailure, with the same
+ * command and timeout (issue #25 and design, amended Oct 29: "a turn that ends on an API error fires only
+ * StopFailure"). A setup that writes the waiter under Stop only fails here, naming that cause.
+ */
+export function waiterEntries(settings: Line): { stop: Entry; failure: Entry } {
   const found = deepEntries(settings).filter((e) => e.hook.asyncRewake === true);
-  if (found.length !== 1) throw Error(`setup must write one asyncRewake waiter entry of DeepBuild's into ~/.claude/settings.json; found ${found.length}: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
-  return found[0]!;
+  const shownAll = JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })));
+  const stop = found.filter((e) => e.event === 'Stop');
+  const failure = found.filter((e) => e.event === 'StopFailure');
+  const elsewhere = found.filter((e) => e.event !== 'Stop' && e.event !== 'StopFailure');
+  if (stop.length === 1 && failure.length === 0 && elsewhere.length === 0) throw Error(`setup wrote the waiter's entry under Stop only: a turn that ends on an API error fires only StopFailure, so setup must also write it under StopFailure, with the same command and timeout: ${shownAll}`);
+  if (stop.length !== 1 || failure.length !== 1 || elsewhere.length !== 0) throw Error(`setup must write DeepBuild's asyncRewake waiter entry once under Stop and once under StopFailure, and nowhere else, into ~/.claude/settings.json; found ${stop.length} under Stop, ${failure.length} under StopFailure, ${elsewhere.length} elsewhere: ${shownAll}`);
+  const [a, b] = [stop[0]!.hook, failure[0]!.hook];
+  if (a.command !== b.command || a.timeout !== b.timeout) throw Error(`setup must write the waiter's entry under Stop and under StopFailure with the same command and timeout: Stop ${JSON.stringify(a)}, StopFailure ${JSON.stringify(b)}`);
+  return { stop: stop[0]!, failure: failure[0]! };
 }
 
 /** `deep setup` with HOME the test's home, a hub already answering; fails with the command's output unless it exits 0. */
@@ -372,10 +383,25 @@ export function payload(s: Session, event: string, extra: Line = {}): Line {
   switch (event) {
     case 'SessionStart': Object.assign(base, { source: 'startup', model: 'claude-haiku-5-5' }); delete base.prompt_id; break;
     case 'Stop': Object.assign(base, { stop_hook_active: false, last_assistant_message: 'Done.' }); break;
+    // A turn that ends on an API error (facts: StopFailure requires `error`), one with no automatic continue (API_ERROR).
+    case 'StopFailure': Object.assign(base, { error: API_ERROR, last_assistant_message: `API Error: ${API_ERROR}` }); break;
     case 'SessionEnd': Object.assign(base, { reason: 'other' }); break;
     default: break;
   }
   return { ...base, ...extra };
+}
+/**
+ * The API error the tests' StopFailure turns end on. Not `overloaded` or `rate_limit`: the facts map those to
+ * rate_limited, a transient cause, and the design gives a transient stop one automatic continue, which a correct hub
+ * sends through the session's waiter, so the waiter would wake the session before your answer. Not
+ * `authentication_failed` either: a sign-in problem raises an unblock task whose closing resumes the session the same
+ * way. `invalid_request` is a value Claude Code's hooks reference lists that the facts map to no cause (unknown), and an
+ * unknown cause gets nothing: the session stays stopped and idle, its waiter waiting (design: Tasks close themselves).
+ */
+export const API_ERROR = 'invalid_request';
+/** The synthetic assistant entry Claude Code writes for a turn's API error (facts: stop.cause.errors, model <synthetic>). */
+export function apiError(s: Session, error = API_ERROR): void {
+  appendTranscript(s, { type: 'assistant', isApiErrorMessage: true, error, message: { model: '<synthetic>', id: randomUUID(), type: 'message', role: 'assistant', content: [{ type: 'text', text: `API Error: ${error}` }], stop_reason: 'stop_sequence', usage: { input_tokens: 0, output_tokens: 0 } } });
 }
 export function appendTranscript(s: Session, entry: Line): void {
   const line = { parentUuid: null, isSidechain: false, uuid: randomUUID(), timestamp: new Date().toISOString(), sessionId: s.id, cwd: s.cwd, version: COVERED, userType: 'external', entrypoint: 'cli', ...entry };
@@ -401,7 +427,7 @@ export const carriers = (s: Session, ids: string[]): Line[] => transcriptEntries
 // ---- The Claude Code stand-in (fixtures/claude.mjs): one process per session.
 export interface HookRun { command: string; async: boolean; asyncRewake: boolean; timeout: number; pid: number; session: string; started: number; ended: number | null; code: number | null; signal: string | null; stdout: string; stderr: string; timedOut: boolean; expired: boolean }
 export interface Fired { ran: HookRun[]; background: HookRun[]; blocked?: string; settingsError?: string }
-export interface Wake { pid: number; session: string; code: number; at: number; stderr: string; dropped?: boolean; started?: number; prompt?: string; promptId?: string; fired?: Fired }
+export interface Wake { pid: number; session: string; event?: string; code: number; at: number; stderr: string; dropped?: boolean; started?: number; prompt?: string; promptId?: string; fired?: Fired }
 export class Claude {
   private n = 0;
   private readonly pending = new Map<number, (line: Line) => void>();
@@ -579,8 +605,10 @@ export async function idleSessions(hub: Hub, home: string, n: number, env: Recor
   for (let i = 0; i < n; i++) begun.push(await beginAsk(hub, home, env));
   const sessions = await Promise.all(begun.map((b) => b.finish()));
   const stops = await Promise.all(sessions.map((a) => a.claude.hook('Stop', payload(a.s, 'Stop', { last_assistant_message: 'I asked which header colour you want; I will wait for your answer.' }))));
-  stops.forEach((fired, i) => { if (fired.blocked) throw Error(`nothing is answered yet, so ${sessions[i]!.s.id}'s stop goes through: ${firedShown(fired)}`); });
-  for (const a of sessions) await waitFor(async () => (await a.claude.liveWaiters(a.s.id)).length > 0 || undefined, 30_000, `the waiter of ${a.s.id}, waiting once its stop went through`);
+  stops.forEach((fired, i) => {
+    if (fired.blocked) throw Error(`nothing is answered yet, so ${sessions[i]!.s.id}'s stop goes through: ${firedShown(fired)}`);
+  });
+  for (const a of sessions) await waitFor(async () => (await a.claude.liveWaiters(a.s.id)).length > 0 || undefined, 30_000, `the waiter of ${a.s.id}, waiting once its Stop went through`);
   return sessions;
 }
 export interface Woken { session: string; ms: number; wake: Wake }

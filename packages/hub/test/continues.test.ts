@@ -185,4 +185,184 @@ describe('a continue parked for the next prompt', () => {
       expect(said.stdout, 'the next prompt of the resumed session carries the continue').toContain('one automatic continue');
     });
   }, 60_000);
+  it('outlives the hub restarting: the next prompt after it gets the continue once, and the one after does not', async () => {
+    await withHub(async (root, home, { restart }) => {
+      const id = '7f3d5a6c-5555-4666-8777-88889999aaaa';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
+      expect(await send(join(root, 'hub.sock'), line('SessionStart', { source: 'startup' }))).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await send(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' }))).toContain('"ack"');
+      expect(await send(join(root, 'hub.sock'), line('StopFailure', { error: 'overloaded', prompt_id: 'p1' }))).toContain('"ack"');
+      expect(await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE 'DeepBuild continues this session%'", id), 10_000), 'parked for the next prompt').toHaveLength(1);
+      // The hub restarts, an update say, before you type again.
+      await restart({}, async () => undefined);
+      typed('go on', 'p2');
+      const said = await reply(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: 'go on', prompt_id: 'p2' }));
+      expect(said.stdout, 'the first prompt after the restart carries the continue').toContain('one automatic continue');
+      expect(await send(join(root, 'hub.sock'), line('Stop', { stop_hook_active: false, prompt_id: 'p2' }))).toContain('"ack"');
+      typed('and the tests', 'p3');
+      const next = await reply(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: 'and the tests', prompt_id: 'p3' }));
+      expect(next.stdout, 'carried once').not.toContain('one automatic continue');
+      // A second restart after the prompt carried it parks nothing again.
+      await restart({}, async () => undefined);
+      typed('and the docs', 'p4');
+      const after = await reply(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: 'and the docs', prompt_id: 'p4' }));
+      expect(after.stdout, 'a carried continue is not rebuilt').not.toContain('one automatic continue');
+    });
+  }, 60_000);
+  it('is not repeated to the prompt that already shows it: a wake the waiter took before the hub restarted', async () => {
+    await withHub(async (root, home, { restart }) => {
+      const id = '7f3d5a6c-5555-4666-8777-88889999aaab';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
+      expect(await send(join(root, 'hub.sock'), line('SessionStart', { source: 'startup' }))).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await send(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' }))).toContain('"ack"');
+      expect(await send(join(root, 'hub.sock'), line('StopFailure', { error: 'overloaded', prompt_id: 'p1' }))).toContain('"ack"');
+      expect(await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'session.continued' AND session_id = ?", id), 10_000)).toHaveLength(1);
+      await restart({}, async () => undefined);
+      const wake = '<task-notification> Stop hook blocking error: DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.</task-notification>';
+      typed(wake, 'p2');
+      const said = await reply(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: wake, prompt_id: 'p2' }));
+      expect(said.stdout, 'the prompt shows it already').not.toContain('one automatic continue');
+    });
+  }, 60_000);
+});
+
+describe('a first turn that ends in StopFailure', () => {
+  it('has the waiter its StopFailure started wake the session with the continue parked before it connected', async () => {
+    await withHub(async (root, home) => {
+      const id = '7f3d5a6c-5555-4666-8777-88889999aaaa';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'p1', promptId: 'p1', message: { role: 'user', content: 'list the files' }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid }));
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      expect(await hook('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' })).toContain('"ack"');
+      // The session's first turn ends on an overloaded service: no stop of it started a waiter yet, so the continue the
+      // core records is parked for the next prompt.
+      expect(await hook('StopFailure', { error: 'overloaded', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE 'DeepBuild continues this session%'", id), 10_000), 'parked for the next prompt').toHaveLength(1);
+      // Claude Code starts the waiter the StopFailure entry names; it connects after the continue was parked.
+      const woke = await waiter(root, id, 10_000);
+      expect(woke, 'the waiter woke the session with the parked continue, with nothing typed').toMatchObject({ session: id, text: expect.stringContaining('one automatic continue') });
+      // Claude Code's wake turn: its prompt is the waiter's words, as Claude Code 2.1.308 sends it.
+      const wake = `<task-notification> <summary>Stop hook feedback</summary> </task-notification> <system-reminder> Stop hook blocking error from command "StopFailure:overloaded": ${String(woke?.text)} </system-reminder>`;
+      expect(await hook('UserPromptSubmit', { prompt: wake, prompt_id: 'pw' })).toContain('"ack"');
+      // Shown by the wake turn, it no longer waits for the next prompt.
+      const said = await reply(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), 'UserPromptSubmit', { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: 'UserPromptSubmit', prompt: 'go on', prompt_id: 'p2' }, { ppid: process.pid }));
+      expect(said.stdout, 'carried once').not.toContain('one automatic continue');
+    });
+  }, 60_000);
+
+  it('keeps the continue it handed a waiter that never woke the session: your next prompt carries it', async () => {
+    await withHub(async (root, home) => {
+      const id = '8a4e6b7d-6666-4777-8888-9999aaaabbbb';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid }));
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await hook('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await hook('StopFailure', { error: 'overloaded', prompt_id: 'p1' })).toContain('"ack"');
+      await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE 'DeepBuild continues this session%'", id), 10_000);
+      expect(await waiter(root, id, 10_000), 'handed to the waiter').toMatchObject({ text: expect.stringContaining('one automatic continue') });
+      // Claude Code never started the wake turn; you type instead.
+      typed('are you there?', 'p2');
+      const said = await reply(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), 'UserPromptSubmit', { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: 'UserPromptSubmit', prompt: 'are you there?', prompt_id: 'p2' }, { ppid: process.pid }));
+      expect(said.stdout, 'the prompt you typed carries the continue no wake showed').toContain('one automatic continue');
+    });
+  }, 60_000);
+});
+
+describe('a spend limit', () => {
+  it('stops each session as a block only you can clear, and its sessions share one task', async () => {
+    await withHub(async (root, home) => {
+      writeFileSync(join(root, 'config.json'), JSON.stringify({ asks: {
+        deadline: { taste: '3d', authority: '1d', unblock: '2d', exception: '2d', choice: '2d', definition: '4h' },
+        default: { taste: 'recommended', authority: 'no', unblock: 'stay-blocked', exception: 'no-change', choice: 'recommended', definition: 'leave-out' },
+        fallback: ['change-owner'], fold: 5,
+      } }));
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const sessions = ['9b5f7c8e-7777-4888-8999-aaaabbbbcccc', '9b5f7c8e-7777-4888-8999-aaaabbbbcccd'];
+      let n = 0;
+      for (const id of sessions) {
+        const transcript = join(project, `${id}.jsonl`);
+        writeFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'p1', promptId: 'p1', message: { role: 'user', content: 'go' }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+        const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid }));
+        expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+        expect(await hook('UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' })).toContain('"ack"');
+        // Claude Code ends the turn on the account's spend limit: its hooks reference names this error billing_error.
+        expect(await hook('StopFailure', { error: 'billing_error', prompt_id: 'p1' })).toContain('"ack"');
+      }
+      const stopsOf = () => rows<{ cause: string; owner: string; signature: string }>(root, "SELECT json_extract(data, '$.cause') AS cause, json_extract(data, '$.owner') AS owner, json_extract(data, '$.signature') AS signature FROM events WHERE kind = 'agent.stop'");
+      await until(() => (stopsOf().length >= 2 ? [1] : []), 10_000);
+      const stops = stopsOf();
+      expect(stops.map((s) => [s.cause, s.owner]), 'each stop is a rate limit only you can raise').toEqual([['rate_limited', 'you'], ['rate_limited', 'you']]);
+      expect(new Set(stops.map((s) => s.signature)).size, 'one cause, one signature').toBe(1);
+      const open = () => rows<{ id: string }>(root, "SELECT id FROM events WHERE kind = 'ask.created' AND json_extract(data, '$.kind') = 'unblock' AND 'ask:' || id NOT IN (SELECT subject FROM events WHERE kind = 'ask.superseded')");
+      await until(open, 10_000);
+      await new Promise((r) => setTimeout(r, 500));
+      expect(open(), 'both sessions share one open task').toHaveLength(1);
+    });
+  }, 60_000);
+  it('is yours to clear even from a StopFailure that names no prompt, so no turn is read', async () => {
+    await withHub(async (root, home) => {
+      const id = '9b5f7c8e-7777-4888-8999-aaaabbbbccce';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'p1', promptId: 'p1', message: { role: 'user', content: 'go' }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid }));
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      expect(await hook('UserPromptSubmit', { prompt: 'go' })).toContain('"ack"');
+      expect(await hook('StopFailure', { error: 'billing_error' })).toContain('"ack"');
+      const stops = await until(() => rows<{ cause: string; owner: string }>(root, "SELECT json_extract(data, '$.cause') AS cause, json_extract(data, '$.owner') AS owner FROM events WHERE kind = 'agent.stop'"), 10_000);
+      expect(stops.map((s) => [s.cause, s.owner])).toEqual([['rate_limited', 'you']]);
+    });
+  }, 60_000);
+});
+
+describe('a dropped connection', () => {
+  it('stops the session as a transient the service owns, and continues it once by itself', async () => {
+    await withHub(async (root, home) => {
+      const id = 'ab6f8d9f-8888-4999-8aaa-bbbbccccdddd';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'p1', promptId: 'p1', message: { role: 'user', content: 'go' }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      // Claude Code 2.1.308 when the API can't be reached: StopFailure says server_error, and the turn's API error entry
+      // says the same with its text (recorded live, a connection refused).
+      appendFileSync(transcript, `${JSON.stringify({ type: 'assistant', uuid: 'a1', isApiErrorMessage: true, error: 'server_error', message: { role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: 'API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)' }] } })}\n`);
+      let n = 0;
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid }));
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      expect(await hook('UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await hook('StopFailure', { error: 'server_error', prompt_id: 'p1', last_assistant_message: 'API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)' })).toContain('"ack"');
+      const [stop] = await until(() => rows<{ cause: string; owner: string }>(root, "SELECT json_extract(data, '$.cause') AS cause, json_extract(data, '$.owner') AS owner FROM events WHERE kind = 'agent.stop' AND session_id = ?", id), 10_000);
+      expect([stop?.cause, stop?.owner], 'a dropped connection is a timeout the service owns').toEqual(['timed_out', 'service']);
+      const continued = await until(() => rows<{ because: string }>(root, "SELECT json_extract(data, '$.because') AS because FROM events WHERE kind = 'session.continued' AND session_id = ?", id), 10_000);
+      expect(continued.map((c) => c.because), 'one automatic continue').toEqual(['transient']);
+    });
+  }, 60_000);
 });
