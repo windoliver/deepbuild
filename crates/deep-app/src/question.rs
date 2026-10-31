@@ -19,7 +19,7 @@ use crate::{
     answer::Answer,
     arming::{Machine, Outcome, Press, Slot, Source, State, HOLD_STILL},
     confirm,
-    kinds::{Kind, Model},
+    kinds::Model,
     states,
 };
 
@@ -423,17 +423,7 @@ impl Controller {
 
     /// How many steps the approval runs, and how many of the batch can't be undone, on a batched approval.
     pub fn approve(&self) -> Option<(usize, usize)> {
-        if self.model.kind != Kind::BatchedAuthority || self.model.steps.is_empty() {
-            return None;
-        }
-        Some((
-            self.model.steps.iter().filter(|step| step.on).count(),
-            self.model
-                .steps
-                .iter()
-                .filter(|step| !step.undoable)
-                .count(),
-        ))
+        self.model.approve()
     }
 
     /// A press, down or up, at its own timestamp; `now` is when it was delivered, which the usage rows carry.

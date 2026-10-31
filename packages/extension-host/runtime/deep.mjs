@@ -14,6 +14,8 @@ export const API = Object.freeze([
   { method: 'deep.registerCheck', needs: null },
   { method: 'deep.registerResolver', needs: null },
   { method: 'deep.registerSource', needs: null },
+  // #364: a handle for a secret the manifest names, never its value.
+  { method: 'deep.secret', needs: null },
   { method: 'deep.registerEnvironment', needs: null },
   { method: 'deep.registerView', needs: null },
   { method: 'deep.registerAdapter', needs: null },
@@ -63,6 +65,8 @@ export function extensionSide(call, load) {
   const adapters = new Map();
   // Its index's methods stay here too (#355); the host asks for each call by name.
   const indexes = new Map();
+  // Its sources by name (#364): a polled one's parse and a stream one's read stay here; the host sends the rest.
+  const sources = new Map();
   // Each returns how to drop what it kept.
   const keep = {
     'deep.registerCheck': keeper(checks),
@@ -73,6 +77,7 @@ export function extensionSide(call, load) {
     'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.registerEnvironment': keeper(environments),
+    'deep.registerSource': keeper(sources),
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
@@ -87,7 +92,9 @@ export function extensionSide(call, load) {
       // Kept before the host hears of it, so the host never asks for what isn't here yet; dropped if it refuses.
       const drop = keep[method]?.(...args);
       const within = scope.getStore();
-      const made = Promise.resolve().then(() => call(method, args.filter((a) => typeof a !== 'function'), within)).catch((error) => {
+      // A source's functions stay here: the host gets its declaration only.
+      const sent = method === 'deep.registerSource' ? args.map((a) => (typeof a === 'object' && a !== null ? Object.fromEntries(Object.entries(a).filter(([, v]) => typeof v !== 'function')) : a)) : args;
+      const made = Promise.resolve().then(() => call(method, sent.filter((a) => typeof a !== 'function'), within)).catch((error) => {
         drop?.();
         throw error;
       });
@@ -160,6 +167,11 @@ export function extensionSide(call, load) {
         const fn = actions.get(params?.name);
         if (!fn) throw Error(`no action ${params?.name} is registered here`);
         return (await scope.run(params.scope, () => fn(params.input, params.ctx))) ?? null;
+      }
+      if (method === 'source.parse' || method === 'source.read') {
+        const source = sources.get(params?.name);
+        if (!source) throw Error(`no source ${params?.name} is registered here`);
+        return method === 'source.parse' ? await source.parse(params.answer) : await source.read(params.stream, params.cursor, params.limit);
       }
       if (method === 'output') {
         const fn = outputs.get(params?.name);

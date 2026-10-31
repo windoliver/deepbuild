@@ -1,0 +1,10 @@
+{
+  "id": "test/market",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts", "record"] },
+  "checks": ["ext.market.report"],
+  "secrets": [{ "name": "market_key", "for": "the market data API's key" }],
+  "sources": [{ "name": "ext.market.price", "variant": "polled" }],
+  "requires": { "preview": ["deep.registerSource", "deep.secret", "deep.on"] }
+}
