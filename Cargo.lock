@@ -1936,13 +1936,16 @@ dependencies = [
 name = "deep-replica"
 version = "0.0.0"
 dependencies = [
+ "crc32fast",
  "deep-app",
  "gpui-kit",
  "gpui-shell",
+ "image",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
