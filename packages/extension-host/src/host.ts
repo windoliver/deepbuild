@@ -14,6 +14,9 @@
 // files', a signature that doesn't verify or a key other than the one trusted for the package, a piece of the
 // trusted ring or the done gate replaced, a conflict with an installed package, a check kind another package holds
 // that it doesn't declare it replaces, and a kernel contract version the kernel doesn't publish.
+//
+// Sources and secrets (#364): the hub makes every call a polled source needs, adding a secret by its handle only on
+// the source's host (./sources.ts), and a stream source is held to source@1's kit at install, wherever it runs.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
@@ -26,13 +29,14 @@ import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
-import { canonicalize, checkManifest, frozenDigests, hubSlots, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
+import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
+import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { Terminals, type OpenSpec } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -44,7 +48,10 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest'
   | 'skips-kind-declare' | 'drops-mode' | 'holder-from-arguments' | 'declares-kind-on-first-lease'
   | 'close-stops-every-host' | 'narrower-grant-implies-run-as-you' | 'revoke-keeps-running' | 'revoke-stops-programs-only'
-  | 'input-from-any-writer' | 'piece-writes-input';
+  | 'input-from-any-writer' | 'piece-writes-input'
+  // #139's: a host that lets a stable package call a preview method, and an installer that wires a use to the newest
+  // interface its provider has.
+  | 'stable-may-call-preview' | 'rewires-to-newest';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -89,7 +96,19 @@ export interface ExtensionHostOptions {
   asks?: Asks;
   /** The kernel's one lease table (#237): a manifest's lease kinds are declared in it, and `deep.lease` leases from it. */
   leases?: LeaseTable;
+  /** The published extension API installs are held to (#139): each method's stability. Default: extensionApi(). */
+  api?: readonly ApiEntry[];
+  /** Methods this host answers `unsupported` to, as a shim that dropped them would: the contract step's planted twin (#139). */
+  unsupported?: readonly string[];
   plant?: Plant;
+  /** The OS secret store a source's secret is read from (#364). Default: the Keychain on macOS, and none elsewhere. */
+  secrets?: SecretStore;
+  /** Opens your browser at a sign-in page. Default: macOS's open. */
+  browse?: (url: string) => Promise<void>;
+  /** The HTTP client every source call goes through; it never follows a redirect. Default: Node's fetch. */
+  http?: HttpClient;
+  /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
+  replay?: Recording;
 }
 export interface InstallFrom {
   from: string;
@@ -166,6 +185,34 @@ export interface ExtensionHost {
   owner(session: string): Promise<{ adapter: string } | null>;
   /** An answer for a session: the owning adapter delivers it by a route its flags allow now, or it waits for one. */
   deliverAnswer(answer: Delivery): Promise<Delivered>;
+  /** What each loaded package's code returned at its load, by package: a release's fixture returns its calls' results (#139). */
+  loadResult(id: string): Record<string, unknown> | undefined;
+  /** Each use of a loaded package: the interface its manifest names, the one it is wired to and the provider (#139). */
+  edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]>;
+  /**
+   * Your value for a secret a package's manifest names, on the trusted path (#364). A loaded source of it naming the
+   * secret with a key test calls once with the value first: valid saves it, the source refusing the key (invalid)
+   * saves nothing, and a test that couldn't run (INCONCLUSIVE) saves it. With no key test it reads untested and saves.
+   */
+  enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }>;
+  /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
+  readSource(name: string): Promise<SourceRead>;
+  /** Every source call this host made, with its secrets stripped. */
+  recording(): Recording;
+  /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
+  readings(source: string, window: { from: number; to: number }): Promise<Reading[]>;
+  /**
+   * Removes a secret on the trusted path: without your yes, or with a yes naming another list, it only answers the
+   * sources that will go BLOCKED without it; with a yes naming exactly those, it removes the secret.
+   */
+  removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }>;
+  /** Sign-in through an OAuth loopback for a loaded source that declares one, on the trusted path: the token is saved as the secret. */
+  signIn(connection: Connection, extension: string, name: string): Promise<{ saved: true }>;
+  /**
+   * The next page of a loaded stream source, from the cursor the hub keeps for it across a restart: each event held to
+   * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
+   */
+  readStream(name: string, limit: number): Promise<StreamRead>;
   /** Stops every process it started, but the terminals of a piece whose manifest's host lives past the app. */
   close(): Promise<void>;
 }
@@ -210,6 +257,12 @@ const PUBLISHER_KEY = /^ed25519:([0-9a-f]{64})$/;
 const ENVIRONMENT = 'environment@1';
 /** The wiki's index slot (#355): one fill, a package's that replaces the shipped index. */
 const INDEX = 'index@1';
+/** A stream source's slot (#364): read from a cursor, in order, losing nothing across a restart. */
+const SOURCE = 'source@1';
+/** The hub's own connection, for what only the core appends. */
+const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** A source's name, as the manifest contract holds it. */
+const SOURCE_NAME = /^ext\.[a-z0-9][a-z0-9_-]*\.[a-z][a-z0-9_]*$/;
 const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
 /** An index@1 fill as the host reaches it in the package: each call answered over the package's side. */
 export interface IndexFill extends SlotFill {
@@ -223,9 +276,13 @@ export interface IndexFill extends SlotFill {
 
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
-  provides?: { interface: string; kind: string }[]; uses?: { interface: string }[]; templates?: Template[];
+  provides?: { interface: string; kind: string; adapter?: { from: string } }[]; uses?: { interface: string }[]; templates?: Template[];
   conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string; leases?: LeaseKind[];
+  /** extension.contract@1's (#139): whether it declares itself stable, and the preview entries it uses by name. */
+  stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
+  secrets?: { name: string; for: string }[];
+  sources?: { name: string; variant: string; reading?: string }[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] }; holds: string[] }
@@ -255,6 +312,10 @@ interface Ext {
   index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
   hubBound: boolean;
+  /** The sources it registered, by name, as declared (#364); their functions stay with the package. */
+  sources: Map<string, Declared>;
+  /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
+  starts: number;
   /** How to take its resolver back from the asks core, once it registered one. */
   resolverDrop?: () => void;
   /** Inside DeepBuild's signed release: its replies are text, and join first. */
@@ -282,6 +343,8 @@ interface Ext {
   cleaned?: Cleanup | undefined;
   /** The leases granted to this load of it: its unload ends these, never another load's under the same holder. */
   leased: string[];
+  /** The calls the host refused it for using a preview method other than by name (#139): each refuses its install. */
+  refusals: string[];
   /** Set once its unload ends its leases: one granted after, to a call already under way, ends at its grant. */
   leasesEnded?: boolean;
   server?: HttpServer;
@@ -359,6 +422,8 @@ function declaredPath(schema: unknown, path: string): string {
   return kept;
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
+/** A package's manifest, as its folder holds it. */
+const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
 async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
   let disarm = (): void => undefined;
   try {
@@ -429,18 +494,31 @@ class Host implements ExtensionHost {
   /** The agent sessions adapters bound, by session ID. */
   private readonly sessions = new Map<string, Bound>();
   private isReady = false;
+  /** What each loaded package's code returned at its load (#139). */
+  private readonly loadResults = new Map<string, Record<string, unknown>>();
+  /** The published API by method, whose stability each call is held to (#139). */
+  private readonly published: ReadonlyMap<string, ApiEntry>;
+  /** The edges wired at load: user → (the interface its manifest uses → the interface it reads from its provider). */
+  private readonly wired = new Map<string, Map<string, string>>();
   /** The starts of the packages loaded before ready, once ready runs. */
   private starting: Promise<void> = Promise.resolve();
   private closed = false;
+  private readonly sources: Sources;
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
     // An install recorded before #351 holds the check kinds its manifest declares.
-    for (const e of Object.values(this.entries)) e.holds ??= (JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest).checks ?? [];
+    for (const e of Object.values(this.entries)) e.holds ??= manifestOf(e.folder).checks ?? [];
     this.results = this.read('checked.json');
     this.keys = this.read('keys.json');
+    this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
     this.terminals = new Terminals(options.home, options.supervisor);
+    this.sources = new Sources({
+      now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
+      // Each call's cost and each new reading, as the core: the hub makes every source call.
+      append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
+    });
   }
 
   private read<T>(name: string): Record<string, T> {
@@ -468,6 +546,8 @@ class Host implements ExtensionHost {
     const project = from.project === undefined ? null : realpathSync(from.project);
     // Read as data before any of its code runs; a symlink anywhere refuses the install.
     this.admit(manifest as Manifest, packageDigest(from.from), project);
+    // An update that drops an interface an installed piece uses, with no adapter for it, asks you first (#139).
+    await this.updateHeld(manifest as Manifest);
     // A quota that counts nothing would never refuse: each is a whole number of calls per a whole number of ms.
     for (const h of from.grant?.hosts ?? []) {
       const whole = (n: unknown): boolean => Number.isSafeInteger(n) && (n as number) > 0;
@@ -496,6 +576,17 @@ class Host implements ExtensionHost {
       throw e;
     }
     this.entries[id] = entry;
+    // AC10's wrong program (#139): each use of an interface of this provider is wired to the newest major it provides.
+    if (this.options.plant === 'rewires-to-newest') {
+      const provided = (manifest.provides ?? []).map((p) => p.interface);
+      for (const e of Object.values(this.entries).filter((x) => x.id !== id)) {
+        for (const u of manifestOf(e.folder).uses ?? []) {
+          const base = u.interface.slice(0, u.interface.lastIndexOf('@'));
+          const newest = provided.filter((i) => i.startsWith(`${base}@`)).sort((a, b) => Number(b.split('@')[1]) - Number(a.split('@')[1]))[0];
+          if (newest && newest !== u.interface) this.wired.set(e.id, new Map([...(this.wired.get(e.id) ?? []), [u.interface, newest]]));
+        }
+      }
+    }
     // A signed package's key is trusted on first use.
     if (manifest.publisher_key !== undefined && this.keys[id] === undefined) {
       this.keys = { ...this.keys, [id]: manifest.publisher_key };
@@ -536,10 +627,7 @@ class Host implements ExtensionHost {
       throw Error(`${id} declares it replaces the done gate, or provides a second one beside it (${GATE}); no package does until a second gate exists and ${GATE} opens with its kit`);
     }
     const others = Object.values(this.entries).filter((e) => e.id !== id);
-    for (const e of others) {
-      const theirs = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
-      if (m.conflicts?.includes(e.id) || theirs.conflicts?.includes(id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
-    }
+    for (const e of others) if (manifestOf(e.folder).conflicts?.includes(id) || m.conflicts?.includes(e.id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
     // A user-level package's kinds are in use in every project; a project's, only in its own.
     const overlaps = (e: Entry): boolean => e.project === null || project === null || e.project === project;
     for (const kind of m.checks ?? []) {
@@ -548,6 +636,49 @@ class Host implements ExtensionHost {
     }
     const published = frozenDigests();
     for (const contract of m.kernel ?? []) if (!Object.hasOwn(published, contract)) throw Error(`${id} runs on the kernel contract ${contract}, which this kernel doesn't publish`);
+    // A package that uses a preview entry by name is a preview package (#139).
+    const listed = m.requires?.preview ?? [];
+    if (m.stability === 'stable' && listed.length && this.options.plant !== 'stable-may-call-preview') throw Error(`${id} declares itself stable and lists ${listed.join(', ')} in requires.preview; a package that uses a preview entry can't declare itself stable`);
+  }
+  /**
+   * An update of an installed package that no longer provides an interface another installed piece uses, neither
+   * itself nor through an adapter row, asks you once, naming those users, and installs nothing until you answer: your
+   * yes goes on, anything else refuses the update and leaves the installed version and its users' edges as they were.
+   */
+  private async updateHeld(m: Manifest): Promise<void> {
+    const before = this.entries[m.id];
+    if (!before) return;
+    const old = manifestOf(before.folder);
+    const keeps = new Set((m.provides ?? []).map((p) => p.interface));
+    const dropped = (old.provides ?? []).map((p) => p.interface).filter((i) => !keeps.has(i));
+    const users = Object.values(this.entries).filter((e) => e.id !== m.id)
+      .flatMap((e) => (manifestOf(e.folder).uses ?? []).filter((u) => dropped.includes(u.interface)).map((u) => ({ user: e.id, uses: u.interface })));
+    if (!users.length) return;
+    if (this.options.plant === 'rewires-to-newest') return;
+    const asks = this.options.asks;
+    const named = users.map((u) => `${u.user} uses ${u.uses}`).join('; ');
+    if (!asks) throw Error(`${m.id}@${m.version} no longer provides what installed pieces use (${named}), and this host has no asks core to ask you; nothing was installed`);
+    const now = this.options.now();
+    const key = sha256Hex(canonicalize({ update: m.id, version: m.version, users } as unknown as JsonValue));
+    const question = `Install ${m.id} ${m.version}? It no longer provides ${[...new Set(users.map((u) => u.uses))].join(', ')}, which ${[...new Set(users.map((u) => u.user))].join(', ')} use${users.length > 1 ? '' : 's'}, and keeps no adapter for it.`;
+    const ask = await asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, 'extension.update', {
+      kind: 'authority', question,
+      options: [{ id: 'approve', label: `Install ${m.version}`, decision: 'allow' }, { id: 'decline', label: `Keep ${before.version}`, decision: 'deny' }],
+      recommended: null, deadline: now + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
+      pinned_to: { kind: 'evidence', ref: key },
+    }, { steps: users.map((u) => ({ does: `Install ${m.id} ${m.version}, leaving ${u.user}'s use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Install ${m.id} ${before.version} again`, public: false, cost: 0 })), diff: key });
+    // Installs nothing until you answer: the install waits on the ask's close, and goes on only on your yes on record.
+    for (;;) {
+      const row = (await asks.inbox()).find((r) => r.ask === ask);
+      if (row?.status === 'closed') {
+        const answered = await this.options.record.read({ after: 0, kinds: ['ask.answered'], limit: 100_000 });
+        const yes = row.outcome === 'answered' && answered.some((e) => e.subject === ask && (e.data as { decision?: unknown }).decision === 'allow');
+        if (yes) return;
+        throw Error(`${m.id}@${m.version} isn't installed: you kept ${before.version}, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
+      }
+      if (this.closed) throw Error(`${m.id}@${m.version} isn't installed: the host closed before you answered`);
+      await sleep(50);
+    }
   }
   async trustKey(connection: Connection, id: string, key: string): Promise<void> {
     if (connection.writer !== 'app' && connection.writer !== 'cli') throw Error(`a publisher key is trusted only by your answer on the trusted path, the app or the CLI, not by ${connection.writer}`);
@@ -565,7 +696,7 @@ class Host implements ExtensionHost {
     this.trustedPath(connection, `${RUN_AS_YOU} is approved`);
     const entry = this.entries[id];
     if (!entry) throw Error(`${id} isn't installed`);
-    const manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const manifest = manifestOf(entry.folder);
     if (word !== RUN_AS_YOU || !(manifest.access?.words ?? []).includes(word)) throw Error(`${id}'s manifest doesn't ask for ${String(word)}, so there is nothing to approve`);
     this.runAsYou = { ...this.runAsYou, [id]: true };
     this.save('run-as-you.json', this.runAsYou);
@@ -610,7 +741,9 @@ class Host implements ExtensionHost {
    * environment its manifest declares (#331) is an environment@1 fill; a kit's first FAIL refuses the install,
    * naming the case. A kind of the package's own is BLOCKED: unrun, so never passed. A replacement or an
    * environment the sandbox would run is BLOCKED too (the kits' suites and stacks run where the sandbox can't
-   * reach), and a BLOCKED one doesn't install. A package that declares nothing to kit runs no code at install.
+   * reach), and a BLOCKED one doesn't install. Each stream source its manifest lists is a source@1 fill (#364), judged
+   * wherever the package runs, the kit's restart a restart of its code. A package that declares nothing to kit runs no
+   * code at install.
    */
   private async installKits(entry: Entry, manifest: Manifest): Promise<KitRun[]> {
     const { folder, digest } = this.snapshot(entry);
@@ -623,6 +756,11 @@ class Host implements ExtensionHost {
     const kits = `${[kitted.length ? CHECK_KIND : '', environments.length ? ENVIRONMENT : ''].filter(Boolean).join(' and ')}'s kit${kitted.length && environments.length ? 's' : ''}`;
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
+    const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
+    if (hub && streams.length && !this.isReady) {
+      rmSync(folder, { recursive: true, force: true });
+      throw Error(`BLOCKED: ${entry.id} registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
+    }
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
     if (hub && indexed && !this.isReady) {
       rmSync(folder, { recursive: true, force: true });
@@ -637,7 +775,7 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
       throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     }
-    if (!kitted.length && !environments.length && !indexed) {
+    if (!kitted.length && !environments.length && !indexed && !streams.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
@@ -692,11 +830,101 @@ class Host implements ExtensionHost {
         const failed = report.cases.find((c) => c.outcome !== 'PASS');
         if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
       }
+      const sourceKit = streams.length ? slotKits().find((k) => k.slot === SOURCE) as SlotKit<SlotFill> | undefined : undefined;
+      if (streams.length && !sourceKit) throw Error(`the conformance package ships no ${SOURCE} kit`);
+      for (const name of streams) {
+        if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
+        // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
+        const fill = {
+          slot: SOURCE, revision: sourceKit!.revision, variant: 'stream',
+          read: (stream: unknown, cursor: unknown, limit: unknown) => within(CALL_MS, `${entry.id}'s ${name}`, ext.ask!('source.read', { name, stream, cursor, limit })),
+          restart: async () => {
+            await ext.stop?.();
+            if (ext.run) ext.run = `run:${ulid(this.options.now())}`;
+            await this.start(ext);
+          },
+        } as unknown as SlotFill;
+        const report = await runKit(sourceKit!, fill, { parts: ['fixed'] });
+        runs.push({ slot: SOURCE, fill: name, verdict: report.verdict });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s source ${name} reads ${report.verdict} on ${SOURCE}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+      }
     } finally {
       await ext.stop?.();
       rmSync(folder, { recursive: true, force: true });
     }
     return runs;
+  }
+  async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
+    this.trustedPath(connection, 'a secret is entered');
+    this.secretOf(extension, name);
+    if (typeof value !== 'string' || !value) throw Error(`a value for ${name} is a string`);
+    const ext = this.exts.get(extension);
+    const tested = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.keyTest !== null);
+    return this.sources.enter(extension, name, value, tested);
+  }
+  async readSource(name: string): Promise<SourceRead> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
+    if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the polled source ${name}` };
+    return this.sources.read(ext.entry.id, ext.sources.get(name) as Polled, (answer) => this.ask(ext, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+  }
+  recording(): Recording {
+    return this.sources.recording();
+  }
+  async readings(source: string, window: { from: number; to: number }): Promise<Reading[]> {
+    if (!SOURCE_NAME.test(source) || !Number.isSafeInteger(window?.from) || !Number.isSafeInteger(window?.to)) throw Error('readings takes a source\'s name and a window of two times in ms');
+    const rows = await this.options.record.raw('SELECT value, unit, as_of, source FROM readings WHERE source = ? AND as_of BETWEEN ? AND ? ORDER BY as_of, reading', [source, window.from, window.to]) as { value: string; unit: string; as_of: number; source: string }[];
+    return rows.map((r) => ({ source: r.source, value: Number(r.value), unit: r.unit, as_of: r.as_of }));
+  }
+  async removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }> {
+    this.trustedPath(connection, 'a secret is removed');
+    this.secretOf(extension, name);
+    // What its packages registered needing it; schedules and checks name sources, so they go BLOCKED through them.
+    const blocked = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name).sort();
+    const yes = [...(answer?.yes ?? [])].sort();
+    if (!answer || yes.length !== blocked.length || yes.some((s, i) => s !== blocked[i])) return { removed: false, blocked };
+    await this.sources.remove(extension, name, blocked);
+    return { removed: true, blocked };
+  }
+  async signIn(connection: Connection, extension: string, name: string): Promise<{ saved: true }> {
+    this.trustedPath(connection, 'a sign-in is made');
+    this.secretOf(extension, name);
+    const ext = this.exts.get(extension);
+    const source = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.oauth !== null);
+    if (!source) throw Error(`no loaded source of ${extension} signs in for ${name}`);
+    return this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+  }
+  async readStream(name: string, limit: number): Promise<StreamRead> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'stream');
+    if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the stream source ${name}` };
+    if (!Number.isSafeInteger(limit) || limit < 1) throw Error('readStream takes a page limit of at least one event');
+    const failed = (cause: string): StreamRead => ({ status: 'failed', source: name, cause });
+    const cursors = this.read<string | null>('cursors.json');
+    // At run time the stream is the package's own upstream, which its read reaches through its grant.
+    let page: unknown;
+    try {
+      page = await this.ask(ext, CALL_MS, `${name}'s read`, 'source.read', { name, stream: null, cursor: cursors[name] ?? null, limit });
+    } catch (e) {
+      return failed(`its read failed: ${message(e)}`);
+    }
+    const p = page as { events?: unknown; cursor?: unknown } | null;
+    const events = p?.events;
+    const isEvent = (e: unknown): e is StreamEvent => isPlain(e) && Number.isSafeInteger(e.seq) && typeof e.kind === 'string' && 'data' in e;
+    if (!Array.isArray(events) || events.length > limit || !events.every(isEvent) || (p!.cursor !== null && typeof p!.cursor !== 'string')) return failed('its read gave no page of at most the limit, with a cursor');
+    const type = (ext.manifest.sources ?? []).find((s) => s.name === name)?.reading;
+    for (const e of type ? events : []) {
+      const held = validate(type!, e.data);
+      if (!held.ok) return failed(`event ${e.seq} isn't ${type}: ${held.issues[0]!.path || '/'} ${held.issues[0]!.code}`);
+    }
+    this.save('cursors.json', { ...cursors, [name]: p!.cursor });
+    return { status: 'events', source: name, events };
+  }
+  /** The secret a package's manifest names, or a refusal naming it. */
+  private secretOf(extension: string, name: string): void {
+    const entry = this.entries[extension];
+    if (!entry) throw Error(`${extension} isn't installed`);
+    const manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    if (!(manifest.secrets ?? []).some((s) => s.name === name)) throw Error(`${extension}'s manifest names no secret ${name}`);
   }
   async installed(): Promise<Installed[]> {
     return Object.values(this.entries).map((e) => this.installedOf(e));
@@ -724,7 +952,7 @@ class Host implements ExtensionHost {
     const reasons: string[] = [];
     let manifest: Manifest | undefined;
     try {
-      manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+      manifest = manifestOf(folder);
     } catch (e) {
       reasons.push(`its deepbuild.json can't be read: ${message(e)}`);
     }
@@ -747,6 +975,8 @@ class Host implements ExtensionHost {
     const ext = this.ext(entry, folder, manifest, digest, 'sandbox', 'conformance');
     try {
       await this.start(ext);
+      // The calls it made and didn't wait for are answered too before its run is read.
+      await Promise.all(this.calls);
     } catch (e) {
       return [`its code didn't register in the platform sandbox: ${message(e)}`];
     } finally {
@@ -755,6 +985,7 @@ class Host implements ExtensionHost {
     const declared = manifest.checks ?? [];
     const environments = manifest.environments ?? [];
     return [
+      ...ext.refusals,
       ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
       ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
     ];
@@ -764,7 +995,7 @@ class Host implements ExtensionHost {
     return {
       entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(),
-      adapters: new Set(), leased: [], hubBound: this.hubBound(entry, folder, digest),
+      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), starts: 0,
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -826,7 +1057,7 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
       return refuse(not);
     }
-    const manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const manifest = manifestOf(folder);
     try {
       await this.declareKinds(entry.id, manifest.leases ?? []);
     } catch (e) {
@@ -907,21 +1138,24 @@ class Host implements ExtensionHost {
 
   /** Runs the package's code: in the hub's process, or in the platform sandbox through the supervisor. */
   private async start(ext: Ext): Promise<void> {
+    ext.starts++;
     const index = join(ext.folder, 'index.ts');
     const params = {
       ...(ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {}),
       ...(this.options.plant === 'piece-writes-input' ? { planted: ['deep.terminal.write'] } : {}),
     };
     if (ext.place === 'hub') {
-      const url = `${pathToFileURL(index).href}?digest=${ext.digest.slice(3)}`;
+      // A restart runs its code afresh, as a new process would: nothing it held in memory survives.
+      const url = `${pathToFileURL(index).href}?digest=${ext.digest.slice(3)}${ext.starts > 1 ? `&start=${ext.starts}` : ''}`;
       ext.ask = extensionSide((method, params, scope) => this.dispatch(ext, method, params, scope), async (deep) => {
         const code = (await import(url)) as { default: (deep: unknown) => unknown };
-        await code.default(deep);
+        return await code.default(deep);
       }).serve;
     } else {
       await this.sandboxed(ext);
     }
-    await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
+    const returned = await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
+    if (ext.mode === 'loaded' && isPlain(returned)) this.loadResults.set(ext.entry.id, structuredClone(returned));
     // Its handlers, actions and outputs publish only now that it started, and only while it's still the one loaded.
     if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) ext.live = true;
   }
@@ -1024,7 +1258,7 @@ class Host implements ExtensionHost {
     let proof: string[] = [];
     if (ext.run) {
       if (ext.cleaned?.outcome !== 'clean') return;
-      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = '${ext.run}' ORDER BY log_pos`);
+      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = ? ORDER BY log_pos`, [ext.run]);
       proof = (ended as { id: string }[]).map((e) => e.id);
     }
     for (const id of ids) await table.release(id, proof);
@@ -1105,6 +1339,9 @@ class Host implements ExtensionHost {
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const conformance = ext.mode === 'conformance';
     const quiet = (): void => { if (conformance) throw Error(`${method}: nothing reaches the record while conformance runs`); };
+    this.previewHeld(ext, method);
+    // A shim that dropped a method answers it unsupported, naming it (the contract step's planted twin, #139).
+    if (this.options.unsupported?.includes(method)) return { outcome: 'unsupported', operation: method, surface: 'extension-api' };
     switch (method) {
       case 'deep.registerCheck': {
         const [type] = args;
@@ -1184,6 +1421,20 @@ class Host implements ExtensionHost {
         ext.index = { name, revision: fill.revision as number };
         return null;
       }
+      case 'deep.secret': {
+        const [name] = args;
+        if (!(ext.manifest.secrets ?? []).some((s) => s.name === name)) throw Error(`deep.secret: ${String(name)} isn't a secret ${id}'s manifest names`);
+        return handleOf(name as string);
+      }
+      case 'deep.registerSource': {
+        const [name, declared] = args;
+        const own = { sources: ext.manifest.sources ?? [], secrets: ext.manifest.secrets ?? [], hosts: (ext.entry.grant.hosts ?? []).map((h) => h.host) };
+        const source = declareSource(name, declared, own);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.sources.has(source.name));
+        if (owner) throw Error(`deep.registerSource: ${source.name} is already registered by ${owner.entry.id}`);
+        ext.sources.set(source.name, source);
+        return null;
+      }
       case 'deep.registerRoute': {
         const [route] = args;
         if (typeof route !== 'string' || !ROUTE.test(route)) throw Error(`deep.registerRoute takes "<METHOD> <path>", not ${JSON.stringify(route)}`);
@@ -1239,6 +1490,15 @@ class Host implements ExtensionHost {
       case 'deep.lease':
         quiet();
         return this.lease(ext, args[0], args[1]);
+      case 'deep.config.get': {
+        // The package's own settings (#139 wires it): ~/.deepbuild/config.json's extensions.<id>.<key>; a key nobody set reads null.
+        const [key] = args;
+        if (typeof key !== 'string' || !key) throw Error('deep.config.get takes a setting\'s key');
+        const file = join(this.options.home, 'config.json');
+        const all = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as { extensions?: Record<string, Record<string, unknown>> } : {};
+        const value = all.extensions?.[id]?.[key];
+        return value === undefined ? null : structuredClone(value);
+      }
       // Hosted terminals (#104): what runs is the piece's own, under run-as-you, and never at its conformance run.
       case 'deep.terminal.open': {
         if (conformance) throw Error(`${method}: nothing runs while conformance runs`);
@@ -1264,6 +1524,23 @@ class Host implements ExtensionHost {
       default:
         throw Error(`${method} isn't wired into this host yet`);
     }
+  }
+  /**
+   * A preview method is used only by name (#139): a package lists each one it calls in its manifest's requires.preview,
+   * or the call is refused with preview_unrequested; and a package that declares itself stable calls none. Conformance
+   * runs the package's code at install, so a call it makes there refuses the install, naming the method.
+   */
+  private previewHeld(ext: Ext, method: string): void {
+    if (this.published.get(method)?.stability !== 'preview') return;
+    const m = ext.manifest;
+    let refusal: string | undefined;
+    if (m.stability === 'stable') {
+      if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
+    } else if (!(m.requires?.preview ?? []).includes(method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
+    if (!refusal) return;
+    // Kept on the run, so a package that never awaits the call is refused all the same.
+    ext.refusals.push(refusal);
+    throw Error(refusal);
   }
   /** The record its grant names, filtered here before anything crosses to the package. */
   private async query(ext: Ext, filter: unknown): Promise<unknown[]> {
@@ -1294,11 +1571,13 @@ class Host implements ExtensionHost {
     const id = ext.entry.id;
     if (typeof name !== 'string' || !ext.uses.has(name)) throw Error(`deep.read: ${String(name)} isn't an interface ${id} uses`);
     // Only a provider that started: an output publishes once its piece is ready, like its handlers and actions.
-    const provider = [...this.exts.values()].find((p) => p !== ext && p.live && p.provides.has(name) && !p.detached);
+    // The use reads the interface it is wired to (#139): the one its manifest names, unless the planted installer rewired it.
+    const to = this.wired.get(id)?.get(name) ?? name;
+    const provider = [...this.exts.values()].find((p) => p !== ext && p.live && p.provides.has(to) && !p.detached);
     if (!provider) return { missing: true };
     const edge = `${id} uses ${name} from ${provider.entry.id}`;
     if (!provider.ask) throw Error(`the edge ${edge}: ${provider.entry.id} stopped while ${id} still used it`);
-    const reading = within(CALL_MS, `the edge ${edge}`, provider.ask('output', { name }));
+    const reading = within(CALL_MS, `the edge ${edge}`, provider.ask('output', { name: to }));
     provider.reads.add(reading);
     try {
       return { value: await reading };
@@ -1506,9 +1785,7 @@ class Host implements ExtensionHost {
       // Only the owner's lines set the turn and open routes: an adapter that relays can't steer another's delivery.
       if (this.owners(b).includes(name)) {
         if (OPENS_TURN.has(line.event)) b.inTurn = true;
-        if (line.event === ENDS_TURN) b.inTurn = false;
-        if (line.event === ENDS_TURN) await this.flush(session, b, 'hold');
-        if (line.event === ENDS_TURN) await this.flush(session, b, 'wake');
+        if (line.event === ENDS_TURN) { b.inTurn = false; await this.flush(session, b, 'hold'); await this.flush(session, b, 'wake'); }
         if (line.event === 'UserPromptSubmit') await this.flush(session, b, 'prompt');
         if (OPENS_TURN.has(line.event)) await this.flush(session, b, 'steer');
       }
@@ -1693,6 +1970,22 @@ class Host implements ExtensionHost {
       server.close(() => resolve());
       server.closeAllConnections();
     });
+  }
+
+  loadResult(id: string): Record<string, unknown> | undefined {
+    const r = this.loadResults.get(id);
+    return r === undefined ? undefined : structuredClone(r);
+  }
+  async edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]> {
+    const out: { user: string; uses: string; interface: string; provider: string }[] = [];
+    for (const ext of this.exts.values()) {
+      for (const uses of (ext.manifest.uses ?? []).map((u) => u.interface)) {
+        const to = this.wired.get(ext.entry.id)?.get(uses) ?? uses;
+        const provider = [...this.exts.values()].find((p) => p !== ext && (p.manifest.provides ?? []).some((row) => row.interface === to));
+        if (provider) out.push({ user: ext.entry.id, uses, interface: to, provider: provider.entry.id });
+      }
+    }
+    return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
   }
 
   async close(): Promise<void> {

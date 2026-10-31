@@ -11,6 +11,13 @@ import { openRecord, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost } from '../src/index.js';
 
+/** The preview methods a package's code calls, which its manifest lists by name since #139 (requires.preview). */
+const PREVIEW = /\bdeep\.(on|registerResolver|registerSource|registerEnvironment|lease|registerView|readNow|registerAdapter|registerRoute|registerIndex|record\.append|record\.query|evidence\.put|asks\.create|config\.get|notices\.send|store|schedule|secret|send|provide|use|read|fetch|registerAction)\(/g;
+const previewOf = (code: string): { requires?: { preview: string[] } } => {
+  const used = [...new Set([...code.matchAll(PREVIEW)].map((m) => `deep.${m[1]}`))].sort();
+  return used.length ? { requires: { preview: used } } : {};
+};
+
 const dirs: string[] = [];
 const closing: { close(): Promise<void> }[] = [];
 afterAll(async () => {
@@ -32,7 +39,7 @@ const LEASES = "export default async function (deep: any): Promise<void> {\n  de
 function pkgOf(version: string, leases: unknown[], code = CODE): string {
   const folder = temp();
   writeFileSync(join(folder, 'index.ts'), code);
-  const manifest = { id: 'test/x', version, digest: '', checks: ['ext.x.run'], leases };
+  const manifest = { id: 'test/x', version, digest: '', checks: ['ext.x.run'], leases, ...previewOf(code) };
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
   manifest.digest = packageDigest(folder);
   writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));

@@ -1,6 +1,8 @@
 {
   "title": "reading.source@1",
   "description": "A reading source, polled or over one MCP tool counted as read: readings with their unit, source and as-of time.",
+  "x-since": "R2",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

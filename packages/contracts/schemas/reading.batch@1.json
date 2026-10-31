@@ -1,6 +1,8 @@
 {
   "title": "reading.batch@1",
   "description": "A batch of readings; a series resolves through its file.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

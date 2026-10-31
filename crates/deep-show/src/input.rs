@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 
 use crate::hub::{Hub, Planted};
 use crate::placement::Grid;
+use crate::refused;
 use crate::shared::FLICKS;
 
 /// What a frame draws besides the revision: the camera, and the view controls that choose the
@@ -34,7 +35,7 @@ pub struct PanelScope {
     seen: Vec<(i64, Seen)>,
 }
 
-fn point(v: &Value) -> Option<[f64; 2]> {
+pub fn point(v: &Value) -> Option<[f64; 2]> {
     let a = v.as_array().filter(|a| a.len() == 2)?;
     Some([a[0].as_f64()?, a[1].as_f64()?])
 }
@@ -85,10 +86,6 @@ pub fn event(v: &Value) -> Option<Event> {
         },
         _ => return None,
     })
-}
-
-fn refused(code: &str) -> Value {
-    json!({"code": code})
 }
 
 impl Hub<'_> {
@@ -372,11 +369,7 @@ impl Hub<'_> {
                 &self.scenario.evidence,
             )
             .map_err(|u| json!({"code": u.code, "path": u.path}))?;
-        let [w, h] = drawn.frame.size;
-        let size = size.unwrap_or([
-            w.round().clamp(1.0, 8192.0) as u16,
-            h.round().clamp(1.0, 8192.0) as u16,
-        ]);
+        let size = size.unwrap_or_else(|| crate::snapshot::px(drawn.frame.size));
         let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
         let png = crate::snapshot::png(self.renderer.raster(&drawn, size, Some(ground)), size);
         crate::evidence::put(&self.scenario.evidence, &png)

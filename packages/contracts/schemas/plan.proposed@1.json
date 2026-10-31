@@ -1,6 +1,8 @@
 {
   "title": "plan.proposed@1",
   "description": "A plan was proposed for an authority ask.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "plans"
   ],

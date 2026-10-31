@@ -1,6 +1,8 @@
 {
   "title": "reading.dropped@1",
   "description": "A reading job refused one citation (#63): its quote was not at its handle, the handle names a whole session or nothing, or it was not delivered to that job. The finding it held was written nowhere.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {
