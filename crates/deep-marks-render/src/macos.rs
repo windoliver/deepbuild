@@ -416,7 +416,8 @@ fn usage() -> Usage {
     }
     let ns = |t: libc::timeval| t.tv_sec as u64 * 1_000_000_000 + t.tv_usec as u64 * 1_000;
     Usage {
-        wakeups: info.ri_pkg_idle_wkups, interrupts: info.ri_interrupt_wkups,
+        wakeups: info.ri_pkg_idle_wkups,
+        interrupts: info.ri_interrupt_wkups,
         cpu_ns: ns(ru.ru_utime) + ns(ru.ru_stime),
     }
 }
