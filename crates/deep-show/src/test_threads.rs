@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::{OpError, Val, View};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// The shared state the planted operator touches.
 static COUNT: AtomicU64 = AtomicU64::new(0);
@@ -63,23 +63,20 @@ fn register_serial(r: &mut Registrar) {
         .serial()
         .run(|v| {
             let a = area(v)?;
-            v.write("test.serial.out", Val::json(json!(a)))
+            v.write("test.serial.out", Val::typed(a))
         });
 }
 
 fn register_racy(r: &mut Registrar) {
     kind(r, "racy");
-    r.array("test.racy.out", "json", "item", "geometry", "items");
+    r.array("test.racy.out", "counted", "item", "geometry", "items");
     r.operator("out", "items", &["self"], &["test.racy.out"])
         .applies(|_, _, item| item.get("kind").and_then(Value::as_str) == Some("test.racy@1"))
         .run(|v| {
             let a = area(v)?;
             // The planted read: shared state outside the read set, undeclared.
             let count = COUNT.fetch_add(1, Ordering::Relaxed);
-            v.write(
-                "test.racy.out",
-                Val::json(json!({"area": a, "count": count})),
-            )
+            v.write("test.racy.out", Val::typed((a, count)))
         });
 }
 

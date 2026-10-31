@@ -1124,18 +1124,27 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let record = record_of(v.outside()?);
-    let worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
+    // Each item's transform, looked up only for the items the frame builds itself.
+    let worlds = v.every("core.world")?;
+    let by_id = std::cell::OnceCell::new();
+    let world = |id: &str| {
+        let by_id: &BTreeMap<&str, &Val> =
+            by_id.get_or_init(|| worlds.iter().map(|(i, w)| (*i, w)).collect());
+        by_id.get(id).and_then(|w| w.as_typed::<Transform>())
+    };
     let fields: Vec<(&str, Arc<Fields>)> = v
         .every("core.fields")?
         .into_iter()
         .filter_map(|(id, f)| f.as_typed::<Fields>().map(|f| (id, f)))
         .collect();
-    let world = |id: &str| worlds.get(id).and_then(|w| w.as_typed::<Transform>());
-    let prebuilt: BTreeMap<&str, Arc<Option<scene::Placed>>> = v
+    // Each item's own marks, in item order as the fields are; an item out of that order is built
+    // by the frame, which draws it the same.
+    let prebuilt: Vec<(&str, Arc<Option<scene::Placed>>)> = v
         .every("marks2d.item")?
         .into_iter()
         .filter_map(|(id, p)| p.as_typed::<Option<scene::Placed>>().map(|p| (id, p)))
         .collect();
+    let mut prebuilt = prebuilt.iter().peekable();
     // An item in a collection or naming a layer the document lacks, and one that is a parent,
     // draws in a scope other items set or is refused: the frame builds those itself.
     let members: std::collections::BTreeSet<&str> = doc["collections"]
@@ -1149,7 +1158,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let mut items = Map::new();
     let mut held: Vec<(&str, &Fields, &scene::Placed)> = Vec::new();
     for (id, f) in &fields {
-        match prebuilt.get(id).and_then(|p| p.as_ref().as_ref()) {
+        let own = prebuilt.next_if(|(i, _)| i == id).map(|(_, p)| p);
+        match own.and_then(|p| p.as_ref().as_ref()) {
             Some(p)
                 if !members.contains(id) && layers.is_some_and(|l| l.contains_key(&p.layer)) =>
             {
