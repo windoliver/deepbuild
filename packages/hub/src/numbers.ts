@@ -100,7 +100,7 @@ export class Numbers {
         // A message labelled twice is one message.
         const sample = [...new Map(labels.map((l) => [l.message, l])).values()].flatMap((l): LabelledMessage[] => {
           const e = typed.get(l.message);
-          const text = e ? String(e.data.text) : pool[l.message];
+          const text = e ? String(e.data.text) : Object.hasOwn(pool, l.message) ? pool[l.message] : undefined;
           return text === undefined ? [] : [{ message: l.message, text, label: l.label, period: !e || e.ts < before ? 'baseline' : 'dogfood', dates_hidden: true, labelled_by: 'you' }];
         });
         return { id, check: checkClassifier({ id, classifier, sample, threshold }) };
@@ -173,10 +173,10 @@ export class Numbers {
     const { messages, lost } = baselineMessages(manifest.measures, (sha) => bytes.get(sha) ?? null);
     const held = [...this.typed().values()];
     const values = this.o.held();
-    const fresh = messages.filter((m) => m.ts < before).map((m) => ({ ...m, text: scrubText(m.text, values ? { held: values } : undefined) })).filter((m) => !held.some((e) => m.text.slice(0, CUT) === String(e.data.text).slice(0, CUT) && Math.abs(e.ts - m.ts) < SAME_MESSAGE_MS));
+    const fresh = messages.filter((m) => m.ts < before).map((m) => ({ id: opaque(`${m.ts}:${m.text}`), ts: m.ts, text: scrubText(m.text, values ? { held: values } : undefined) })).filter((m) => !held.some((e) => m.text.slice(0, CUT) === String(e.data.text).slice(0, CUT) && Math.abs(e.ts - m.ts) < SAME_MESSAGE_MS));
     const had = await this.pool(before);
-    const pool = { ...had, ...Object.fromEntries(fresh.map((m) => [opaque(`${m.ts}:${m.text}`), m.text])) };
-    if (Object.keys(pool).length === Object.keys(had).length) return { messages: pool, lost };
+    const pool = { ...had, ...Object.fromEntries(fresh.map((m) => [m.id, m.text])) };
+    if (JSON.stringify(pool) === JSON.stringify(had)) return { messages: pool, lost };
     const sha = await this.o.keep(Buffer.from(JSON.stringify({ before, messages: pool })), 'readings:label-pool');
     const ts = this.o.now();
     await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, evidence: [sha], data: { reading: `${POOL}${before}`, value: Object.keys(pool).length, unit: 'count', as_of: ts, source: `labelpool:${sha}`, n: Object.keys(pool).length, outside: false } });
@@ -225,7 +225,7 @@ export class Numbers {
     const half = SAMPLE / 2;
     // The record holds only what the hub saw: a period before it has no messages to label without a manifest, and the check stays BLOCKED.
     const oneSided = !earlier.length || !later.length;
-    const warnings = [...(oneSided ? ['There are messages from only one side of that date, so these labels can\'t pass: a check needs both periods.'] : []), ...(taken?.lost ? [`${taken.lost} of the manifest's transcripts are missing or fail their hash, so their messages aren't here.`] : [])];
+    const warnings = [...(oneSided ? ['There are messages from only one side of that date, so these labels can\'t pass: a check needs both periods.'] : []), ...(taken?.lost ? [`${taken.lost} of the manifest's transcripts are missing, fail their hash or have a window that isn't one, so their messages aren't here.`] : [])];
     return { before, ...(warnings.length ? { warning: warnings.join(' ') } : {}), label_in: `${join(this.o.root, 'labels')}/<is_it_done|rework>.json as { threshold, before, labels: [{ message, label }] }`, messages: shuffled([...shuffled(earlier).slice(0, half), ...shuffled(later).slice(0, half)]) };
   }
 }
