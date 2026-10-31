@@ -2,6 +2,10 @@
 //! chain's plan from the view's size and the bloom's radius, shared by the frame, the GPU run and
 //! the CPU reference, so all three run the same stages at the same sizes.
 
+use std::collections::BTreeMap;
+
+use serde_json::Value;
+
 /// The chain's levels, at most.
 pub const MAX_LEVELS: usize = 6;
 
@@ -41,6 +45,24 @@ pub fn levels(size: [u32; 2], radius: f64) -> Vec<[u32; 2]> {
         ((sizes.len() as f64 * radius.clamp(0.0, 1.0)).ceil() as usize).clamp(1, sizes.len());
     sizes.truncate(keep);
     sizes
+}
+
+/// The chain's runs at `size` and the params its stages read: `bloom`'s, with the number of
+/// levels added.
+pub(crate) fn chain(
+    size: [u32; 2],
+    bloom: &BTreeMap<String, Value>,
+) -> (Vec<Run>, BTreeMap<String, Value>) {
+    let radius = bloom
+        .get("bloom.radius")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.85);
+    let mut params = bloom.clone();
+    params.insert(
+        "bloom.levels".into(),
+        Value::from(levels(size, radius).len() as u64),
+    );
+    (plan(size, radius), params)
 }
 
 /// The chain's runs in order. Levels 0 … n − 1 are the downsamples; levels n … are the

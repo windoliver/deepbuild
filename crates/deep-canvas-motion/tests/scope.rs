@@ -9,22 +9,16 @@ use serde_json::{json, Map, Value};
 
 const S: i64 = 705_600_000;
 
-fn x_at(doc: &Value, item: &str, t: i64) -> f64 {
+/// `item`'s position on `axis` (0 is x, 1 is y) at `t`.
+fn pos_at(doc: &Value, item: &str, t: i64, axis: usize) -> f64 {
     let program = Program::compile(doc.as_object().unwrap()).expect("the document reads");
     let doc = doc.as_object().expect("an object");
     let f = frame(doc, &program, t, Validity::Full);
-    f.items[item]["at"]["pos"][0].as_f64().expect("a number")
+    f.items[item]["at"]["pos"][axis].as_f64().expect("a number")
 }
 
-fn y_at(doc: &Value, item: &str, t: i64) -> f64 {
-    let program = Program::compile(doc.as_object().unwrap()).expect("the document reads");
-    let f = frame(
-        doc.as_object().expect("an object"),
-        &program,
-        t,
-        Validity::Full,
-    );
-    f.items[item]["at"]["pos"][1].as_f64().expect("a number")
+fn x_at(doc: &Value, item: &str, t: i64) -> f64 {
+    pos_at(doc, item, t, 0)
 }
 
 fn dot(id: &str, extra: Value) -> (String, Value) {
@@ -67,7 +61,7 @@ fn a_child_rides_its_parent_turned_and_moved_by_it() {
         "turned 90°, the hand's x is the arm's"
     );
     assert!(
-        (y_at(&d, "hand", 0) - 10.0).abs() < 1e-12,
+        (pos_at(&d, "hand", 0, 1) - 10.0).abs() < 1e-12,
         "and its offset turns onto y"
     );
 }

@@ -30,8 +30,8 @@ use deep_gpu::meter::{
 };
 use deep_gpu::surface::Path;
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
+use crate::frames::hex;
 use crate::liveview::{compile_upscale, Drawing, Kit, Timer, Upscale, View, SLOTS};
 use crate::{refused, App, Planted};
 
@@ -1720,13 +1720,6 @@ impl Live {
         }
         out
     }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
 }
 
 /// One canonical render of a stamped document at `t`: a fresh view of one slot, its own results,
