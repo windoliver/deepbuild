@@ -65,10 +65,48 @@ struct Args {
     clicks: Vec<(u64, [f64; 2])>,
     /// The record's state for each status binding's source (#382).
     states: BTreeMap<String, String>,
+    /// Report the first frame as a cold start: when it settled, from this process's spawn, and
+    /// which pipelines it compiled (#854).
+    cold: bool,
     /// The theme the look's roles and status map resolve in (#382).
     theme: String,
     /// The look's status map, when it has one (#382).
     status: Option<Status>,
+}
+
+/// Milliseconds from this process's spawn, as the kernel records its start, to now.
+#[cfg(target_os = "macos")]
+fn since_spawn_ms() -> Option<f64> {
+    // SAFETY: an all-zero proc_bsdinfo is valid for proc_pidinfo to fill, and the size passed is
+    // its own.
+    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
+    let read = unsafe {
+        libc::proc_pidinfo(
+            libc::getpid(),
+            libc::PROC_PIDTBSDINFO,
+            0,
+            (&raw mut info).cast(),
+            size,
+        )
+    };
+    if read != size {
+        return None;
+    }
+    let started = std::time::UNIX_EPOCH
+        + std::time::Duration::new(info.pbi_start_tvsec, info.pbi_start_tvusec as u32 * 1000);
+    Some(
+        std::time::SystemTime::now()
+            .duration_since(started)
+            .ok()?
+            .as_secs_f64()
+            * 1000.0,
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn since_spawn_ms() -> Option<f64> {
+    None
 }
 
 pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -195,6 +233,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         states,
         theme,
         status,
+        cold: call["cold"].as_bool().unwrap_or(false),
     })
 }
 
@@ -378,6 +417,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let timings = args.timings && !noop;
     let opened = session3::open(app, size, timings, shows)?;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
+    // What the view compiled as it opened, before its first frame (#854).
+    let mut cold = args.cold.then(|| (session3::pipelines(app), Value::Null));
     let mut text = status::Text::default();
     let mut report = (Value::Array(Vec::new()), Value::Array(Vec::new()));
     let mut moved: Option<u32> = None;
@@ -517,6 +558,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             )?;
             if n == args.from {
                 moved = drawn.moved;
+                // The first frame is settled once drawn: its time from the spawn, then which
+                // pipelines it compiled.
+                if let Some((before, report)) = cold.as_mut() {
+                    let ms = since_spawn_ms();
+                    let pipelines: Vec<Value> = session3::pipelines(app)
+                        .into_iter()
+                        .map(|p| json!({"name": p, "on_first_frame": !before.contains(&p)}))
+                        .collect();
+                    *report = json!({"since_spawn_ms": ms, "pipelines": pipelines});
+                }
             }
             if delay > 0 {
                 held.push((n + delay, drawn.slot));
@@ -673,6 +724,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         report.1,
     );
     let mut reply = json!({"frames": frames, "passes": passes, "status": status_report});
+    if let Some((_, report)) = cold {
+        reply["cold"] = report;
+    }
     if timings {
         reply["profiler"] =
             json!({"name": "wgpu-profiler", "version": env!("DEEP_WGPU_PROFILER_VERSION")});
