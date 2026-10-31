@@ -162,6 +162,12 @@ fn read_board(
     Ok(out)
 }
 
+/// The build answering: its Cargo profile and its toolchain, as `rustc -V` prints it, which a
+/// coefficient file records (issue #855).
+pub fn build() -> Value {
+    json!({"profile": env!("DEEP_PROFILE"), "toolchain": env!("DEEP_TOOLCHAIN")})
+}
+
 /// The `costs` call: each operator's fitted terms, by key.
 pub fn measure(startup: &Startup) -> Value {
     let writer = Writer {
@@ -267,5 +273,5 @@ pub fn measure(startup: &Startup) -> Value {
         }
         terms.insert(op.key.clone(), Value::Object(t));
     }
-    json!({"terms": terms, "runs": RUNS, "items": ITEMS * 5})
+    json!({"terms": terms, "runs": RUNS, "items": ITEMS * 5, "build": build()})
 }
