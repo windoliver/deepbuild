@@ -365,6 +365,8 @@ pub struct Operator {
     pub run: Option<Run>,
     /// A stepping operator's step length in flicks: it steps in simulate at every multiple of it.
     pub step: Option<i64>,
+    /// It isn't thread-safe: its nodes run only on the scheduler's own thread (#857).
+    pub serial: bool,
 }
 
 impl Operator {
@@ -383,6 +385,12 @@ impl Operator {
     /// Its body.
     pub fn run(&mut self, run: Run) -> &mut Self {
         self.run = Some(run);
+        self
+    }
+
+    /// Isn't thread-safe: runs only on the scheduler's own thread.
+    pub fn serial(&mut self) -> &mut Self {
+        self.serial = true;
         self
     }
 
@@ -655,6 +663,7 @@ impl Registrar {
             applies: None,
             run: None,
             step: None,
+            serial: false,
         });
         self.operators.last_mut().expect("just pushed")
     }
