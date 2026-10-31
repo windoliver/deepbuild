@@ -392,13 +392,19 @@ impl Model {
             .collect()
     }
 
-    /// The approve button's words on a batched approval: how many steps it runs and how many can't be undone.
-    pub fn approve_label(&self) -> Option<String> {
+    /// How many steps a batched approval runs, and how many of the batch can't be undone.
+    pub(crate) fn approve(&self) -> Option<(usize, usize)> {
         if self.kind != Kind::BatchedAuthority || self.steps.is_empty() {
             return None;
         }
         let runs = self.steps.iter().filter(|step| step.on).count();
         let irreversible = self.steps.iter().filter(|step| !step.undoable).count();
+        Some((runs, irreversible))
+    }
+
+    /// The approve button's words on a batched approval: how many steps it runs and how many can't be undone.
+    pub fn approve_label(&self) -> Option<String> {
+        let (runs, irreversible) = self.approve()?;
         Some(format!(
             "Approve: runs {runs} of {} steps · {irreversible} can't be undone",
             self.steps.len()

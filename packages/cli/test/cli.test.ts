@@ -44,7 +44,7 @@ describe('deep checkout command', () => {
   ] as const)('deep env %s in a fresh home sets nothing up there', (_, args, status, why) => {
     const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-home-')));
     try {
-      const env = { ...process.env, HOME: home };
+      const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
       for (const key of Object.keys(env)) if (key.startsWith('DEEP_') || key.startsWith('CLAUDE')) delete env[key];
       // The timeout outlives the 15 s a wrong program spends waiting for the home's hub to start.
       const result = spawnSync(process.execPath, [cli, 'env', ...args(home)], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
