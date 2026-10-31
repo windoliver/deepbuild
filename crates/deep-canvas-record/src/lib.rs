@@ -57,12 +57,16 @@ pub struct Shown {
     pub reasons: Vec<&'static str>,
 }
 
+deep_canvas::canonical_fields!(Shown { id, rank, reasons });
+
 /// The one count item the rest fold into.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fold {
     pub items: Vec<String>,
     pub line: String,
 }
+
+deep_canvas::canonical_fields!(Fold { items, line });
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Level {
@@ -71,6 +75,8 @@ pub struct Level {
     /// Arrivals that would change a held set, waiting until the next hold.
     pub new: usize,
 }
+
+deep_canvas::canonical_fields!(Level { shown, fold, new });
 
 fn reasons(item: &Item) -> Vec<&'static str> {
     let mut keys: Vec<&'static str> = RANK

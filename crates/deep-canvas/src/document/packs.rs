@@ -1203,7 +1203,7 @@ fn expand_one(
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));
     }
-    let key = Hasher::new("recipe.key")
+    let key = Hasher::v1("recipe.key")
         .text(&pack.id.text())
         .text(&format!("{}@{}.{}", recipe.id, recipe.major, recipe.minor))
         .bytes(&canonical(&Value::Object(inputs.clone())))
@@ -1410,7 +1410,7 @@ fn at_path(id: &str, step: &str) -> String {
 /// The seed of a derived item: `(instance, step, index)`, so adding an item never reseeds the
 /// others.
 pub fn seed_of(instance: &str, step: &str, index: Option<u64>) -> u64 {
-    let mut h = Hasher::new("recipe.seed");
+    let mut h = Hasher::v1("recipe.seed");
     h.text(instance).text(step);
     match index {
         Some(i) => h.int(i as i64),

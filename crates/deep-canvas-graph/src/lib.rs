@@ -80,6 +80,8 @@ pub struct Place {
     pub y: f64,
 }
 
+deep_canvas::canonical_fields!(Place { rank, order, x, y });
+
 /// The layout memory, by stable node ID.
 pub type Memory = BTreeMap<String, Place>;
 
