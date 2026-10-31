@@ -1,6 +1,8 @@
 {
   "title": "hub.stopped@1",
   "description": "The hub stopped, with why: a signal, a stop you asked for, or a crash found at the next start.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

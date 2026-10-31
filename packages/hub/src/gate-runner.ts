@@ -9,14 +9,13 @@
 import type { Checkouts, TempCheckout } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 
-const sql = (s: string) => s.replace(/'/g, "''");
 /** A base run's check, apart from the check's own runs: its failure is the proof and its time isn't the check's. */
 export const BASE_RUN = '@base';
 
 /** A check of a claim, as the definition locks it: its approved bytes and its lane facts. */
 export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes' }
 export interface GateOptions {
-  raw(query: string): Promise<unknown[]>;
+  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
@@ -55,7 +54,7 @@ export class GateRunner {
 
   /** The median of a check's last clean runs on this machine, from the record; null before it has run clean. */
   private async expectedMs(check: string): Promise<number | null> {
-    const rows = (await this.o.raw(`SELECT ended - started AS ms FROM runs WHERE check_id = '${sql(check)}' AND outcome = 'passed' AND ended IS NOT NULL ORDER BY ended DESC LIMIT 5`)) as { ms: number }[];
+    const rows = (await this.o.raw(`SELECT ended - started AS ms FROM runs WHERE check_id = ? AND outcome = 'passed' AND ended IS NOT NULL ORDER BY ended DESC LIMIT 5`, [check])) as { ms: number }[];
     if (!rows.length) return null;
     const sorted = rows.map((r) => Number(r.ms)).sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)]!;

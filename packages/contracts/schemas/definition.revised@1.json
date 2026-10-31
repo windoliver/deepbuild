@@ -1,6 +1,8 @@
 {
   "title": "definition.revised@1",
   "description": "A definition of done was revised after a dispute. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "definitions"
   ],

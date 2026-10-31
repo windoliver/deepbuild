@@ -1,0 +1,1802 @@
+BASE-FAILURE.txt: the acceptance suite for #139 run on the base commit f2867254 (origin/main), nothing implemented.
+
+Command:  node node_modules/vitest/vitest.mjs run --root tests/acceptance/139 --no-file-parallelism
+Date:     2026-10-29 (2026-10-29)
+Node:     v24.22.0
+Vitest:   vitest/5.0.5 darwin-arm64 node-v24.22.0
+tsc:      npx tsc -p tests/acceptance/139/tsconfig.json  -> no diagnostics
+Exit:     1
+Result:   66 failed, 0 passed (66 tests in 10 files)
+
+Why each test fails at the base (the first line of its failure):
+  FAILED AC9 the local preflight's lint or interfaces lane runs scripts/api-surface.mjs
+         AssertionError: a local lane runs api-surface.mjs: ["typecheck","lint","unit","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]: expected false to be true // Object.is equality
+  FAILED AC9 the unchanged repo passes: cargo-semver-checks over the canvas module crates and deep-hook, and the API re
+         Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC9 a planted removal of a public function from deep-hook fails, naming the function
+         Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC9 a planted change to a method's signature without an updated report fails, naming the method; with the repo
+         Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC9 a run that can't complete is BLOCKED, never PASS: with cargo-semver-checks off the PATH the step exits 3 a
+         Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC7 the contract step adds under 30 s to the local preflight
+         AssertionError: the local preflight has a lane that runs "contract-diff.mjs check": expected undefined to be defined
+  FAILED AC7 an adapter adds under 50 µs at p95 to a call it serves
+         AssertionError: @deepbuild/hub exports contractAdapter(table).serve(method, params, call): expected 'undefined' to be 'function' // Object.is equality
+  FAILED AC11 the unchanged entry passes (the pass side of the cases below)
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 an optional field added in a minor passes with no break file
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 a member added to an extensible set (a code) in a minor passes with no break file
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 a field removed in a minor fails, naming the entry and the field mode
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 a field retyped in a minor fails, naming the entry and the field type
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 a field made required in a minor fails, naming the entry and the field mode
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 a member added to an exhaustive set in a minor fails, naming the entry and the field phase
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 an optional field that can deny added in a minor fails, naming the entry and the field deny
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 the same reshaping under a new numbered name, the old name kept as it was, passes: the entry took a new m
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC11 (wrong program) a step that passes every additive change lets the planted deny field through, and this te
+         AssertionError: expected [Function] to throw error matching /a step that passes every additive cha…/ but got 'scripts/contract-diff.mjs does not ex…'
+  FAILED AC11 the real step fails the planted deny field (the test above passes the wrong program through this same ass
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC8 the step runs every member of every group, and with the candidate unchanged it passes, listing the failure
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC8 a planted break in one gallery document's kind fails it, naming the document and the first value that diff
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC14 the planted break leaves the release preflight failed, naming the document, until one of the two is recor
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC14 (wrong program) a release preflight that only reports it passes, and this test fails it
+         AssertionError: expected [Function] to throw error matching /a release preflight that only reports…/ but got 'scripts/contract-diff.mjs does not ex…'
+  FAILED AC14 accepted, with its break file quoting the exact line and the workaround, releases it; accepted with no br
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC14 marked fixed releases it only when the document passes again: the owner's word alone is not evidence
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC14 the release preflight runs the corpus: a release-only lane runs the contract step's corpus command
+         AssertionError: a release lane runs "contract-diff.mjs corpus": ["spine checkpoint","setup checkpoint","claude code adapter live"]: expected undefined to be defined
+  FAILED AC12 hub.ping returns hub.health's result with a deprecated notice naming hub.health and R3; hub.health itself
+         Error: hub.ping was refused: {"v":1,"id":"hub.ping#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method hub.ping.","path":"/method","actual":"hub.ping","evidence":[]}}
+  FAILED AC12 (wrong program) a hub that serves the old method silently fails, naming the method
+         Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: file://~/dev/claude-worktrees/doneright/issue-139-tests/packages/hub/dist/plant.js:36
+  FAILED AC12 the install check and deep doctor name the installed package whose manifest uses the deprecated method
+         AssertionError: deep install installs it (the notice is not a refusal)
+  FAILED AC1 the candidate that changes nothing passes (the pass side of every test below)
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC1 removing deep.on, which arrived in R1, fails naming the method and R1
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC1 retyping a field of deep.arrived fails naming the method, the field and R2
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC2 a break file that quotes a different line fails, still naming the method
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC2 a break file with the exact line and no workaround fails
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff fail
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: P
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.ge
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose 
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC3 a preview method reshaped between two releases passes the contract diff with no break file
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC3 (wrong program) a contract step that diffs preview entries asks for a break file, and this test fails it
+         AssertionError: expected [Function] to throw error matching /a contract step that diffs preview en…/ but got 'scripts/contract-diff.mjs does not ex…'
+  FAILED AC3 the same method marked stable fails the diff without a break file, naming it
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC3 a stable method that no shipped piece of its release calls fails the preflight, naming it; called by a shi
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC3 a package that declares itself stable and calls the preview deep.provide is refused, naming deep.provide, 
+         AssertionError: the refusal names the preview method: expected 'its manifest fails extension.manifest…' to contain 'deep.provide'
+  FAILED AC3 (wrong program) a host that lets the stable package call a preview method installs it, and this test fails
+         Error: expected [Function] to throw error matching /a host that lets a stable package cal…/ but got 'the refusal names the preview method:…'
+  FAILED AC13 a preview entry with no tracking issue fails the preflight, naming it; with one it passes
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC13 a package that uses a preview method without listing it in requires.preview is refused with preview_unreq
+         AssertionError: the package is refused: expected true to be false // Object.is equality
+  FAILED AC13 one that lists it in requires.preview installs, and is not a stable package
+         AssertionError: listing the preview method installs it: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+  FAILED AC13 one that lists it and declares itself stable is refused, naming the method and stable
+         AssertionError: the same package, listing the preview method and declaring no stability, installs: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+  FAILED AC13 a document that uses a preview kind without listing it is refused with preview_unrequested, naming the ki
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests aga
+         AssertionError: the update that keeps prices@1 through its adapter installs: its manifest fails extension.manifest@1 at /provides/1/adapter: unlisted_field {"from":"ext.acme.prices@2"}: expected false to be true // Object.is equality
+  FAILED AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge
+         Error: expected [Function] to throw error matching /…/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2 but got 'the update that keeps prices@1 throug…'
+  FAILED AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you
+         Error: timed out after 30000 ms waiting for an ask naming acme/stocks
+  FAILED AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was
+         Error: timed out after 30000 ms waiting for an ask naming acme/stocks
+  FAILED AC5 every published schema in packages/contracts/schemas carries x-since, and each one with x-deprecated_since
+         AssertionError: 163 of 163 published schemas have no x-since (first: access@1.json, action.entered@1.json, action.reported@1.json, adapter.caps@1.json, adapter.event@1.json): expected [ 'access@1.json', …(162) ] to deeply equal []
+  FAILED AC5 the contract step passes the repo's own contracts
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC5 a schema with no x-since fails the contract test, naming the schema and since; an API method with no since
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC5 a replaced entry that names nothing as its replacement fails, naming the entry and replaced_by; naming an 
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC6 a hub-slot row with no since fails, naming the slot
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC6 a canvas registry with no since fails, naming the registry
+         Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+  FAILED AC6 (wrong program) a step that covers only the six kinds passes the hub slot, and this test fails it
+         AssertionError: expected [Function] to throw error matching /a contract step that covers only API …/ but got 'scripts/contract-diff.mjs does not ex…'
+  FAILED AC6 (wrong program) the same step passes the canvas registry, and this test fails it
+         AssertionError: expected [Function] to throw error matching /passed the hub registry/ but got 'scripts/contract-diff.mjs does not ex…'
+
+Reasons in short:
+  - scripts/contract-diff.mjs does not exist (AC1, AC2, AC3 diff half, AC4, AC5, AC6, AC8, AC11, AC13 tracking and document
+    halves, AC14): every test of those criteria reaches the contract step and says so. The wrong-program tests fail on it too:
+    the twin can't run, so the assertion that must fail it never gets its twin.
+  - scripts/api-surface.mjs does not exist and no lane runs it (AC9).
+  - packages/contracts/schemas: 163 of 163 schemas have no x-since (AC5).
+  - no lane runs the contract step, no release lane runs the corpus, @deepbuild/hub exports no contractAdapter (AC7, AC14).
+  - the hub serves no method hub.ping and starts only with plants it knows; deep install refuses a manifest with `calls` (AC12).
+  - the manifest contract has no `stability`, `requires` or provides.adapter field, and the host has no `api` option or edges() (AC3, AC10, AC13).
+  - the host installs an update that removes a used interface with no ask (AC10: no ask naming acme/stocks within 30 s).
+
+
+Full output of the run:
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-139-tests/tests/acceptance/139
+
+ ❯ prices.test.ts (4 tests | 4 failed) 61189ms
+   ❯ #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view (4)
+     × AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output 318ms
+     × AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge 219ms
+     × AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it 30210ms
+     × AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was 30320ms
+ ❯ apisurface.test.ts (5 tests | 5 failed) 28061ms
+   ❯ #139.f5cfafe3 the local preflight runs cargo-semver-checks on the canvas module crates and deep-hook, and compares the TypeScript extension API with its committed report (5)
+     × AC9 the local preflight's lint or interfaces lane runs scripts/api-surface.mjs 7ms
+     × AC9 the unchanged repo passes: cargo-semver-checks over the canvas module crates and deep-hook, and the API report equal to the committed one 11863ms
+     × AC9 a planted removal of a public function from deep-hook fails, naming the function 4268ms
+     × AC9 a planted change to a method's signature without an updated report fails, naming the method; with the report written, it passes 4566ms
+     × AC9 a run that can't complete is BLOCKED, never PASS: with cargo-semver-checks off the PATH the step exits 3 and prints BLOCKED api, naming the tool 4161ms
+ ❯ deprecated.test.ts (3 tests | 3 failed) 1725ms
+   ❯ #139.9bbdfea5 a JSON-RPC call of a method with deprecated_since returns its result through the adapter with a deprecated notice, and deep doctor and the install check name the package that uses it (3)
+     × AC12 hub.ping returns hub.health's result with a deprecated notice naming hub.health and R3; hub.health itself carries none 521ms
+     × AC12 (wrong program) a hub that serves the old method silently fails, naming the method 224ms
+     × AC12 the install check and deep doctor name the installed package whose manifest uses the deprecated method 756ms
+ ❯ preview.test.ts (11 tests | 11 failed) 2882ms
+   ❯ #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails (4)
+     × AC3 a preview method reshaped between two releases passes the contract diff with no break file 71ms
+     × AC3 (wrong program) a contract step that diffs preview entries asks for a break file, and this test fails it 87ms
+     × AC3 the same method marked stable fails the diff without a break file, naming it 87ms
+     × AC3 a stable method that no shipped piece of its release calls fails the preflight, naming it; called by a shipped piece, or published as preview, it passes 299ms
+   ❯ #139.607ef4f7 a fixture package that declares itself stable and calls a preview method is refused at install, naming the method (2)
+     × AC3 a package that declares itself stable and calls the preview deep.provide is refused, naming deep.provide, and is not loaded 1466ms
+     × AC3 (wrong program) a host that lets the stable package call a preview method installs it, and this test fails it 53ms
+   ❯ #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested (5)
+     × AC13 a preview entry with no tracking issue fails the preflight, naming it; with one it passes 104ms
+     × AC13 a package that uses a preview method without listing it in requires.preview is refused with preview_unrequested, naming the method 214ms
+     × AC13 one that lists it in requires.preview installs, and is not a stable package 60ms
+     × AC13 one that lists it and declares itself stable is refused, naming the method and stable 56ms
+     × AC13 a document that uses a preview kind without listing it is refused with preview_unrequested, naming the kind; listed, it passes 125ms
+ ❯ classify.test.ts (11 tests | 11 failed) 1637ms
+   ❯ #139.f86cd0ad the contract step classifies each change against the previous release (11)
+     × AC11 the unchanged entry passes (the pass side of the cases below) 435ms
+     × AC11 an optional field added in a minor passes with no break file 107ms
+     × AC11 a member added to an extensible set (a code) in a minor passes with no break file 68ms
+     × AC11 a field removed in a minor fails, naming the entry and the field mode 94ms
+     × AC11 a field retyped in a minor fails, naming the entry and the field type 72ms
+     × AC11 a field made required in a minor fails, naming the entry and the field mode 108ms
+     × AC11 a member added to an exhaustive set in a minor fails, naming the entry and the field phase 80ms
+     × AC11 an optional field that can deny added in a minor fails, naming the entry and the field deny 101ms
+     × AC11 the same reshaping under a new numbered name, the old name kept as it was, passes: the entry took a new major 77ms
+     × AC11 (wrong program) a step that passes every additive change lets the planted deny field through, and this test fails it 119ms
+     × AC11 the real step fails the planted deny field (the test above passes the wrong program through this same assertion) 96ms
+ ❯ history.test.ts (9 tests | 9 failed) 1293ms
+   ❯ #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in (4)
+     × AC1 the candidate that changes nothing passes (the pass side of every test below) 75ms
+     × AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2 73ms
+     × AC1 removing deep.on, which arrived in R1, fails naming the method and R1 67ms
+     × AC1 retyping a field of deep.arrived fails naming the method, the field and R2 68ms
+   ❯ #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it (5)
+     × AC2 a break file that quotes a different line fails, still naming the method 64ms
+     × AC2 a break file with the exact line and no workaround fails 111ms
+     × AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it 100ms
+     × AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it 0ms
+     × AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3 88ms
+ ❯ corpus.test.ts (7 tests | 7 failed) 1795ms
+   ❯ #139.9dd2cc13 before each release every extension, pack and document DeepBuild made or shipped runs against the candidate, and the report lists only the failures the previous release didn't have (2)
+     × AC8 the step runs every member of every group, and with the candidate unchanged it passes, listing the failure R1 already had apart 173ms
+     × AC8 a planted break in one gallery document's kind fails it, naming the document and the first value that differs; the known failure stays listed apart 227ms
+   ❯ #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file (5)
+     × AC14 the planted break leaves the release preflight failed, naming the document, until one of the two is recorded 200ms
+     × AC14 (wrong program) a release preflight that only reports it passes, and this test fails it 197ms
+     × AC14 accepted, with its break file quoting the exact line and the workaround, releases it; accepted with no break file does not 193ms
+     × AC14 marked fixed releases it only when the document passes again: the owner's word alone is not evidence 200ms
+     × AC14 the release preflight runs the corpus: a release-only lane runs the contract step's corpus command 11ms
+ ❯ oldload.test.ts (6 tests | 6 failed) 1833ms
+   ❯ #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one (6)
+     × AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview one 202ms
+     × AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: PASS 217ms
+     × AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported 195ms
+     × AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.get is changed 188ms
+     × AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose result changed is named 166ms
+     × AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other 238ms
+ ❯ since.test.ts (8 tests | 8 failed) 1899ms
+   ❯ #139.075d6d53 every entry in the published schemas has since, and every replaced entry names what replaced it; a missing field fails the contract test (4)
+     × AC5 every published schema in packages/contracts/schemas carries x-since, and each one with x-deprecated_since names x-replaced_by 12ms
+     × AC5 the contract step passes the repo's own contracts 1ms
+     × AC5 a schema with no x-since fails the contract test, naming the schema and since; an API method with no since does too 300ms
+     × AC5 a replaced entry that names nothing as its replacement fails, naming the entry and replaced_by; naming an entry that exists passes 258ms
+   ❯ #139.3d203a4b a hub slot and a canvas registry each published without since fail the contract test, naming them (4)
+     × AC6 a hub-slot row with no since fails, naming the slot 172ms
+     × AC6 a canvas registry with no since fails, naming the registry 175ms
+     × AC6 (wrong program) a step that covers only the six kinds passes the hub slot, and this test fails it 178ms
+     × AC6 (wrong program) the same step passes the canvas registry, and this test fails it 236ms
+ ❯ budgets.test.ts (2 tests | 2 failed) 176ms
+   ❯ #139.88ade6c5 budgets on the reference Mac, compared with the merge base: the contract step adds under 30 s, an adapter under 50 µs at p95 (2)
+     × AC7 the contract step adds under 30 s to the local preflight 5ms
+     × AC7 an adapter adds under 50 µs at p95 to a call it serves 169ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 66 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apisurface.test.ts > #139.f5cfafe3 the local preflight runs cargo-semver-checks on the canvas module crates and deep-hook, and compares the TypeScript extension API with its committed report > AC9 the local preflight's lint or interfaces lane runs scripts/api-surface.mjs
+AssertionError: a local lane runs api-surface.mjs: ["typecheck","lint","unit","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ apisurface.test.ts:69:197
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/66]⎯
+
+ FAIL  apisurface.test.ts > #139.f5cfafe3 the local preflight runs cargo-semver-checks on the canvas module crates and deep-hook, and compares the TypeScript extension API with its committed report > AC9 the unchanged repo passes: cargo-semver-checks over the canvas module crates and deep-hook, and the API report equal to the committed one
+Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ surface apisurface.test.ts:45:3
+ ❯ apisurface.test.ts:73:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/66]⎯
+
+ FAIL  apisurface.test.ts > #139.f5cfafe3 the local preflight runs cargo-semver-checks on the canvas module crates and deep-hook, and compares the TypeScript extension API with its committed report > AC9 a planted removal of a public function from deep-hook fails, naming the function
+Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ surface apisurface.test.ts:45:3
+ ❯ apisurface.test.ts:86:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/66]⎯
+
+ FAIL  apisurface.test.ts > #139.f5cfafe3 the local preflight runs cargo-semver-checks on the canvas module crates and deep-hook, and compares the TypeScript extension API with its committed report > AC9 a planted change to a method's signature without an updated report fails, naming the method; with the report written, it passes
+Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ surface apisurface.test.ts:45:3
+ ❯ apisurface.test.ts:104:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/66]⎯
+
+ FAIL  apisurface.test.ts > #139.f5cfafe3 the local preflight runs cargo-semver-checks on the canvas module crates and deep-hook, and compares the TypeScript extension API with its committed report > AC9 a run that can't complete is BLOCKED, never PASS: with cargo-semver-checks off the PATH the step exits 3 and prints BLOCKED api, naming the tool
+Error: scripts/api-surface.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ surface apisurface.test.ts:45:3
+ ❯ apisurface.test.ts:119:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/66]⎯
+
+ FAIL  budgets.test.ts > #139.88ade6c5 budgets on the reference Mac, compared with the merge base: the contract step adds under 30 s, an adapter under 50 µs at p95 > AC7 the contract step adds under 30 s to the local preflight
+AssertionError: the local preflight has a lane that runs "contract-diff.mjs check": expected undefined to be defined
+ ❯ budgets.test.ts:22:88
+     20|   it('AC7 the contract step adds under 30 s to the local preflight', a…
+     21|     const lane = await contractLane();
+     22|     expect(lane, 'the local preflight has a lane that runs "contract-d…
+       |                                                                                        ^
+     23|     expect(existsSync(STEP), 'scripts/contract-diff.mjs exists').toBe(…
+     24|     const baseLanes = spawnSync('git', ['show', 'origin/main:scripts/l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/66]⎯
+
+ FAIL  budgets.test.ts > #139.88ade6c5 budgets on the reference Mac, compared with the merge base: the contract step adds under 30 s, an adapter under 50 µs at p95 > AC7 an adapter adds under 50 µs at p95 to a call it serves
+AssertionError: @deepbuild/hub exports contractAdapter(table).serve(method, params, call): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ budgets.test.ts:45:117
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/66]⎯
+
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 the unchanged entry passes (the pass side of the cases below)
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ r1 classify.test.ts:27:5
+ ❯ classify.test.ts:55:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/66]⎯
+
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 an optional field added in a minor passes with no break file
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 a member added to an extensible set (a code) in a minor passes with no break file
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ check helpers.ts:187:126
+ ❯ classify.test.ts:60:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/66]⎯
+
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 a field removed in a minor fails, naming the entry and the field mode
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 a field retyped in a minor fails, naming the entry and the field type
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 a field made required in a minor fails, naming the entry and the field mode
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 a member added to an exhaustive set in a minor fails, naming the entry and the field phase
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 an optional field that can deny added in a minor fails, naming the entry and the field deny
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ check helpers.ts:187:126
+ ❯ classify.test.ts:66:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/66]⎯
+
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 the same reshaping under a new numbered name, the old name kept as it was, passes: the entry took a new major
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ check helpers.ts:187:126
+ ❯ classify.test.ts:73:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/66]⎯
+
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 (wrong program) a step that passes every additive change lets the planted deny field through, and this test fails it
+AssertionError: expected [Function] to throw error matching /a step that passes every additive cha…/ but got 'scripts/contract-diff.mjs does not ex…'
+
+- Expected:
+/a step that passes every additive change let the planted deny field through/
+
++ Received:
+"scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)"
+
+ ❯ classify.test.ts:77:55
+     75|
+     76|   it('AC11 (wrong program) a step that passes every additive change le…
+     77|     expect(() => denyInAMinor('pass-every-additive')).toThrow(/a step …
+       |                                                       ^
+     78|   }, 120_000);
+     79|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/66]⎯
+
+ FAIL  classify.test.ts > #139.f86cd0ad the contract step classifies each change against the previous release > AC11 the real step fails the planted deny field (the test above passes the wrong program through this same assertion)
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ check helpers.ts:187:126
+ ❯ denyInAMinor classify.test.ts:48:13
+ ❯ classify.test.ts:81:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/66]⎯
+
+ FAIL  corpus.test.ts > #139.9dd2cc13 before each release every extension, pack and document DeepBuild made or shipped runs against the candidate, and the report lists only the failures the previous release didn't have > AC8 the step runs every member of every group, and with the candidate unchanged it passes, listing the failure R1 already had apart
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 corpus.test.ts:30:3
+ ❯ corpus.test.ts:42:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/66]⎯
+
+ FAIL  corpus.test.ts > #139.9dd2cc13 before each release every extension, pack and document DeepBuild made or shipped runs against the candidate, and the report lists only the failures the previous release didn't have > AC8 a planted break in one gallery document's kind fails it, naming the document and the first value that differs; the known failure stays listed apart
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 corpus.test.ts:30:3
+ ❯ corpus.test.ts:51:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/66]⎯
+
+ FAIL  corpus.test.ts > #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file > AC14 the planted break leaves the release preflight failed, naming the document, until one of the two is recorded
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 corpus.test.ts:30:3
+ ❯ heldRelease corpus.test.ts:63:13
+ ❯ corpus.test.ts:72:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/66]⎯
+
+ FAIL  corpus.test.ts > #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file > AC14 (wrong program) a release preflight that only reports it passes, and this test fails it
+AssertionError: expected [Function] to throw error matching /a release preflight that only reports…/ but got 'scripts/contract-diff.mjs does not ex…'
+
+- Expected:
+/a release preflight that only reports the new corpus failure passed it/
+
++ Received:
+"scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)"
+
+ ❯ corpus.test.ts:76:46
+     74|
+     75|   it('AC14 (wrong program) a release preflight that only reports it pa…
+     76|     expect(() => heldRelease('report-only')).toThrow(/a release prefli…
+       |                                              ^
+     77|   }, 300_000);
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/66]⎯
+
+ FAIL  corpus.test.ts > #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file > AC14 accepted, with its break file quoting the exact line and the workaround, releases it; accepted with no break file does not
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 corpus.test.ts:30:3
+ ❯ corpus.test.ts:80:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/66]⎯
+
+ FAIL  corpus.test.ts > #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file > AC14 marked fixed releases it only when the document passes again: the owner's word alone is not evidence
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 corpus.test.ts:30:3
+ ❯ corpus.test.ts:98:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/66]⎯
+
+ FAIL  corpus.test.ts > #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file > AC14 the release preflight runs the corpus: a release-only lane runs the contract step's corpus command
+AssertionError: a release lane runs "contract-diff.mjs corpus": ["spine checkpoint","setup checkpoint","claude code adapter live"]: expected undefined to be defined
+ ❯ corpus.test.ts:109:126
+    107|     const lanes = (await import(new URL('../../../scripts/lanes.mjs', …
+    108|     const lane = lanes.releaseLanes.find((l) => l.commands.some((c) =>…
+    109|     expect(lane, `a release lane runs "contract-diff.mjs corpus": ${JS…
+       |                                                                                                                              ^
+    110|   });
+    111| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/66]⎯
+
+ FAIL  deprecated.test.ts > #139.9bbdfea5 a JSON-RPC call of a method with deprecated_since returns its result through the adapter with a deprecated notice, and deep doctor and the install check name the package that uses it > AC12 hub.ping returns hub.health's result with a deprecated notice naming hub.health and R3; hub.health itself carries none
+Error: hub.ping was refused: {"v":1,"id":"hub.ping#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method hub.ping.","path":"/method","actual":"hub.ping","evidence":[]}}
+ ❯ ping deprecated.test.ts:44:35
+     42|     const old = await conn.call('hub.ping');
+     43|     const current = await conn.call('hub.health');
+     44|     if (!('result' in old)) throw Error(`hub.ping was refused: ${JSON.…
+       |                                   ^
+     45|     if (!old.deprecated) throw Error(`the hub served the deprecated me…
+     46|     return { old, current };
+ ❯ deprecated.test.ts:54:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/66]⎯
+
+ FAIL  deprecated.test.ts > #139.9bbdfea5 a JSON-RPC call of a method with deprecated_since returns its result through the adapter with a deprecated notice, and deep doctor and the install check name the package that uses it > AC12 (wrong program) a hub that serves the old method silently fails, naming the method
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: file://~/dev/claude-worktrees/doneright/issue-139-tests/packages/hub/dist/plant.js:36
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=silent-deprecated names no planted program
+    at plantOf (file://~/dev/claude-worktrees/doneright/issue-139-tests/packages/hub/dist/plant.js:36:15)
+    at runHub (file://~/dev/claude-worktrees/doneright/issue-139-tests/packages/hub/dist/server.js:1027:19)
+    at hubCommand (file://~/dev/claude-worktrees/doneright/issue-139-tests/packages/hub/dist/index.js:46:28)
+    at file://~/dev/claude-worktrees/doneright/issue-139-tests/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../16/helpers.ts:249:11
+
+ ❯ scene deprecated.test.ts:32:15
+ ❯ deprecated.test.ts:62:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/66]⎯
+
+ FAIL  deprecated.test.ts > #139.9bbdfea5 a JSON-RPC call of a method with deprecated_since returns its result through the adapter with a deprecated notice, and deep doctor and the install check name the package that uses it > AC12 the install check and deep doctor name the installed package whose manifest uses the deprecated method
+AssertionError: deep install installs it (the notice is not a refusal)
+Source: /tmp/dh139-pkg-acme-pinger-w8d9sf
+  acme/pinger@1.0.0, digest d1:9b758abfa8ecb4061e31cac5be3d9730b5be0aef8fa19b26b7b1c89be61e95e9, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: none
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+Installed acme/pinger@1.0.0
+It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /calls: unlisted_field ["hub.ping"]
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ deprecated.test.ts:70:95
+     68|     const installed = await deep(s.home, ['install', pkg], { env: s.en…
+     69|     const said = `${installed.stdout}${installed.stderr}`;
+     70|     expect(installed.code, `deep install installs it (the notice is no…
+       |                                                                                               ^
+     71|     expect(said, 'the install check names the package, the method and …
+     72|     expect(said).toContain('hub.ping');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/66]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 the candidate that changes nothing passes (the pass side of every test below)
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:15:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/66]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:20:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/66]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 removing deep.on, which arrived in R1, fails naming the method and R1
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/66]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 retyping a field of deep.arrived fails naming the method, the field and R2
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/66]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file that quotes a different line fails, still naming the method
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ quotedOtherLine history.test.ts:52:24
+ ❯ history.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/66]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file with the exact line and no workaround fails
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ history.test.ts:65:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/66]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ history.test.ts:71:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/66]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ history.test.ts:80:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/66]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:85:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/66]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview one
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:45:17
+ ❯ oldload.test.ts:52:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/66]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: PASS
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:45:17
+ ❯ oldload.test.ts:61:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/66]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:45:17
+ ❯ oldload.test.ts:69:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/66]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.get is changed
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:45:17
+ ❯ oldload.test.ts:74:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/66]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose result changed is named
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:45:17
+ ❯ oldload.test.ts:83:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/66]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ oldload.test.ts:96:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/66]⎯
+
+ FAIL  preview.test.ts > #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails > AC3 a preview method reshaped between two releases passes the contract diff with no break file
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ previewReshaped preview.test.ts:20:3
+ ❯ preview.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/66]⎯
+
+ FAIL  preview.test.ts > #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails > AC3 (wrong program) a contract step that diffs preview entries asks for a break file, and this test fails it
+AssertionError: expected [Function] to throw error matching /a contract step that diffs preview en…/ but got 'scripts/contract-diff.mjs does not ex…'
+
+- Expected:
+/a contract step that diffs preview entries failed the reshaped preview method deep\.preview/
+
++ Received:
+"scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)"
+
+ ❯ preview.test.ts:33:51
+     31|
+     32|   it('AC3 (wrong program) a contract step that diffs preview entries a…
+     33|     expect(() => previewReshaped('diff-preview')).toThrow(/a contract …
+       |                                                   ^
+     34|   }, 120_000);
+     35|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/66]⎯
+
+ FAIL  preview.test.ts > #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails > AC3 the same method marked stable fails the diff without a break file, naming it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ preview.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/66]⎯
+
+ FAIL  preview.test.ts > #139.607ef4f7 a preview method reshaped passes the diff; a stable package that calls it is refused at install; the same method stable fails; a stable method no shipped piece calls fails > AC3 a stable method that no shipped piece of its release calls fails the preflight, naming it; called by a shipped piece, or published as preview, it passes
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ preview.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/66]⎯
+
+ FAIL  preview.test.ts > #139.607ef4f7 a fixture package that declares itself stable and calls a preview method is refused at install, naming the method > AC3 a package that declares itself stable and calls the preview deep.provide is refused, naming deep.provide, and is not loaded
+AssertionError: the refusal names the preview method: expected 'its manifest fails extension.manifest…' to contain 'deep.provide'
+
+Expected: "deep.provide"
+Received: "its manifest fails extension.manifest@1 at /stability: unlisted_field stable"
+
+ ❯ stableCallsPreview preview.test.ts:83:62
+     81|   const got = await admitFixture({ stability: 'stable' }, plant);
+     82|   if (got.ok) throw Error('a host that lets a stable package call a pr…
+     83|   expect(got.reason, 'the refusal names the preview method').toContain…
+       |                                                              ^
+     84| }
+     85|
+ ❯ preview.test.ts:89:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/66]⎯
+
+ FAIL  preview.test.ts > #139.607ef4f7 a fixture package that declares itself stable and calls a preview method is refused at install, naming the method > AC3 (wrong program) a host that lets the stable package call a preview method installs it, and this test fails it
+AssertionError: expected [Function] to throw error matching /a host that lets a stable package cal…/ but got 'the refusal names the preview method:…'
+
+- Expected:
+/a host that lets a stable package call a preview method installed/
+
++ Received:
+"the refusal names the preview method: expected 'its manifest fails extension.manifest…' to contain 'deep.provide'"
+
+ ❯ preview.test.ts:93:64
+     91|
+     92|   it('AC3 (wrong program) a host that lets the stable package call a p…
+     93|     await expect(stableCallsPreview('stable-may-call-preview')).reject…
+       |                                                                ^
+     94|   }, 120_000);
+     95| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/66]⎯
+
+ FAIL  preview.test.ts > #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested > AC13 a preview entry with no tracking issue fails the preflight, naming it; with one it passes
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ preview.test.ts:100:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/66]⎯
+
+ FAIL  preview.test.ts > #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested > AC13 a package that uses a preview method without listing it in requires.preview is refused with preview_unrequested, naming the method
+AssertionError: the package is refused: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ preview.test.ts:113:46
+    111|   it('AC13 a package that uses a preview method without listing it in …
+    112|     const got = await admitFixture({});
+    113|     expect(got.ok, 'the package is refused').toBe(false);
+       |                                              ^
+    114|     if (got.ok) return;
+    115|     expect(got.reason, 'the refusal carries the code and names the met…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/66]⎯
+
+ FAIL  preview.test.ts > #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested > AC13 one that lists it in requires.preview installs, and is not a stable package
+AssertionError: listing the preview method installs it: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ preview.test.ts:121:91
+    119|   it('AC13 one that lists it in requires.preview installs, and is not …
+    120|     const got = await admitFixture({ requires: { preview: ['deep.provi…
+    121|     expect(got.ok, `listing the preview method installs it: ${got.ok ?…
+       |                                                                                           ^
+    122|   }, 120_000);
+    123|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/66]⎯
+
+ FAIL  preview.test.ts > #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested > AC13 one that lists it and declares itself stable is refused, naming the method and stable
+AssertionError: the same package, listing the preview method and declaring no stability, installs: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ preview.test.ts:126:143
+    124|   it('AC13 one that lists it and declares itself stable is refused, na…
+    125|     const listed = await admitFixture({ requires: { preview: ['deep.pr…
+    126|     expect(listed.ok, `the same package, listing the preview method an…
+       |                                                                                                                                               ^
+    127|     const got = await admitFixture({ requires: { preview: ['deep.provi…
+    128|     expect(got.ok, 'a package that lists a preview method can\'t decla…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[48/66]⎯
+
+ FAIL  preview.test.ts > #139.b9c5c209 a preview entry names its tracking issue, and is used only by name: a package or a document lists it in requires.preview, or it is refused with preview_unrequested > AC13 a document that uses a preview kind without listing it is refused with preview_unrequested, naming the kind; listed, it passes
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ preview.test.ts:135:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[49/66]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output
+AssertionError: the update that keeps prices@1 through its adapter installs: its manifest fails extension.manifest@1 at /provides/1/adapter: unlisted_field {"from":"ext.acme.prices@2"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ updateWithAdapter prices.test.ts:79:110
+     77|   contractTest(await report(h));
+     78|   const got = await admit(h, v2);
+     79|   expect(got.ok, `the update that keeps prices@1 through its adapter i…
+       |                                                                                                              ^
+     80|   expect(await versions(h), 'prices 2.0.0 is the installed version').t…
+     81|   await expectEdge(h);
+ ❯ prices.test.ts:87:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[50/66]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge
+AssertionError: expected [Function] to throw error matching /…/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2 but got 'the update that keeps prices@1 throug…'
+
+- Expected:
+/the edge acme\/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2/
+
++ Received:
+"the update that keeps prices@1 through its adapter installs: its manifest fails extension.manifest@1 at /provides/1/adapter: unlisted_field {\"from\":\"ext.acme.prices@2\"}: expected false to be true // Object.is equality"
+
+ ❯ prices.test.ts:91:57
+     89|
+     90|   it('AC10 (wrong program) an installer that rewires the view to price…
+     91|     await expect(updateWithAdapter('rewires-to-newest')).rejects.toThr…
+       |                                                         ^
+     92|   }, 180_000);
+     93|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[51/66]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it
+Error: timed out after 30000 ms waiting for an ask naming acme/stocks
+ ❯ waitUntil helpers.ts:265:33
+    263|     const v = await probe();
+    264|     if (v) return v;
+    265|     if (Date.now() > end) throw Error(`timed out after ${ms} ms waitin…
+       |                                 ^
+    266|     await sleep(50);
+    267|   }
+ ❯ prices.test.ts:99:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[52/66]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was
+Error: timed out after 30000 ms waiting for an ask naming acme/stocks
+ ❯ waitUntil helpers.ts:265:33
+    263|     const v = await probe();
+    264|     if (v) return v;
+    265|     if (Date.now() > end) throw Error(`timed out after ${ms} ms waitin…
+       |                                 ^
+    266|     await sleep(50);
+    267|   }
+ ❯ prices.test.ts:114:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[53/66]⎯
+
+ FAIL  since.test.ts > #139.075d6d53 every entry in the published schemas has since, and every replaced entry names what replaced it; a missing field fails the contract test > AC5 every published schema in packages/contracts/schemas carries x-since, and each one with x-deprecated_since names x-replaced_by
+AssertionError: 163 of 163 published schemas have no x-since (first: access@1.json, action.entered@1.json, action.reported@1.json, adapter.caps@1.json, adapter.event@1.json): expected [ 'access@1.json', …(162) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "access@1.json",
++   "action.entered@1.json",
++   "action.reported@1.json",
++   "adapter.caps@1.json",
++   "adapter.event@1.json",
++   "adapter.facts@1.json",
++   "adapter.unsupported@1.json",
++   "agent.stop@1.json",
++   "agent.stop@2.json",
++   "agent.stop@3.json",
++   "agent.stop@4.json",
++   "answer.refused@1.json",
++   "archive.quiet@1.json",
++   "ask.answered@1.json",
++   "ask.answered@2.json",
++   "ask.answered@3.json",
++   "ask.answered@4.json",
++   "ask.batched@1.json",
++   "ask.cancelled@1.json",
++   "ask.created@1.json",
++   "ask.created@2.json",
++   "ask.created@3.json",
++   "ask.created@4.json",
++   "ask.defaulted@1.json",
++   "ask.escalated@1.json",
++   "ask.later@1.json",
++   "ask.moot@1.json",
++   "ask.sources@1.json",
++   "ask.superseded@1.json",
++   "call.overrun@1.json",
++   "capability.refused@1.json",
++   "card_rule.set@1.json",
++   "check.code@1.json",
++   "check@1.json",
++   "ci.archived@1.json",
++   "claim.made@1.json",
++   "claim.made@2.json",
++   "claim.made@3.json",
++   "claim.sent_back@1.json",
++   "claim.stalled@1.json",
++   "command.staged@1.json",
++   "commit.made@1.json",
++   "decision.applied@1.json",
++   "decision.created@1.json",
++   "decision.judged@1.json",
++   "decision.overruled@1.json",
++   "decision.overruled@2.json",
++   "decision.revoked@1.json",
++   "default.undone@1.json",
++   "definition.drafted@1.json",
++   "definition.locked@1.json",
++   "definition.locked@2.json",
++   "definition.revised@1.json",
++   "delivery.outcome@1.json",
++   "doc.patched@1.json",
++   "doctor.item@1.json",
++   "error@1.json",
++   "error@2.json",
++   "error@3.json",
++   "evidence.put@1.json",
++   "evidence.removed@1.json",
++   "evidence.stored@1.json",
++   "exit.code@1.json",
++   "extension.edges@1.json",
++   "extension.manifest@1.json",
++   "guard@1.json",
++   "hook.ack@1.json",
++   "hook.ack@2.json",
++   "hook.joined@1.json",
++   "hook.reply@1.json",
++   "hook.reply@2.json",
++   "hook.request@1.json",
++   "hook.request@2.json",
++   "hook.request@3.json",
++   "hook.template@1.json",
++   "hub.stopped@1.json",
++   "job.ended@1.json",
++   "job.event@1.json",
++   "job.recorded@1.json",
++   "layer.rows@1.json",
++   "learn.applied@1.json",
++   "learn.proposed@1.json",
++   "learn.rolled_back@1.json",
++   "learn.widened@1.json",
++   "learn_check.made@1.json",
++   "lease.acquired@1.json",
++   "lease.acquired@2.json",
++   "lease.denied@1.json",
++   "lease.kind@1.json",
++   "lease.released@1.json",
++   "lease.released@2.json",
++   "lease.stale@1.json",
++   "mcp.tools_listed@1.json",
++   "merge.dry_run@1.json",
++   "note.closed@1.json",
++   "note.opened@1.json",
++   "notice.sent@1.json",
++   "notice.subscribed@1.json",
++   "open_item.closed@1.json",
++   "open_item.opened@1.json",
++   "package.envelope@1.json",
++   "package.signature@1.json",
++   "permission.answer@1.json",
++   "permission.request@1.json",
++   "plan.proposed@1.json",
++   "pr.merged@1.json",
++   "process.ended@1.json",
++   "process.starting@1.json",
++   "process.tracked@1.json",
++   "promise.blocked@1.json",
++   "promise.due@1.json",
++   "promise.set@1.json",
++   "promise.woken@1.json",
++   "question.proceeded@1.json",
++   "reading.answer@1.json",
++   "reading.batch@1.json",
++   "reading.dropped@1.json",
++   "reading.finished@1.json",
++   "reading.recorded@1.json",
++   "reading.rollup@1.json",
++   "reading.slice@1.json",
++   "request.cost@1.json",
++   "run.cleaned@1.json",
++   "run.finished@1.json",
++   "run.started@1.json",
++   "sandbox.denied@1.json",
++   "session.attention@1.json",
++   "session.attention@2.json",
++   "session.child_started@1.json",
++   "session.end@1.json",
++   "session.gone@1.json",
++   "session.reading@1.json",
++   "session.start@1.json",
++   "session.start@2.json",
++   "session.start@3.json",
++   "spend.approved@1.json",
++   "spend.asked@1.json",
++   "spend.charged@1.json",
++   "spend.reserved@1.json",
++   "spool.refused@1.json",
++   "suggestion.filed@1.json",
++   "suggestion.settled@1.json",
++   "task.closed@1.json",
++   "task.completed@1.json",
++   "task.created@1.json",
++   "tool.after@1.json",
++   "tool.after@2.json",
++   "tool.before@1.json",
++   "tool.before@2.json",
++   "tool.before@3.json",
++   "tool.span@1.json",
++   "transcript.archived@1.json",
++   "transcript.archived@2.json",
++   "turn.usage@1.json",
++   "user.ask@1.json",
++   "verdict.made@1.json",
++   "verdict.outcome@1.json",
++   "verdict.stale@1.json",
++   "verdict@1.json",
++   "wiki.read@1.json",
++   "work.broke@1.json",
++   "worktree.created@1.json",
++   "worktree.removed@1.json",
++ ]
+
+ ❯ since.test.ts:18:138
+     16|     const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+     17|     const missing = files.filter((f) => typeof readJson(join(dir, f))[…
+     18|     expect(missing, `${missing.length} of ${files.length} published sc…
+       |                                                                                                                                          ^
+     19|     const unreplaced = files.filter((f) => { const s = readJson(join(d…
+     20|     expect(unreplaced, 'a deprecated schema names x-replaced_by').toEq…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[54/66]⎯
+
+ FAIL  since.test.ts > #139.075d6d53 every entry in the published schemas has since, and every replaced entry names what replaced it; a missing field fails the contract test > AC5 the contract step passes the repo's own contracts
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ check helpers.ts:187:126
+ ❯ since.test.ts:24:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[55/66]⎯
+
+ FAIL  since.test.ts > #139.075d6d53 every entry in the published schemas has since, and every replaced entry names what replaced it; a missing field fails the contract test > AC5 a schema with no x-since fails the contract test, naming the schema and since; an API method with no since does too
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ since.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[56/66]⎯
+
+ FAIL  since.test.ts > #139.075d6d53 every entry in the published schemas has since, and every replaced entry names what replaced it; a missing field fails the contract test > AC5 a replaced entry that names nothing as its replacement fails, naming the entry and replaced_by; naming an entry that exists passes
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ since.test.ts:41:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[57/66]⎯
+
+ FAIL  since.test.ts > #139.3d203a4b a hub slot and a canvas registry each published without since fail the contract test, naming them > AC6 a hub-slot row with no since fails, naming the slot
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ withoutSince since.test.ts:64:3
+ ❯ since.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[58/66]⎯
+
+ FAIL  since.test.ts > #139.3d203a4b a hub slot and a canvas registry each published without since fail the contract test, naming them > AC6 a canvas registry with no since fails, naming the registry
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ withoutSince since.test.ts:64:3
+ ❯ since.test.ts:79:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[59/66]⎯
+
+ FAIL  since.test.ts > #139.3d203a4b a hub slot and a canvas registry each published without since fail the contract test, naming them > AC6 (wrong program) a step that covers only the six kinds passes the hub slot, and this test fails it
+AssertionError: expected [Function] to throw error matching /a contract step that covers only API …/ but got 'scripts/contract-diff.mjs does not ex…'
+
+- Expected:
+/a contract step that covers only API methods, JSON-RPC methods, MCP tools, event kinds, document kinds and sidecar formats passed the hub slot/
+
++ Received:
+"scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)"
+
+ ❯ since.test.ts:83:58
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[60/66]⎯
+
+ FAIL  since.test.ts > #139.3d203a4b a hub slot and a canvas registry each published without since fail the contract test, naming them > AC6 (wrong program) the same step passes the canvas registry, and this test fails it
+AssertionError: expected [Function] to throw error matching /passed the hub registry/ but got 'scripts/contract-diff.mjs does not ex…'
+
+- Expected:
+/passed the hub registry/
+
++ Received:
+"scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)"
+
+ ❯ since.test.ts:87:62
+     85|
+     86|   it('AC6 (wrong program) the same step passes the canvas registry, an…
+     87|     expect(() => withoutSince('registry', 'six-kinds-only')).toThrow(/…
+       |                                                              ^
+     88|   }, 180_000);
+     89| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[61/66]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  66 failed (66)
+   Start at  23:48:16
+   Duration  104.49s (tests 99%, import 1%)
+
+exit 1
+
+
+===== Blind redraft of the AC10 tests (prices.test.ts), at the base f2867254 =====
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/139 prices --no-file-parallelism
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-139-tests/tests/acceptance/139
+
+ ❯ prices.test.ts (4 tests | 4 failed) 855ms
+   ❯ #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view (4)
+     × AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output 322ms
+     × AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge 115ms
+     × AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it 124ms
+     × AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was 114ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output
+AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-dZ9IdL admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scene prices.test.ts:56:88
+     54|   for (const dir of [v1, stocks]) {
+     55|     const got = await admit(h, dir);
+     56|     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? ''…
+       |                                                                                        ^
+     57|   }
+     58|   return { w, h, v2 };
+ ❯ updateWithAdapter prices.test.ts:84:21
+ ❯ prices.test.ts:95:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge
+AssertionError: expected [Function] to throw error matching /…/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2 but got 'the starting world: /private/tmp/dh13…'
+
+- Expected:
+/the edge acme\/stocks uses ext.acme.prices@1 is wired to ext.acme.prices@2/
+
++ Received:
+"the starting world: /private/tmp/dh139-pkg-acme-acme-ObSsDK admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {\"preview\":[\"deep.provide\"]}: expected false to be true // Object.is equality"
+
+ ❯ prices.test.ts:99:57
+     97|
+     98|   it('AC10 (wrong program) an installer that rewires the view to price…
+     99|     await expect(updateWithAdapter('rewires-to-newest')).rejects.toThr…
+       |                                                         ^
+    100|   }, 180_000);
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it
+AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-LAghEy admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scene prices.test.ts:56:88
+     54|   for (const dir of [v1, stocks]) {
+     55|     const got = await admit(h, dir);
+     56|     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? ''…
+       |                                                                                        ^
+     57|   }
+     58|   return { w, h, v2 };
+ ❯ prices.test.ts:103:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was
+AssertionError: the starting world: /private/tmp/dh139-pkg-acme-acme-HZyZe0 admitted: its manifest fails extension.manifest@1 at /requires: unlisted_field {"preview":["deep.provide"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scene prices.test.ts:56:88
+     54|   for (const dir of [v1, stocks]) {
+     55|     const got = await admit(h, dir);
+     56|     expect(got.ok, `the starting world: ${dir} admitted: ${got.ok ? ''…
+       |                                                                                        ^
+     57|   }
+     58|   return { w, h, v2 };
+ ❯ prices.test.ts:120:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  01:26:58
+   Duration  1.58s (tests 58%, import 32%, transform 9%)
+
+
+exit 1
+
+
+===== Blind redraft: history.test.ts and oldload.test.ts at the base (f2867254) =====
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/139 history oldload --no-file-parallelism
+(15 failed; each fails on the missing scripts/contract-diff.mjs)
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-139-tests/tests/acceptance/139
+
+ ❯ oldload.test.ts (6 tests | 6 failed) 620ms
+   ❯ #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one (6)
+     × AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview one 167ms
+     × AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: PASS 75ms
+     × AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported 57ms
+     × AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.get is changed 62ms
+     × AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose result changed is named 52ms
+     × AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other 61ms
+ ❯ history.test.ts (9 tests | 9 failed) 668ms
+   ❯ #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in (4)
+     × AC1 the candidate that changes nothing passes (the pass side of every test below) 50ms
+     × AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2 57ms
+     × AC1 removing deep.on, a stable method that arrived in R1, fails naming the method and R1 51ms
+     × AC1 retyping a field of deep.arrived fails naming the method, the field and R2 57ms
+   ❯ #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it (5)
+     × AC2 a break file that quotes a different line fails, still naming the method 47ms
+     × AC2 a break file with the exact line and no workaround fails 56ms
+     × AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it 50ms
+     × AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it 0ms
+     × AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3 87ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 the candidate that changes nothing passes (the pass side of every test below)
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:15:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 removing deep.arrived, which arrived in R2, fails naming the method and R2
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:20:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 removing deep.on, a stable method that arrived in R1, fails naming the method and R1
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesWithEarly helpers.ts:211:3
+ ❯ history.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  history.test.ts > #139.0a8054ec removing or reshaping a published method without a break file fails the preflight, naming the method and the release it arrived in > AC1 retyping a field of deep.arrived fails naming the method, the field and R2
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ history.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file that quotes a different line fails, still naming the method
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ quotedOtherLine history.test.ts:52:24
+ ❯ history.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file with the exact line and no workaround fails
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ history.test.ts:65:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 a break file that quotes the exact line and the workaround passes, and the release notes list it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesR1R2 helpers.ts:199:3
+ ❯ reshaped history.test.ts:40:13
+ ❯ history.test.ts:71:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 (wrong program) a step that accepts any break file passes the different line, and this test fails it
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ history.test.ts:80:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  history.test.ts > #139.5c4d4a53 a planted break whose break file quotes a different line fails; one that quotes the exact line passes, and the release notes list it > AC2 the diff runs against every earlier release: a break file for R2 to R3 alone leaves the R1 to R3 diff failing, naming R1_R3
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ releasesWithEarly helpers.ts:211:3
+ ❯ history.test.ts:85:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 the record pins the fixture's envelope digest and holds one result per stable method, none for the preview one
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:54:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 the fixture loads in the candidate and calls both stable methods, each result equal to the recorded one: PASS
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:63:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a shim that answers deep.registerCheck unsupported fails, naming the method and unsupported
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:71:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a result that differs from the recorded one fails, naming the method: the recorded value of deep.config.get is changed
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:76:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a fixture rebuilt from today's SDK fails: its envelope digest is not the pinned one, and the method whose result changed is named
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ record helpers.ts:181:13
+ ❯ cutR1 oldload.test.ts:47:17
+ ❯ oldload.test.ts:85:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  oldload.test.ts > #139.09f0df5f the previous release's fixture package, pinned by envelope digest, loads and calls every stable method that release lists, and each result equals the recorded one > AC4 a fixture that calls only one of the two stable methods R1 lists fails, naming the other
+Error: scripts/contract-diff.mjs does not exist: the surface this criterion is tested through is not built (README, The surface under test)
+ ❯ needStep helpers.ts:75:34
+     73| export type StepPlant = 'diff-preview' | 'six-kinds-only' | 'pass-ever…
+     74| export function needStep(script = STEP): void {
+     75|   if (!existsSync(script)) throw Error(`${script.slice(REPO.length)} d…
+       |                                  ^
+     76| }
+     77| /** `node scripts/contract-diff.mjs <args> --root <tree>`, with a wron…
+ ❯ step helpers.ts:79:3
+ ❯ oldload.test.ts:98:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  15 failed (15)
+   Start at  02:01:22
+   Duration  1.64s (tests 87%, import 9%, transform 4%)
+

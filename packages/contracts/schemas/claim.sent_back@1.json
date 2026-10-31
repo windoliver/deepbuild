@@ -1,6 +1,8 @@
 {
   "title": "claim.sent_back@1",
   "description": "A claim was sent back.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

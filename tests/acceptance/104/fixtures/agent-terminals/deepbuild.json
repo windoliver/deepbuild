@@ -6,5 +6,6 @@
   "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] },
   "panels": [{ "name": "terminals", "area": "tab" }],
   "actions": ["ext.agent-terminals.open", "ext.agent-terminals.tabs", "ext.agent-terminals.read"],
-  "checks": ["ext.agent-terminals.hosts", "ext.agent-terminals.shows_again"]
+  "checks": ["ext.agent-terminals.hosts", "ext.agent-terminals.shows_again"],
+  "requires": { "preview": ["deep.registerAction", "deep.terminal.list", "deep.terminal.open", "deep.terminal.read"] }
 }

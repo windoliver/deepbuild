@@ -1,6 +1,8 @@
 {
   "title": "command.staged@1",
   "description": "A destructive command whose reach can't be worked out had the folders it names staged as a copy-on-write copy before it ran, so the run can be undone from the copy (deep undo staged:<id>) until the copy is let go.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

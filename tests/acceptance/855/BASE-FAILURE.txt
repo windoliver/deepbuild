@@ -1,0 +1,416 @@
+# #855 acceptance suite at the base (0b35e68e, read at 0466575b), 2026-10-30:
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/855 --no-file-parallelism
+# Paths redacted: the checkout as <checkout>, temporary folders as <tmp>, the home folder as ~.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/855
+
+ ❯ hash.test.ts (4 tests | 4 failed) 119553ms
+   ❯ #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey (4)
+     × #855.6df0cf9c keys and result digests are computed with hash@2 by default, and every one differs from the same document's under hash@1 3879ms
+     × #855.6df0cf9c equal documents get equal keys and result digests on two machines: the debug build here, and the release build in another time zone, locale, home and thread count, on the documents spelled otherwise 1202ms
+     × #855.6df0cf9c equal documents get equal keys and result digests on a machine of another architecture: the x86_64 build under Rosetta (INCONCLUSIVE where this Mac can't build or run it) 131ms
+     × #855.6df0cf9c a cache written under hash@1 still hits after the migration's single rekey: a third session of the same content finds every result the hash@1 sessions wrote, and a second migration rekeys nothing 33ms
+ ❯ costs.test.ts (6 tests | 6 failed) 173431ms
+   ❯ #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile (6)
+     × #855.1e8c7f85 the committed costs.json records an optimized build profile and the toolchain, and its text.shape, text.status and marks2d.frame coefficients are each lower than the debug build's 51ms
+     × #855.1e8c7f85 the costs call reports the build that measured: the debug binary its dev profile, the release binary an optimized one, both with the checkout's toolchain 8764ms
+     × #855.1e8c7f85 measured on this checkout's optimized build, text.shape, text.status and marks2d.frame each come out lower than today's debug-built coefficients (a timing reading: INCONCLUSIVE off a quiet reference Mac on mains) 1364ms
+     × #855.1e8c7f85 a planted coefficient file marked with the debug profile dev is refused by the cost model at startup, naming the profile 63ms
+     × #855.1e8c7f85 a file with no build profile at all, today's costs.json, is refused too: nothing missing passes 72ms
+     × #855.1e8c7f85 the planted file's twin marked release is read: the build starts and its registry's costs are that file's terms; the committed file is read the same way 117ms
+ ❯ debug.test.ts (3 tests | 3 failed) 153883ms
+   ❯ #855.4c02dddc a typed result's digest is the same from two builds whose Debug output for it differs; a planted result that digests its Debug text differs and fails, naming the operator (3)
+     × #855.4c02dddc over every shipped fixture, every node's key and result digest are the same in full and in full with test-debug-alt 7021ms
+     × #855.4c02dddc the two builds' Debug output differs for every typed result: each node that wrote a typed value has another Debug digest in the second build, and the base's Debug-digested operators are among them 899ms
+     × #855.4c02dddc a planted result that digests its Debug text: test.dbg.out's digest differs between the two builds, and the comparison fails naming test.dbg.out and nothing else 244ms
+ ❯ json.test.ts (4 tests | 4 failed) 265097ms
+   ❯ #855.f682f4c0 the seal refuses a planted frame-phase operator that writes a JSON value, naming it; a 10,000-item board's frame with one item changed allocates no JSON value (4)
+     × #855.f682f4c0 the build with test.json refuses to start: seal_refused, json_in_frame, naming the operator test.json.out and not the check-phase writer test.json.audit 27ms
+     × #855.f682f4c0 with every shipped operator typed, each frame of the 10,000-item board after one item of each kind changes allocates no JSON value, while the frame runs that item's operators 15824ms
+     × #855.f682f4c0 a 10,000-item board whose one rect slides on a clip: every frame moves that one item and allocates no JSON value 8032ms
+     × #855.f682f4c0 the count is the allocator's: let in by --planted admits_frame_json, test.json.out's frame after its item changes counts JSON values, while test.json.audit stays in phase check 28ms
+ ❯ keying.test.ts (1 test | 1 failed) 168246ms
+   ❯ #855.6df0cf9c keying a 10,000-item revision takes under half its hash@1 time (1)
+     × #855.6df0cf9c keying the 10,000-item board with hash@2 takes under 0.5 of its hash@1 time (five pairs of fresh release processes after a warm-up pair, judged by the design's rule) 1961ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  costs.test.ts > #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile > #855.1e8c7f85 the committed costs.json records an optimized build profile and the toolchain, and its text.shape, text.status and marks2d.frame coefficients are each lower than the debug build's
+AssertionError: crates/deep-canvas/costs.json: build, the build profile and toolchain that measured the coefficients is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:43:96
+     41| }
+     42| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     43|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     44|   return value as JsonObject;
+     45| }
+ ❯ buildOf costs.test.ts:34:13
+ ❯ costs.test.ts:47:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  costs.test.ts > #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile > #855.1e8c7f85 the costs call reports the build that measured: the debug binary its dev profile, the release binary an optimized one, both with the checkout's toolchain
+AssertionError: the debug binary's costs reply: build, the build profile and toolchain that measured the coefficients is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:43:96
+     41| }
+     42| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     43|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     44|   return value as JsonObject;
+     45| }
+ ❯ buildOf costs.test.ts:34:13
+ ❯ costs.test.ts:57:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  costs.test.ts > #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile > #855.1e8c7f85 measured on this checkout's optimized build, text.shape, text.status and marks2d.frame each come out lower than today's debug-built coefficients (a timing reading: INCONCLUSIVE off a quiet reference Mac on mains)
+AssertionError: the release binary's costs reply: build, the build profile and toolchain that measured the coefficients is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:43:96
+     41| }
+     42| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     43|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     44|   return value as JsonObject;
+     45| }
+ ❯ buildOf costs.test.ts:34:13
+ ❯ costs.test.ts:67:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  costs.test.ts > #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile > #855.1e8c7f85 a planted coefficient file marked with the debug profile dev is refused by the cost model at startup, naming the profile
+AssertionError: the refusal is the cost model's: {"ok":false,"code":"bad_input"}: expected 'bad_input' to be 'costs_refused' // Object.is equality
+
+Expected: "costs_refused"
+Received: "bad_input"
+
+ ❯ costs.test.ts:80:86
+     78|   it(`${ID} a planted coefficient file marked with the debug profile d…
+     79|     const line = refusedStart(builds.bin(FULL), ['--costs', fixturePat…
+     80|     expect(line['code'], `the refusal is the cost model's: ${JSON.stri…
+       |                                                                                      ^
+     81|     expect(line['profile'], 'the refusal names the profile').toBe('dev…
+     82|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  costs.test.ts > #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile > #855.1e8c7f85 a file with no build profile at all, today's costs.json, is refused too: nothing missing passes
+AssertionError: the refusal is the cost model's: {"ok":false,"code":"bad_input"}: expected 'bad_input' to be 'costs_refused' // Object.is equality
+
+Expected: "costs_refused"
+Received: "bad_input"
+
+ ❯ costs.test.ts:86:86
+     84|   it(`${ID} a file with no build profile at all, today's costs.json, i…
+     85|     const line = refusedStart(builds.bin(FULL), ['--costs', fixturePat…
+     86|     expect(line['code'], `the refusal is the cost model's: ${JSON.stri…
+       |                                                                                      ^
+     87|     expect(line['profile'], 'no profile to name').toBeNull();
+     88|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  costs.test.ts > #855.1e8c7f85 coefficients measured from an optimized build are lower than today's debug-built ones for text.shape, text.status and marks2d.frame; a planted file marked with a debug profile is refused, naming the profile > #855.1e8c7f85 the planted file's twin marked release is read: the build starts and its registry's costs are that file's terms; the committed file is read the same way
+AssertionError: deep-show run --costs <checkout>/tests/acceptance/855/fixtures/costs-release.json exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:177:164
+    175|   const s = start(bin, argv, [sc], options);
+    176|   expect(s.timedOut, `${SHOW_NAME} ${argv.join(' ')} finished within i…
+    177|   expect(s.status, `${SHOW_NAME} ${argv.join(' ')} exited 0 (${s.signa…
+       |                                                                                                                                                                    ^
+    178|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    179|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+ ❯ costs.test.ts:92:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  debug.test.ts > #855.4c02dddc a typed result's digest is the same from two builds whose Debug output for it differs; a planted result that digests its Debug text differs and fails, naming the operator > #855.4c02dddc over every shipped fixture, every node's key and result digest are the same in full and in full with test-debug-alt
+AssertionError: Core board at 0.5s: hash, the hash version its keys and digests were computed with is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:55:92
+     53| }
+     54| export function str(value: JsonValue | undefined, what: string): strin…
+     55|   expect(typeof value, `${what} is a string, got ${JSON.stringify(valu…
+       |                                                                                            ^
+     56|   return value as string;
+     57| }
+ ❯ evaluated helpers.ts:310:16
+ ❯ evalOf debug.test.ts:34:10
+ ❯ debug.test.ts:49:73
+ ❯ shipped debug.test.ts:49:41
+ ❯ debug.test.ts:54:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  debug.test.ts > #855.4c02dddc a typed result's digest is the same from two builds whose Debug output for it differs; a planted result that digests its Debug text differs and fails, naming the operator > #855.4c02dddc the two builds' Debug output differs for every typed result: each node that wrote a typed value has another Debug digest in the second build, and the base's Debug-digested operators are among them
+AssertionError: Core board at 0.5s: hash, the hash version its keys and digests were computed with is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:55:92
+     53| }
+     54| export function str(value: JsonValue | undefined, what: string): strin…
+     55|   expect(typeof value, `${what} is a string, got ${JSON.stringify(valu…
+       |                                                                                            ^
+     56|   return value as string;
+     57| }
+ ❯ evaluated helpers.ts:310:16
+ ❯ evalOf debug.test.ts:34:10
+ ❯ debug.test.ts:49:73
+ ❯ shipped debug.test.ts:49:41
+ ❯ debug.test.ts:59:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  debug.test.ts > #855.4c02dddc a typed result's digest is the same from two builds whose Debug output for it differs; a planted result that digests its Debug text differs and fails, naming the operator > #855.4c02dddc a planted result that digests its Debug text: test.dbg.out's digest differs between the two builds, and the comparison fails naming test.dbg.out and nothing else
+AssertionError: the binary builds: deep-show full+test-debug-digest: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-debug-digest failed:
++ error: none of the selected packages contains this feature: test-debug-digest
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:141:82
+    139|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    140|       expect(entry.unavailable, `the build ${buildName(build)} can be …
+    141|       expect(entry.error, `the binary builds: ${SHOW_NAME} ${buildName…
+       |                                                                                  ^
+    142|       return entry.bin;
+    143|     },
+ ❯ debug.test.ts:73:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  hash.test.ts > #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey > #855.6df0cf9c keys and result digests are computed with hash@2 by default, and every one differs from the same document's under hash@1
+AssertionError: the small board at 0.5s: hash, the hash version its keys and digests were computed with is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:55:92
+     53| }
+     54| export function str(value: JsonValue | undefined, what: string): strin…
+     55|   expect(typeof value, `${what} is a string, got ${JSON.stringify(valu…
+       |                                                                                            ^
+     56|   return value as string;
+     57| }
+ ❯ evaluated helpers.ts:310:16
+ ❯ hash.test.ts:48:12
+ ❯ evaluate hash.test.ts:45:15
+ ❯ hash.test.ts:61:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  hash.test.ts > #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey > #855.6df0cf9c equal documents get equal keys and result digests on two machines: the debug build here, and the release build in another time zone, locale, home and thread count, on the documents spelled otherwise
+AssertionError: the small mixed board at 0.5s: hash, the hash version its keys and digests were computed with is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:55:92
+     53| }
+     54| export function str(value: JsonValue | undefined, what: string): strin…
+     55|   expect(typeof value, `${what} is a string, got ${JSON.stringify(valu…
+       |                                                                                            ^
+     56|   return value as string;
+     57| }
+ ❯ evaluated helpers.ts:310:16
+ ❯ hash.test.ts:48:12
+ ❯ evaluate hash.test.ts:45:15
+ ❯ hash.test.ts:75:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  hash.test.ts > #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey > #855.6df0cf9c equal documents get equal keys and result digests on a machine of another architecture: the x86_64 build under Rosetta (INCONCLUSIVE where this Mac can't build or run it)
+AssertionError: the small mixed board at 0.5s: hash, the hash version its keys and digests were computed with is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:55:92
+     53| }
+     54| export function str(value: JsonValue | undefined, what: string): strin…
+     55|   expect(typeof value, `${what} is a string, got ${JSON.stringify(valu…
+       |                                                                                            ^
+     56|   return value as string;
+     57| }
+ ❯ evaluated helpers.ts:310:16
+ ❯ hash.test.ts:48:12
+ ❯ evaluate hash.test.ts:45:15
+ ❯ hash.test.ts:94:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  hash.test.ts > #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey > #855.6df0cf9c a cache written under hash@1 still hits after the migration's single rekey: a third session of the same content finds every result the hash@1 sessions wrote, and a second migration rekeys nothing
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:180:101
+    178|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    179|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    180|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    181|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    182|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ hash.test.ts:104:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  json.test.ts > #855.f682f4c0 the seal refuses a planted frame-phase operator that writes a JSON value, naming it; a 10,000-item board's frame with one item changed allocates no JSON value > #855.f682f4c0 the build with test.json refuses to start: seal_refused, json_in_frame, naming the operator test.json.out and not the check-phase writer test.json.audit
+AssertionError: the binary builds: deep-show full+test-json: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-json failed:
++ error: none of the selected packages contains this feature: test-json
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there is a similarly named feature: test-pool
++
+
+ ❯ Object.bin helpers.ts:141:82
+    139|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    140|       expect(entry.unavailable, `the build ${buildName(build)} can be …
+    141|       expect(entry.error, `the binary builds: ${SHOW_NAME} ${buildName…
+       |                                                                                  ^
+    142|       return entry.bin;
+    143|     },
+ ❯ json.test.ts:37:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  json.test.ts > #855.f682f4c0 the seal refuses a planted frame-phase operator that writes a JSON value, naming it; a 10,000-item board's frame with one item changed allocates no JSON value > #855.f682f4c0 with every shipped operator typed, each frame of the 10,000-item board after one item of each kind changes allocates no JSON value, while the frame runs that item's operators
+AssertionError: the frames after r0 changed: frames[0].json_values, the JSON values the frame allocated, counted by the allocator is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num helpers.ts:51:123
+     49| }
+     50| export function num(value: JsonValue | undefined, what: string): numbe…
+     51|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     52|   return value as number;
+     53| }
+ ❯ helpers.ts:360:177
+ ❯ framesOf helpers.ts:358:56
+ ❯ json.test.ts:53:32
+ ❯ json.test.ts:51:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+ FAIL  json.test.ts > #855.f682f4c0 the seal refuses a planted frame-phase operator that writes a JSON value, naming it; a 10,000-item board's frame with one item changed allocates no JSON value > #855.f682f4c0 a 10,000-item board whose one rect slides on a clip: every frame moves that one item and allocates no JSON value
+AssertionError: the sliding board's frames: frames[0].json_values, the JSON values the frame allocated, counted by the allocator is a finite number, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num helpers.ts:51:123
+     49| }
+     50| export function num(value: JsonValue | undefined, what: string): numbe…
+     51|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                           ^
+     52|   return value as number;
+     53| }
+ ❯ helpers.ts:360:177
+ ❯ framesOf helpers.ts:358:56
+ ❯ json.test.ts:67:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/18]⎯
+
+ FAIL  json.test.ts > #855.f682f4c0 the seal refuses a planted frame-phase operator that writes a JSON value, naming it; a 10,000-item board's frame with one item changed allocates no JSON value > #855.f682f4c0 the count is the allocator's: let in by --planted admits_frame_json, test.json.out's frame after its item changes counts JSON values, while test.json.audit stays in phase check
+AssertionError: the binary builds: deep-show full+test-json: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-json failed:
++ error: none of the selected packages contains this feature: test-json
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there is a similarly named feature: test-pool
++
+
+ ❯ Object.bin helpers.ts:141:82
+    139|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    140|       expect(entry.unavailable, `the build ${buildName(build)} can be …
+    141|       expect(entry.error, `the binary builds: ${SHOW_NAME} ${buildName…
+       |                                                                                  ^
+    142|       return entry.bin;
+    143|     },
+ ❯ json.test.ts:80:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/18]⎯
+
+ FAIL  keying.test.ts > #855.6df0cf9c keying a 10,000-item revision takes under half its hash@1 time > #855.6df0cf9c keying the 10,000-item board with hash@2 takes under 0.5 of its hash@1 time (five pairs of fresh release processes after a warm-up pair, judged by the design's rule)
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:180:101
+    178|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    179|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    180|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    181|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    182|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ keying keying.test.ts:29:26
+ ❯ keying.test.ts:42:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/18]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  18 failed (18)
+   Start at  15:48:40
+   Duration  886.29s (tests 100%)
+

@@ -1,6 +1,8 @@
 {
   "title": "pr.merged@1",
   "description": "A pull request was merged.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "tasks"
   ],

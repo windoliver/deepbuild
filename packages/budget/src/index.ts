@@ -10,7 +10,7 @@
 import { canonicalize, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Asks, PlanStep } from '@deepbuild/asks';
-import { ulid } from '@deepbuild/record';
+import { readSince, ulid } from '@deepbuild/record';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 
 export type ScopeKind = 'issue' | 'resource' | 'project' | 'work';
@@ -93,7 +93,6 @@ type Folded = (typeof FOLDED)[number];
 const RUN = /^run:[0-9A-Za-z]+$/;
 const DECISION = /^decision:[0-9A-Za-z]+$/;
 const SHA256 = /^[0-9a-f]{64}$/;
-const PAGE = 1000;
 
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -424,19 +423,13 @@ class BudgetLedger implements Ledger {
    * moves to the head read first, so a busy log's other events are scanned once.
    */
   private async sync(): Promise<void> {
-    const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
-    const head = Number(row?.head ?? 0);
-    for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: PAGE, kinds: FOLDED });
-      for (const e of page) {
-        // A read in the raising request's turn can overlap another: each event is folded once.
-        if (e.log_pos <= this.cursor) continue;
-        this.fold(e);
-        this.cursor = e.log_pos;
-      }
-      if (page.length < PAGE) break;
-    }
-    this.cursor = Math.max(this.cursor, head);
+    const end = await readSince(this.options.record, this.cursor, FOLDED, (e) => {
+      // A read in the raising request's turn can overlap another: each event is folded once.
+      if (e.log_pos <= this.cursor) return;
+      this.fold(e);
+      this.cursor = e.log_pos;
+    });
+    this.cursor = Math.max(this.cursor, end);
   }
 
   private fold(e: Event): void {

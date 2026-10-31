@@ -1,0 +1,9 @@
+{
+  "id": "deepbuild/r1fixture",
+  "version": "1.0.0",
+  "digest": "d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d",
+  "stability": "stable",
+  "checks": [
+    "ext.r1fixture.check"
+  ]
+}

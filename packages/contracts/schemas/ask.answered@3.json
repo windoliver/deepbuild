@@ -1,6 +1,8 @@
 {
   "title": "ask.answered@3",
   "description": "You answered an ask. Only the core appends it, from the trusted path. It says where the answer came from (the card, deep inbox answer, or text typed in the session, which is unverified), the revision the ask showed, which it is recorded as answered on, and the click token an approval bound. @3 adds steps: on a yes to a batch, the steps of the plan your switches left on, which alone the yes approves.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "pinned_to": {
       "oneOf": [
