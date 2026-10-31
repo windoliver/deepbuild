@@ -160,7 +160,7 @@ export class Holds {
    * raised from its subject so a saved decision that covers it answers it at once, as decided for you. Its handle,
    * and the decision that answered it with its option, if one did.
    */
-  async asked(meta: HookMeta, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
+  async asked(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
     const pinned_to = await this.o.pin(meta.cwd, about.question);
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
