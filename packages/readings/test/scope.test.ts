@@ -2,7 +2,7 @@
 // approval wait, and pricing by exact model.
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { billingMode, countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, searchReadings, staleRuns, type RecordEvent } from '../src/index.js';
+import { billingMode, checkClassifier, countTexts, lifecycleNumbers, planWindowTokens, readingsOf, recompute, recomputeBaseline, searchReadings, staleRuns, type LabelledMessage, type RecordEvent } from '../src/index.js';
 
 const MIN = 60_000;
 let n = 0;
@@ -262,5 +262,39 @@ describe('the shipped rate card', () => {
     expect(cost('claude-opus-4-6')).toMatchObject({ basis: 'estimated', usd: 5 });
     expect(cost('claude-opus-5-5')).toMatchObject({ basis: 'estimated', usd: 4 });
     expect(cost('claude-sonnet-5-6')).toEqual({ basis: 'unpriced' });
+  });
+});
+
+describe('a classifier against your labels, when the yes messages are rare', () => {
+  const YES = 'is it done?';
+  const labelled = (yes: number, n: number): LabelledMessage[] => Array.from({ length: n }, (_, i) => ({
+    message: `m${i}`, text: i < yes ? `${YES} ${i}` : `other ${i}`, label: i < yes, period: i % 2 ? 'baseline' as const : 'dogfood' as const, dates_hidden: true, labelled_by: 'you',
+  }));
+  const check = (sample: LabelledMessage[], classifier: (text: string) => boolean) => checkClassifier({ id: 'is_it_done', classifier, sample, threshold: 0.8 });
+  const finds = (text: string) => text.startsWith(YES);
+
+  it('one that always says no fails, however high its plain agreement', () => {
+    const result = check(labelled(20, 200), () => false);
+    expect(result.agreement).toBeCloseTo(0.9, 10);
+    expect(result.recall).toBe(0);
+    expect(result.status).toBe('FAIL');
+  });
+  it('one that says yes too often fails on its precision', () => {
+    const result = check(labelled(20, 200), (text) => finds(text) || Number(text.split(' ').pop()) < 40);
+    expect(result.recall).toBe(1);
+    expect(result.precision).toBeCloseTo(0.5, 10);
+    expect(result.agreement).toBeCloseTo(0.9, 10);
+    expect(result.status).toBe('FAIL');
+  });
+  it('one that finds them passes, at the threshold on both', () => {
+    const result = check(labelled(10, 100), (text) => finds(text) && !text.endsWith(' 0') && !text.endsWith(' 1'));
+    expect(result.recall).toBeCloseTo(0.8, 10);
+    expect(result.precision).toBe(1);
+    expect(result.status).toBe('PASS');
+  });
+  it('under 10 yes labels can\'t decide, even when it finds them all', () => {
+    const result = check(labelled(9, 200), finds);
+    expect(result.yes).toBe(9);
+    expect(result.status).toBe('BLOCKED');
   });
 });

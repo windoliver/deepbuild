@@ -243,7 +243,7 @@ export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows'])
   return rows.map((r) => {
     const value = r.value === null ? 'unknown' : String(r.value);
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
-    const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
+    const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n}, ${r.agreement.yes} yes, recall ${r.agreement.recall?.toFixed(2) ?? 'none'}, precision ${r.agreement.precision?.toFixed(2) ?? 'none'} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
     const by = r.by ? ` (${Object.entries(r.by).filter(([, ms]) => ms).map(([why, ms]) => `${why} ${ms}`).join(', ')})` : '';
     return `${r.id}${r.subject ? ` ${r.subject}` : ''}: ${value} ${r.unit}${by}${cost}${r.complete === false ? ' incomplete' : ''}${r.band === 'over' ? ' OVER BUDGET' : ''}${agreement} · ${r.source} · ${r.basis} · ${ageOf(r.age_ms)}${r.status === 'STALE' ? ' · STALE' : ''}${r.detail ? ` ${JSON.stringify(r.detail)}` : ''}`;
   });

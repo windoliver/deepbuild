@@ -5,14 +5,23 @@ import type { ClassifierCheck } from './types.js';
 export interface LabelledMessage { message: string; text: string; label: boolean; period: 'baseline' | 'dogfood'; dates_hidden: boolean; labelled_by: string }
 
 const MIN_SAMPLE = 100;
+// Yes messages are rare, so plain agreement passes a classifier that always says no. It has to
+// find them and be right when it says yes, and it can't be judged on fewer than this many.
+const MIN_YES = 10;
 export function checkClassifier(input: { id: string; classifier: (text: string) => boolean; sample: LabelledMessage[]; threshold: number }): ClassifierCheck {
   const { id, classifier, sample, threshold } = input;
   const labelled_by = sample[0]?.labelled_by ?? null;
   const n = sample.length;
   const right = sample.filter((m) => classifier(m.text) === m.label).length;
   const agreement = n ? right / n : null;
-  const decides = n >= MIN_SAMPLE && sample.every((m) => m.dates_hidden) && new Set(sample.map((m) => m.period)).size === 2 && new Set(sample.map((m) => m.labelled_by)).size === 1;
-  return { id, n, agreement, labelled_by, status: !decides || agreement === null ? 'BLOCKED' : agreement >= threshold ? 'PASS' : 'FAIL' };
+  const yes = sample.filter((m) => m.label).length;
+  const said = sample.filter((m) => classifier(m.text));
+  const found = said.filter((m) => m.label).length;
+  const recall = yes ? found / yes : null;
+  const precision = said.length ? found / said.length : null;
+  const decides = n >= MIN_SAMPLE && yes >= MIN_YES && sample.every((m) => m.dates_hidden) && new Set(sample.map((m) => m.period)).size === 2 && new Set(sample.map((m) => m.labelled_by)).size === 1;
+  const passes = agreement !== null && agreement >= threshold && (recall ?? 0) >= threshold && (precision ?? 0) >= threshold;
+  return { id, n, agreement, yes, recall, precision, labelled_by, status: !decides || agreement === null ? 'BLOCKED' : passes ? 'PASS' : 'FAIL' };
 }
 
 /** A person asking whether work is done, instead of being told: "is it done?", "did it deploy?", "does it pass now?". */
@@ -32,7 +41,7 @@ export function decisionOneInputs(readings: { id: string; check: ClassifierCheck
   const refused: { id: string; why: string }[] = [];
   for (const { id, check } of readings) {
     if (!check) refused.push({ id, why: 'not checked against a labelled sample' });
-    else if (check.status !== 'PASS') refused.push({ id, why: `its check is ${check.status}: agreement ${check.agreement} over ${check.n} messages` });
+    else if (check.status !== 'PASS') refused.push({ id, why: `its check is ${check.status}: agreement ${check.agreement} over ${check.n} messages, ${check.yes} labelled yes, recall ${check.recall}, precision ${check.precision}` });
     else if (!labellers.includes(check.labelled_by ?? '')) refused.push({ id, why: `labelled by ${check.labelled_by}, not you` });
     else used.push(id);
   }

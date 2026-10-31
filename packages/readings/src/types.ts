@@ -2,7 +2,7 @@
 export interface RecordEvent { id: string; kind: string; v?: number; ts: number; session: string | null; subject?: string | null; data: Record<string, unknown> }
 export type Cost = { basis: 'reported'; usd: number } | { basis: 'estimated'; usd: number; rate_card: string } | { basis: 'unpriced' };
 export interface HeldBy { question: number; slow: number; fast: number; snapshot_start: number; queue_wait: number }
-export interface ClassifierCheck { id: string; n: number; agreement: number | null; status: 'PASS' | 'FAIL' | 'BLOCKED'; labelled_by: string | null }
+export interface ClassifierCheck { id: string; n: number; agreement: number | null; yes: number; recall: number | null; precision: number | null; status: 'PASS' | 'FAIL' | 'BLOCKED'; labelled_by: string | null }
 export interface Reading {
   id: string;
   subject: string | null;
