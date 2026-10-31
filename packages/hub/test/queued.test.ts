@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
-import { hookLine, send, withHub } from './hub.js';
+import { hookLine, reply, send, withHub } from './hub.js';
 
 const procs: ChildProcess[] = [];
 afterAll(() => { for (const p of procs) p.kill('SIGTERM'); });
@@ -65,6 +65,42 @@ describe('messages typed while the agent works', () => {
       } finally {
         db.close();
       }
+    });
+  }, 60_000);
+});
+
+describe('a message typed while the agent works', () => {
+  it('is acknowledged at a later call, never in place of a guard\'s block on the next one', async () => {
+    const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    procs.push(claude);
+    await withHub(async (root, home) => {
+      writeFileSync(join(root, 'rules.json'), JSON.stringify({ v: 1, entries: { blocked: { match: 'kill:by-name', scope: 'all_repos', mode: 'block', reason: 'REASON.', next_step: 'NEXT.', fail_closed: false } } }));
+      const work = join(home, 'work');
+      const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
+      mkdirSync(work, { recursive: true });
+      mkdirSync(projects, { recursive: true });
+      const transcript = join(projects, `${SESSION}.jsonl`);
+      writeFileSync(transcript, '');
+      const socket = join(root, 'hub.sock');
+      const entry = (line: object) => appendFileSync(transcript, `${JSON.stringify(line)}\n`);
+      const payload = (event: string, extra: Record<string, unknown> = {}) => ({ session_id: SESSION, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra });
+      const hook = (event: string, extra: Record<string, unknown> = {}) => send(socket, hookLine(ulid(Date.now()), event, payload(event, extra), { ppid: claude.pid }));
+      const call = (id: string) => ({ tool_name: 'Bash', tool_input: { command: 'sleep 60' }, tool_use_id: id });
+      const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+      const asks = () => (db.prepare("SELECT count(*) AS n FROM events WHERE kind = 'user.ask' AND session_id = ?").get(SESSION) as { n: number }).n;
+      try {
+        await hook('SessionStart', { source: 'startup' });
+        for (const until = Date.now() + 10_000; Date.now() < until && !(db.prepare("SELECT count(*) AS n FROM events WHERE kind = 'session.start' AND session_id = ?").get(SESSION) as { n: number }).n; await new Promise((r) => setTimeout(r, 50)));
+        entry({ type: 'user', promptId: 'p1', sessionId: SESSION, message: { role: 'user', content: 'Fix the header test.' } });
+        await hook('UserPromptSubmit', { prompt: 'Fix the header test.', prompt_id: 'p1' });
+        await hook('PreToolUse', call('toolu_1'));
+        entry(queued('Also make the footer green.'));
+        await hook('PostToolUse', call('toolu_1'));
+        for (const until = Date.now() + 10_000; Date.now() < until && asks() < 2; await new Promise((r) => setTimeout(r, 50)));
+        await new Promise((r) => setTimeout(r, 200));
+        const denied = await reply(socket, hookLine(ulid(Date.now()), 'PreToolUse', payload('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'pkill -f node' }, tool_use_id: 'toolu_2' }), { ppid: claude.pid, matched: ['blocked'], notes: {} }));
+        expect(denied.exit, JSON.stringify(denied)).toBe(2);
+      } finally { db.close(); }
     });
   }, 60_000);
 });
