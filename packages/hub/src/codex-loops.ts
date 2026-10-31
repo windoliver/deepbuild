@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -14,20 +15,35 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 interface CodexFacts {
   versions: string[];
   windows: { limit: string; weeklyMinutes: number; ignoredOtherwise: string };
-  billing: { plan: string };
-  goals: { continuing: string[] };
+  billing: { plan: string[] };
+  goals: { continuing: string[]; store: { file: string; table: string } };
   heartbeats: { folder: string; file: string; kind: string; active: string };
 }
 const facts = (): CodexFacts => (JSON.parse(readFileSync(new URL('../../../adapters/loops.facts.json', import.meta.url), 'utf8')) as { agents: { codex: CodexFacts } }).agents.codex;
 
 /** The loop a stop reads: looping, with its next prompt's due time when one is known, or a loop with none left. */
 export type Loop = { state: 'looping'; due: number | null } | { state: 'none_left' };
-export interface CodexReadings { version?: string; readings: string[]; loop?: Loop }
+export interface CodexReadings { version?: string; readings: string[]; loop?: Loop; limits?: Obj; account?: string }
 
 /** Codex's home for a session: the folder its rollout sits under, since the shared daemon may not share this process's environment. */
 function homeOf(transcript: string): string {
   const at = transcript.lastIndexOf('/sessions/');
   return at > 0 ? transcript.slice(0, at) : process.env.CODEX_HOME || join(homedir(), '.codex');
+}
+
+/** The thread's goal in the store in Codex's home, read-only: a goal set outside a tool call leaves no rollout record. */
+function storedGoal(f: CodexFacts, home: string, session: string): string | undefined {
+  try {
+    const db = new DatabaseSync(join(home, f.goals.store.file), { readOnly: true });
+    try { return (db.prepare(`SELECT status FROM ${f.goals.store.table} WHERE thread_id = ?`).get(session) as { status?: string } | undefined)?.status; } finally { db.close(); }
+  } catch { return undefined; }
+}
+/** The account Codex is signed in to, by its ID alone, which a window reading is filed under. */
+function accountIn(home: string): string | undefined {
+  try {
+    const auth = JSON.parse(readFileSync(join(home, 'auth.json'), 'utf8')) as { tokens?: { account_id?: unknown } };
+    return typeof auth.tokens?.account_id === 'string' && auth.tokens.account_id ? auth.tokens.account_id : undefined;
+  } catch { return undefined; }
 }
 
 /** One window's room, in the words a row shows; a reading is never a used percentage, so a missing one can't read as 0%. */
@@ -93,6 +109,7 @@ export async function codexReadings(session: string, transcript: string, turn: s
   let tokens = false;
   const seen = new Map<string, { used: number; at: string }>();
   let reached = false;
+  let newest: Obj | undefined;
   for (const raw of text.split('\n')) {
     if (!raw.includes('session_meta') && !raw.includes('token_count') && !raw.includes('goal') && !raw.includes('task_started')) continue;
     let entry: unknown;
@@ -109,9 +126,10 @@ export async function codexReadings(session: string, transcript: string, turn: s
       tokens = true;
       if (!isObj(payload.rate_limits)) continue;
       const limits = payload.rate_limits;
-      if (typeof limits[f.billing.plan] === 'string') plan = limits[f.billing.plan] as string;
+      for (const key of f.billing.plan) if (typeof limits[key] === 'string') plan = limits[key] as string;
       // Another limit's snapshot, such as image_gen's, says nothing of the account's codex windows.
       if ((limits.limit_id ?? f.windows.limit) !== f.windows.limit) continue;
+      newest = limits;
       for (const w of [limits.primary, limits.secondary]) {
         if (!isObj(w) || typeof w.used_percent !== 'number') continue;
         seen.set(typeof w.window_minutes === 'number' && w.window_minutes >= f.windows.weeklyMinutes ? 'weekly' : '5-hour', { used: w.used_percent, at: String(entry.timestamp ?? '') });
@@ -122,7 +140,9 @@ export async function codexReadings(session: string, transcript: string, turn: s
   if (version !== undefined && !f.versions.includes(version)) return { version, readings: [] };
   const readings = [...seen].map(([name, w]) => windowLine(name, w.used, w.at));
   if (tokens) readings.push(plan ? `Codex billing: your ${plan} plan, from the session's logs` : 'Codex billing: no plan in the session\'s logs, so an API account');
-  const beats = heartbeats(f, homeOf(transcript), session);
+  const home = homeOf(transcript);
+  goal ??= storedGoal(f, home, session);
+  const beats = heartbeats(f, home, session);
   const dues = beats.active.flatMap((b) => (b.due === null ? [] : [b.due]));
   const due = dues.length ? Math.min(...dues) : null;
   let loop: Loop | undefined;
@@ -135,7 +155,8 @@ export async function codexReadings(session: string, transcript: string, turn: s
   if (beats.active.length) loop = { state: 'looping', due };
   else if (beats.paused || continuation) readings.push('Codex heartbeat: no automatic prompt left');
   if (!loop && (goal !== undefined || beats.paused || continuation)) loop = { state: 'none_left' };
-  return { ...(version ? { version } : {}), readings, ...(loop ? { loop } : {}) };
+  const account = newest && accountIn(home);
+  return { ...(version ? { version } : {}), readings, ...(loop ? { loop } : {}), ...(newest && account ? { limits: newest, account } : {}) };
 }
 
 /** The reading naming a version whose loops the facts don't cover: it is left to the grace window. */

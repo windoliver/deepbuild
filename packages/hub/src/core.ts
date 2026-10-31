@@ -2307,6 +2307,8 @@ export class Core {
     const read = await codexReadings(meta.session, meta.transcript, meta.fields?.turn_id, live.from === 'continuation');
     if (read.loop) data.loop = read.loop;
     live.looping = read.loop?.state === 'looping' || live.looping;
+    // A session's newest windows are what the runner admits the account's Codex jobs by.
+    if (read.limits && read.account) await this.runner.report({ agent: 'codex', account: read.account, rate_limits: read.limits } as unknown as WindowReport).catch(() => undefined);
     const readings = read.version && !loopsCovered(read.version) && coveredBy('codex', read.version) ? [uncoveredLoops(read.version)] : read.readings;
     for (const reading of readings) {
       const [seen] = await this.record.raw(`SELECT 1 FROM session_readings WHERE session_id = '${sql(meta.session)}' AND reading = '${sql(reading)}' LIMIT 1`);
