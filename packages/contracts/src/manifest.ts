@@ -68,6 +68,38 @@ function checkEnvironments(environments: unknown): ContractIssue[] {
   return environments.flatMap((name, i): ContractIssue[] => (typeof name === 'string' && ENVIRONMENT_NAME.test(name) ? [] : [issue('pattern', `/environments/${i}`, name)]));
 }
 
+/**
+ * The secrets a package names and the sources it registers (#364): each secret its name and what it's for, each
+ * source its ext.<plugin>.<name> and its variant, as `deep.registerSource` fills it, and for a stream the reading
+ * type each of its events is held to.
+ */
+const SECRET_NAME = /^[a-z][a-z0-9_]*$/;
+const VARIANTS = ['stream', 'polled', 'mcp'];
+const READINGS = ['work.item@1', 'push.record@1'];
+function checkSecrets(secrets: unknown): ContractIssue[] {
+  if (!Array.isArray(secrets)) return [issue('type', '/secrets', secrets)];
+  return secrets.flatMap((s, i): ContractIssue[] => {
+    const { name, for: what, ...rest } = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
+    if (typeof s !== 'object' || s === null || Object.keys(rest).length) return [issue('type', `/secrets/${i}`, s)];
+    return [
+      ...(typeof name === 'string' && SECRET_NAME.test(name) ? [] : [issue('pattern', `/secrets/${i}/name`, name)]),
+      ...(typeof what === 'string' && what ? [] : [issue('required', `/secrets/${i}/for`, what)]),
+    ];
+  });
+}
+function checkSources(sources: unknown, plugin: string): ContractIssue[] {
+  if (!Array.isArray(sources)) return [issue('type', '/sources', sources)];
+  return sources.flatMap((s, i): ContractIssue[] => {
+    const { name, variant, reading, ...rest } = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
+    if (typeof s !== 'object' || s === null || Object.keys(rest).length) return [issue('type', `/sources/${i}`, s)];
+    return [
+      ...(typeof name === 'string' && own(name, plugin, false) ? [] : [issue('pattern', `/sources/${i}/name`, name)]),
+      ...(VARIANTS.includes(variant as string) ? [] : [issue('enum', `/sources/${i}/variant`, variant)]),
+      ...(reading === undefined || (variant === 'stream' && READINGS.includes(reading as string)) ? [] : [issue('enum', `/sources/${i}/reading`, reading)]),
+    ];
+  });
+}
+
 /** The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. */
 export function checkManifest(value: unknown): Validation {
   // Read beside extension.manifest@1, whose frozen shape doesn't list them: `templates` is hook.template@1's,
@@ -75,10 +107,10 @@ export function checkManifest(value: unknown): Validation {
   // package.signature@1's (#351), `leases` is an array here, each item held to lease.kind@1 and to the names
   // other packages declared once the host declares it in the lease table (#44), and `host` is extension.host@1's (#104).
   // `stability`, `requires` and `calls` are extension.contract@1's (#139), and so is a `provides` row's `adapter`, the
-  // interface a row's reading is adapted from. Each sits at the manifest's root, or in its row, so its issues' paths are
-  // the manifest's.
+  // interface a row's reading is adapted from. `secrets` and `sources` are the secret and source blocks' (#364). Each
+  // sits at the manifest's root, or in its row, so its issues' paths are the manifest's.
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, environments, conflicts, kernel, signature, leases, host, stability, requires, calls, ...rest } = object ? value as Record<string, unknown> : {};
+  const { templates, environments, secrets, sources, conflicts, kernel, signature, leases, host, stability, requires, calls, ...rest } = object ? value as Record<string, unknown> : {};
   const adapters: { at: number; adapter: unknown }[] = [];
   if (Array.isArray(rest.provides)) {
     rest.provides = rest.provides.map((row: unknown, at) => {
@@ -100,6 +132,8 @@ export function checkManifest(value: unknown): Validation {
   const issues: ContractIssue[] = [
     ...(templates === undefined ? [] : checkTemplates(templates)),
     ...(environments === undefined ? [] : checkEnvironments(environments)),
+    ...(secrets === undefined ? [] : checkSecrets(secrets)),
+    ...(sources === undefined ? [] : checkSources(sources, (value as Manifest).id.slice((value as Manifest).id.indexOf('/') + 1))),
     ...(leases === undefined || Array.isArray(leases) ? [] : [issue('type', '/leases', leases)]),
     ...beside('extension.edges@1', { conflicts, kernel }),
     ...beside('package.signature@1', { signature }),
