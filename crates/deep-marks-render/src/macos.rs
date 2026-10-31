@@ -391,6 +391,37 @@ pub struct Renderer {
     cx: HeadlessAppContext,
 }
 
+/// What this process has spent so far, as the kernel counts it.
+struct Usage {
+    /// Package-idle wakeups, every thread's.
+    wakeups: u64,
+    /// Interrupt wakeups, every thread's.
+    interrupts: u64,
+    /// User and system CPU, every thread's, in ns.
+    cpu_ns: u64,
+}
+
+fn usage() -> Usage {
+    // SAFETY: an all-zero rusage_info_v4 and rusage are valid for the calls to fill.
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is a rusage_info_v4, the flavor asked for; `ru` is a rusage.
+    unsafe {
+        libc::proc_pid_rusage(
+            libc::getpid(),
+            libc::RUSAGE_INFO_V4,
+            (&raw mut info).cast::<libc::rusage_info_t>(),
+        );
+        libc::getrusage(libc::RUSAGE_SELF, &mut ru);
+    }
+    let ns = |t: libc::timeval| t.tv_sec as u64 * 1_000_000_000 + t.tv_usec as u64 * 1_000;
+    Usage {
+        wakeups: info.ri_pkg_idle_wkups,
+        interrupts: info.ri_interrupt_wkups,
+        cpu_ns: ns(ru.ru_utime) + ns(ru.ru_stime),
+    }
+}
+
 /// Waits for every committed frame command buffer to complete, then reads the ledger.
 fn settled() -> Ledger {
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -486,6 +517,14 @@ impl Renderer {
                 store,
             ),
             Request::Session { look, steps, store } => self.session(&look, steps, store),
+            Request::Idle {
+                doc,
+                look,
+                view,
+                record,
+                seconds,
+                arms_each_vsync,
+            } => self.idle(&doc, &look, view, record, seconds, arms_each_vsync),
             Request::Render {
                 out,
                 doc,
@@ -1004,6 +1043,74 @@ impl Renderer {
             compiled: None,
             last_layers: BTreeMap::new(),
         }
+    }
+
+    /// The document opened, then held on screen for `seconds` of the real clock: the frame clock
+    /// sleeps until the presented frame's `valid_until` or the time a bound value on screen goes
+    /// stale, and wakes for nothing else. What the process spent meanwhile is read from the
+    /// kernel: its wakeups and its CPU, every thread's. A wakeup is a package-idle wakeup, the CPU
+    /// woken from idle for this process (Activity Monitor's Idle Wake Ups). Interrupt wakeups are
+    /// reported beside them as a reading: a process that has drawn with Metal takes about 22 a
+    /// minute from the driver, whatever it does after, so no frame clock can hold those to 1.
+    fn idle(
+        &mut self,
+        doc: &Map<String, Value>,
+        look: &Look,
+        view: View,
+        mut record: Record,
+        seconds: u64,
+        arms_each_vsync: bool,
+    ) -> Value {
+        let mut session = Self::new_session();
+        let result = (|| -> Result<Value, Value> {
+            compile(&mut session, doc)?;
+            let pinned_at_0 = record.pinned;
+            self.present(&mut session, doc, look, view, &record, 0, false, false)?;
+            settled();
+            let before = usage();
+            let start = Instant::now();
+            let end = start + Duration::from_secs(seconds);
+            let vsync = Duration::from_nanos(1_000_000_000 / 60);
+            let at = |flicks: i64| start + Duration::from_nanos((flicks.max(0) as u64) * 10 / 7056);
+            let mut drawn = Vec::new();
+            let mut frame = 1u64;
+            loop {
+                let now = Instant::now();
+                let next = if arms_each_vsync {
+                    Some(now + vsync)
+                } else {
+                    [session.valid_until, session.stale_at]
+                        .into_iter()
+                        .flatten()
+                        .min()
+                        .map(at)
+                };
+                let wake = next.map_or(end, |n| n.min(end));
+                if let Some(wait) = wake.checked_duration_since(now) {
+                    std::thread::sleep(wait);
+                }
+                let elapsed = start.elapsed();
+                if Instant::now() >= end {
+                    break;
+                }
+                let t = (elapsed.as_nanos() * 7056 / 10) as i64;
+                record.pinned = pinned_at_0 + t;
+                self.present(&mut session, doc, look, view, &record, t, false, true)?;
+                frame += 1;
+                drawn.push(json!({"frame": frame, "at_ms": elapsed.as_secs_f64() * 1000.0}));
+            }
+            let seconds = start.elapsed().as_secs_f64();
+            let after = usage();
+            let cpu_ms = (after.cpu_ns - before.cpu_ns) as f64 / 1e6;
+            Ok(json!({
+                "ok": true, "opened_frames": 1, "seconds": seconds, "frames": drawn.len(),
+                "drawn": drawn, "wakeups": after.wakeups - before.wakeups,
+                "interrupt_wakeups": after.interrupts - before.interrupts, "cpu_ms": cpu_ms,
+                "cpu_fraction": cpu_ms / (seconds * 1000.0),
+            }))
+        })();
+        self.close(session);
+        result.unwrap_or_else(|refusal| refusal)
     }
 
     #[allow(clippy::too_many_arguments)]

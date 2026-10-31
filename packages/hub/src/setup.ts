@@ -14,11 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
 import { confirmed } from './authority.js';
+import { Confirmer } from './confirm.js';
 import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
+import { Devices } from './trusted.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -87,6 +89,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     await draftAskSettings(root);
     recordLoginPath(root);
     installRules(root);
+    await enrollConfirm(root);
     const hook = builtHook();
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
@@ -182,6 +185,19 @@ function editConfig(root: string, edit: (config: Obj) => void): void {
   try { config = JSON.parse(readFileSync(file, 'utf8')) as Obj; } catch { /* draftAskSettings wrote it */ }
   edit(config);
   writeJson(file, config);
+}
+/**
+ * deep-confirm's key (#880), made once: the hub then counts the OS confirming you only as a signature by it, from the
+ * helper recorded with it. A key already recorded stays, since setting one up again is the trusted path's alone. Where
+ * a test file stands in for the OS confirming you, or off macOS, there is nothing to set up.
+ */
+async function enrollConfirm(root: string): Promise<void> {
+  if (process.platform !== 'darwin' || process.env.DEEP_HUB_TEST_CONFIRM) return;
+  const paths = rootOf(root);
+  const devices = new Devices(paths.devices);
+  if (devices.enclave()) return;
+  const why = await new Confirmer({ devices, key: paths.confirmKey }).enroll(Date.now());
+  if (why) process.stderr.write(`deep setup: deep-confirm's key wasn't set up (${why}), so no answer from the CLI counts until it is; run deep setup again.\n`);
 }
 /** Your login shell's PATH, so the hub, started with a login service's short PATH, runs the same claude and codex. */
 function recordLoginPath(root: string): void {

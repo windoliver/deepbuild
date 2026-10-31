@@ -55,6 +55,9 @@ pub struct Planted {
     pub replays_after_add: bool,
     /// #383: every frame adds a pass that keeps the GPU busy for at least 10 ms.
     pub slow_gpu_frame: bool,
+    /// #854: the renderer and its pipelines are compiled in the first frame, not when the view
+    /// opens.
+    pub builds_on_first_frame: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -565,6 +568,8 @@ pub struct Renderer {
     finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// Render pipelines this renderer compiled, so a patch's new ones can be counted (#379).
     compiled: u32,
+    /// Each pipeline it compiled, by name, in the order it compiled them (#854).
+    names: Vec<&'static str>,
     meshes: BTreeMap<Shape, Mesh>,
     batches: BTreeMap<String, Batch>,
     atlas: AtlasTexture,
@@ -676,8 +681,9 @@ struct Families {
 }
 
 impl Families {
-    /// Compiles the pipelines `layer` draws with that aren't yet; how many it compiled.
-    fn ensure(&mut self, d: &wgpu::Device, layer: &Layer3) -> u32 {
+    /// Compiles the pipelines `layer` draws with that aren't yet, naming each in `names`; how
+    /// many it compiled.
+    fn ensure(&mut self, d: &wgpu::Device, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
         let mut made = 0;
         let (module, draw, text, fz) = (
             &self.module,
@@ -685,8 +691,9 @@ impl Families {
             &self.text_layout,
             self.forward_z,
         );
-        for (wanted, slot, layout, vs, fs, buffer) in [
+        for (name, wanted, slot, layout, vs, fs, buffer) in [
             (
+                "scene3d.line",
                 !layer.lines.is_empty(),
                 &mut self.line,
                 draw,
@@ -695,6 +702,7 @@ impl Families {
                 instance(std::mem::size_of::<SegmentRecord>() as u64, &SEGMENT),
             ),
             (
+                "scene3d.point",
                 !layer.points.is_empty(),
                 &mut self.point,
                 draw,
@@ -703,6 +711,7 @@ impl Families {
                 instance(std::mem::size_of::<PointRecord>() as u64, &POINT),
             ),
             (
+                "scene3d.text",
                 !layer.labels.is_empty(),
                 &mut self.text,
                 text,
@@ -721,6 +730,7 @@ impl Families {
                     fs,
                     &[Some(buffer)],
                 ));
+                names.push(name);
                 made += 1;
             }
         }
@@ -732,6 +742,11 @@ impl Renderer {
     /// Render pipelines it compiled so far.
     pub fn pipelines(&self) -> u32 {
         self.compiled
+    }
+
+    /// Each pipeline it compiled so far, by name (#854).
+    pub fn compiled_names(&self) -> &[&'static str] {
+        &self.names
     }
 
     pub fn new(device: &Device, planted: Planted) -> Renderer {
@@ -932,6 +947,12 @@ impl Renderer {
             output_f32,
             finished: None,
             compiled: 2,
+            names: vec![
+                "scene3d.mesh",
+                "scene3d.shadow",
+                "scene3d.output",
+                "scene3d.output_f32",
+            ],
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
             atlas,
@@ -1168,7 +1189,7 @@ impl Renderer {
     }
 
     fn prepare_batch(&mut self, device: &Device, layer: &Layer3) {
-        self.compiled += self.families.ensure(&device.device, layer);
+        self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
         let mut written = 0u32;
         let mut next = self.next_generation;
         for s in &layer.solids {
@@ -1874,7 +1895,9 @@ impl RenderModule for Module3 {
     fn build(&mut self, device: &Device) -> Result<(), String> {
         let mut s = lock(&self.shared);
         let planted = s.planted;
-        s.renderer = Some(Renderer::new(device, planted));
+        if !planted.builds_on_first_frame {
+            s.renderer = Some(Renderer::new(device, planted));
+        }
         Ok(())
     }
 
@@ -1887,6 +1910,10 @@ impl RenderModule for Module3 {
         let Some((scene, look)) = s.next.clone() else {
             return Vec::new();
         };
+        // The planted renderer compiles everything it draws with here, in the frame.
+        if s.renderer.is_none() && s.planted.builds_on_first_frame {
+            s.renderer = Some(Renderer::new(device, s.planted));
+        }
         let Shared {
             renderer,
             post,

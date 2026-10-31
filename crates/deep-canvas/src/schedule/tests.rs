@@ -152,6 +152,60 @@ fn a_revision_stamps_only_the_classes_its_change_falls_in() {
     );
 }
 
+#[test]
+fn a_revision_of_item_values_alone_leaves_what_a_whole_load_leaves() {
+    let sealed = Registry::new(BuildSet::Core).seal().expect("seals");
+    // A scheduler each, so neither session reads the other's results from the cache.
+    let (mut s, mut s2) = (
+        Scheduler::new(&sealed, Options::default()),
+        Scheduler::new(&sealed, Options::default()),
+    );
+    let first = board(false);
+    let (mut whole, mut items) = (
+        Session::new(0, BTreeMap::new()),
+        Session::new(0, BTreeMap::new()),
+    );
+    whole.load(&mut s, &first);
+    items.load(&mut s2, &first);
+    whole.frame(&mut s, 0, &default_view(&first));
+    items.frame(&mut s2, 0, &default_view(&first));
+
+    let mut moved = first.clone();
+    moved["items"]["a"]["at"] = json!({"pos": [3, 0, 0]});
+    moved["items"]["a"]["params"]["box"] = json!([0, 0, 12, 10]);
+    whole.load(&mut s, &moved);
+    let issues = items.revise_items(&mut s2, &moved, &["a"]);
+    assert_eq!(issues, Some(Vec::new()));
+    let ran = (
+        whole.frame(&mut s, 0, &default_view(&moved)),
+        items.frame(&mut s2, 0, &default_view(&moved)),
+    );
+    assert_eq!(ran.0, ran.1);
+    assert!(ran.0 > 0, "the change ran the item's nodes");
+    let seen = |session: &Session,
+                s: &Scheduler<'_>|
+     -> Vec<(String, Option<String>, String, String, &'static str)> {
+        session
+            .nodes(s)
+            .into_iter()
+            .map(|n| (n.operator, n.item, n.key, n.result, n.run.name()))
+            .collect()
+    };
+    assert_eq!(seen(&whole, &s), seen(&items, &s2));
+    for class in [Class::Transform, Class::Geometry, Class::Shading] {
+        assert_eq!(whole.changed_at("a", class), items.changed_at("a", class));
+    }
+    assert_eq!(whole.document(), items.document());
+
+    // A change that moves an item in the plan is the whole load's.
+    let mut reordered = moved.clone();
+    reordered["items"]["a"]["order"] = json!("z9");
+    assert_eq!(items.revise_items(&mut s2, &reordered, &["a"]), None);
+    let mut grown = moved.clone();
+    grown["items"]["c"] = json!({"id": "c", "kind": "rect@1", "params": {"box": [0, 0, 1, 1]}});
+    assert_eq!(items.revise_items(&mut s2, &grown, &["c"]), None);
+}
+
 /// Real threads, each taking the next job, so shards apply in whatever order they finish.
 #[derive(Debug)]
 struct Threads;

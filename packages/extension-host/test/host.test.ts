@@ -782,8 +782,10 @@ describe('#350 review regressions', () => {
 
   it('a notice an action sends acts for that action\'s caller', async () => {
     const { h, record } = await world();
-    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => deep.notices.send({ readings: [] }));";
+    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => deep.notices.send({ kind: 'ext.acts.alert', subscription: 'all', key: 'k1', readings: [] }));";
     await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${send}\n}\n`, { actions: ['ext.acts.tell'], notices: ['ext.acts.alert'] }));
+    // A notice goes out only for a cause you subscribed to (#365).
+    await h.subscribeNotice(YOU, 'ext.acts.alert', 'all');
     // A session claim the hub couldn't check: the write keeps that mark, and the package is still its writer.
     const result = await h.callAction({ action: 'ext.acts.tell', target: { handle: 'ext:test/acts', version: '1.0.0' }, input: {}, caller: { ...AGENT, verified: false } });
     expect(result.status).toBe('done');
@@ -904,8 +906,10 @@ describe('#363 record grants and action calls', () => {
 
   it('the notices a send action sends are in its changed, read from the record', async () => {
     const { h, record } = await world();
-    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => ({ output: { sent: await deep.notices.send({ readings: [] }) }, report: { verified: true, checked: 'sent' } }));";
+    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => ({ output: { sent: await deep.notices.send({ kind: 'ext.acts.alert', subscription: 'all', key: 'k1', readings: [] }) }, report: { verified: true, checked: 'sent' } }));";
     await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${send}\n}\n`, { actions: ['ext.acts.tell'], notices: ['ext.acts.alert'] }));
+    // A notice goes out only for a cause you subscribed to (#365).
+    await h.subscribeNotice(YOU, 'ext.acts.alert', 'all');
     const r = await h.callAction({ action: 'ext.acts.tell', target: { handle: 'ext:test/acts', version: '1.0.0' }, input: {}, caller: YOU, request: 'r1' });
     expect(r.status, JSON.stringify(r)).toBe('done');
     const notice = (r as { output: { sent: string } }).output.sent;
