@@ -1,7 +1,7 @@
 // Codex's versions and windows in the runner (#39): a build its facts don't list isn't covered by a listed build's
 // numbers, and a window is the one its length says, as the hub's row reads it.
 import { describe, expect, it } from 'vitest';
-import { codexWindows, shownVersion } from '../src/runner.js';
+import { codexRefused, codexWindows, shownVersion } from '../src/runner.js';
 
 describe('the version Codex shows', () => {
   it('keeps its suffix where versions are exact, so a stable build is not its alpha', () => {
@@ -21,5 +21,19 @@ describe('Codex\'s windows', () => {
     expect(named.get('five_hour')?.used).toBe(1);
     expect(named.get('seven_day')?.used).toBe(2);
     expect([...codexWindows({ primary: { used_percent: 1 }, secondary: { used_percent: 2 } }).keys()]).toEqual(['five_hour', 'seven_day']);
+  });
+});
+
+describe('what counts as a refusal', () => {
+  const ran = (command: string, status = 'failed') => ({ type: 'command_execution', command, status, aggregated_output: 'Operation not permitted' });
+  it('is a write the sandbox stopped, or a patch declined', () => {
+    expect(codexRefused(ran("/bin/sh -c 'printf x > out.txt'"))).toBe(true);
+    expect(codexRefused(ran('touch out.txt'))).toBe(true);
+    expect(codexRefused({ type: 'file_change', status: 'declined' })).toBe(true);
+  });
+  it('is not a read that failed the same way, nor a command that ran', () => {
+    expect(codexRefused(ran('cat /private/secret'))).toBe(false);
+    expect(codexRefused(ran('cat /private/secret 2>/dev/null'))).toBe(false);
+    expect(codexRefused(ran('touch out.txt', 'completed'))).toBe(false);
   });
 });
