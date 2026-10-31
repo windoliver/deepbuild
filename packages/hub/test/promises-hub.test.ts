@@ -2,13 +2,12 @@
 // recorded with its quote, due time, count and end; at its time a session with a waiter is woken through it; one
 // with none hears it at its next prompt, its row saying so meanwhile; and a fourth set is BLOCKED with its owner.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import net from 'node:net';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
-import { hookLine, reply, withHub } from './hub.js';
+import { hookLine, reply, session, waiter, withHub } from './hub.js';
 
 const procs: ChildProcess[] = [];
 afterAll(() => { for (const p of procs) p.kill('SIGTERM'); });
@@ -33,38 +32,6 @@ async function until<T>(read: () => T, ok: (v: T) => boolean, ms = 8000): Promis
   let v = read();
   while (!ok(v) && Date.now() < end) { await sleep(100); v = read(); }
   return v;
-}
-
-/** A waiter as deep-hook's is: a cli connection that asks `session.wait` and resolves with what the hub hands it. */
-function waiter(root: string, session: string, cwd: string): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(join(root, 'hub.sock'));
-    let got = '';
-    let said = 0;
-    sock.setEncoding('utf8');
-    sock.on('data', (chunk: string) => {
-      got += chunk;
-      const lines = got.split('\n');
-      while (lines.length - 1 > said) {
-        const line = JSON.parse(lines[said]!) as Record<string, unknown>;
-        said++;
-        if ('hello' in line) sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token: readFileSync(join(root, 'control.token'), 'utf8').trim() })}\n`);
-        else if (line.role === 'cli') sock.write(`${JSON.stringify({ v: 1, id: 'w1', method: 'session.wait', params: { session, cwd, since: Date.now() } })}\n`);
-        else if (line.id === 'w1') { sock.destroy(); if ('error' in line) reject(Error(JSON.stringify(line.error))); else resolve(line.result as Record<string, unknown>); }
-      }
-    });
-    sock.on('error', reject);
-  });
-}
-
-function session(home: string, id: string) {
-  const work = join(home, 'work');
-  const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
-  mkdirSync(work, { recursive: true });
-  mkdirSync(projects, { recursive: true });
-  const transcript = join(projects, `${id}.jsonl`);
-  writeFileSync(transcript, '');
-  return { work, transcript, payload: (event: string, extra: Record<string, unknown>) => ({ session_id: id, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra }) };
 }
 
 describe('promised checks through the hub', () => {

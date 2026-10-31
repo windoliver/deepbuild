@@ -163,34 +163,31 @@ impl Runner {
                 wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             ),
         ];
-        let mut b = 2;
-        for name in &c.textures {
+        let textures = c.textures.iter().map(|name| {
             let sample_type = match c.op.inputs[name].ty {
                 Ty::Tex(Tex::Uint) => wgpu::TextureSampleType::Uint,
                 Ty::Tex(Tex::Depth) => wgpu::TextureSampleType::Depth,
                 _ => wgpu::TextureSampleType::Float { filterable: true },
             };
-            let ty = wgpu::BindingType::Texture {
+            wgpu::BindingType::Texture {
                 sample_type,
                 view_dimension: wgpu::TextureViewDimension::D2,
                 multisampled: false,
-            };
-            entries.push(entry(b, stage, ty));
-            b += 1;
-        }
+            }
+        });
         let storage = |read_only| wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Storage { read_only },
             has_dynamic_offset: false,
             min_binding_size: None,
         };
-        for _ in &c.storage_inputs {
-            entries.push(entry(b, stage, storage(true)));
-            b += 1;
-        }
-        for _ in &c.op.storage {
-            entries.push(entry(b, stage, storage(false)));
-            b += 1;
-        }
+        let buffers = (c.storage_inputs.iter().map(|_| storage(true)))
+            .chain(c.op.storage.iter().map(|_| storage(false)));
+        entries.extend(
+            textures
+                .chain(buffers)
+                .zip(2..)
+                .map(|(ty, b)| entry(b, stage, ty)),
+        );
         let input_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("operator inputs"),
             entries: &entries,
@@ -298,21 +295,15 @@ impl Runner {
                 resource: wgpu::BindingResource::Sampler(&self.sampler),
             },
         ];
-        let mut b = 2;
-        for v in textures {
-            entries.push(wgpu::BindGroupEntry {
-                binding: b,
-                resource: wgpu::BindingResource::TextureView(v),
-            });
-            b += 1;
-        }
-        for buf in storage {
-            entries.push(wgpu::BindGroupEntry {
-                binding: b,
-                resource: buf.as_entire_binding(),
-            });
-            b += 1;
-        }
+        let resources = (textures
+            .iter()
+            .map(|v| wgpu::BindingResource::TextureView(v)))
+        .chain(storage.iter().map(|b| b.as_entire_binding()));
+        entries.extend(
+            resources
+                .zip(2..)
+                .map(|(resource, binding)| wgpu::BindGroupEntry { binding, resource }),
+        );
         let g1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("operator inputs"),
             layout: &self.input_layout,

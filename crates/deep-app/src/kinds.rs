@@ -741,6 +741,20 @@ mod tests {
         json!({"v": 4, "id": id, "kind": "ask.created", "log_pos": 1, "session": "s1", "data": data})
     }
 
+    /// The card's field `name`.
+    fn field<'a>(model: &'a Model, name: &str) -> Option<&'a str> {
+        model
+            .fields
+            .iter()
+            .find(|(field, _)| field == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /// An authority ask's subject: a push to main.
+    fn push() -> Value {
+        json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}})
+    }
+
     #[test]
     fn the_card_shows_the_plan_the_core_binds_never_a_later_one() {
         let proposal = |id: &str, writer: &str, log_pos: u64, hash: char, does: &str| {
@@ -749,11 +763,7 @@ mod tests {
             ]}})
         };
         let events = vec![
-            ask(
-                "A",
-                "authority",
-                json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}}),
-            ),
+            ask("A", "authority", push()),
             proposal("P0", "mcp:s1", 2, 'b', "push main --force"),
             proposal("P1", "core", 3, 'a', "push main"),
             proposal("P2", "core", 4, 'c', "push main and delete the tag"),
@@ -774,16 +784,15 @@ mod tests {
 
     #[test]
     fn the_card_shows_the_batch_the_core_wrote_never_an_agents() {
-        let push = json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}});
         let batched = |id: &str, writer: &str, log_pos: u64, asks: &[&str]| {
             json!({"kind": "ask.batched", "id": id, "writer": writer, "log_pos": log_pos, "data": {
                 "batch": "b", "asks": asks.iter().map(|ask| json!({"ask": ask, "plan_hash": null})).collect::<Vec<_>>(),
             }})
         };
         let events = vec![
-            ask("A", "authority", push.clone()),
-            ask("B", "authority", push.clone()),
-            ask("C", "authority", push),
+            ask("A", "authority", push()),
+            ask("B", "authority", push()),
+            ask("C", "authority", push()),
             batched("K", "core", 4, &["ask:A", "ask:B"]),
             batched("X", "mcp:s1", 5, &["ask:A", "ask:C"]),
         ];
@@ -799,11 +808,7 @@ mod tests {
     #[test]
     fn a_lone_approval_runs_its_whole_plan_and_says_so_on_its_button() {
         let events = vec![
-            ask(
-                "A",
-                "authority",
-                json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}}),
-            ),
+            ask("A", "authority", push()),
             json!({"kind": "plan.proposed", "id": "P", "writer": "core", "log_pos": 2, "data": {"ask": "ask:A", "diff": "d".repeat(64), "hash": "h".repeat(64), "steps": [
                 {"does": "push", "changes": [], "undo": "force-push back", "public": true, "cost": 0},
                 {"does": "tag", "changes": [], "undo": "delete the tag", "public": true, "cost": 0},
@@ -866,15 +871,14 @@ mod tests {
 
     #[test]
     fn a_batch_member_runs_or_skips_whole_and_starts_off_with_a_step_that_cant_be_undone() {
-        let push = json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}});
         let plan = |ask: &str, steps: Value| {
             json!({"kind": "plan.proposed", "id": format!("P{ask}"), "writer": "core", "log_pos": 2, "data": {
                 "ask": format!("ask:{ask}"), "diff": "d".repeat(64), "hash": ask.repeat(64), "steps": steps}})
         };
         let step = |does: &str, undo: &str| json!({"does": does, "changes": [], "undo": undo, "public": false, "cost": 0});
         let events = vec![
-            ask("A", "authority", push.clone()),
-            ask("B", "authority", push),
+            ask("A", "authority", push()),
+            ask("B", "authority", push()),
             plan("A", json!([step("delete", "none")])),
             plan(
                 "B",
@@ -909,10 +913,9 @@ mod tests {
 
     #[test]
     fn an_ask_batched_with_no_plan_of_its_own_is_still_among_the_steps_it_approves() {
-        let push = json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}});
         let events = vec![
-            ask("A", "authority", push.clone()),
-            ask("B", "authority", push),
+            ask("A", "authority", push()),
+            ask("B", "authority", push()),
             json!({"kind": "plan.proposed", "id": "PB", "writer": "core", "log_pos": 2, "data": {"ask": "ask:B", "diff": "d".repeat(64), "hash": "b".repeat(64), "steps": [
                 {"does": "push", "changes": [], "undo": "force-push back", "public": false, "cost": 0}]}}),
             json!({"kind": "ask.batched", "id": "K", "writer": "core", "log_pos": 4, "data": {
@@ -1076,26 +1079,14 @@ mod tests {
         events.extend(run("r5", "e2e", &"b".repeat(40), "failed", Value::Null));
         let quiet = vec![events[0].clone()];
         let model = Model::read(&events, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(get("checks"), Some("2 of 3 passed"));
         assert_eq!(get("look at"), Some("checkout.tsx:42"));
 
         // A rerun of the unit check that hasn't finished: its passed run before it no longer counts.
         events.push(json!({"kind": "run.started", "data": {"run": "r6", "check": "unit", "claim": "c", "commit": pinned}}));
         let model = Model::read(&events, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(get("checks"), Some("1 of 3 passed"));
         assert_eq!(get("look at"), Some("checkout.tsx:42"));
 
@@ -1111,13 +1102,7 @@ mod tests {
             json!("checkout.tsx:42"),
         ));
         let model = Model::read(&forged, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(
             (get("checks"), get("look at")),
             (Some("0 of 1 passed"), Some("checkout.tsx:42"))
@@ -1134,13 +1119,7 @@ mod tests {
         ));
         twice.push(json!({"kind": "run.finished", "writer": "core", "data": {"run": "r10", "check": "layout", "outcome": "passed"}}));
         let model = Model::read(&twice, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(
             (get("checks"), get("look at")),
             (Some("1 of 1 passed"), None)
@@ -1152,13 +1131,7 @@ mod tests {
         placed.extend(run("r12", "layout", &pinned, "failed", json!("old")));
         placed.extend(run("r11", "layout", &pinned, "passed", Value::Null));
         let model = Model::read(&placed, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(
             (get("checks"), get("look at")),
             (Some("1 of 1 passed"), None)
@@ -1169,13 +1142,7 @@ mod tests {
         later.push(json!({"kind": "run.started", "data": {"run": "r7", "check": "unit", "claim": "c", "commit": pinned}}));
         later.extend(run("r8", "layout", &pinned, "failed", Value::Null));
         let model = Model::read(&later, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(
             (get("checks"), get("look at")),
             (Some("0 of 2 passed"), Some("layout"))
@@ -1185,13 +1152,7 @@ mod tests {
         stopped.push(json!({"kind": "run.started", "writer": "core", "data": {"run": "r13", "check": "e2e", "claim": "c", "commit": pinned}}));
         stopped.push(json!({"kind": "run.finished", "writer": "core", "data": {"run": "r13", "check": "e2e", "outcome": "missing", "points_to": null, "findings": ["its stack never came up: db"]}}));
         let model = Model::read(&stopped, "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(get("look at"), Some("e2e: its stack never came up: db"));
         // Where a run points wins over its findings; pointing at nothing ("") is pointing nowhere.
         for (points_to, look) in [
@@ -1200,23 +1161,12 @@ mod tests {
         ] {
             stopped[2]["data"]["points_to"] = points_to;
             let model = Model::read(&stopped, "ask:T", 0).unwrap();
-            let got = model
-                .fields
-                .iter()
-                .find(|(field, _)| field == "look at")
-                .map(|(_, value)| value.clone());
-            assert_eq!(got.as_deref(), Some(look));
+            assert_eq!(field(&model, "look at"), Some(look));
         }
 
         // Only a run still going: that is the thing to look at.
         let model = Model::read(&later[..2], "ask:T", 0).unwrap();
-        let get = |name: &str| {
-            model
-                .fields
-                .iter()
-                .find(|(field, _)| field == name)
-                .map(|(_, value)| value.as_str())
-        };
+        let get = |name: &str| field(&model, name);
         assert_eq!(
             (get("checks"), get("look at")),
             (Some("0 of 1 passed"), Some("unit, still running"))

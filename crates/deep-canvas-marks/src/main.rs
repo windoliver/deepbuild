@@ -35,17 +35,9 @@ fn main() {
         std::process::exit(2);
     }
     let mut shaper = Shaper::new();
-    let stdin = io::stdin();
-    let mut reader = stdin.lock();
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let mut buf = Vec::new();
-    loop {
-        buf.clear();
-        match reader.read_until(b'\n', &mut buf) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
+    let mut out = io::stdout().lock();
+    for buf in io::stdin().lock().split(b'\n') {
+        let Ok(buf) = buf else { break };
         let answer = match std::str::from_utf8(&buf) {
             Ok(text) => solve_line(&mut shaper, text.trim_end_matches(['\n', '\r'])),
             Err(_) => bad_input(),
