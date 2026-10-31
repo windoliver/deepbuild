@@ -15,7 +15,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
-import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
+import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import { after, badDeadline, type Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, Subagent, WindowReport } from './types.js';
@@ -238,16 +238,8 @@ class LocalRunner implements Runner {
    * a busy log's other events are scanned once, not again at every pump.
    */
   private async events(): Promise<Event[]> {
-    const [row] = (await this.o.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
-    const head = Number(row?.head ?? 0);
     const all: Event[] = [];
-    for (;;) {
-      const page = await this.o.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
-      all.push(...page);
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < 1000) break;
-    }
-    this.cursor = Math.max(this.cursor, head);
+    this.cursor = await readSince(this.o.record, this.cursor, FOLDED, (e) => all.push(e));
     return all;
   }
   /** What the record gained: the jobs a crash left, and answers to the runner's asks. */
