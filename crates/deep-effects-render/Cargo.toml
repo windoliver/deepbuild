@@ -18,5 +18,4 @@ deep-scene3d-render = { path = "../deep-scene3d-render" }
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
-bytemuck = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

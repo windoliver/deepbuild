@@ -242,6 +242,15 @@ pub struct Placed {
     pub marks: Vec<Vec<[Rect; 2]>>,
 }
 
+impl deep_canvas::schedule::Canonical for Placed {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.card, &self.sheet, &self.cells, &self.marks),
+            out,
+        );
+    }
+}
+
 /// The card's slot at the view's top left, the sheet to its right at the same top, its cells in
 /// rows of `columns` (or as many as fit, for auto), each at its exact size, with room beside and
 /// below a cell for its highlights' marks. A sheet that doesn't fit beside the card is refused: a
