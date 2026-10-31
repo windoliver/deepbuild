@@ -19,6 +19,7 @@
     "release:check": "DEEP_PREFLIGHT=release scripts/preflight"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "7.60.0",
     "@stryker-mutator/core": "10.0.0",
     "@types/better-sqlite3": "7.6.13",
     "@types/node": "24.19.2",

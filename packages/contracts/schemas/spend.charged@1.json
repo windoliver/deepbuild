@@ -1,6 +1,8 @@
 {
   "title": "spend.charged@1",
   "description": "A paid run's cost reading landed: the run is charged against every budget it reserved against, and its reservation released. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

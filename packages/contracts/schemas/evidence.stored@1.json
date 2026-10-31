@@ -1,6 +1,8 @@
 {
   "title": "evidence.stored@1",
   "description": "The evidence store kept a file: appended by the record for each put, with what the file was stored as.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "evidence"
   ],

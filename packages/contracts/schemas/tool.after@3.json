@@ -1,6 +1,8 @@
 {
   "title": "tool.after@3",
   "description": "A tool call ended: ok at its PostToolUse, or failed at its PostToolUseFailure, with an error signature, its cause and who can act on it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "session_files",
     "returns"

@@ -1,6 +1,8 @@
 {
   "title": "task.created@1",
   "description": "A task was created.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "tasks"
   ],
