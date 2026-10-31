@@ -1262,7 +1262,7 @@ class Host implements ExtensionHost {
     let proof: string[] = [];
     if (ext.run) {
       if (ext.cleaned?.outcome !== 'clean') return;
-      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = '${ext.run}' ORDER BY log_pos`);
+      const ended = await this.options.record.raw(`SELECT id FROM events WHERE kind = 'process.ended' AND json_extract(data, '$.run') = ? ORDER BY log_pos`, [ext.run]);
       proof = (ended as { id: string }[]).map((e) => e.id);
     }
     for (const id of ids) await table.release(id, proof);

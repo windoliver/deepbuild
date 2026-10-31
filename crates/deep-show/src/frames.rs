@@ -10,7 +10,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::Issue;
-use deep_canvas::schedule::{default_view, OpIssue, Session as DocSession, Target, Val};
+use deep_canvas::schedule::{
+    default_view, HashVersion, OpIssue, Session as DocSession, Target, Val,
+};
 use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
 use deep_text::worker::Pending;
 use serde_json::{json, Map, Value};
@@ -120,7 +122,7 @@ impl<'a> Hub<'a> {
             .collect();
         // #379: every render pass the build registers, and every operator's and pass's cost
         // model, its coefficients and the micro-benchmark that measured them.
-        let reference = deep_canvas::cost::Coefficients::reference();
+        let reference = &sealed.costs;
         let mut passes = Map::new();
         let mut costs = Map::new();
         let mut cost = |name: &str, module: &str| {
@@ -236,13 +238,18 @@ impl<'a> Hub<'a> {
             .nodes(&self.sched)
             .into_iter()
             .map(|n| {
-                json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
-                       "key": n.key, "result": n.result, "run": n.run.name()})
+                let mut node = json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
+                       "key": n.key, "result": n.result, "run": n.run.name()});
+                if e.debug_text {
+                    node["debug"] = debug_digest(&n.values);
+                }
+                node
             })
             .collect();
         let report = &evaluated.report;
         let mut reply = json!({
             "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
+            "hash": self.sched.hash().name(),
             "rev": rev,
             "t": t,
             "epoch": evaluated.epoch(),
@@ -362,12 +369,21 @@ impl<'a> Hub<'a> {
             };
             let view = session_view(session, &Map::new());
             let t = f.from + f.step * k as i64;
+            let _ = self.sched.take_json();
             let frame_started = Instant::now();
             let (ran, allocs) =
                 crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
             let ms = frame_started.elapsed().as_secs_f64() * 1000.0;
+            // #855: the JSON values the frame's operators wrote, each counted by the heap
+            // allocations it takes, which a copy of it takes again, and its shared handle.
+            let json_values: u64 = self
+                .sched
+                .take_json()
+                .iter()
+                .map(|v| crate::count_allocations(|| (**v).clone()).1 + 1)
+                .sum();
             let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
-                                   "settling": pending.is_some()});
+                                   "settling": pending.is_some(), "json_values": json_values});
             let mut capture = 0;
             if f.pixels {
                 let before = thread_cpu_ns();
@@ -436,10 +452,11 @@ impl<'a> Hub<'a> {
                 .map(|items| items.keys().cloned().collect())
                 .unwrap_or_default();
             for id in ids {
-                if let Some(Val::Any(any, _)) = session.value(&self.sched, "text.run", Some(&id)) {
-                    if let Ok(run) = any.downcast::<Run>() {
-                        drawn.push((doc.clone(), run.shaped.clone()));
-                    }
+                let run = session
+                    .value(&self.sched, "text.run", Some(&id))
+                    .and_then(|v| v.as_typed::<Run>());
+                if let Some(run) = run {
+                    drawn.push((doc.clone(), run.shaped.clone()));
                 }
             }
         }
@@ -455,6 +472,29 @@ impl<'a> Hub<'a> {
             })
             .collect();
         json!({ "runs": runs })
+    }
+
+    /// `migrate`: rekeys the process's content-key cache under `to`, once (#855).
+    pub fn migrate(&mut self, to: HashVersion) -> Value {
+        let from = self.sched.hash();
+        let mut sessions: Vec<&mut DocSession> = self.sessions.values_mut().collect();
+        let rekeyed = self.sched.migrate(to, &mut sessions);
+        json!({"from": from.name(), "to": to.name(), "entries": self.sched.cached(), "rekeyed": rekeyed})
+    }
+
+    /// `keys`: every content key of the session's current revision computed afresh, `runs`
+    /// times, each pass timed by this binary's clock (#855).
+    pub fn keys(&mut self, doc: &str, runs: usize) -> Value {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let mut ns = Vec::with_capacity(runs);
+        for _ in 0..runs {
+            let started = Instant::now();
+            session.rekey(&mut self.sched);
+            ns.push(started.elapsed().as_nanos() as u64);
+        }
+        json!({"hash": self.sched.hash().name(), "nodes": session.node_count(), "ns": ns})
     }
 
     /// An item's interned handle in the session's current revision.
@@ -595,7 +635,10 @@ fn core_boxes(
         .filter_map(|(_, id)| {
             let lowered = json("core.lowered", id)?;
             let b = lowered["params"]["box"].as_array()?;
-            let pos = json("core.world", id).map(|w| [num(&w["pos"][0]), num(&w["pos"][1])]);
+            let pos = session
+                .value(sched, "core.world", Some(id))
+                .and_then(|w| w.as_typed::<deep_canvas::schedule::core_ops::Transform>())
+                .map(|w| [w.pos[0], w.pos[1]]);
             let [x, y] = pos.unwrap_or([0.0, 0.0]);
             let role = lowered["params"]["paint"]["fill"]["role"]
                 .as_str()
@@ -626,10 +669,10 @@ fn cell_grids(
     use deep_canvas_marks::scene::{self, Fill, Mark};
     let mut out = Vec::new();
     for (id, _) in doc["items"].as_object().into_iter().flatten() {
-        let Some(Val::Any(any, _)) = session.value(sched, "cells.grid", Some(id)) else {
-            continue;
-        };
-        let Ok(g) = any.downcast::<Grid>() else {
+        let Some(g) = session
+            .value(sched, "cells.grid", Some(id))
+            .and_then(|v| v.as_typed::<Grid>())
+        else {
             continue;
         };
         let mark = |m: Mark| scene::Drawn {
@@ -698,11 +741,9 @@ pub(crate) fn drawing_of(
     session: &DocSession,
 ) -> Option<Painted> {
     let doc = session.document()?;
-    let typed = |array: &str| match session.value(sched, array, None) {
-        Some(Val::Any(any, _)) => Some(any),
-        _ => None,
-    };
-    let mut drawing = typed("marks2d.frame").and_then(|a| a.downcast::<Drawing>().ok());
+    let mut drawing = session
+        .value(sched, "marks2d.frame", None)
+        .and_then(|v| v.as_typed::<Drawing>());
     // #402: each cell grid's rows, drawn through the one shaper over the frame's marks.
     let grids = cell_grids(sched, session, doc);
     if let (Some(d), false) = (&mut drawing, grids.is_empty()) {
@@ -718,7 +759,9 @@ pub(crate) fn drawing_of(
             animated: d.animated.clone(),
         });
     }
-    let status = typed("text.status").and_then(|a| a.downcast::<StatusDrawing>().ok());
+    let status = session
+        .value(sched, "text.status", None)
+        .and_then(|v| v.as_typed::<StatusDrawing>());
     let side = |k: usize| doc["size"][k].as_f64().unwrap_or(1.0);
     let boxes = match drawing {
         Some(_) => Vec::new(),
@@ -730,4 +773,28 @@ pub(crate) fn drawing_of(
         status,
         size: [side(0), side(1)],
     })
+}
+
+/// A value's Debug text, as a diagnostic shows it; never a digest's input. A test build with
+/// `test-debug-alt` prints every value another way, as another compiler might (#855).
+pub(crate) fn debug_text(value: &dyn std::fmt::Debug) -> String {
+    if cfg!(feature = "test-debug-alt") {
+        format!("{value:#?} (alt)")
+    } else {
+        format!("{value:?}")
+    }
+}
+
+/// The SHA-256 of the Debug text of the typed values a node wrote, in the order it wrote them;
+/// `null` when it wrote none. A diagnostic only: no key or digest reads it.
+fn debug_digest(values: &[Val]) -> Value {
+    let texts: Vec<String> = values
+        .iter()
+        .filter_map(Val::debug)
+        .map(debug_text)
+        .collect();
+    if texts.is_empty() {
+        return Value::Null;
+    }
+    json!(deep_canvas::schedule::sha256_hex(texts.concat().as_bytes()))
 }
