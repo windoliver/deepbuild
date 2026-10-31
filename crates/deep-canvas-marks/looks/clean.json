@@ -3,27 +3,65 @@
   "format": 1,
   "basis": "drawing",
   "license": "Apache-2.0",
-  "description": "The clean pipeline look: flat ground and ink for the line, Needs you and receipts, one status map with a glyph and a word for each state, and an automatic legend.",
+  "description": "The clean pipeline look: flat ground and ink for the line, Needs you and receipts, one status map with a glyph and a word for each state, an automatic legend, and the app's chrome roles in light and dark.",
   "palette": {
     "white": "#ffffff",
     "graphite": "#1b1d22",
     "slate": "#8b8f97",
     "night": "#0b0c0e",
     "snow": "#f2f3f5",
-    "lagoon": "#1aa3c8"
+    "lagoon": "#1aa3c8",
+    "mist": "#f5f5f6",
+    "fog": "#e3e4e6",
+    "coal": "#16171a",
+    "smoke": "#2a2c30",
+    "orchid": "#b0207f",
+    "heliotrope": "#e879f9",
+    "indigo": "#4f46e5",
+    "periwinkle": "#6366f1",
+    "graphite_secondary": "#1b1d22d6",
+    "graphite_tertiary": "#1b1d2285",
+    "graphite_disabled": "#1b1d2233",
+    "graphite_hover": "#1b1d220f",
+    "graphite_selected": "#1b1d221a",
+    "snow_secondary": "#f2f3f5d6",
+    "snow_tertiary": "#f2f3f585",
+    "snow_disabled": "#f2f3f533",
+    "snow_hover": "#f2f3f50f",
+    "snow_selected": "#f2f3f51a"
   },
   "roles": {
     "ground": "white",
     "ink": "graphite",
     "muted": "slate",
-    "accent": "lagoon"
+    "accent": "lagoon",
+    "raised": "mist",
+    "divider": "fog",
+    "ink_primary": "graphite",
+    "ink_secondary": "graphite_secondary",
+    "ink_tertiary": "graphite_tertiary",
+    "ink_disabled": "graphite_disabled",
+    "hover": "graphite_hover",
+    "selected": "graphite_selected",
+    "session_readout": "orchid",
+    "session_line": "indigo"
   },
   "themes": {
     "light": {},
     "dark": {
       "roles": {
         "ground": "night",
-        "ink": "snow"
+        "ink": "snow",
+        "raised": "coal",
+        "divider": "smoke",
+        "ink_primary": "snow",
+        "ink_secondary": "snow_secondary",
+        "ink_tertiary": "snow_tertiary",
+        "ink_disabled": "snow_disabled",
+        "hover": "snow_hover",
+        "selected": "snow_selected",
+        "session_readout": "heliotrope",
+        "session_line": "periwinkle"
       }
     }
   },
