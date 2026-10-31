@@ -1806,7 +1806,7 @@ impl Reader {
             let shells = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"];
             if !line
                 .split_whitespace()
-                .any(|w| shells.contains(&w.rsplit('/').next().unwrap_or(w)))
+                .any(|w| shells.contains(&same_name(w.rsplit('/').next().unwrap_or(w)).as_str()))
             {
                 return;
             }
