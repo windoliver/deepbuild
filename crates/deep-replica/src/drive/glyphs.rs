@@ -35,6 +35,8 @@ struct Seen {
     sprites: Vec<Sprite>,
     /// The next frame the renderer is handed is for its glyphs only: no pixels are drawn.
     scene_only: bool,
+    /// The scale the window draws at, when it isn't the 2x GPUI's test window sizes its images for.
+    scale: Option<f32>,
 }
 
 #[derive(Clone, Copy)]
@@ -109,6 +111,11 @@ impl Glyphs {
         self.0.lock().expect("glyphs").scene_only = true;
         let _ = window.render_to_image();
         self.0.lock().expect("glyphs").scene_only = false;
+    }
+
+    /// Sizes the images the renderer draws for a window drawing at `scale`.
+    pub fn draw_at(&self, scale: f32) {
+        self.0.lock().expect("glyphs").scale = Some(scale);
     }
 
     pub fn text_system(&self, inner: Arc<dyn PlatformTextSystem>) -> Arc<dyn PlatformTextSystem> {
@@ -304,9 +311,15 @@ impl PlatformHeadlessRenderer for Renderer {
         size: Size<DevicePixels>,
     ) -> Result<RgbaImage> {
         self.keep(scene);
-        if self.seen.0.lock().expect("glyphs").scene_only {
+        let seen = self.seen.0.lock().expect("glyphs");
+        if seen.scene_only {
             return Ok(RgbaImage::new(1, 1));
         }
+        let size = match seen.scale {
+            Some(scale) => size.map(|v| DevicePixels((v.0 as f32 * scale / 2.).round() as i32)),
+            None => size,
+        };
+        drop(seen);
         self.inner.render_scene_to_image(scene, size)
     }
     fn render_scene(&mut self, scene: &Scene, _size: Size<DevicePixels>) -> Result<()> {
