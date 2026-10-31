@@ -19,7 +19,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
-import { codexConfig, codexHooks, hooksDisabled, installedCodex, modified, readTrust } from './codex-settings.js';
+import { codexConfig, codexHooks, hooksDisabled, installedCodex, modified, readTrust, trustProblems } from './codex-settings.js';
 const MANAGED = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode/managed-settings.json' : '/etc/claude-code/managed-settings.json';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -198,8 +198,8 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   // Trust is Codex's to say, by its own hook list, as the hub read it at a Codex session's start: doctor starts no Codex.
   const ours = readTrust(root);
   if (ours) {
-    const waiting = ours.filter((h) => h.trustStatus !== 'trusted');
-    if (waiting.length) add('codex.hooks_trust', agent, 'hooks_untrusted', 'warn', `Codex's hook list reports ${waiting.map((h) => `${h.eventName} ${h.trustStatus}`).join(', ')}: those hooks don't run until you approve them`, 'Approve them once in /hooks in a Codex session.');
+    const problems = trustProblems(root);
+    if (problems.length) add('codex.hooks_trust', agent, 'hooks_untrusted', 'warn', `Codex's hook list reports ${problems.join(', ')}: those hooks don't run until you approve them`, 'Approve or enable them once in /hooks in a Codex session.');
     else add('codex.hooks_trust', agent, 'healthy', 'ok', `Codex's hook list reports DeepBuild's ${ours.length} entries trusted`, 'Nothing to do.');
   }
   const [version, login] = await Promise.all([ran(codex, ['--version']), ran(codex, ['login', 'status'])]);
