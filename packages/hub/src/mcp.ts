@@ -4,11 +4,13 @@
 // With the hub down or restarting it keeps its tool list and answers each call within a second that the hub is
 // unreachable, never with a success, and reconnects at the next call. Every error is a tool result holding error@2.
 // The pages of the codes those errors carry read at deep://codes/<code>, with no tool call and no hub.
+// `deep mcp actions` is the second server entry, deep-actions (#363): the same process and hub connection, serving
+// the plug-in actions' two tools in place of the deep_* tools.
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
 import { hubAddress } from './paths.js';
-import { toolList } from './tools.js';
+import { actionToolList, toolList } from './tools.js';
 import { line, refusal, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -86,10 +88,10 @@ class Hub {
   }
 }
 
-/** `deep mcp`: serves the agent on stdin and stdout until stdin closes. */
-export async function runMcp(): Promise<number> {
+/** `deep mcp`, or `deep mcp actions` for deep-actions: serves the agent on stdin and stdout until stdin closes. */
+export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<number> {
   const hub = new Hub();
-  const tools = toolList();
+  const tools = server === 'deep' ? toolList() : actionToolList();
   const send = (message: Obj) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   const lines = createInterface({ input: process.stdin });
   const calls: Promise<void>[] = [];
@@ -106,7 +108,7 @@ export async function runMcp(): Promise<number> {
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
-        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: 'deep', version: '0.0.0' } } });
+        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' } } });
         break;
       case 'ping':
         send({ id, result: {} });
@@ -132,7 +134,9 @@ export async function runMcp(): Promise<number> {
         }
         // A call that waits, such as deep_wait, holds up no other call.
         calls.push(hub.call(name, params.arguments).then(({ ok, value }) => {
-          send({ id, result: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: !ok, ...(ok ? { structuredContent: value } : {}) } });
+          // A plug-in action that started and failed is an error the agent sees, with its report (#363).
+          const failed = ok && server === 'deep-actions' && (value as { status?: unknown } | null)?.status === 'failed';
+          send({ id, result: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: !ok || failed, ...(ok ? { structuredContent: value } : {}) } });
         }));
         break;
       }
