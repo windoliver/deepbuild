@@ -3,5 +3,6 @@
   "version": "1.0.0",
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
   "access": { "words": ["record"] },
-  "actions": ["ext.starts.ping"]
+  "actions": ["ext.starts.ping"],
+  "requires": { "preview": ["deep.on", "deep.registerAction"] }
 }

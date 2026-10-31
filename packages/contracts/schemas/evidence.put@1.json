@@ -1,6 +1,8 @@
 {
   "title": "evidence.put@1",
   "description": "A file entered the evidence store, with its redaction label and license.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "evidence"
   ],

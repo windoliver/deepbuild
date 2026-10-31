@@ -1,6 +1,8 @@
 {
   "title": "wiki.read@1",
   "description": "Setup read a source's messages into the wiki (#356): the session, how many of its messages are read and the last one, so the next setup delivers only what came after.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

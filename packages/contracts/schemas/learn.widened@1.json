@@ -1,6 +1,8 @@
 {
   "title": "learn.widened@1",
   "description": "A learned change's scope was widened, as you confirmed.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "evidence": {
       "type": "array",

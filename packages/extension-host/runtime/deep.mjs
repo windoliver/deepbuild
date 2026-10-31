@@ -99,10 +99,11 @@ export function extensionSide(call, load) {
   for (const { method } of API) add(method);
   return {
     async serve(method, params) {
-      // A planted host's methods beyond the schema (tests only), before the package's code runs.
+      // A planted host's methods beyond the schema (tests only), before the package's code runs. What the package's
+      // code returned at its load comes back as JSON: a release's fixture package returns its calls' results (#139).
       if (method === 'load') {
         for (const planted of params?.planted ?? []) add(planted);
-        return void (await load(deep, params));
+        return (await load(deep, params)) ?? null;
       }
       if (method === 'run') {
         const runner = checks.get(params?.type);

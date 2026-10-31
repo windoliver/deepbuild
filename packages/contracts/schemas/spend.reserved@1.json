@@ -1,6 +1,8 @@
 {
   "title": "spend.reserved@1",
   "description": "A paid run reserved its price against every budget that covers it, all of them in this one event, before it started. The reservation holds, unpriced, until the run's cost reading lands. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

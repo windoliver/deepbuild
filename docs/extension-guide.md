@@ -21,7 +21,7 @@ Most plug-ins need few methods. Start with these 13, in this order.
 
 ### `deep.on`
 
-In R1 · stable · `d1:a835ee7b3bd031e52a8ce58545b0b68d8a45a4b388fc8943bca15c65a9cba077`
+In R1 · preview · `d1:a835ee7b3bd031e52a8ce58545b0b68d8a45a4b388fc8943bca15c65a9cba077`
 
 Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.stop, pr.opened, merged, released or schedule. A handler adds context for the agent or denies with a reason; outside DeepBuild's signed release, both only fill templates the manifest declares, with typed values.
 
@@ -97,7 +97,7 @@ A handle to a secret: the hub adds its value to the request, and the plug-in nev
 
 ### `deep.notices.send`
 
-In R1 · stable · `d1:1278dcb064eaaf8a0978a1e9e8761ce8ec0aa0f8da2668f87939b82ff27f2a2b`
+In R1 · preview · `d1:1278dcb064eaaf8a0978a1e9e8761ce8ec0aa0f8da2668f87939b82ff27f2a2b`
 
 Sends a notice you asked for, citing fresh readings, once per key.
 
@@ -117,7 +117,7 @@ Anything that leaves your machine for a person: an ask, or a standing rule.
 
 ### `deep.asks.create`
 
-In R1 · stable · `d1:52c8f6e58d710c8bc4663462c671d42192aee7be5745fdc88882dc116e5539fa`
+In R1 · preview · `d1:52c8f6e58d710c8bc4663462c671d42192aee7be5745fdc88882dc116e5539fa`
 
 Raises an ask: a question only you can answer, with its options, its deadline and its default.
 
@@ -172,7 +172,7 @@ A check kind: its runner gets a spec and the checkout and returns the run's outc
 
 ### `deep.registerResolver`
 
-In R1 · stable · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
+In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
 
 Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask's kind and scope; otherwise the ask reaches you.
 
@@ -199,7 +199,7 @@ Leases a resource of a declared lease.kind@1 kind, the core's or one a manifest 
 
 ### `deep.registerAdapter`
 
-In R1 · stable · `d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27`
+In R1 · preview · `d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27`
 
 An agent adapter: it maps the agent's hooks, delivers answers by the routes its caps allow, and names what it can't do rather than doing nothing.
 
@@ -210,7 +210,7 @@ An agent adapter: it maps the agent's hooks, delivers answers by the routes its 
 
 ### `deep.registerRoute`
 
-In R1 · stable · `d1:9a22da7084c9353b5a2acb7912aee3fbac5c471d4d6d6d2b6f5977a56a0362d4`
+In R1 · preview · `d1:9a22da7084c9353b5a2acb7912aee3fbac5c471d4d6d6d2b6f5977a56a0362d4`
 
 An HTTP route served on 127.0.0.1, which reaches the package only once you turn it on.
 
@@ -220,7 +220,7 @@ An HTTP route served on 127.0.0.1, which reaches the package only once you turn 
 
 ### `deep.registerIndex`
 
-In R1 · stable · `d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a`
+In R1 · preview · `d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a`
 
 An index over the wiki: upsert claims, search with hits that name their sources, drop a source and rebuild from pages. The hub re-attaches each hit's provenance from the claim records, never from the index.
 
@@ -230,7 +230,7 @@ An index over the wiki: upsert claims, search with hits that name their sources,
 
 ### `deep.record.append`
 
-In R1 · stable · `d1:5e1abe51040927c6848a34cd130b32fd0c386bbd9337b39c791a7e8f492ae8bc`
+In R1 · preview · `d1:5e1abe51040927c6848a34cd130b32fd0c386bbd9337b39c791a7e8f492ae8bc`
 
 Appends one of the package's own event kinds to the record.
 
@@ -240,7 +240,7 @@ Appends one of the package's own event kinds to the record.
 
 ### `deep.record.query`
 
-In R1 · stable · `d1:925a9f01d1787905fb15b900f5ccbda1afd38233e119fc347440cb0b77f2d08c`
+In R1 · preview · `d1:925a9f01d1787905fb15b900f5ccbda1afd38233e119fc347440cb0b77f2d08c`
 
 Reads the record: the core's event kinds and the package's own, only those its grant names.
 
@@ -250,7 +250,7 @@ Reads the record: the core's event kinds and the package's own, only those its g
 
 ### `deep.evidence.put`
 
-In R1 · stable · `d1:12f1088c044c8fbb685a7425fc5026272bb450c96675c1b36029e9648a953c66`
+In R1 · preview · `d1:12f1088c044c8fbb685a7425fc5026272bb450c96675c1b36029e9648a953c66`
 
 Stores a file as evidence and returns its SHA-256.
 
@@ -260,13 +260,60 @@ Stores a file as evidence and returns its SHA-256.
 
 ### `deep.config.get`
 
-In R1 · stable · `d1:71b7b4e2e3db1026349e712236f9d3231abdec149243becc4ac6fd1f85f6f08d`
+In R1 · preview · `d1:71b7b4e2e3db1026349e712236f9d3231abdec149243becc4ac6fd1f85f6f08d`
 
 Reads one of the package's settings.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `key` | string | yes |
+
+### `deep.read`
+
+In R1 · preview · `d1:2b3e3c57692e9afcf5ed8f7de18e1c2b2bb7dcc722de36649ab31e6ef473166d`
+
+Reads an output interface the package uses, through the provider the hub wired the use to: its value, or missing when none provides it.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+
+### `deep.fetch`
+
+In R1 · preview · `d1:045034db4b5007472e621322e9c6b122fdec4cbe6c8d393c93fc688c6103c556`
+
+An outside call the hub makes for the package, only to a host its grant names and within that host's quota.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `request` | object | yes |
+
+### `deep.terminal.open`
+
+In R1 · preview · `d1:95eb23764a43d724a267df4616cd7c6c1d08a47498adb5cc957293fccbe42f51`
+
+Opens a terminal the hub hosts for the package under run-as-you: its program, folder, size and title; its input comes only from the panel you focused.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `spec` | object | yes |
+
+### `deep.terminal.list`
+
+In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
+
+The package's own hosted terminals, each with its run and process.
+
+### `deep.terminal.read`
+
+In R1 · preview · `d1:fa7a50bc188ddb120dbc0d0af0295f457bdc94c13e506b153d567cd02253e63a`
+
+Reads a hosted terminal's output from an offset, in pages.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `terminal` | string | yes |
+| `from` | integer | yes |
 
 ## Slots
 

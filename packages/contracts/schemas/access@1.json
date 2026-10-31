@@ -1,6 +1,8 @@
 {
   "title": "access@1",
   "description": "The access words a manifest grants, from a closed list (technical-design.md, Access): files, programs, hosts, run-as-you, the screen, sound, the microphone, the camera, a device class as device:<class>, the clipboard, a window, the agent, edit_as_you and the record. A device class is name@major, or a plug-in's own ext.<plug-in>.<name>@major. Any other word fails, naming it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "words": {

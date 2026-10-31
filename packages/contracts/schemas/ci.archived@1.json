@@ -1,6 +1,8 @@
 {
   "title": "ci.archived@1",
   "description": "A completed CI run was copied from the forge before its retention deletes it: its result, and each job log as evidence.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "evidence"
   ],

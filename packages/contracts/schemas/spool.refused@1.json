@@ -1,6 +1,8 @@
 {
   "title": "spool.refused@1",
   "description": "A line in deep-hook's spool the hub skipped at replay: cut by a write that never finished, or refused, named by its byte offset.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {
