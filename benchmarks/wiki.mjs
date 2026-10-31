@@ -5,6 +5,9 @@
 // needed. The reading agent is a stand-in that reads nothing, so the number is DeepBuild's own work: archive,
 // pattern matching, claims, pages and read positions. The issue's 5% of a plan window and 4,000-token start slice stay
 // in tests/acceptance/356/budgets.test.ts.
+// node benchmarks/wiki.mjs memory (issue #111): the same process compiles four agents' memory files, 200 rules each with
+// 100 shared, failing unless a shared rule is one claim with four sources and a second compile changes no page. The
+// issue's 60 s stays in tests/acceptance/111/budgets.test.ts.
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -20,14 +23,24 @@ const task = process.argv[2];
 const root = mkdtempSync(join(tmpdir(), 'deep-wiki-bench-'));
 const pages = (dir) => new Map(readdirSync(dir, { recursive: true }).filter((f) => f.endsWith('.md')).map((f) => [f, readFileSync(join(dir, f), 'utf8')]));
 try {
-  if (task !== 'build') throw Error(`Unknown task ${task}; one of: build`);
+  if (task !== 'build' && task !== 'memory') throw Error(`Unknown task ${task}; one of: build, memory`);
   const now = () => T0;
   const env = { HOME: root, CLAUDE_CONFIG_DIR: join(root, 'claude') };
   const repos = ['api', 'web', 'cli', 'docs'].map((n) => join(root, 'work', n));
   for (const r of repos) mkdirSync(join(r, '.git'), { recursive: true });
   const folder = join(env.CLAUDE_CONFIG_DIR, 'projects', '-bench');
   mkdirSync(folder, { recursive: true });
-  for (let i = 0; i < 212; i++) {
+  if (task === 'memory') {
+    // The wiki reads each agent's file from the home it runs under.
+    process.env.HOME = root;
+    const files = { claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md', pi: '.pi/agent/AGENTS.md', cursor: '.cursor/rules/team.mdc' };
+    for (const [agent, file] of Object.entries(files)) {
+      const lines = Array.from({ length: 200 }, (_, n) => `- ${n < 100 ? 'shared' : agent} rule number ${n} of the corpus`);
+      mkdirSync(join(root, file, '..'), { recursive: true });
+      writeFileSync(join(root, file), `${lines.join('\n')}\n`);
+    }
+  }
+  for (let i = 0; i < (task === 'memory' ? 0 : 212); i++) {
     const id = `${(0x35600 + i).toString(16).padStart(8, '0')}-0000-4000-a000-${String(i).padStart(12, '0')}`;
     const lines = Array.from({ length: 12 }, (_, k) => {
       const text = k === 1 ? `remember: ${repos[i % 4].split('/').pop()} fact ${i} starts with \`npm run dev${i % 5}\`. ${'lorem ipsum dolor '.repeat(25)}` : `${'sit amet consectetur '.repeat(30)}`;
@@ -56,7 +69,15 @@ try {
   const build = openWikiBuild({ record, root: rootOf(hub), store, runner, asks, now, archive: () => archive.pass(), core, cli: { writer: 'cli', actor: 'you', scope: 'you' } });
   const first = await build.build();
   const written = pages(rootOf(hub).wiki);
-  const repoPages = [...written.keys()].filter((f) => f.startsWith('repos'));
+  if (task === 'memory') {
+    const line = written.get('rules.md')?.split('\n').find((l) => l.startsWith('- shared rule number 7 of the corpus'));
+    if (!line?.includes('"proof":4')) throw Error(`a shared rule isn't one claim with four sources: ${line}`);
+    await build.build();
+    if (pages(rootOf(hub).wiki).get('rules.md') !== written.get('rules.md')) throw Error('rules.md changed on a second compile of unchanged files');
+    await record.close();
+    process.exit(0);
+  }
+  const repoPages =[...written.keys()].filter((f) => f.startsWith('repos'));
   if (repoPages.length !== 4) throw Error(`${repoPages.length} repo pages after the first build, not 4`);
   const firstJobs = jobs;
   const again = await build.build();
