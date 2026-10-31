@@ -54,6 +54,8 @@ export type Plant =
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
+  // #124's: deep_drive launching replicas without the replica lease.
+  | 'deep-drive-no-lease'
   // #875's: a fix check's base run counted as its proof whatever way it failed, as an opaque script's is.
   | 'any-nonzero-base-exit'
   // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
@@ -93,6 +95,7 @@ const PLANTS: readonly string[] = [
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
+  'deep-drive-no-lease',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
 ];

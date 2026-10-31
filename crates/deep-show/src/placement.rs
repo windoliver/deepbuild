@@ -32,6 +32,8 @@ pub struct Display {
     pub bounds: [f64; 4],
     pub refresh_hz: i64,
     pub next_vsync: i64,
+    /// The token every frame it presents carries, for captures of it (#105).
+    pub feed: Option<String>,
 }
 
 /// A display's vsync grid: `next_vsync + k × period`, k ≥ 0.
