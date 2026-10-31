@@ -91,14 +91,14 @@ Error: on the merge base the check's test must run, and fail there on its assert
 
 ==== AC4, from the full run at 09:10 (final code)
  FAIL  hub.test.ts > AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests > AC4 (wrong program any-nonzero-base-exit) the helper the fix adds reads as proof, and AC1's judgement fails
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file://<repo>/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 Error: DEEP_HUB_PLANT=any-nonzero-base-exit names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/cli/dist/main.js:178:30
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:40:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:49:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
 Node.js v24.22.0
  ❯ startHub ../29/h-d.ts:270:45
     268|     sleep(120_000).then(() => undefined),
@@ -111,14 +111,14 @@ Node.js v24.22.0
  ❯ hub.test.ts:39:15
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
  FAIL  hub.test.ts > AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests > AC4 (wrong program any-nonzero-base-exit) the TypeError from the function the fix adds reads as proof, and AC2's judgement fails
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file://<repo>/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 Error: DEEP_HUB_PLANT=any-nonzero-base-exit names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/cli/dist/main.js:178:30
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:40:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:49:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
 Node.js v24.22.0
  ❯ startHub ../29/h-d.ts:270:45
     268|     sleep(120_000).then(() => undefined),
@@ -131,14 +131,14 @@ Node.js v24.22.0
  ❯ hub.test.ts:45:15
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
  FAIL  hub.test.ts > AC4 #875.758d1556 a hub that counts any non-zero base exit as proof fails these tests > AC4 (wrong program any-nonzero-base-exit) the real fix stays PASS: the plant changes only what a base exit proves
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=any-nonzero-base-exit did not start: file://<repo>/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 Error: DEEP_HUB_PLANT=any-nonzero-base-exit names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-875-ee3328/agent-a8395a7eb3093651b/packages/cli/dist/main.js:178:30
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:40:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:49:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
 Node.js v24.22.0
  ❯ startHub ../29/h-d.ts:270:45
     268|     sleep(120_000).then(() => undefined),
