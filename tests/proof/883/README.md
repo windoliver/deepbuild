@@ -20,10 +20,12 @@ list of what Notification Center holds from the app (`deep-app --notification-ce
   open at the end empties Notification Center.
 
 It runs by hand (it is in `byHand` in scripts/lanes.mjs): the bundle must be allowed to notify, in System Settings ›
-Notifications › DeepBuild. Sign the bundle with a stable identity, or macOS asks again after every build:
+Notifications › DeepBuild. Sign the bundle with a stable identity, or macOS asks again after every build. Name the
+identity by its SHA-1 hash from `security find-identity -p codesigning -v`: two certificates can share one name, and
+codesign refuses an ambiguous name.
 
 ```sh
-DEEP_APP_SIGN="<your signing identity>" scripts/app-bundle
+DEEP_APP_SIGN=<the identity's SHA-1 hash> scripts/app-bundle
 node node_modules/vitest/vitest.mjs run tests/proof/883/notification-center.live.test.ts
 ```
 
