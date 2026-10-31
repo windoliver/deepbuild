@@ -1,0 +1,14 @@
+// A stream source (#364 AC3) from outside the release: it reads the stream it is handed page by page, from the cursor
+// alone, keeping nothing between reads. source@1's kit hands it the kit's own stream at install.
+interface Event { seq: number; kind: string; data: string }
+
+export default function (deep: any): void {
+  deep.registerSource('ext.feed.events', {
+    variant: 'stream',
+    read(stream: { events: Event[] }, cursor: string | null, limit: number): { events: Event[]; cursor: string | null } {
+      const start = cursor === null ? 0 : Number(cursor);
+      const events = stream.events.slice(start, start + limit);
+      return { events, cursor: String(start + events.length) };
+    },
+  });
+}
