@@ -16,7 +16,6 @@ use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use deep_canvas::cost::Coefficients;
 use deep_canvas::document::{
     canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
 };
@@ -38,6 +37,7 @@ use crate::frames::{op_issue, overflows, unfit_issue};
 use crate::placement::{self, Placement};
 use crate::shared::{self, Clock, CommitFault, Quota, Shared};
 use crate::snapshot::{self, Drawn, Renderer, Unfit};
+use crate::workers::{Priority, Workers};
 
 /// deep_show answers within 2 s: a snapshot whose frame hasn't settled by then is not presented
 /// (Admission and latch; Render-back).
@@ -160,6 +160,10 @@ pub enum Planted {
     PacksKeyedByName,
     /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
     CheckpointNearestInDistance,
+    /// #857: results of nodes run on several threads merge in the order they finished.
+    MergesInFinishOrder,
+    /// #857: the background jobs' threads run at the live view's priority.
+    BackgroundAtLivePriority,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
     AcceptsEverySampleRate8To192k,
     /// #488: `rate`'s index forms t × p in i64.
@@ -202,6 +206,20 @@ pub enum Planted {
     TabRedrawsAt30hz,
     /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
     TabDrawsCapture,
+    /// #105: the capture gate takes any press of the chord, synthetic ones too, as the hold.
+    RecordsWithoutHold,
+    /// #105: the recorder ignores `max` and keeps frames for as long as the chord is held.
+    RecordsPastMax,
+    /// #105: a saved bug capture is attached to its ask with no check drafted.
+    DraftsNoCheck,
+    /// #105: each frame, as it arrives, is appended to the record holding its bytes in base64.
+    FramesToRecord,
+    /// #105: the frames so far are stored as an asset by hash each time a frame arrives.
+    KeepsAssetAfterCrash,
+    /// #105: the saved capture is labelled redaction `complete`.
+    LabelsRedactionComplete,
+    /// #105: a send delivers its files at once, unasked.
+    SendsWithoutApproval,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -211,6 +229,8 @@ pub struct Startup {
     pub seal_ms: f64,
     /// #387: the planted scheduler that orders steps at one time by canvas-module name.
     pub steps_by_name: bool,
+    /// #855: the planted seal let a frame-phase JSON writer in, so its values run and count.
+    pub admits_frame_json: bool,
     /// A build with a test canvas module: every read every operator makes is logged.
     pub test_build: bool,
     /// #856: the planted hub that shapes a revision's long text on the UI thread at its latch.
@@ -361,6 +381,13 @@ pub struct PatchCall {
 pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
+    /// #855: rekeys the process's content keys under a hash, once.
+    Migrate(deep_canvas::schedule::HashVersion),
+    /// #855: computes every content key of a session's revision afresh, `runs` times, timed.
+    Keys {
+        doc: String,
+        runs: usize,
+    },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -553,6 +580,8 @@ pub enum Call {
     Ring(Box<crate::ring::RingCall>),
     /// Terminals, streams and the session page's terminal tab (#402).
     Term(Box<crate::terminal::TermCall>),
+    /// A capture for a bug report, its ask and its send (#105).
+    Capture(Box<crate::capture::CaptureCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -573,6 +602,8 @@ pub struct Eval {
     pub perturb: Option<String>,
     pub pixels: bool,
     pub size: Option<[u16; 2]>,
+    /// #855: each node's Debug text digest beside its result, a diagnostic only.
+    pub debug_text: bool,
 }
 
 pub struct Scenario {
@@ -609,10 +640,14 @@ pub struct Scenario {
     pub quotas: BTreeMap<String, Quota>,
     pub clock: Option<Clock>,
     pub commit_fault: Option<CommitFault>,
+    /// The hub ends at this time as SIGKILL would (#105).
+    pub kill_at: Option<i64>,
     /// Each document session's epoch counter starts here (#387: a long run without running it).
     pub epoch_start: u32,
     /// Ties break by a shuffle from this seed instead of by name and order (#387).
     pub shuffle: Option<u32>,
+    /// The hash the process keys with until a `migrate` call (#855).
+    pub hash: deep_canvas::schedule::HashVersion,
     /// The golden store; without it, the repo's committed store (#138).
     pub goldens: Option<PathBuf>,
     /// What every backend reports as its OS and driver for this run (#138).
@@ -623,6 +658,18 @@ pub struct Scenario {
     pub machine: Option<Map<String, Value>>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// Every session's pool in place of its budget class's (#857).
+    pub threads: Option<usize>,
+    /// Work that isn't a frame, running from before the first call to after the last (#857).
+    pub background: Vec<Job>,
+}
+
+/// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
+/// one, each evaluated frame after frame at the background priority.
+pub struct Job {
+    pub kind: &'static str,
+    pub replicas: usize,
+    pub document: Value,
 }
 
 /// One revision of a document (Revision).
@@ -652,6 +699,8 @@ pub struct Hub<'a> {
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
+    /// The scenario's background jobs' progress (#857).
+    pub background: Vec<crate::jobs::Progress>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -682,6 +731,8 @@ pub struct Hub<'a> {
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
     pub terms: crate::terminal::Terms,
+    /// Captures for bug reports, their asks and sends (#105).
+    pub capturing: crate::capture::Capturing,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -750,12 +801,20 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
+        admits_frame_json: startup.admits_frame_json,
     };
     Options {
         access_log: startup.test_build,
         shuffle: scenario.shuffle,
         planted,
         timing: None,
+        pool: Some(Arc::new(Workers {
+            priority: Priority::Frame,
+            performance_cores: crate::workers::performance_cores(),
+        })),
+        threads: scenario.threads,
+        hash: scenario.hash,
     }
 }
 
@@ -785,6 +844,7 @@ impl<'a> Hub<'a> {
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
+            background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
             pending3d: None,
@@ -806,6 +866,10 @@ impl<'a> Hub<'a> {
                 scenario.placement_planted,
             ),
             terms: crate::terminal::Terms::default(),
+            capturing: crate::capture::Capturing::restore(
+                scenario.state.as_deref(),
+                scenario.planted,
+            ),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -944,14 +1008,7 @@ impl<'a> Hub<'a> {
         size: Option<[u16; 2]>,
     ) -> Result<Raster, ()> {
         let size = size.unwrap_or_else(|| {
-            let s = |i: usize| {
-                doc["size"][i]
-                    .as_f64()
-                    .unwrap_or(1.0)
-                    .round()
-                    .clamp(1.0, 8192.0) as u16
-            };
-            [s(0), s(1)]
+            snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
         let gpu = self.gpu3().ok_or(())?;
@@ -1145,6 +1202,8 @@ impl<'a> Hub<'a> {
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
+            Call::Migrate(to) => self.migrate(*to),
+            Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -1269,6 +1328,7 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Capture(c) => self.capture_call(c),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {
@@ -1288,10 +1348,7 @@ impl<'a> Hub<'a> {
         let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
         let panel = self.scenario.docs.get(doc)?;
         let rect = self.slot(panel)?;
-        let size = [
-            rect[2].round().clamp(1., 8192.) as u16,
-            rect[3].round().clamp(1., 8192.) as u16,
-        ];
+        let size = snapshot::px([rect[2], rect[3]]);
         let record = self.record();
         let layers: Vec<Value> = self
             .bands()
@@ -1434,7 +1491,7 @@ impl<'a> Hub<'a> {
         let Some((writer, name)) = self.writer(&show.via) else {
             return refused("no_session");
         };
-        let Some(panel) = self
+        let Some(_) = self
             .scenario
             .docs
             .get(&show.doc)
@@ -1478,7 +1535,10 @@ impl<'a> Hub<'a> {
                 let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
-                        let coefficients = Coefficients::reference()
+                        let coefficients = self
+                            .startup
+                            .sealed
+                            .costs
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
@@ -1639,7 +1699,6 @@ impl<'a> Hub<'a> {
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);
         }
-        let _ = panel;
         // The checked revision becomes the session's current one; a snapshot is the session's
         // own frame at `t`.
         let doc = stamped.unwrap_or(Value::Null);
@@ -1735,13 +1794,7 @@ impl<'a> Hub<'a> {
                         Some(drawn3d) => drawn3d.ok(),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
-                            let size = show.size.unwrap_or_else(|| {
-                                let [w, h] = drawn.frame.size;
-                                [
-                                    w.round().clamp(1.0, 8192.0) as u16,
-                                    h.round().clamp(1.0, 8192.0) as u16,
-                                ]
-                            });
+                            let size = show.size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
                             let instanced = crate::packs::instanced(
                                 self.expansions

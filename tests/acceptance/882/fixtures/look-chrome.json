@@ -1,0 +1,116 @@
+{
+  "id": "clean",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "#882's acceptance tests: the clean look with chrome roles in the README's shape, for the wrong-program tests. Not shipped.",
+  "palette": {
+    "white": "#ffffff",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "night": "#0b0c0e",
+    "snow": "#f2f3f5",
+    "lagoon": "#1aa3c8",
+    "raised_light": "#f4f4f5",
+    "divider_light": "#e4e4e7",
+    "ink1_light": "#1b1d22ff",
+    "ink2_light": "#1b1d22dc",
+    "ink3_light": "#1b1d2288",
+    "ink4_light": "#1b1d2250",
+    "hover_light": "#1b1d220f",
+    "selected_light": "#1b1d221a",
+    "readout": "#1b1d22",
+    "line": "#1aa3c8",
+    "raised_dark": "#17181b",
+    "divider_dark": "#2a2c31",
+    "ink1_dark": "#f2f3f5ff",
+    "ink2_dark": "#f2f3f5c0",
+    "ink3_dark": "#f2f3f590",
+    "ink4_dark": "#f2f3f53a",
+    "hover_dark": "#f2f3f514",
+    "selected_dark": "#f2f3f524",
+    "readout_dark": "#f2f3f5"
+  },
+  "roles": {
+    "ground": "white",
+    "ink": "graphite",
+    "muted": "slate",
+    "accent": "lagoon",
+    "raised": "raised_light",
+    "divider": "divider_light",
+    "ink_primary": "ink1_light",
+    "ink_secondary": "ink2_light",
+    "ink_tertiary": "ink3_light",
+    "ink_disabled": "ink4_light",
+    "hover": "hover_light",
+    "selected": "selected_light",
+    "session_readout": "readout",
+    "session_line": "line"
+  },
+  "themes": {
+    "light": {},
+    "dark": {
+      "roles": {
+        "ground": "night",
+        "ink": "snow",
+        "raised": "raised_dark",
+        "divider": "divider_dark",
+        "ink_primary": "ink1_dark",
+        "ink_secondary": "ink2_dark",
+        "ink_tertiary": "ink3_dark",
+        "ink_disabled": "ink4_dark",
+        "hover": "hover_dark",
+        "selected": "selected_dark",
+        "session_readout": "readout_dark"
+      }
+    }
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  }
+}

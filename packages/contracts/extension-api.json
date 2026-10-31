@@ -3,7 +3,8 @@
     "method": "deep.on",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:a835ee7b3bd031e52a8ce58545b0b68d8a45a4b388fc8943bca15c65a9cba077",
     "params": {
       "type": "object",
@@ -43,7 +44,8 @@
     "method": "deep.registerResolver",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f",
     "params": {
       "type": "object",
@@ -61,6 +63,7 @@
     ],
     "since": "R1",
     "stability": "preview",
+    "tracking": "#364",
     "digest": "d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10",
     "params": {
       "type": "object",
@@ -88,6 +91,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a",
     "params": {
       "type": "object",
@@ -108,6 +112,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:72f80c99488b577be1da72993587eced73bc5fe76185dec9159ede0ac6513665",
     "params": {
       "type": "object",
@@ -150,6 +155,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#58",
     "digest": "d1:13a87be727b3bee24e988056df0a299ae55bc59ff858ea6e9bb1ff9e09aaeb98",
     "params": {
       "type": "object",
@@ -185,6 +191,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#262",
     "digest": "d1:3fbb3cce956746cd044a47e7f8dbd5c1d3c5f1f65911b2911e2e688e90492fc8",
     "params": {
       "type": "object",
@@ -204,7 +211,8 @@
     "method": "deep.registerAdapter",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#566",
     "digest": "d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27",
     "params": {
       "type": "object",
@@ -254,7 +262,8 @@
     "method": "deep.registerRoute",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:9a22da7084c9353b5a2acb7912aee3fbac5c471d4d6d6d2b6f5977a56a0362d4",
     "params": {
       "type": "object",
@@ -274,7 +283,8 @@
     "method": "deep.registerIndex",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a",
     "params": {
       "type": "object",
@@ -294,7 +304,8 @@
     "method": "deep.record.append",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#363",
     "digest": "d1:5e1abe51040927c6848a34cd130b32fd0c386bbd9337b39c791a7e8f492ae8bc",
     "params": {
       "type": "object",
@@ -316,7 +327,8 @@
     "method": "deep.record.query",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#363",
     "digest": "d1:925a9f01d1787905fb15b900f5ccbda1afd38233e119fc347440cb0b77f2d08c",
     "params": {
       "type": "object",
@@ -345,7 +357,8 @@
     "method": "deep.evidence.put",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:12f1088c044c8fbb685a7425fc5026272bb450c96675c1b36029e9648a953c66",
     "params": {
       "type": "object",
@@ -365,7 +378,8 @@
     "method": "deep.asks.create",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:52c8f6e58d710c8bc4663462c671d42192aee7be5745fdc88882dc116e5539fa",
     "params": {
       "type": "object",
@@ -387,7 +401,8 @@
     "method": "deep.config.get",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#359",
     "digest": "d1:71b7b4e2e3db1026349e712236f9d3231abdec149243becc4ac6fd1f85f6f08d",
     "params": {
       "type": "object",
@@ -407,7 +422,8 @@
     "method": "deep.notices.send",
     "variants": null,
     "since": "R1",
-    "stability": "stable",
+    "stability": "preview",
+    "tracking": "#365",
     "digest": "d1:1278dcb064eaaf8a0978a1e9e8761ce8ec0aa0f8da2668f87939b82ff27f2a2b",
     "params": {
       "type": "object",
@@ -430,24 +446,121 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
-    "digest": "d1:1982b1979f80ec15fa337a0efc5a66ae0ab5f636ac7a5a7479e6a4abe151f7b4",
+    "tracking": "#363",
+    "digest": "d1:7b959c929cca7fc80f98820934c9c93e767a8866fadad5a3db367ccfe61e0900",
     "params": {
       "type": "object",
       "properties": {
         "kind": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_.-]*$"
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
         },
-        "schema": {
+        "declared": {
           "type": "object",
-          "properties": {},
-          "required": [],
-          "additionalProperties": true
+          "properties": {
+            "generation": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "schema": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": true
+            },
+            "migrates": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "required": [
+            "generation",
+            "schema"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "kind",
-        "schema"
+        "declared"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store.put",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#363",
+    "digest": "d1:ac1335306776e0ed3ee5cdeba7b615c6f0dfde8fcd5c367f3f6f513bf15ec830",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {}
+      },
+      "required": [
+        "kind",
+        "key",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store.get",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#363",
+    "digest": "d1:c730609691c50bf822922c5ed1f8c3f9a1b0e16003aaf842b0905856483fc6cf",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store.list",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#363",
+    "digest": "d1:3a6e7074261baae03245f92663edcc20c0c3c888edcd18c537680339239048b9",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+        }
+      },
+      "required": [
+        "kind"
       ],
       "additionalProperties": false
     }
@@ -457,6 +570,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#365",
     "digest": "d1:c6c3eac01e6be5e714c8a1229d7c058e4f6679bc39bfde1f3e6b3e3aeef99245",
     "params": {
       "type": "object",
@@ -484,6 +598,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#364",
     "digest": "d1:9d5f56c1393c2dc10d5439a7b123f1c677a1dce2c5b57c3efc307d4689a1ce43",
     "params": {
       "type": "object",
@@ -504,6 +619,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#365",
     "digest": "d1:36e4ba36532096240f95b0f05c921cf33d8dde11b955effc2e48195f3e225d76",
     "params": {
       "type": "object",
@@ -526,6 +642,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#103",
     "digest": "d1:719a6a9525f4aaa667255c3f19a97aa71016639751d1cc9c4d8d732a5e897c40",
     "params": {
       "type": "object",
@@ -564,6 +681,7 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
+    "tracking": "#103",
     "digest": "d1:9ea66487ceafb0da1ba53b24cc8b234c31cb0e05bf1baca30e6a665c9d8d3d1e",
     "params": {
       "type": "object",
@@ -594,11 +712,33 @@
     }
   },
   {
+    "method": "deep.read",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#103",
+    "digest": "d1:2b3e3c57692e9afcf5ed8f7de18e1c2b2bb7dcc722de36649ab31e6ef473166d",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerAction",
     "variants": null,
     "since": "R2",
     "stability": "preview",
-    "digest": "d1:e3f3d719dd4a19c61231550621eb4d966cdf7eba22e542d6d7be541b396e1cca",
+    "tracking": "#363",
+    "digest": "d1:5a52fe18cc22318cd0ccc42e606723a61abef05b0cd255a25489008cba588bb8",
     "params": {
       "type": "object",
       "properties": {
@@ -618,6 +758,23 @@
             },
             "input": {
               "type": "object"
+            },
+            "output": {
+              "type": "object"
+            },
+            "changes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+              }
+            },
+            "reads": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+              }
             }
           },
           "required": [
@@ -630,6 +787,161 @@
       "required": [
         "name",
         "declared"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.fetch",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#364",
+    "digest": "d1:045034db4b5007472e621322e9c6b122fdec4cbe6c8d393c93fc688c6103c556",
+    "params": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "HEAD",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ]
+            },
+            "headers": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9-]+$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.terminal.open",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366",
+    "digest": "d1:95eb23764a43d724a267df4616cd7c6c1d08a47498adb5cc957293fccbe42f51",
+    "params": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "object",
+          "properties": {
+            "argv": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cwd": {
+              "type": "string",
+              "minLength": 1
+            },
+            "env": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "cols": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "argv",
+            "cwd",
+            "cols",
+            "rows",
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "spec"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.terminal.list",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366",
+    "digest": "d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.terminal.read",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366",
+    "digest": "d1:fa7a50bc188ddb120dbc0d0af0295f457bdc94c13e506b153d567cd02253e63a",
+    "params": {
+      "type": "object",
+      "properties": {
+        "terminal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "terminal",
+        "from"
       ],
       "additionalProperties": false
     }

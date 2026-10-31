@@ -17,12 +17,11 @@ pub struct Verdict {
 
 impl Verdict {
     pub fn to_json(&self) -> Value {
-        match &self.names {
-            Some(names) => {
-                json!({ "result": if self.pass { "pass" } else { "fail" }, "names": names })
-            }
-            None => json!({ "result": if self.pass { "pass" } else { "fail" } }),
+        let mut out = json!({ "result": if self.pass { "pass" } else { "fail" } });
+        if let Some(names) = &self.names {
+            out["names"] = json!(names);
         }
+        out
     }
 }
 
@@ -110,6 +109,7 @@ pub fn states(row: &str, seen: &[Seen]) -> Verdict {
     };
     for surface in seen {
         let text = &surface.text;
+        let lower = text.to_lowercase();
         let shown = shows(text, word)
             && match *word {
                 "sent back" => has_round(text),
@@ -120,7 +120,6 @@ pub fn states(row: &str, seen: &[Seen]) -> Verdict {
                 _ => true,
             }
             && !never.iter().any(|never| {
-                let lower = text.to_lowercase();
                 words_at(&lower, never)
                     .into_iter()
                     .any(|at| *never != "done" || !lower[..at].ends_with("says "))

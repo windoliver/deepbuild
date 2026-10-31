@@ -1,0 +1,28 @@
+{
+  "title": "push.record@1",
+  "description": "A forge's reading of one pushed commit (#364): the pusher the provider recorded for the push, never the commit's author or committer. An empty pusher is null.",
+  "x-since": "R2",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "maxLength": 40,
+      "description": "The commit's SHA-1, in lower-case hex."
+    },
+    "pusher": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 8192,
+      "description": "The account the provider recorded pushing it, or null when it recorded none."
+    }
+  },
+  "required": [
+    "commit",
+    "pusher"
+  ],
+  "additionalProperties": false
+}

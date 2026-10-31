@@ -1,6 +1,8 @@
 {
   "title": "definition.locked@1",
   "description": "A definition of done was locked. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "definitions"
   ],

@@ -1,6 +1,8 @@
 {
   "title": "job.recorded@1",
   "description": "One of DeepBuild's own headless jobs, recorded before anything of it starts: its kind, agent, account and folder, and what waits on it, so a hub that crashes before it starts finds it at its next start and never runs it twice.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -241,8 +241,8 @@ pub struct Terminal {
     osc: Vec<u8>,
     /// A UTF-8 sequence being read.
     utf8: Vec<u8>,
-    /// Rows a feed changed since the last [`Terminal::take_dirty`], by screen row.
-    dirty: std::collections::BTreeSet<u16>,
+    /// Whether a feed changed each screen row since the last [`Terminal::take_dirty`].
+    dirty: Vec<bool>,
     /// Whether the screen scrolled since the last take.
     scrolled: bool,
     /// Every OSC 52 read, with the terminator that ended it (`bel`, `st` or `c1`), for a
@@ -277,7 +277,7 @@ impl Terminal {
             params: Vec::new(),
             osc: Vec::new(),
             utf8: Vec::new(),
-            dirty: std::collections::BTreeSet::new(),
+            dirty: vec![false; usize::from(rows.max(1))],
             scrolled: false,
             queries: Vec::new(),
         }
@@ -347,9 +347,9 @@ impl Terminal {
         let n = if self.scrolled {
             usize::from(self.rows)
         } else {
-            self.dirty.len()
+            self.dirty.iter().filter(|d| **d).count()
         };
-        self.dirty.clear();
+        self.dirty.fill(false);
         self.scrolled = false;
         n
     }
@@ -368,6 +368,7 @@ impl Terminal {
             s.x = s.x.min(cols - 1);
             s.y = s.y.min(rows - 1);
         }
+        self.dirty.resize(usize::from(rows), false);
         self.cols = cols;
         self.rows = rows;
         self.scrolled = true;
@@ -581,7 +582,7 @@ impl Terminal {
                 let cell = &mut self.screen_mut().rows[usize::from(y)][usize::from(x)];
                 if !cell.g.is_empty() {
                     cell.g.extend(c);
-                    self.dirty.insert(y);
+                    self.dirty[usize::from(y)] = true;
                     return;
                 }
             }
@@ -608,7 +609,7 @@ impl Terminal {
         self.screen_mut().rows[usize::from(y)][usize::from(x)]
             .g
             .extend(c);
-        self.dirty.insert(y);
+        self.dirty[usize::from(y)] = true;
         Some(())
     }
 
@@ -635,7 +636,7 @@ impl Terminal {
         } else {
             s.x = x + 1;
         }
-        self.dirty.insert(y);
+        self.dirty[usize::from(y)] = true;
     }
 
     fn linefeed(&mut self) {
@@ -698,7 +699,7 @@ impl Terminal {
         for c in &mut row[usize::from(from)..usize::from(to)] {
             *c = Cell::blank(&pen);
         }
-        self.dirty.insert(y);
+        self.dirty[usize::from(y)] = true;
     }
 
     fn csi(&mut self, raw: &[u8], end: u8) {

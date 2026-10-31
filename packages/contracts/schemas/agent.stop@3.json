@@ -1,6 +1,8 @@
 {
   "title": "agent.stop@3",
   "description": "The agent stopped a turn: why, from the stop's closed set of causes, and what the turn used.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

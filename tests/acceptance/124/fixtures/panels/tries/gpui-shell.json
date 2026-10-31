@@ -1,0 +1,8 @@
+{
+  "id": "fixture-124-tries",
+  "name": "A panel that tries to reach past the replica",
+  "entry": "main.js",
+  "capabilities": {
+    "clipboard": { "write": true }
+  }
+}

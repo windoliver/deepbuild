@@ -2589,7 +2589,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -2703,6 +2703,15 @@ export interface EvidenceStored {
 
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
+
+/** extension.contract@1 */
+export interface ExtensionContract {
+  stability?: "stable" | "preview";
+  requires?: {
+    preview?: Array<string>;
+  };
+  calls?: Array<string>;
+}
 
 /** extension.edges@1 */
 export interface ExtensionEdges {
@@ -3761,6 +3770,12 @@ export interface PromiseWoken {
   evidence?: Array<string>;
 }
 
+/** push.record@1 */
+export interface PushRecord {
+  commit: string;
+  pusher: string | null;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
@@ -4351,6 +4366,29 @@ export interface SessionStartV4 {
   evidence?: Array<string>;
 }
 
+/** source.called@1 */
+export interface SourceCalled {
+  v: 1;
+  id: string;
+  kind: "source.called";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    host: string;
+    outcome: "answered" | "timeout" | "unreachable";
+    status?: number;
+    ms: number;
+    bytes: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** spend.approved@1 */
 export interface SpendApproved {
   v: 1;
@@ -4515,6 +4553,27 @@ export interface StopHeld {
     queue_wait: number;
     code_changing: boolean;
     budget_cost: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** store.item@1 */
+export interface StoreItem {
+  v: 1;
+  id: string;
+  kind: string;
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    generation: number;
+    value: unknown;
+    call: string | null;
   };
   evidence?: Array<string>;
 }
@@ -5511,6 +5570,20 @@ export interface WorkBroke {
     cause: "revert" | "follow_up_fix" | "is_it_done" | "issue";
   };
   evidence?: Array<string>;
+}
+
+/** work.item@1 */
+export interface WorkItem {
+  source_id: string;
+  link: string;
+  title: string;
+  body: string;
+  criteria: Array<string>;
+  authors: Array<{
+    handle: string;
+    role: "owner" | "collaborator" | "outside";
+  }>;
+  updated: string;
 }
 
 /** worktree.created@1 */

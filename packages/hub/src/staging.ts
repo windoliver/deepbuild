@@ -15,7 +15,6 @@ import type { Holds } from './holds.js';
 import { deepHook } from './paths.js';
 import { refusal, Refused, STAGE_HOLD_MS, type Gated, type HookMeta, type Plant } from './wire.js';
 
-const sql = (s: string) => s.replace(/'/g, "''");
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 /** The ceilings and the set time when config.json says nothing. */
 const DEFAULTS = { files: 10_000, seconds: 10, keepMs: 3 * UNITS.d! };
@@ -43,7 +42,7 @@ export function settings(root: string): Settings {
 
 export interface StagingOptions {
   root: string;
-  raw(query: string): Promise<unknown[]>;
+  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now(): number;
   plant: Plant | undefined;
   append(connection: Connection, input: EventInput): Promise<void>;
@@ -138,7 +137,7 @@ export class Staging {
     const handle = params.staged;
     if (typeof handle !== 'string' || !/^staged:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/staged', 'Name the staging by its handle, staged:<id>.', handle));
     const id = handle.slice('staged:'.length);
-    const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'command.staged' AND id = '${sql(id)}'`)) as { data: string }[];
+    const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'command.staged' AND id = ?`, [id])) as { data: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/staged', `No staging ${handle} in the record.`, handle));
     const { folders, until, command } = JSON.parse(row.data) as { folders: string[]; until: number; command: string };
     const copy = join(this.dir, id);
@@ -156,7 +155,7 @@ export class Staging {
   async prune(): Promise<void> {
     const names = await readdir(this.dir).catch(() => [] as string[]);
     for (const name of names) {
-      const [row] = (await this.o.raw(`SELECT json_extract(data, '$.until') AS until FROM events WHERE kind = 'command.staged' AND id = '${sql(name)}'`)) as { until: number }[];
+      const [row] = (await this.o.raw(`SELECT json_extract(data, '$.until') AS until FROM events WHERE kind = 'command.staged' AND id = ?`, [name])) as { until: number }[];
       const path = join(this.dir, name);
       const gone = row ? this.o.now() >= row.until : Date.now() - ((await stat(path).catch(() => undefined))?.mtimeMs ?? 0) > ORPHAN_MS;
       if (gone) await rm(path, { recursive: true, force: true });

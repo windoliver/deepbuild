@@ -24,9 +24,25 @@ const QUOTE = 400;
 /** Pages the wiki generates from other pages' claims, such as its standing questions: no index holds them twice. */
 const VIEWS = 'questions/';
 
-/** The words a query asks for: every hit holds each of them as a word. */
-export const words = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-const holds = (text: string, wanted: readonly string[]): boolean => { const have = new Set(words(text)); return wanted.every((w) => have.has(w)); };
+/** The words a query asks for, runs of letters and digits in any script: every hit holds each of them as a word. */
+export const words = (text: string): string[] => text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+/** A word in a script written without spaces has no boundaries to split on, so a hit holds it anywhere in its text. */
+const spaceless = (word: string): boolean => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(word);
+const holds = (text: string, wanted: readonly string[]): boolean => {
+  const have = new Set(words(text));
+  const lower = text.normalize('NFC').toLowerCase();
+  return wanted.every((w) => (spaceless(w) ? lower.includes(w) : have.has(w)));
+};
+/** What a query with no word left says, so an empty reply is never mistaken for nothing found. */
+const NO_WORDS = 'The query had no words to search for: a word is a run of letters or digits.';
+/**
+ * SQL that keeps the rows whose column might hold every word, for `holds` to settle: LIKE folds case for a to z only,
+ * so a word with any other letter is left to `holds`.
+ */
+const mightHold = (column: string, wanted: readonly string[]): { sql: string; params: string[] } => {
+  const ascii = wanted.filter((w) => /^[\x00-\x7f]+$/.test(w));
+  return { sql: ascii.map(() => `${column} LIKE ?`).join(' AND ') || '1', params: ascii.map((w) => `%${w}%`) };
+};
 
 /** The claims on the wiki's pages, each by `<page>#<id>`, so one ID on two pages stays two claims. */
 export function pageClaims(wiki: string): Claim[] {
@@ -58,11 +74,18 @@ export async function openIndex(wiki: string, module?: string): Promise<IndexFil
   return fill;
 }
 
-const list = (values: readonly string[]): string => values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ');
-/** The ledger's index: every query word an FTS5 term, and each hit holding every word as a word, as the reference index reads it. */
+/** One `?` per value, for an IN list whose values are bound. */
+const marks = (values: readonly unknown[]): string => values.map(() => '?').join(', ');
+/**
+ * The ledger's index: every query word an FTS5 term, and each hit holding every word as a word, as the reference index
+ * reads it. FTS5 keeps a spaceless run as one token, so a word in such a script is found by LIKE instead.
+ */
 async function ledgerSearch(input: SearchIn, wanted: readonly string[]): Promise<IndexHit[]> {
-  // Each word is letters and digits only, so it goes into the SQL as it is.
-  const rows = (await input.raw(`SELECT handle, page, text FROM wiki_text WHERE wiki_text MATCH '${wanted.map((w) => `"${w}"`).join(' ')}' ORDER BY rowid`)) as { handle: string; page: string; text: string }[];
+  const terms = wanted.filter((w) => !spaceless(w));
+  const runs = wanted.filter(spaceless);
+  const where = [...(terms.length ? ['wiki_text MATCH ?'] : []), ...runs.map(() => 'text LIKE ?')].join(' AND ');
+  const params = [...(terms.length ? [terms.map((w) => `"${w}"`).join(' ')] : []), ...runs.map((w) => `%${w}%`)];
+  const rows = (await input.raw(`SELECT handle, page, text FROM wiki_text WHERE ${where} ORDER BY rowid`, params)) as { handle: string; page: string; text: string }[];
   return rows.filter((r) => holds(r.text, wanted)).map((r) => ({ claim: r.handle.slice(r.handle.indexOf('#') + 1), page: r.page, quote: r.text, source: `wiki/${r.page}.md` }));
 }
 
@@ -76,14 +99,14 @@ interface Recorded { handle: string; text: string; known: string; proof: number;
 async function wikiHits(found: IndexHit[], input: SearchIn): Promise<Hit[]> {
   const handles = found.map((h) => `wiki:${h.page}#${h.claim.startsWith(`${h.page}#`) ? h.claim.slice(h.page.length + 1) : h.claim}`);
   if (!handles.length) return [];
-  const claims = new Map(((await input.raw(`SELECT handle, text, known, proof, scope, state FROM wiki_claims WHERE handle IN (${list(handles)})`)) as Recorded[]).map((c) => [c.handle, c]));
+  const claims = new Map(((await input.raw(`SELECT handle, text, known, proof, scope, state FROM wiki_claims WHERE handle IN (${marks(handles)})`, handles)) as Recorded[]).map((c) => [c.handle, c]));
   const sources = new Map<string, unknown[]>();
-  for (const s of (await input.raw(`SELECT claim, at, repo, path, commit_sha, quote, role, hash FROM wiki_sources WHERE claim IN (${list(handles)}) ORDER BY claim, n`)) as Record<string, string | null>[]) {
+  for (const s of (await input.raw(`SELECT claim, at, repo, path, commit_sha, quote, role, hash FROM wiki_sources WHERE claim IN (${marks(handles)}) ORDER BY claim, n`, handles)) as Record<string, string | null>[]) {
     const { claim, commit_sha, ...rest } = s;
     const kept = Object.fromEntries(Object.entries({ ...rest, commit: commit_sha }).filter(([, v]) => v !== null));
     sources.set(claim!, [...(sources.get(claim!) ?? []), kept]);
   }
-  const learned = new Set(((await input.raw(`SELECT DISTINCT target FROM learned_layer WHERE layer = 'learned' AND target IN (${list(handles)})`)) as { target: string }[]).map((r) => r.target));
+  const learned = new Set(((await input.raw(`SELECT DISTINCT target FROM learned_layer WHERE layer = 'learned' AND target IN (${marks(handles)})`, handles)) as { target: string }[]).map((r) => r.target));
   const hits: Hit[] = [];
   found.forEach((h, i) => {
     const source = handles[i]!;
@@ -106,7 +129,7 @@ export interface SearchIn {
   /** A swapped-in index; undefined reads the ledger's own. */
   index: IndexFill | undefined;
   /** SQL over the record, read only. */
-  raw(sql: string): Promise<unknown[]>;
+  raw(sql: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   /** The worktree whose spec is the project's, if the call names one the hub knows. */
   worktree: string | undefined;
   /** The session the call is bound to; undefined reads only what belongs to no session. `everyone` reads every session's (a planted wrong program). */
@@ -118,15 +141,14 @@ export interface SearchIn {
 }
 
 /** Every hit for the query, each citing its source: the wiki's and the spec's, then the session's own, then decisions, newest first. */
-export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: number }> {
+export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: number; note?: string }> {
   const wanted = words(input.query);
-  if (!wanted.length) return { hits: [], more: 0 };
-  // Each word is letters and digits only, so it goes into the SQL as it is.
-  const like = (column: string) => wanted.map((w) => `${column} LIKE '%${w}%'`).join(' AND ');
+  if (!wanted.length) return { hits: [], more: 0, note: NO_WORDS };
   const hits: Hit[] = await wikiHits(input.index ? await input.index.search(input.query) : await ledgerSearch(input, wanted), input);
 
+  const asked = mightHold('a.question', wanted);
   const decisions = (await input.raw(`SELECT e.id AS id, a.question AS question, e.data AS data FROM events e JOIN asks a ON a.id = substr(json_extract(e.data, '$.ask'), 5)
-    WHERE e.kind = 'decision.created' AND ${like('a.question')} ORDER BY e.log_pos DESC`)) as { id: string; question: string; data: string }[];
+    WHERE e.kind = 'decision.created' AND ${asked.sql} ORDER BY e.log_pos DESC`, asked.params)) as { id: string; question: string; data: string }[];
   const decided: Hit[] = [];
   for (const d of decisions) {
     if (!holds(d.question, wanted)) continue;
@@ -137,8 +159,9 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
   const own = input.session;
   const record: Hit[] = [];
   if (own !== undefined) {
-    const whose = typeof own === 'string' ? `AND session_id = '${own.replace(/'/g, "''")}'` : '';
-    const rows = (await input.raw(`SELECT id, kind, data FROM events WHERE kind IN ('open_item.opened', 'verdict.made') ${whose} AND ${like('data')} ORDER BY log_pos DESC`)) as { id: string; kind: string; data: string }[];
+    const whose = typeof own === 'string' ? 'AND session_id = ?' : '';
+    const held = mightHold('data', wanted);
+    const rows = (await input.raw(`SELECT id, kind, data FROM events WHERE kind IN ('open_item.opened', 'verdict.made') ${whose} AND ${held.sql} ORDER BY log_pos DESC`, [...(typeof own === 'string' ? [own] : []), ...held.params])) as { id: string; kind: string; data: string }[];
     for (const row of rows) {
       const d = JSON.parse(row.data) as { task_ref?: string; text?: string; verdict?: string; reasons?: string[]; smallest?: string };
       const text = row.kind === 'open_item.opened' ? String(d.text) : [...(d.reasons ?? []), d.smallest ?? ''].join(' ');

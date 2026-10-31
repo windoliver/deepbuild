@@ -1,0 +1,8 @@
+{
+  "id": "test/reader",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "actions": ["ext.reader.query"],
+  "requires": { "preview": ["deep.registerAction", "deep.record.query"] }
+}
