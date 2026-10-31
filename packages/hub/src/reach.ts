@@ -18,6 +18,7 @@ export function apiHost(): string {
     if (typeof value !== 'string') continue;
     try {
       const url = new URL(value);
+      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname) continue;
       return `${url.hostname}:${url.port || (url.protocol === 'http:' ? '80' : '443')}`;
     } catch { /* not a URL: the next */ }
   }
