@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { call, type Reply } from './client.js';
+import { deprecatedCalls } from './contracts.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -16,6 +17,7 @@ const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 interface Manifest {
   id?: string; version?: string; digest?: string; publisher_key?: string; access?: { words?: string[] }; notices?: string[]; actions?: string[];
   checks?: string[]; provides?: { interface: string }[]; uses?: { interface: string }[]; replaces?: string[]; conflicts?: string[]; kernel?: string[];
+  calls?: string[];
 }
 
 const list = (values: readonly string[] | undefined): string => (values?.length ? values.join(', ') : 'none');
@@ -49,6 +51,8 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     `  replaces: ${list(m.replaces)}`,
     `  conflicts with: ${list(m.conflicts)}`,
     `  runs on: ${list(m.kernel)}`,
+    // The install check names each deprecated method the manifest calls, served through its adapter until it stops (#139).
+    ...deprecatedCalls(m).map((e) => `  deprecated: ${m.id} calls ${e.method}, deprecated since ${e.deprecated_since}; it is served through ${e.replaced_by}${e.stops_serving ? ` until ${e.stops_serving}` : ''}, so call ${e.replaced_by}`),
     '',
   ].join('\n'));
   let reply: Reply;

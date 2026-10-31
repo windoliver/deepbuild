@@ -1,6 +1,8 @@
 {
   "title": "promise.woken@1",
   "description": "The agent heard its promised check (#120): through its waiter's wake, the context of its next prompt, or a held stop.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

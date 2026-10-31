@@ -12,6 +12,7 @@ import { Worker } from 'node:worker_threads';
 import { shipped, type HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
+import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { hubAdapters } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
@@ -78,6 +79,17 @@ const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/**
+ * The connection as one call of a deprecated method sees it: its reply line carries the notice beside its result.
+ * Every other property reads and writes through to the connection itself.
+ */
+function noticed<C extends object>(conn: C & { write(value: Obj): void }, id: unknown, notice: DeprecatedNotice): C {
+  const write = (value: Obj): void => conn.write(value.id === id && 'result' in value ? { ...value, deprecated: notice } : value);
+  return new Proxy(conn, {
+    get: (target, key) => (key === 'write' ? write : Reflect.get(target, key, target)),
+    set: (target, key, value) => Reflect.set(target, key, value, target),
+  });
+}
 const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
 /** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
 const warnings = (ruled: string): string[] =>
@@ -291,6 +303,8 @@ class Hub {
   private readonly acking = new Set<string>();
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
+  /** The published JSON-RPC methods: a deprecated one is served through its replacement, with a notice (#139). */
+  private readonly adapter = contractAdapter(rpcTable());
   readonly start = ulid(Date.now());
   private helloLine = '';
   /** The long waits (#120): expected times, overruns and the lines they show; one timer for the earliest due. */
@@ -838,14 +852,20 @@ class Hub {
     conn.end();
   }
 
-  private method(conn: Conn, value: Obj): void {
+  private method(given: Conn, value: Obj): void {
+    let conn = given;
     const id = value.id ?? null;
     if (value.v !== 1) return conn.write({ id, error: versionRefusal(value) });
     if (!('method' in value)) {
       return conn.write({ id, error: refusal('role', '', `A hook request is read only as a connection's first line; this ${conn.name} connection can't send one.`, conn.name) });
     }
-    const method = value.method;
-    if (typeof method !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', method) });
+    const called = value.method;
+    if (typeof called !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', called) });
+    // A deprecated method is served through the adapter (#139): the method that replaced it runs, and the reply says so.
+    const replaced = this.adapter.replacing(called);
+    const method = replaced?.replaced_by ?? called;
+    const notice: DeprecatedNotice | undefined = replaced && this.plant !== 'silent-deprecated' ? this.adapter.serve(called, null, () => null).deprecated : undefined;
+    if (notice) conn = noticed(conn, id, notice);
     const allowed = ALLOWED.get(method);
     if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {

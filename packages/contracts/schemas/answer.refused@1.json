@@ -1,6 +1,8 @@
 {
   "title": "answer.refused@1",
   "description": "An answer reached an ask that had already closed, and the core refused it: it names how the ask closed, when, and the channel the answer came from. It changes nothing about the ask, and nothing reaches the agent. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "asks"
   ],

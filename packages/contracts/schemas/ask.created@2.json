@@ -1,6 +1,8 @@
 {
   "title": "ask.created@2",
   "description": "An ask was created. It always ends: it has a deadline, a fallback and a default. A taste call over candidates names the ones dropped before the ask as near copies of a candidate it keeps.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "$defs": {
     "pinned_to": {
       "oneOf": [

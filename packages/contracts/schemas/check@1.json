@@ -1,6 +1,8 @@
 {
   "title": "check@1",
   "description": "A check; a PASS never rests on a model alone.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "kind": {

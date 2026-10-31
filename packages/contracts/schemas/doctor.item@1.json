@@ -1,6 +1,8 @@
 {
   "title": "doctor.item@1",
   "description": "One item deep doctor shows: a stable code from the extensible doctor family, its level, the evidence read and the fix. A reader at an earlier minor takes a code it doesn't know for unknown, never for a success.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "code": {
@@ -26,6 +28,7 @@
         "binary_differs",
         "token_expiring",
         "prompt_failed",
+        "deprecated_used",
         "unknown"
       ],
       "description": "What the item found: healthy when the check ran and found nothing wrong; not_checked when nobody ran it, never ok.",

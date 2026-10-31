@@ -1,6 +1,8 @@
 {
   "title": "adapter@1",
   "description": "An adapter: one per agent, its facts, its capability flags and what it names unsupported; delivery and every core rule choose a route from the flags, never from the agent name.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {
