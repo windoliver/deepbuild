@@ -47,7 +47,11 @@ export type Plant =
   // contradicted claim deleted.
   | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
   // #27's: deep_ask raised without its subject, so a repeated question reaches you.
-  | 'repeat-reaches-you';
+  | 'repeat-reaches-you'
+  // #823's: deep_wait reading its ask every 100 ms, and a stopping hub answering waiting calls as a success.
+  | 'deep-wait-polls' | 'stop-answers-waiting'
+  // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
+  | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -79,6 +83,8 @@ const PLANTS: readonly string[] = [
   'stages-without-ceiling', 'stages-unpredicted-writes',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'repeat-reaches-you',
+  'deep-wait-polls', 'stop-answers-waiting',
+  'deep-show-writer-from-payload', 'deep-show-waits-for-app',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

@@ -187,6 +187,20 @@ pub enum Planted {
     ConflictsUnreported,
     /// #401: every key, the escape chord too, goes to the focused panel alone.
     FocusedPanelTakesEscape,
+    /// #402: the terminal applies at most 30 updates a second, merging the rest.
+    Terminal30PerSecond,
+    /// #402: the cell grid draws each patch a frame after the frame it should.
+    CellsAFrameLate,
+    /// #402: a video stream shows the frames a pause queued when its panel resumes.
+    VideoShowsLate,
+    /// #402: a video stream drops frames and its counter stays 0.
+    VideoDropsUncounted,
+    /// #402: the terminal tab draws the terminal's text as text items, outside the cell grid.
+    TabDrawsText,
+    /// #402: the terminal tab redraws at most 30 times a second.
+    TabRedrawsAt30hz,
+    /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
+    TabDrawsCapture,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -232,6 +246,10 @@ pub struct Session {
     pub name: String,
     /// The agent's process, the parent its hooks came from: (pid, start time).
     pub process: (u64, i64),
+    /// #402: where a session runs in a terminal the hub doesn't host, and the captured screen
+    /// of it the page must never draw; both `None` for a hosted one or none.
+    pub runs_in: Option<String>,
+    pub capture: Option<Vec<String>>,
 }
 
 pub struct Process {
@@ -517,6 +535,8 @@ pub enum Call {
     },
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
+    /// Terminals, streams and the session page's terminal tab (#402).
+    Term(Box<crate::terminal::TermCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -644,6 +664,8 @@ pub struct Hub<'a> {
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
+    /// Terminals, streams and session pages (#402).
+    pub terms: crate::terminal::Terms,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -762,6 +784,7 @@ impl<'a> Hub<'a> {
                 scenario.layout.as_ref(),
                 scenario.placement_planted,
             ),
+            terms: crate::terminal::Terms::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -1208,9 +1231,80 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Term(t) => self.term_call(t),
         };
         self.stamp(&mut reply);
         reply
+    }
+
+    /// #806: a document's current revision as the hub records it once presented: its writer, the
+    /// layer the connection stamped and its canonical document, kept in the evidence store by the
+    /// hash it names; and every layer on screen on its panel, back to front, as the app draws them.
+    pub fn presented_revision(&self, doc: &str) -> Option<Value> {
+        let row = self.current(doc)?;
+        let canonical = canonical_in(&row.doc, &self.startup.sealed.kinds()).ok()?;
+        let hash = evidence::put(&self.scenario.evidence, canonical.bytes.as_bytes()).ok()?;
+        let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
+        let panel = self.scenario.docs.get(doc)?;
+        let rect = self.slot(panel)?;
+        let size = [
+            rect[2].round().clamp(1., 8192.) as u16,
+            rect[3].round().clamp(1., 8192.) as u16,
+        ];
+        let record = self.record();
+        let layers: Vec<Value> = self
+            .bands()
+            .iter()
+            .filter(|b| {
+                b.doc
+                    .as_deref()
+                    .is_some_and(|d| self.scenario.docs.get(d) == Some(panel))
+            })
+            .map(|b| {
+                let mut out = b.to_json();
+                let current = b.doc.as_deref().and_then(|d| self.current(d));
+                // The presented document's items this layer draws; another document's layer on the
+                // panel draws none of them.
+                let drawn: Vec<String> = current
+                    .filter(|_| b.doc.as_deref() == Some(doc))
+                    .and_then(|r| r.doc["items"].as_object())
+                    .map(|m| m.keys().cloned().collect())
+                    .unwrap_or_default();
+                // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
+                // kept in the evidence store for the app to draw, by its hash.
+                let picture = current.and_then(|r| {
+                    let doc = r.doc.as_object()?;
+                    let mut renderer = Renderer::new();
+                    let d = renderer
+                        .prepare(
+                            doc,
+                            0,
+                            &self.look.light,
+                            self.look.status.as_ref(),
+                            &record,
+                            &self.scenario.evidence,
+                        )
+                        .ok()?;
+                    let png = snapshot::png(renderer.raster(&d, size, None), size);
+                    evidence::put(&self.scenario.evidence, &png).ok()
+                });
+                out["doc"] = json!(b.doc);
+                out["items"] = json!(drawn);
+                out["picture"] = json!(picture);
+                out
+            })
+            .collect();
+        Some(json!({
+            "doc": doc,
+            "rev": row.rev,
+            "hash": hash,
+            "writer": row.writer.to_json(),
+            "layer": row.writer.layer_id(),
+            "items": items,
+            "panel": panel,
+            "rect": rect,
+            "layers": layers,
+        }))
     }
 
     /// Every canvas reply carries the core's version and the module-set digest (#305;
