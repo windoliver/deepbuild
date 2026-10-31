@@ -688,10 +688,12 @@ export class Core {
   // ---- Hooks.
 
   /** A Claude Code stop whose payload says server_error, under 10 minutes old: the try of the host its API calls go to. */
-  private tryNetwork(drafts: Draft[], meta: HookMeta): Promise<void> | undefined {
+  private tryNetwork(drafts: Draft[], meta: HookMeta, tries = new Map<string, Promise<boolean>>()): Promise<void> | undefined {
     if ((meta.agent !== 'claude-code' && meta.agent !== 'claude') || meta.fields?.error !== 'server_error' || this.now() - (drafts[0]?.ts ?? 0) >= 10 * 60_000) return undefined;
     const host = apiHost();
-    return reachable(host).then((reached) => { meta.network = { host, reached }; });
+    const trying = tries.get(host) ?? reachable(host);
+    tries.set(host, trying);
+    return trying.then((reached) => { meta.network = { host, reached }; });
   }
 
   /**
@@ -4464,6 +4466,8 @@ export class Core {
    * one appended right after the cut bytes included. A file is removed only once its events are in a FULL commit.
    */
   private async replaySpool(): Promise<void> {
+    // One try per host for the pass: a spool of stops from one outage holds later hooks for one try at most.
+    const tries = new Map<string, Promise<boolean>>();
     if (!existsSync(this.root.spool)) return;
     // Every deep-hook appends to spool.jsonl. It moves aside first, so a hook that spools during the replay begins
     // a new file, which the next replay takes. A hook whose write lands in the moved file sees the path no longer
@@ -4518,7 +4522,7 @@ export class Core {
         }
         if (parsed?.kind === 'hook') {
           const { drafts, meta } = parsed;
-          await this.tryNetwork(drafts, meta);
+          await this.tryNetwork(drafts, meta, tries);
           await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch((error: unknown) => {
             failed = true;
             process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
