@@ -53,7 +53,9 @@ export type Plant =
   // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
-  | 'silent-deprecated';
+  | 'silent-deprecated'
+  // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
+  | 'signature-covers-anything';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -88,6 +90,7 @@ const PLANTS: readonly string[] = [
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
+  'signature-covers-anything',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
