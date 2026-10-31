@@ -26,7 +26,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query);
   // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
-  const notes = new Map(((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'This stop isn''t held%') ORDER BY log_pos")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
+  const notes = new Map(((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   // A turn you interrupted, with no prompt since (#39).
   const interrupted = new Set(((await query("SELECT e.session_id FROM events e WHERE e.kind = 'session.reading' AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
@@ -157,6 +157,7 @@ export function render(rows: readonly StatusRow[], from: string): string {
       out.push(repo);
       for (const r of shown.filter((m) => m.repo === repo).sort((a, b) => rank(a) - rank(b))) {
         out.push(`  ${r.id.slice(0, 8)}  ${r.state.padEnd(9)}  ${r.agent.padEnd(11)}  ${r.why}`);
+        if (r.note) out.push(`      ${r.note}`);
         for (const reading of r.readings ?? []) out.push(`      ${reading}`);
         for (const call of r.calls ?? []) out.push(`      ${call}`);
         // The planted wrong program lists the turn's tool calls and leaves its commits out.
