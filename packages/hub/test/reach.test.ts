@@ -133,9 +133,14 @@ describe('a stop the hub tries', () => {
       mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
       writeFileSync(join(root, 'spool', 'spool.jsonl'), sessions.map((s) => line(s, 'StopFailure', { error: 'server_error', prompt_id: 'p1' }, { late: true })).join(''), { mode: 0o600 });
       const at = Date.now();
-      await reply(sock, line(OTHER, 'UserPromptSubmit', { prompt: 'again', prompt_id: 'p2' }));
-      expect(Date.now() - at, 'a prompt behind the replay waits for one try, not three').toBeLessThan(3000);
-      expect(await owner(root), 'the replayed stop was tried').toBe('you');
+      await send(sock, line(OTHER, 'SessionStart', { source: 'resume' }));
+      const landed = (): number => {
+        const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+        try { return (db.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'agent.stop' AND json_extract(data, '$.owner') = 'you'").get() as { n: number }).n; } finally { db.close(); }
+      };
+      while (landed() < 3 && Date.now() - at < 10_000) await pause(50);
+      expect(landed(), 'every replayed stop was tried').toBe(3);
+      expect(Date.now() - at, 'the replay took one try, not three').toBeLessThan(3500);
     });
   }, 60_000);
 

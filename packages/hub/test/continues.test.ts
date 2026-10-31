@@ -346,6 +346,12 @@ describe('a spend limit', () => {
 describe('a dropped connection', () => {
   it('stops the session as a transient the service owns, and continues it once by itself', async () => {
     await withHub(async (root, home) => {
+      // The service answers: the hub's try of its host, a real connection, succeeds.
+      const service = net.createServer((c) => c.destroy());
+      await new Promise<void>((r) => service.listen(0, '127.0.0.1', r));
+      mkdirSync(join(home, '.claude'), { recursive: true });
+      writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://127.0.0.1:${(service.address() as net.AddressInfo).port}` } }));
+      service.unref();
       const id = 'ab6f8d9f-8888-4999-8aaa-bbbbccccdddd';
       const project = join(home, '.claude', 'projects', 'tmp');
       mkdirSync(project, { recursive: true });
