@@ -4,7 +4,7 @@
 //! platform-specific; off macOS every drawing line answers `{"ok":false,"code":"unsupported_platform"}`.
 //! The surface is the #391 acceptance README's, with #392's added: `check` and `look` (on every
 //! platform), looks by ID or as look@1, status states, readings with their as-of time, replay and
-//! frame captures; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
+//! frame captures, and #882's: `look` answers each theme's roles; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`.
 //!
@@ -117,6 +117,21 @@ fn palette(value: &Value) -> Option<Palette> {
         .collect()
 }
 
+/// Each theme's roles as `#rrggbb`, or `#rrggbbaa` for a role at an alpha (#882).
+fn roles(look: &Look) -> Value {
+    let theme = |opaque: &Palette, alpha: &std::collections::BTreeMap<String, look::Rgba>| {
+        let mut out: Map<String, Value> = opaque
+            .iter()
+            .map(|(r, [red, g, b])| (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}"))))
+            .collect();
+        out.extend(alpha.iter().map(|(r, [red, g, b, a])| {
+            (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}{a:02x}")))
+        }));
+        Value::Object(out)
+    };
+    json!({"light": theme(&look.light, &look.light_alpha), "dark": theme(&look.dark, &look.dark_alpha)})
+}
+
 /// A look as a request names it: a shipped look's ID, a look@1 definition, or #391's role map
 /// `{light, dark?}` (with no status map), with the definition it resolved from. The status guard
 /// refuses a look@1 that gives two states one glyph, naming the pair.
@@ -135,6 +150,8 @@ fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
             let roles = Look {
                 light,
                 dark,
+                light_alpha: Default::default(),
+                dark_alpha: Default::default(),
                 status: None,
             };
             return Some(Ok((roles, Value::Object(map.clone()))));
@@ -264,8 +281,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         },
     };
     if command == "look" {
-        let (_, def) = look?;
-        return Some(Answer::Now(json!({"ok": true, "look": def})));
+        let (look, def) = look?;
+        return Some(Answer::Now(
+            json!({"ok": true, "look": def, "roles": roles(&look)}),
+        ));
     }
     if command == "check" {
         let doc = doc(input.get("doc"))?;

@@ -5,7 +5,7 @@
 //! draws through the `Canvas` component, whose items live in a `CanvasScene`, a retained-state
 //! handle the script keeps across renders and updates with `set(id, value)`. Every item drawn in
 //! the last frame is recorded with its evaluated value, which is what a replica's text snapshot
-//! lists.
+//! lists, and with where it was drawn, which is where a replica's input reaches it (#124).
 
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
@@ -23,11 +23,13 @@ pub const SCENE: &str = "CanvasScene";
 
 thread_local! {
     static DRAWN: RefCell<BTreeMap<String, Value>> = const { RefCell::new(BTreeMap::new()) };
+    static PLACED: RefCell<BTreeMap<String, Bounds<Pixels>>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 /// Forgets the items of earlier frames; call before the frame a snapshot reads.
 pub fn clear_items() {
     DRAWN.with(|drawn| drawn.borrow_mut().clear());
+    PLACED.with(|placed| placed.borrow_mut().clear());
 }
 
 /// The items drawn since [`clear_items`], by ID, with their evaluated values.
@@ -41,9 +43,23 @@ pub fn items() -> Vec<(String, Value)> {
     })
 }
 
-pub(crate) fn record(id: &str, value: Value) {
+/// Where each item drawn since [`clear_items`] was drawn, in window points.
+pub fn placed() -> Vec<(String, Bounds<Pixels>)> {
+    PLACED.with(|placed| {
+        placed
+            .borrow()
+            .iter()
+            .map(|(id, bounds)| (id.clone(), *bounds))
+            .collect()
+    })
+}
+
+pub(crate) fn record(id: &str, value: Value, bounds: Bounds<Pixels>) {
     DRAWN.with(|drawn| {
         drawn.borrow_mut().insert(id.to_owned(), value);
+    });
+    PLACED.with(|placed| {
+        placed.borrow_mut().insert(id.to_owned(), bounds);
     });
 }
 
@@ -54,7 +70,7 @@ pub fn line(id: &str, values: Vec<f64>, color: Hsla) -> Canvas<()> {
     canvas(
         |_, _, _| (),
         move |bounds, _, window, _| {
-            record(&id, json!(values));
+            record(&id, json!(values), bounds);
             paint_line(bounds, &values, color, window);
         },
     )
@@ -108,7 +124,8 @@ impl ComponentMaterializer for CanvasMaterializer {
             .payload()
             .downcast_ref::<CanvasPayload>()
             .ok_or_else(|| anyhow::anyhow!("Canvas received an incompatible payload"))?;
-        let color = payload.color.unwrap_or_else(|| rgb(0x2563eb).into());
+        // A script that names no color draws its line in the look's line role.
+        let color = payload.color;
         let scene = request.with_state::<Entity<Scene>, _>(&payload.scene, Clone::clone)?;
         let items: Vec<(String, Vec<f64>)> = request.with_window_app(|_, cx| {
             Ok(scene
@@ -122,8 +139,9 @@ impl ComponentMaterializer for CanvasMaterializer {
             canvas(
                 |_, _, _| (),
                 move |bounds, _, window, _| {
+                    let color = color.unwrap_or_else(|| crate::chrome::of(window).session_line);
                     for (id, values) in &items {
-                        record(id, json!(values));
+                        record(id, json!(values), bounds);
                         paint_line(bounds, values, color, window);
                     }
                 },

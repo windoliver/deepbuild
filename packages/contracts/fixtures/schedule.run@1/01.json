@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "schedule.run",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "schedule": "ext.market.watch",
+    "plugin": "acme/market",
+    "phase": "ended",
+    "due": 1760013300000,
+    "verdict": "BLOCKED",
+    "cause": "missing secret market_key",
+    "changes": []
+  }
+}
