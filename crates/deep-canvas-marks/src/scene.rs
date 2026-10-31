@@ -502,7 +502,14 @@ pub struct Drawn {
 }
 
 impl Drawn {
-    /// The mark, its scopes and its clip, for its layer's key.
+    /// What a layer's key reads of the mark: its key at a zoom bucket.
+    fn key(&self, bucket: i32) -> ContentKey {
+        let mut k = KeyBuilder::new("drawn@marks2d.1");
+        self.feed(&mut k, bucket);
+        k.finish()
+    }
+
+    /// The mark, its scopes and its clip.
     fn feed(&self, k: &mut KeyBuilder, bucket: i32) {
         self.mark.feed(k, bucket);
         self.scopes.iter().for_each(|s| s.feed(k));
@@ -1782,7 +1789,7 @@ pub fn status_marks(
 
 /// A mark with its item's order key and ID, which sort it within its layer.
 /// A mark in its layer's draw order: its item's order key, its row, its item's ID.
-type Ordered<'a> = (String, usize, &'a str, Drawn);
+type Ordered<'a> = (&'a str, usize, &'a str, &'a Drawn, ContentKey);
 
 /// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
 const MASK_DEPTH: usize = 4;
@@ -2103,6 +2110,9 @@ pub struct Placed {
     pub layer: String,
     pub order: String,
     pub drawn: Vec<Drawn>,
+    /// Each mark's key at the zoom bucket of a frame at zoom 1, when the item's own node made
+    /// them (#857); a frame computes any other.
+    pub keys: Vec<ContentKey>,
 }
 
 /// An item's marks by their layer, their order and each mark's key input, as a layer keys them.
@@ -2439,6 +2449,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         marks.iter_mut().for_each(|m| m.adjust(&adjust));
     }
     Ok(Some(Placed {
+        keys: Vec::new(),
         layer: layer.to_string(),
         order: order.to_string(),
         drawn: marks
@@ -2499,7 +2510,9 @@ pub fn item_placed(
         row_readings: &BTreeMap::new(),
         planted: Planted::None,
     };
-    let placed = placed(&ctx, &id.to_string(), item).ok()??;
+    let mut placed = placed(&ctx, &id.to_string(), item).ok()??;
+    let bucket = path::bucket(1.0);
+    placed.keys = placed.drawn.iter().map(|d| d.key(bucket)).collect();
     (!paints.wants_boxes.get()).then_some(placed)
 }
 
@@ -2603,27 +2616,33 @@ fn build(
         }
         built.push((id, placed));
     }
-    let prebuilt = prebuilt.iter().map(|(id, p)| (*id, (*p).clone()));
-    for (id, placed) in built.into_iter().chain(prebuilt) {
+    let prebuilt = prebuilt.iter().map(|(id, p)| (*id, *p));
+    for (id, placed) in built.iter().map(|(id, p)| (*id, p)).chain(prebuilt) {
         let Some(slot) = layers.iter_mut().find(|l| l.1 == placed.layer) else {
             return refuse("ref_unresolved", format!("items/{id}/layer"));
         };
-        for (k, drawn) in placed.drawn.into_iter().enumerate() {
+        let made = placed.keys.len() == placed.drawn.len() && bucket == path::bucket(1.0);
+        for (k, drawn) in placed.drawn.iter().enumerate() {
+            let key = if made {
+                placed.keys[k]
+            } else {
+                drawn.key(bucket)
+            };
             // A generated row keeps its set's place, in row order.
-            slot.2.push((placed.order.clone(), k, id, drawn));
+            slot.2.push((&placed.order, k, id, drawn, key));
         }
     }
     layers.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     let layers = layers
         .into_iter()
         .map(|(_, id, mut marks)| {
-            marks.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
-            let marks: Vec<Drawn> = marks.into_iter().map(|(_, _, _, m)| m).collect();
-            let mut k = KeyBuilder::new("layer@marks2d.1");
+            marks.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+            let mut k = KeyBuilder::new("layer@marks2d.2");
             k.text(&id).number(size[0]).number(size[1]).number(zoom);
             for m in &marks {
-                m.feed(&mut k, bucket);
+                k.key(&m.4);
             }
+            let marks: Vec<Drawn> = marks.into_iter().map(|m| m.3.clone()).collect();
             Layer {
                 key: k.finish(),
                 id,

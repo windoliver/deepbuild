@@ -488,7 +488,7 @@ pub struct Scheduler<'s> {
     pub sealed: &'s Sealed,
     pub options: Options,
     /// key → (the node's outputs, its error, how many current nodes hold it).
-    cache: BTreeMap<Key, (Vec<Val>, Option<OpError>, u32)>,
+    cache: Cache,
     tables: BTreeMap<String, (TableValue, Key)>,
     /// Passes over values made to compute keys, since the last [`Scheduler::take_hashes`].
     hashes: Vec<Hashed>,
@@ -500,9 +500,9 @@ pub struct Scheduler<'s> {
     pub look_hook: Option<fn(&Tokens)>,
     /// Each array's writer, by index into the sealed set's operators.
     writer: BTreeMap<String, usize>,
-    /// Results released while a wave settles, freed after it on the pool: freeing a large
-    /// result costs about as much as making it.
-    released: Option<Vec<Vec<Val>>>,
+    /// The cache changes a wave's merge makes, in node order, while it settles: applied after
+    /// it, each shard's on the pool (#857).
+    deferred: Option<Vec<CacheOp>>,
 }
 
 impl<'s> Scheduler<'s> {
@@ -516,13 +516,13 @@ impl<'s> Scheduler<'s> {
         Scheduler {
             sealed,
             options,
-            cache: BTreeMap::new(),
+            cache: Cache::default(),
             tables: BTreeMap::new(),
             hashes: Vec::new(),
             json_written: Vec::new(),
             look_hook: None,
             writer,
-            released: None,
+            deferred: None,
         }
     }
 
@@ -545,7 +545,9 @@ impl<'s> Scheduler<'s> {
     /// the cache with a clean rebuild (the conformance kit).
     pub fn cache_results(&self) -> BTreeMap<String, String> {
         self.cache
+            .0
             .iter()
+            .flatten()
             .map(|(k, (out, err, _))| {
                 (k.hex(), result_digest(self.options.hash, out, err.as_ref()))
             })
@@ -591,7 +593,7 @@ impl<'s> Scheduler<'s> {
         }
         let old = std::mem::take(&mut self.cache);
         let mut rekeyed = 0;
-        for (key, entry) in old {
+        for (key, entry) in old.0.into_iter().flatten() {
             match moves.get(&key) {
                 Some(new) => {
                     rekeyed += 1;
@@ -605,9 +607,112 @@ impl<'s> Scheduler<'s> {
         rekeyed
     }
 
-    /// Holds `key`'s result, if the cache has one.
+    /// Holds `key`'s result for node `n`: whether the cache has it, or `None` while a wave's
+    /// changes are deferred, when applying them answers.
+    fn hold(&mut self, n: usize, key: Key) -> Option<bool> {
+        match &mut self.deferred {
+            Some(ops) => {
+                ops.push(CacheOp::Hold(n, key));
+                None
+            }
+            None => Some(self.cache.hold(key)),
+        }
+    }
+
+    fn release(&mut self, key: Key) {
+        match &mut self.deferred {
+            Some(ops) => ops.push(CacheOp::Release(key)),
+            None => self.cache.release(key),
+        }
+    }
+
+    /// Applies a wave's deferred cache changes, each shard's in node order on the pool (changes
+    /// to different keys commute); returns each hold's node and the key it now holds.
+    fn apply_deferred(&mut self, threads: usize) -> Vec<(usize, Option<Key>)> {
+        let ops = self.deferred.take().unwrap_or_default();
+        let mut by_shard: Vec<Vec<CacheOp>> = (0..SHARDS).map(|_| Vec::new()).collect();
+        for op in ops {
+            by_shard[Cache::shard(op.key())].push(op);
+        }
+        let jobs: Vec<std::sync::Mutex<_>> = self
+            .cache
+            .0
+            .iter_mut()
+            .zip(by_shard)
+            .map(|(map, ops)| std::sync::Mutex::new((map, ops, Vec::new())))
+            .collect();
+        let apply = |k: usize, _| {
+            let mut job = jobs[k].lock().expect("unpoisoned");
+            let (map, ops, held) = &mut *job;
+            let mut ops = std::mem::take(ops).into_iter().peekable();
+            while let Some(op) = ops.next() {
+                match op {
+                    // A node that ran holds its result at once: one lookup, not two.
+                    CacheOp::Insert(key, out, err) => {
+                        let holder = match ops.peek() {
+                            Some(CacheOp::Hold(n, k)) if *k == key => Some(*n),
+                            _ => None,
+                        };
+                        if holder.is_some() {
+                            ops.next();
+                        }
+                        map.insert(key, (out, err, u32::from(holder.is_some())));
+                        held.extend(holder.map(|n| (n, Some(key))));
+                    }
+                    CacheOp::Hold(n, key) => {
+                        held.push((n, Cache::hold_in(map, key).then_some(key)))
+                    }
+                    CacheOp::Release(key) => Cache::release_in(map, key),
+                }
+            }
+        };
+        match self.options.pool.as_deref() {
+            Some(pool) => pool.run(threads, SHARDS, &apply),
+            None => (0..SHARDS).for_each(|k| apply(k, 0)),
+        }
+        jobs.into_iter()
+            .flat_map(|j| j.into_inner().expect("unpoisoned").2)
+            .collect()
+    }
+}
+
+/// How many maps the cache splits into by key, so a wave's changes apply on the pool.
+const SHARDS: usize = 16;
+
+/// A cached result: the node's outputs, its error, how many current nodes hold it.
+type Entry = (Vec<Val>, Option<OpError>, u32);
+
+/// The content-key cache, split by each key's first byte.
+#[derive(Default)]
+struct Cache([BTreeMap<Key, Entry>; SHARDS]);
+
+impl Cache {
+    fn shard(key: Key) -> usize {
+        usize::from(key.0[0]) % SHARDS
+    }
+
+    fn len(&self) -> usize {
+        self.0.iter().map(BTreeMap::len).sum()
+    }
+
+    fn get(&self, key: &Key) -> Option<&Entry> {
+        self.0[Cache::shard(*key)].get(key)
+    }
+
+    fn insert(&mut self, key: Key, entry: Entry) {
+        self.0[Cache::shard(key)].insert(key, entry);
+    }
+
     fn hold(&mut self, key: Key) -> bool {
-        match self.cache.get_mut(&key) {
+        Cache::hold_in(&mut self.0[Cache::shard(key)], key)
+    }
+
+    fn release(&mut self, key: Key) {
+        Cache::release_in(&mut self.0[Cache::shard(key)], key);
+    }
+
+    fn hold_in(map: &mut BTreeMap<Key, Entry>, key: Key) -> bool {
+        match map.get_mut(&key) {
             Some(e) => {
                 e.2 += 1;
                 true
@@ -616,15 +721,28 @@ impl<'s> Scheduler<'s> {
         }
     }
 
-    fn release(&mut self, key: Key) {
-        if let std::collections::btree_map::Entry::Occupied(mut e) = self.cache.entry(key) {
+    fn release_in(map: &mut BTreeMap<Key, Entry>, key: Key) {
+        if let std::collections::btree_map::Entry::Occupied(mut e) = map.entry(key) {
             e.get_mut().2 = e.get().2.saturating_sub(1);
             if e.get().2 == 0 {
-                let (out, _, _) = e.remove();
-                if let Some(list) = &mut self.released {
-                    list.push(out);
-                }
+                e.remove();
             }
+        }
+    }
+}
+
+/// A change a wave's merge makes to the cache.
+enum CacheOp {
+    Insert(Key, Vec<Val>, Option<OpError>),
+    /// Node `n` holds the key.
+    Hold(usize, Key),
+    Release(Key),
+}
+
+impl CacheOp {
+    fn key(&self) -> Key {
+        match self {
+            CacheOp::Insert(k, ..) | CacheOp::Hold(_, k) | CacheOp::Release(k) => *k,
         }
     }
 }
@@ -1754,7 +1872,7 @@ impl Session {
         // One operator's nodes read the same tables.
         self.tables_of(s, first);
         let fates = self.fates(s, &nodes);
-        s.released = Some(Vec::new());
+        s.deferred = Some(Vec::new());
         for (n, (fate, hashed)) in nodes.into_iter().zip(fates) {
             s.hashes.extend(hashed);
             match fate {
@@ -1776,24 +1894,19 @@ impl Session {
                     s.json_written.extend(json);
                     self.tails.extend(tails);
                     report.ran += 1;
-                    if self.mode == Mode::Live {
-                        s.cache.insert(key, (out.clone(), err.clone(), 0));
+                    if let Some(ops) = s.deferred.as_mut().filter(|_| self.mode == Mode::Live) {
+                        ops.push(CacheOp::Insert(key, out.clone(), err.clone()));
                     }
                     self.settle(s, n, key, out, err, Run::Ran, frame, report);
                     self.loaded.as_mut().expect("loaded").nodes[n].thread = thread;
                 }
             }
         }
-        let released = s.released.take().unwrap_or_default();
-        if let Some(pool) = s.options.pool.as_deref().filter(|_| released.len() > 1) {
-            let per = released.len().div_ceil(self.threads);
-            let mut left = released.into_iter();
-            let parts: Vec<std::sync::Mutex<Vec<Vec<Val>>>> = (0..self.threads)
-                .map(|_| std::sync::Mutex::new(left.by_ref().take(per).collect()))
-                .collect();
-            pool.run(self.threads, parts.len(), &|k, _| {
-                drop(std::mem::take(&mut *parts[k].lock().expect("unpoisoned")));
-            });
+        // A result the cache lets go is freed on the pool too: freeing a large result costs
+        // about as much as making it.
+        let l = self.loaded.as_mut().expect("loaded");
+        for (n, held) in s.apply_deferred(self.threads) {
+            l.nodes[n].held = held;
         }
     }
 
@@ -1915,7 +2028,9 @@ impl Session {
         }
         // The cache holds a result while a current node reads its key.
         if mode == Mode::Live && was_held != Some(key) {
-            l.nodes[n].held = s.hold(key).then_some(key);
+            if let Some(held) = s.hold(n, key) {
+                l.nodes[n].held = held.then_some(key);
+            }
             if let Some(k) = was_held {
                 s.release(k);
             }
