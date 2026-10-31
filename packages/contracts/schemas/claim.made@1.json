@@ -1,6 +1,8 @@
 {
   "title": "claim.made@1",
   "description": "An agent said it was done.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

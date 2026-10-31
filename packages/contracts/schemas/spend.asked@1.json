@@ -1,6 +1,8 @@
 {
   "title": "spend.asked@1",
   "description": "A paid run didn't start and waits on an ask: to raise the budgets with no room for it, each by its price (raise), to run again inputs whose paid run didn't pass, once (rerun), or to approve its price for that run alone when no budget covers it (uncovered). It names the run, its price and what your yes does. Your yes is that ask's ask.answered with decision allow, the durable approval: a raise adds the run's price to each budget listed and holds that room for the run until it starts, and an uncovered run's yes approves a budget for that run alone at its price, ending a day after the answer, whose ID is the ask's. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

@@ -1,6 +1,8 @@
 {
   "title": "decision.applied@1",
   "description": "A decision answered an ask for you. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "decisions"
   ],

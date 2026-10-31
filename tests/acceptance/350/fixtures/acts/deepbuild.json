@@ -3,5 +3,6 @@
   "version": "1.0.0",
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
   "access": { "words": ["record"] },
-  "actions": ["ext.acts.where", "ext.acts.scoped", "ext.acts.bump", "ext.acts.slow"]
+  "actions": ["ext.acts.where", "ext.acts.scoped", "ext.acts.bump", "ext.acts.slow"],
+  "requires": { "preview": ["deep.record.append", "deep.registerAction"] }
 }

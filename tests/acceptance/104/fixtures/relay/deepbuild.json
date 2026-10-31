@@ -4,5 +4,6 @@
   "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
   "access": { "words": ["run_as_you"] },
   "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] },
-  "actions": ["ext.relay.open", "ext.relay.type"]
+  "actions": ["ext.relay.open", "ext.relay.type"],
+  "requires": { "preview": ["deep.registerAction", "deep.terminal.open"] }
 }

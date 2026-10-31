@@ -1,6 +1,8 @@
 {
   "title": "extension.manifest@1",
   "description": "What a package declares, in the one package envelope (package.envelope@1's fields at the root): the access words it uses, its panels and the media each uses, the output interfaces it provides and uses (each pinned to a minor), the shipped pieces it replaces, and the names it adds: event kinds, store kinds, check kinds, codes, notice kinds and actions, each ext.<plugin>.<name> unless the piece replaces the shipped piece of that name. The fields the later issues bring (conflicts, contract versions, secrets, sources, MCP commands, jobs, an out-of-process host, run-as-you, handoff, guards, lease kinds, hook context templates) arrive with their fixtures. The rules the node types can't write, a medium used without its access word and a name without its prefix, are checkManifest's.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "id": {
