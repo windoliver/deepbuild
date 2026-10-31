@@ -11,83 +11,82 @@
   },
   "terms": {
     "core.lower": {
-      "ns_per_item": 7744
+      "ns_per_item": 7360
     },
     "motion.compile": {
-      "ns_per_item": 1154
+      "ns_per_item": 8013
     },
     "cells.grid": {
-      "ns_per_item": 10834
+      "ns_per_item": 8708
     },
     "core.fields": {
-      "ns_per_item": 147
+      "ns_per_item": 195
     },
     "core.status": {
-      "ns_per_item": 156
+      "ns_per_item": 229
     },
     "core.transform": {
-      "ns_per_item": 273,
-      "ns_per_vertex": 0.02
+      "ns_per_item": 592
     },
     "look.palette": {
-      "ns_per_item": 193,
-      "ns_per_vertex": 0.38
+      "ns_per_item": 260
     },
     "motion.channels": {
-      "ns_per_item": 7000
+      "ns_per_item": 6750
     },
     "core.world": {
-      "ns_per_item": 116
+      "ns_per_item": 161,
+      "ns_per_vertex": 0.1,
+      "ns_per_glyph": 0.1
     },
     "data.scale": {
-      "ns_per_item": 8291
+      "ns_per_item": 7250
     },
     "graph.layout": {
-      "ns_per_item": 15875
+      "ns_per_item": 10792
     },
     "motion.clock": {
-      "ns_per_item": 5,
-      "ns_per_vertex": 0.01
+      "ns_per_item": 17
     },
     "record.salience": {
-      "ns_per_item": 4542
+      "ns_per_item": 4083
     },
     "sheet.place": {
-      "ns_per_item": 7583
+      "ns_per_item": 6125
     },
     "text.counter": {
-      "ns_per_item": 3125
+      "ns_per_item": 2833
     },
     "text.shape": {
-      "ns_per_item": 1,
-      "ns_per_glyph": 2136.86,
-      "ns_per_glyph_warm": 59.57
+      "ns_per_item": 14846,
+      "ns_per_glyph": 1661.45,
+      "ns_per_glyph_warm": 0.01
     },
     "text.animate": {
-      "ns_per_item": 3750
+      "ns_per_item": 3417
     },
     "marks2d.frame": {
-      "ns_per_item": 8953,
-      "ns_per_vertex": 76.88
+      "ns_per_item": 10711,
+      "ns_per_vertex": 112.06
     },
     "text.status": {
-      "ns_per_item": 14302
+      "ns_per_item": 13906
     },
     "scene3d.geometry": {
       "ns_per_px": 0.0001,
+      "ns_per_vertex": 15.04,
       "bytes_per_px": 16
     },
     "scene3d.output": {
       "ns_per_px": 0.0001,
-      "ns_per_vertex": 1.49,
       "bytes_per_px": 12
     },
     "effects.grid": {
-      "ns_per_px": 0.2958,
+      "ns_per_px": 0.1172,
       "bytes_per_px": 8
     },
     "effects.shadow": {
-      "ns_per_px": 0.3244,
+      "ns_per_px": 0.1266,
       "bytes_per_px": 8
     },
     "effects.particles": {
@@ -95,11 +94,11 @@
       "bytes_per_px": 8
     },
     "effects.outline": {
-      "ns_per_px": 0.1741,
+      "ns_per_px": 0.0775,
       "bytes_per_px": 8
     },
     "effects.glow": {
-      "ns_per_px": 0.2804,
+      "ns_per_px": 0.0001,
       "bytes_per_px": 11
     }
   }
