@@ -2,6 +2,11 @@
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
 //!
+//! Issue #883: with a hub to read, the window's app posts each ask to Notification Center and withdraws it once the
+//! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
+//! builds. `--notification-center`, run from that bundle, prints what Notification Center holds from the app, one
+//! JSON line per notification (`{"tag","title","body"}`), and quits.
+//!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
 //! has drawn and quits, which is how the spike measures cold start.
 //!
@@ -50,6 +55,7 @@ enum Mode {
         chords: u64,
     },
     SetUp,
+    NotificationCenter,
     CaptureBug {
         store: PathBuf,
     },
@@ -60,6 +66,10 @@ fn main() {
     let (panel_dir, mode) = args();
     if let Mode::PostForged { chords } = mode {
         trusted::post_forged(chords);
+        return;
+    }
+    if mode == Mode::NotificationCenter {
+        notification_center::print();
         return;
     }
     if mode == Mode::SetUp {
@@ -77,6 +87,9 @@ fn main() {
         init(cx);
         menu_bar::set_dock_icon();
         menu_bar::show_title(&menu_bar_title(&sessions()));
+        if mode == Mode::Window {
+            notifications::start(cx);
+        }
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
@@ -140,6 +153,7 @@ fn args() -> (Option<PathBuf>, Mode) {
                 }
             }
             "--set-up" => mode = Mode::SetUp,
+            "--notification-center" => mode = Mode::NotificationCenter,
             "--capture-bug" => {
                 mode = Mode::CaptureBug {
                     store: PathBuf::from(args.next().expect("--capture-bug takes a folder")),
@@ -349,7 +363,7 @@ mod trusted {
                             poster_started && tick > 10 + presses + 120
                         }
                     }
-                    Mode::PostForged { .. } | Mode::SetUp => {
+                    Mode::PostForged { .. } | Mode::SetUp | Mode::NotificationCenter => {
                         unreachable!("these modes have no window")
                     }
                     Mode::CaptureBug { .. } => unreachable!("the bug capture runs on its own"),
@@ -498,6 +512,173 @@ mod trusted {
     }
 }
 
+/// Issue #883: the hub's record through the app's one reader. The notifier posts each ask it finds due to
+/// Notification Center, tagged with its session so a newer one replaces it in place, and withdraws one whose ask the
+/// record says closed. The reader starts from the inbox and the stream after it, so what was in the record before
+/// the app or the hub started never reaches the notifier as new.
+mod notifications {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use deep_app::{
+        hub,
+        notify::{Notifier, NOTIFY_AFTER},
+        record::{self, RecordReader},
+    };
+    use gpui_kit::{App, SystemNotification};
+
+    const TICK: Duration = Duration::from_millis(250);
+
+    pub fn start(cx: &mut App) {
+        let reader = RecordReader::open(&hub::address(), &hub::root().join("control.token"));
+        let Ok(reader) = reader else {
+            eprintln!("deep-app: no hub to read, so no notifications");
+            return;
+        };
+        record::install(reader);
+        let mut notifier = Notifier::new(NOTIFY_AFTER);
+        let held = super::notification_center::delivered().unwrap_or_default();
+        let (mut start, mut fed, stale) = record::with_view(|view| {
+            // What Notification Center still holds from before: each is its session's open ask whose question it
+            // carries, and one whose ask closed while the app was away leaves now.
+            let (kept, stale): (Vec<_>, Vec<_>) = held
+                .into_iter()
+                .map(|mut notification| {
+                    notification.ask = view
+                        .inbox
+                        .iter()
+                        .find(|row| {
+                            row["session"] == notification.session.as_str()
+                                && row["status"] != "closed"
+                                && row["question"].as_str().is_some_and(|question| {
+                                    !question.is_empty() && notification.text.contains(question)
+                                })
+                        })
+                        .and_then(|row| row["ask"].as_str().map(str::to_owned));
+                    notification
+                })
+                .partition(|notification| notification.ask.is_some());
+            notifier.start(&view.events, kept);
+            (view.start.clone(), view.events.len(), stale)
+        })
+        .unwrap_or_default();
+        for notification in stale {
+            eprintln!("deep-app: withdrew {}", notification.session);
+            cx.dismiss_system_notification(&notification.session);
+        }
+        cx.spawn(async move |cx| loop {
+            cx.background_executor().timer(TICK).await;
+            let _ = record::poll(Duration::from_millis(5));
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |since| since.as_millis() as u64);
+            let before: Vec<String> = notifier
+                .delivered()
+                .iter()
+                .map(|notification| notification.session.clone())
+                .collect();
+            let posted = record::with_view(|view| {
+                // A new hub start: the reader read again, and its events start over.
+                if view.start != start {
+                    start = view.start.clone();
+                    fed = 0;
+                }
+                for event in &view.events[fed..] {
+                    notifier.saw(event, now);
+                }
+                fed = view.events.len();
+                notifier.due(&view.events, now, None, true)
+            })
+            .unwrap_or_default();
+            cx.update(|cx| {
+                for session in before.iter().filter(|session| {
+                    !notifier
+                        .delivered()
+                        .iter()
+                        .any(|notification| &notification.session == *session)
+                }) {
+                    eprintln!("deep-app: withdrew {session}");
+                    cx.dismiss_system_notification(session);
+                }
+                for notification in posted {
+                    let body = notification
+                        .text
+                        .split_once('\n')
+                        .map_or("", |(_, body)| body);
+                    eprintln!(
+                        "deep-app: notified {} {}",
+                        notification.session,
+                        notification.ask.as_deref().unwrap_or("notice")
+                    );
+                    cx.show_system_notification(SystemNotification {
+                        tag: notification.session.into(),
+                        title: notification.title.into(),
+                        body: body.to_owned().into(),
+                        actions: Vec::new(),
+                    });
+                }
+            });
+        })
+        .detach();
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod notification_center {
+    use std::{ptr::NonNull, sync::mpsc, time::Duration};
+
+    use block2::RcBlock;
+    use deep_app::notify::Notification;
+    use objc2_foundation::{NSArray, NSBundle};
+    use objc2_user_notifications::{UNNotification, UNUserNotificationCenter};
+
+    /// What Notification Center holds from the app's bundle, as the OS lists it: each one's tag as its session and
+    /// no ask, which only the record can name. `None` outside the bundle, where the center aborts the process, as
+    /// gpui notes, or when the OS doesn't answer.
+    pub fn delivered() -> Option<Vec<Notification>> {
+        NSBundle::mainBundle().bundleIdentifier()?;
+        let (sender, receiver) = mpsc::channel();
+        let listed = RcBlock::new(move |list: NonNull<NSArray<UNNotification>>| {
+            // SAFETY: the OS passes a valid array for the call's duration.
+            let list = unsafe { list.as_ref() };
+            let held: Vec<Notification> = list
+                .iter()
+                .map(|notification| {
+                    let request = notification.request();
+                    let content = request.content();
+                    let title = content.title().to_string();
+                    Notification {
+                        ask: None,
+                        session: request.identifier().to_string(),
+                        text: format!("{title}\n{}", content.body()),
+                        title,
+                        sound: None,
+                    }
+                })
+                .collect();
+            let _ = sender.send(held);
+        });
+        UNUserNotificationCenter::currentNotificationCenter()
+            .getDeliveredNotificationsWithCompletionHandler(&listed);
+        receiver.recv_timeout(Duration::from_secs(10)).ok()
+    }
+
+    /// `--notification-center`: one JSON line per notification it holds.
+    pub fn print() {
+        let Some(held) = delivered() else {
+            eprintln!("deep-app: Notification Center didn't list the app's notifications (run it from the bundle)");
+            std::process::exit(1);
+        };
+        for notification in held {
+            let body = notification
+                .text
+                .split_once('\n')
+                .map_or("", |(_, body)| body);
+            let line = serde_json::json!({"tag": notification.session, "title": notification.title, "body": body});
+            println!("{line}");
+        }
+    }
+}
+
 /// `--capture-bug STORE` (#105): the picker, the hold, the recording and its asset.
 #[cfg(target_os = "macos")]
 mod capture_bug {
@@ -637,6 +818,18 @@ mod capture_bug {
             "held_ms": ms(held),
             "asset": {"sha256": sha, "redaction": "unknown"},
         }))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod notification_center {
+    pub fn delivered() -> Option<Vec<deep_app::notify::Notification>> {
+        None
+    }
+
+    pub fn print() {
+        eprintln!("deep-app: --notification-center runs on macOS only");
+        std::process::exit(1);
     }
 }
 
