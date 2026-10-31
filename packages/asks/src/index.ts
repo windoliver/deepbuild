@@ -391,6 +391,8 @@ const CORE = { writer: 'core' } as const;
 /** Writers that speak for an agent: none of them closes an ask. */
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
 const PAGE = 1000;
+/** How many ended sessions' closed asks and session decisions stay in memory; the record keeps them all. */
+const ENDED_KEPT = 64;
 
 type Obj = { [key: string]: JsonValue };
 type Option = { id: string; label: string; decision: Decision };
@@ -464,6 +466,8 @@ const CLOSING: Readonly<Record<string, string>> = {
 class AsksCore implements Asks {
   private cursor = 0;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null }>();
+  /** The sessions that ended, oldest first. */
+  private readonly ended = new Set<string>();
   private readonly asks = new Map<string, Ask>();
   /** Each thread's asks, open or closed, in log order. */
   private readonly threads = new Map<string, Ask[]>();
@@ -1455,6 +1459,38 @@ class AsksCore implements Asks {
     }
   }
 
+  /** Past the newest ended sessions, each one with no ask open leaves memory: its asks and the decisions only it could use. */
+  private forgetEnded(): void {
+    for (const session of [...this.ended].slice(0, Math.max(0, this.ended.size - ENDED_KEPT))) {
+      // A thread with an ask open reads its sessions' attempts and exceptions, and its session's asks may be among them.
+      if (this.openIn(this.threadOf(session)).length) continue;
+      const asks = [...this.asks.values()].filter((a) => a.session === session);
+      for (const ask of asks) {
+        this.asks.delete(ask.id);
+        this.refused.delete(ask.handle);
+        this.requested.delete(ask.handle);
+        this.batchOf.delete(ask.handle);
+        for (const [batch, handles] of this.shownIn) {
+          const rest = handles.filter((h) => h !== ask.handle);
+          if (rest.length) this.shownIn.set(batch, rest);
+          else this.shownIn.delete(batch);
+        }
+        const rest = (this.threads.get(ask.thread) ?? []).filter((a) => a !== ask);
+        if (rest.length) this.threads.set(ask.thread, rest);
+        else this.threads.delete(ask.thread);
+      }
+      for (const held of [...this.decisions.values()].filter((h) => h.scope === `session:${letters(session)}`)) {
+        this.decisions.delete(held.handle);
+        without(this.byKey, held.key, held);
+        if (held.subject) without(this.byNear, nearOf(held.kind, held.subject), held);
+      }
+      this.attempts.delete(session);
+      this.unread.delete(session);
+      this.sessions.delete(session);
+      this.ended.delete(session);
+    }
+  }
+
   /** Reads what the log gained since the last read. */
   private async sync(): Promise<void> {
     for (;;) {
@@ -1470,7 +1506,17 @@ class AsksCore implements Asks {
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     switch (e.kind) {
       case 'session.start':
-        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
+        if (e.session) {
+          this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
+          this.ended.delete(e.session);
+        }
+        return;
+      case 'session.end':
+        // Only a verified end counts: an unverified one ends nothing, as in the hub.
+        if (e.session && !e.unverified) {
+          this.ended.add(e.session);
+          this.forgetEnded();
+        }
         return;
       case 'ask.created': {
         const thread = this.threadOf(e.session);
@@ -1758,6 +1804,11 @@ const VERDICT_STATE: Readonly<Record<Judgment['verdict'], RuleState>> = { widen:
 const JUDGES = new Set(['ext:resolver-decisions', 'core']);
 
 /** The ask kinds that name a subject, and so are keyed from it. */
+const without = <T>(table: Map<string, T[]>, key: string, item: T): void => {
+  const rest = (table.get(key) ?? []).filter((x) => x !== item);
+  if (rest.length) table.set(key, rest);
+  else table.delete(key);
+};
 const SUBJECT_KINDS = new Set(['authority', 'taste', 'choice', 'definition']);
 /** The kinds whose same question from another thread, pinned to the same thing, shows through one card. */
 const JOINED_KINDS = new Set(['taste', 'choice', 'definition']);

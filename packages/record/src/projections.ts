@@ -77,6 +77,7 @@ const TABLES: readonly TableDef[] = [
 ];
 /** The record's reading of turns is keyed by event IDs; it serves `session()` and is not a listed projection; the wiki's text is wiki_claims' index. */
 const INTERNAL = new Set(['turns', 'turn_events', 'wiki_text']);
+const TURNS_CACHED = 64;
 export const PROJECTIONS: readonly string[] = TABLES.filter((t) => !INTERNAL.has(t.name)).map((t) => t.name);
 const byName = new Map(TABLES.map((t) => [t.name, t]));
 export const tableDef = (name: string): TableDef | undefined => byName.get(name);
@@ -600,6 +601,8 @@ export class Projector {
       const rows = this.stmt('SELECT idx, number, start_seq, start_id, stop_seq, stopped, last_seq, last_id FROM turns WHERE session_id = ? ORDER BY idx').safeIntegers(true).all(session) as
         { idx: bigint; number: bigint | null; start_seq: bigint | null; start_id: string; stop_seq: bigint | null; stopped: bigint; last_seq: bigint | null; last_id: string }[];
       turns = rows.map((r) => ({ idx: Number(r.idx), number: r.number === null ? null : Number(r.number), startSeq: r.start_seq, startId: r.start_id, stopSeq: r.stop_seq, stopped: r.stopped !== 0n, lastSeq: r.last_seq, lastId: r.last_id }));
+      // A cache of the turns table, which each change is saved to at once: the oldest read leaves when it's full.
+      if (this.turns.size >= TURNS_CACHED) this.turns.delete(this.turns.keys().next().value!);
       this.turns.set(session, turns);
     }
     return turns;

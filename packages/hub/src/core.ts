@@ -49,6 +49,7 @@ import { Forge, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { downLeaving } from './leftover.js';
+import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
@@ -88,6 +89,8 @@ const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?
 const WAKE_GRACE = 10_000;
 /** The most transcript entries of one turn the core keeps for its stop's records. */
 const TURN_ENTRIES = 5_000;
+/** How many ended sessions the core still answers for, newest first. */
+const ENDED_KEPT = 64;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
 const FOREIGN = new Set(['cursor', 'grok']);
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
@@ -289,6 +292,8 @@ export class Core {
   /** The work items prompts name, read off the hook's parse, for the append that opens their tasks. */
   private readonly items = new WeakMap<Draft, WorkItem>();
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
+  /** The sessions that ended, oldest end first. */
+  private readonly endedOrder = new Set<string>();
   private stamps: Stamp[] = [];
   /** How long each run still going is expected to take, in seconds, by run handle: what the line's "about" reads (#83). */
   private readonly expected = new Map<string, number>();
@@ -782,7 +787,12 @@ export class Core {
       if (meta.event === 'SessionEnd') this.endTurn(session);
       this.judge(session);
       // Written at once, like a session's first cursor: no later hook of the session would write it.
-      if (meta.event === 'SessionEnd') this.writeCursors();
+      if (meta.event === 'SessionEnd') {
+        this.writeCursors();
+        this.endedOrder.delete(session.id);
+        this.endedOrder.add(session.id);
+        this.forgetEnded();
+      }
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
     // After a restart the core knows a session's state from its next hook on; a person's status question, which
@@ -1496,7 +1506,12 @@ export class Core {
     if (before) return before.thread;
     if (source !== 'fork') return session.id;
     const from = /(?:^|\s)(?:--resume|-r)[\s=]([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?=\s|$)/.exec(await argsOf(session.pid))?.[1];
-    return from ? this.sessions.get(from)?.thread ?? from : session.id;
+    if (!from) return session.id;
+    // One that ended long ago has left memory; the record still names its thread.
+    const known = this.sessions.get(from)?.thread;
+    if (known) return known;
+    const [row] = (await this.record.raw(`SELECT thread_id FROM sessions WHERE id = '${sql(from)}'`)) as { thread_id: string | null }[];
+    return row?.thread_id ?? from;
   }
   /** Links a session whose agent process another session's agent process started, such as `codex exec` run by Claude Code, as its child. */
   private async childOf(session: Session, agent: string): Promise<void> {
@@ -1631,6 +1646,7 @@ export class Core {
       r.capped = false;
     }
     if (meta.event === 'SessionEnd') {
+      plantedSessionEnd(this.options.plant, meta.session);
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
       // A call running as its session quit returns to nobody: its answer waits for the session's resume.
@@ -2854,6 +2870,24 @@ export class Core {
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
   }
 
+  /**
+   * Past the newest ENDED_KEPT to end, an ended session with its turns judged and no call pending goes, with what the
+   * core kept for it (#824): the record holds it, and a `/clear` or a late reading only ever looks at one that just ended.
+   */
+  private forgetEnded(): void {
+    for (const id of this.endedOrder) if (!this.sessions.get(id)?.ended) this.endedOrder.delete(id);
+    // A stack it still owns asks whether it lives, and only one in memory can answer that it ended.
+    const owning = new Set(this.owners.values());
+    const ended = [...this.endedOrder].filter((id) => { const s = this.sessions.get(id)!; return !s.closed.length && !s.pending.size && !owning.has(`mcp:${id}`); });
+    for (const id of ended.slice(0, Math.max(0, ended.length - ENDED_KEPT))) {
+      this.endedOrder.delete(id);
+      this.sessions.delete(id);
+      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects]) kept.delete(id);
+      this.versioned.delete(id);
+      for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
+    }
+  }
+
   /** Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none. */
   mcpHello(parent: { pid: number; start: string }): Promise<string | null> {
     return this.queue(async () => {
@@ -3236,6 +3270,7 @@ export class Core {
       try {
         const checked = await this.extensions.check(pkg);
         const load = checked.passed ? await this.extensions.load(pkg) : { status: 'refused' as const, reason: `it failed conformance: ${checked.reasons.join('; ')}` };
+        plantedReload(this.options.plant);
         return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : installed;
       } catch (error) {
         return { ...installed, not_loaded: error instanceof Error ? error.message : String(error) };
@@ -4559,6 +4594,7 @@ export class Core {
   async stop(reason: string): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
+    plantedStop();
     for (const timer of this.timers) clearInterval(timer);
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);

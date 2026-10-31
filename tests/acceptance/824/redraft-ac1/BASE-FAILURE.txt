@@ -1,0 +1,47 @@
+# Base 0466575b, once, Node 24.22, home paths redacted:
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/824/redraft-ac1 --no-file-parallelism
+
+ RUN  v5.0.5 ~/.../tests/acceptance/824/redraft-ac1
+
+ ❯ budgets.long.test.ts (1 test | 1 failed) 10ms
+   ❯ AC1 #824.5d5b3077 the hub stays flat over 5,000 cycles of churn (1)
+     × AC1 #824.5d5b3077 over 5,000 cycles after warm-up, retained heap grows under 1 MB and resident memory under 10 MB, also above the merge base, and the benchmark says PASS only then 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.long.test.ts > AC1 #824.5d5b3077 the hub stays flat over 5,000 cycles of churn > AC1 #824.5d5b3077 over 5,000 cycles after warm-up, retained heap grows under 1 MB and resident memory under 10 MB, also above the merge base, and the benchmark says PASS only then
+AssertionError: BLOCKED: benchmarks/hub-churn.mjs does not exist, so nothing measured the churn: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budgets.long.test.ts:134:114
+
+
+# The reader, against scratch stand-ins that were never committed: a stand-in benchmark printing fixed readings, a
+# stand-in `git` and a stand-in record, with a scratch copy of this test whose only change is that its fit gate answers
+# "fit" (the Mac was on battery at load 100+). These test the arithmetic and the rules, NOT a hub and NOT a measurement.
+# Every stand-in that fails says PASS itself unless noted.
+control, flat                                    passed
+heap +150 B/cycle (0.75 MB)                      passed
+flat, mergeBase.initial, no benchmark at base    passed
+linear-1mb +210 B/cycle                          failed: retained heap grew 1.051 MB over 5000 cycles, not under 1.000 MB (0.210 MB per 1,000 cycles, ...)
+late-step 1.2 MB at the last reading             failed: retained heap grew 1.201 MB (-0.000 MB per 1,000 cycles, 1.201 MB cycle 0 to 5000, ...)
+inflated-zero: cycle 0 +2 MB, then +210 B/cycle  failed: retained heap grew 1.050 MB (0.210 MB per 1,000 cycles, -0.949 MB cycle 0 to 5000, ...)
+rss-leak +2,100 B/cycle                          failed: resident memory grew 10.499 MB over 5000 cycles, not under 10.000 MB
+leaky-base: both sides +400 B/cycle              failed: retained heap grew 2.001 MB over 5000 cycles, not under 1.000 MB
+above-shrinking-base: +0.75 MB, base -0.5 MB     failed: retained heap grew 1.250 MB more than the merge base's -0.499 MB
+short: 11 readings                               failed: this side: 11 readings, not 51
+wrong-commit                                     failed: mergeBase.commit is deadbeef, not the merge base
+no-reason: mergeBase with neither                failed: mergeBase has neither readings nor a reason in initial
+initial, but the base has the benchmark          failed: mergeBase says initial (...) but <commit> has benchmarks/hub-churn.mjs: it must carry readings
+says FAIL, readings fine                         failed: the benchmark itself fails: FAIL planted
+says BLOCKED                                     failed: BLOCKED: the benchmark could not measure
+says PASS, exits 1                               failed: the benchmark says PASS but exits 1
+record holds 100 cycles                          failed: the record holds 100 session.start events, fewer than the 5100 100 + 5000 cycles make (and the other four kinds)
+
+# The fit gate, unstubbed, on this Mac at the same commit: the test skips, it doesn't pass.
+↓ AC1 #824.5d5b3077 ... [INCONCLUSIVE (not a result): not on mains power: Now drawing from 'Battery Power']
