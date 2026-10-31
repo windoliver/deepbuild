@@ -21,6 +21,8 @@ pub mod kinds;
 pub mod notify;
 #[cfg(feature = "panel-check")]
 pub mod panel_check;
+#[cfg(feature = "panel-check")]
+pub mod panel_keys;
 pub mod panel_tree;
 pub mod question;
 pub mod record;
@@ -30,7 +32,7 @@ pub mod states;
 pub mod text;
 pub mod views;
 
-use std::{path::Path, rc::Rc};
+use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};
 
 use gpui_kit::component::TitleBar;
 use gpui_kit::{prelude::FluentBuilder as _, *};
@@ -119,9 +121,12 @@ pub fn menu_bar_title(sessions: &[Session]) -> String {
     waiting_count(sessions).to_string()
 }
 
+/// The rebuilds this panel host has taken.
+pub static REBUILDS: AtomicU64 = AtomicU64::new(0);
+
 /// DeepBuild's module for panels: the recorded quotes and the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
-    HostModule::new("deepbuild")
+    let module = HostModule::new("deepbuild")
         .function("needs_you", |_| needs_you())
         .function("quotes", |_| {
             let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
@@ -144,7 +149,26 @@ pub fn deepbuild_module() -> HostModule {
                 ("interval_s".into(), json_to_host(&interval["interval_s"])),
                 ("symbols".into(), HostValue::Array(symbols)),
             ]))
+        });
+    #[cfg(feature = "panel-check")]
+    let module = module
+        // #358: a panel's script is a function of how many rebuilds its host has taken.
+        .function("rebuild_count", |_| {
+            Ok(HostValue::Number(
+                REBUILDS.load(std::sync::atomic::Ordering::Relaxed) as f64,
+            ))
         })
+        // #358: a fold whose open state follows its key in the app, where no rebuild can lose it. A host function
+        // can't make a node, so it crosses as a marked text the app reads back.
+        .function("fold", |args| {
+            let part = |at| args.string(at).map(str::to_owned);
+            let parts = [part(0)?, part(1)?, part(2)?];
+            let mark = panel_keys::FOLD_MARK;
+            Ok(HostValue::Str(
+                parts.iter().map(|part| format!("{mark}{part}")).collect(),
+            ))
+        });
+    module
 }
 
 /// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
