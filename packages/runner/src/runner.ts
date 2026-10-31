@@ -185,6 +185,11 @@ const inlineToml = (value: unknown): string => (isObj(value)
   : Array.isArray(value) ? `[${value.map(inlineToml).join(',')}]` : JSON.stringify(value));
 /** A sandbox's refusal in a failed command's output: the operating system's words, never the agent's. */
 const SANDBOX_REFUSED = /Operation not permitted|Read-only file system/;
+/** A command that writes: output redirected to a file, or a tool whose job is changing files. A read failing the same way is no refusal. */
+const WRITES = /(?<![\d&])>>?\s*(?!\/dev\/)[^\s&]|\b(?:tee|touch|mkdir|rmdir|rm|mv|cp|ln|chmod|chown|truncate|dd|patch)\s|\bsed\s+-i|\bgit\s+(?:add|commit|apply|checkout|reset|merge|rebase|push)\b/;
+/** Its read-only mode refusing a write: a patch it declined, or a write the sandbox stopped. */
+export const codexRefused = (item: { type?: unknown; status?: unknown; command?: unknown; aggregated_output?: unknown }): boolean =>
+  (item.status === 'failed' || item.status === 'declined') && (item.type === 'file_change' || (item.type === 'command_execution' && WRITES.test(String(item.command)) && SANDBOX_REFUSED.test(String(item.aggregated_output))));
 
 interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
@@ -895,8 +900,7 @@ class LocalRunner implements Runner {
       const item = e.item;
       if (item.type === 'agent_message' && typeof item.text === 'string') job.rec.result = item.text;
       // Its read-only mode refusing a write: a patch it declined, or a command the sandbox stopped.
-      const failed = item.status === 'failed' || item.status === 'declined';
-      if (failed && (item.type === 'file_change' || (item.type === 'command_execution' && SANDBOX_REFUSED.test(String(item.aggregated_output))))) job.stopCause ??= 'refusal';
+      if (codexRefused(item)) job.stopCause ??= 'refusal';
     }
     if (e.type !== 'turn.completed' && e.type !== 'turn.failed') return;
     job.resultAt ??= Date.now();
