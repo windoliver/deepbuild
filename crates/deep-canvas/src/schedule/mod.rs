@@ -1866,8 +1866,11 @@ impl Session {
                 nodes.push(n);
             }
         }
-        let Some(&first) = nodes.first() else {
-            return;
+        let first = match nodes[..] {
+            [] => return,
+            // One changed node is visited as without a pool: it pays for no thread.
+            [n] => return self.visit(s, n, frame, report),
+            [first, ..] => first,
         };
         // One operator's nodes read the same tables.
         self.tables_of(s, first);

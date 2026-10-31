@@ -774,7 +774,7 @@ pub(crate) fn drawing_of(
         let mut frame = d.frame.clone();
         frame.layers.push(deep_canvas_marks::scene::Layer {
             id: "cells".into(),
-            marks: grids,
+            marks: grids.into_iter().map(Arc::new).collect(),
             key: deep_canvas_marks::key::ContentKey([0; 16]),
         });
         *d = Arc::new(Drawing {

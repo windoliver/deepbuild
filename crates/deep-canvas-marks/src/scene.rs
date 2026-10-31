@@ -20,6 +20,7 @@
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
@@ -704,7 +705,8 @@ impl Mark {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layer {
     pub id: String,
-    pub marks: Vec<Drawn>,
+    /// Its marks, shared with the items that made them (#857): a frame places them uncopied.
+    pub marks: Vec<Arc<Drawn>>,
     pub key: ContentKey,
 }
 
@@ -1789,7 +1791,7 @@ pub fn status_marks(
 
 /// A mark with its item's order key and ID, which sort it within its layer.
 /// A mark in its layer's draw order: its item's order key, its row, its item's ID.
-type Ordered<'a> = (&'a str, usize, &'a str, &'a Drawn, ContentKey);
+type Ordered<'a> = (&'a str, usize, &'a str, &'a Arc<Drawn>, ContentKey);
 
 /// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
 const MASK_DEPTH: usize = 4;
@@ -2109,7 +2111,7 @@ fn frame_shown(
 pub struct Placed {
     pub layer: String,
     pub order: String,
-    pub drawn: Vec<Drawn>,
+    pub drawn: Vec<Arc<Drawn>>,
     /// Each mark's key at the zoom bucket of a frame at zoom 1, when the item's own node made
     /// them (#857); a frame computes any other.
     pub keys: Vec<ContentKey>,
@@ -2454,10 +2456,12 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         order: order.to_string(),
         drawn: marks
             .into_iter()
-            .map(|mark| Drawn {
-                mark,
-                clip,
-                scopes: scopes.clone(),
+            .map(|mark| {
+                Arc::new(Drawn {
+                    mark,
+                    clip,
+                    scopes: scopes.clone(),
+                })
             })
             .collect(),
     }))
@@ -2642,7 +2646,7 @@ fn build(
             for m in &marks {
                 k.key(&m.4);
             }
-            let marks: Vec<Drawn> = marks.into_iter().map(|m| m.3.clone()).collect();
+            let marks: Vec<Arc<Drawn>> = marks.into_iter().map(|m| Arc::clone(m.3)).collect();
             Layer {
                 key: k.finish(),
                 id,
