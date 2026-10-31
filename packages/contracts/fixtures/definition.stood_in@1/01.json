@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "id": "01K74FM3QX8Q2X5R7M3N9P4T6W",
+  "kind": "definition.stood_in",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013461123,
+  "data": {
+    "definition": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "requirements": [
+      {
+        "id": "R2",
+        "stand_in": {
+          "surface": {
+            "kind": "service",
+            "routes": [
+              "/health"
+            ],
+            "format": "json"
+          },
+          "hash": "0d4a3d3bd0e0f1d6b3c4e1f5a2b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d7e"
+        }
+      }
+    ]
+  }
+}
