@@ -21,7 +21,6 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
-use deep_canvas::cost::Coefficients;
 use deep_canvas::document::{
     apply_ops, canonical_in, check_packed, recheck, rollback, store_migrations, touched_in, Issue,
     Packs, Patched, Writing, ID_MAPS,
@@ -1588,8 +1587,10 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
-                    // A plug-in's panel scripts run up to the call (#401).
+                    // A plug-in's panel scripts run up to the call (#401), and terminals take
+                    // the output that arrived by then (#402).
                     self.advance_ring(at);
+                    self.advance_terms(at);
                     self.now = at;
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);
@@ -2011,7 +2012,7 @@ fn marks_check(
         (Err(e), Err(old)) if e == old => 0,
         (Err(Refused { code, path }), _) => return Err(Box::new(unfit_issue(code, path.clone()))),
     };
-    let coefficients = Coefficients::reference();
+    let coefficients = &sealed.costs;
     let estimate = |items: Map<String, Value>| {
         // The document's envelope with only these items: the rest of its items never enter.
         let mut subset: Map<String, Value> = doc
@@ -2022,7 +2023,7 @@ fn marks_check(
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         subset.insert("items".into(), Value::Object(items));
-        deep_canvas::cost::estimate(&Value::Object(subset), sealed, &coefficients)
+        deep_canvas::cost::estimate(&Value::Object(subset), sealed, coefficients)
     };
     let written = |at: &dyn Fn(&str) -> Option<Value>| -> Map<String, Value> {
         before

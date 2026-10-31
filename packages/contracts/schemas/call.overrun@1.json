@@ -1,6 +1,8 @@
 {
   "title": "call.overrun@1",
   "description": "A tool call still running past its expected time (#120): what it waits on, how long it has run, and whether a deadline was attached to it. The agent hears it at its next hook; it never becomes a wait on you.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

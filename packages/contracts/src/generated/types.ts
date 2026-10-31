@@ -339,6 +339,288 @@ export interface AdapterFacts {
   skills?: AdapterFactsOperation;
 }
 
+export type AdapterFactsV2Text = string;
+
+export type AdapterFactsV2Match = { [key: string]: unknown };
+
+export type AdapterFactsV2Texts = Array<AdapterFactsV2Text>;
+
+export type AdapterFactsV2Version = string;
+
+export type AdapterFactsV2TextMap = { [key: string]: AdapterFactsV2Text };
+
+export type AdapterFactsV2DataTemplate = { [key: string]: AdapterFactsV2Text };
+
+export type AdapterFactsV2FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV2Payload = {
+  required: AdapterFactsV2FieldTypes;
+  optional: AdapterFactsV2FieldTypes;
+  tools?: { [key: string]: AdapterFactsV2FieldTypes };
+};
+
+export type AdapterFactsV2ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV2StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV2CauseMap = { [key: string]: AdapterFactsV2StopCause };
+
+export type AdapterFactsV2OriginRule = {
+  prompt?: AdapterFactsV2Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV2Text;
+};
+
+export type AdapterFactsV2HookRule = {
+  kind: string;
+  data?: AdapterFactsV2DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV2Text;
+      transcript: AdapterFactsV2Text;
+    };
+    rules: Array<AdapterFactsV2OriginRule>;
+    otherwise: AdapterFactsV2Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV2Text;
+    values: AdapterFactsV2CauseMap;
+    otherwise: AdapterFactsV2StopCause;
+  };
+};
+
+export type AdapterFactsV2Operation = {
+  readBy: AdapterFactsV2Text;
+  conformance: AdapterFactsV2Text;
+};
+
+export type AdapterFactsV2MarkerMap = { [key: string]: AdapterFactsV2Text };
+
+/** adapter.facts@2 */
+export interface AdapterFactsV2 {
+  schema: "adapter.facts@2";
+  versions: Array<AdapterFactsV2Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  continuation: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    cap?: number;
+    field?: AdapterFactsV2Text;
+    hook?: AdapterFactsV2Text;
+  };
+  launch: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    session?: {
+      readBy?: AdapterFactsV2Text;
+      args: AdapterFactsV2Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV2Text;
+      args: AdapterFactsV2Texts;
+      prompt: AdapterFactsV2Text;
+    };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    families: AdapterFactsV2TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    apiKeyVariables: AdapterFactsV2Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV2Text;
+    tokens: AdapterFactsV2Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    tools: AdapterFactsV2Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    home: Array<AdapterFactsV2Text>;
+    path: AdapterFactsV2Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    open: AdapterFactsV2Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    causes: AdapterFactsV2CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV2Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    common: AdapterFactsV2DataTemplate;
+    SessionStart?: AdapterFactsV2HookRule;
+    UserPromptSubmit?: AdapterFactsV2HookRule;
+    PreToolUse?: AdapterFactsV2HookRule;
+    PermissionRequest?: AdapterFactsV2HookRule;
+    PostToolUse?: AdapterFactsV2HookRule;
+    PostToolUseFailure?: AdapterFactsV2HookRule;
+    Stop?: AdapterFactsV2HookRule;
+    StopFailure?: AdapterFactsV2HookRule;
+    SessionEnd?: AdapterFactsV2HookRule;
+    SubagentStart?: AdapterFactsV2HookRule;
+    SubagentStop?: AdapterFactsV2HookRule;
+    TaskCreated?: AdapterFactsV2HookRule;
+    TaskCompleted?: AdapterFactsV2HookRule;
+    TeammateIdle?: AdapterFactsV2HookRule;
+    WorktreeCreate?: AdapterFactsV2HookRule;
+    WorktreeRemove?: AdapterFactsV2HookRule;
+    PreCompact?: AdapterFactsV2HookRule;
+    PostCompact?: AdapterFactsV2HookRule;
+    Interrupt?: AdapterFactsV2HookRule;
+    sessionStart?: AdapterFactsV2HookRule;
+    sessionEnd?: AdapterFactsV2HookRule;
+    preToolUse?: AdapterFactsV2HookRule;
+    postToolUse?: AdapterFactsV2HookRule;
+    stop?: AdapterFactsV2HookRule;
+    session_start?: AdapterFactsV2HookRule;
+    session_shutdown?: AdapterFactsV2HookRule;
+    input?: AdapterFactsV2HookRule;
+    tool_call?: AdapterFactsV2HookRule;
+    tool_result?: AdapterFactsV2HookRule;
+    agent_start?: AdapterFactsV2HookRule;
+    agent_end?: AdapterFactsV2HookRule;
+    agent_before_settle?: AdapterFactsV2HookRule;
+    agent_settled?: AdapterFactsV2HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    tools: { [key: string]: AdapterFactsV2ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV2ToolKind };
+    otherwise: AdapterFactsV2ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    command?: AdapterFactsV2TextMap;
+    paths?: AdapterFactsV2TextMap;
+    mcp?: {
+      tool: AdapterFactsV2Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    tools: AdapterFactsV2Texts;
+    command: AdapterFactsV2Text;
+    shell: AdapterFactsV2Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    payloadField: AdapterFactsV2Text;
+    startedBy: AdapterFactsV2Texts;
+    turnEntry: AdapterFactsV2Text;
+    turnField: AdapterFactsV2Text;
+    messageRole: {
+      path: AdapterFactsV2Text;
+      value: AdapterFactsV2Text;
+    };
+    messageText: AdapterFactsV2Text;
+    values: AdapterFactsV2MarkerMap;
+    otherwise: AdapterFactsV2Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    args: AdapterFactsV2Texts;
+    signedIn: AdapterFactsV2Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    turn: {
+      payload: AdapterFactsV2Text;
+      transcript: AdapterFactsV2Text;
+      elsewhere?: AdapterFactsV2Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV2Text;
+      payload?: {
+        field: AdapterFactsV2Text;
+        values: AdapterFactsV2CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV2Match;
+        field: AdapterFactsV2Text;
+        values: AdapterFactsV2CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV2Match;
+        reached: AdapterFactsV2Text;
+        windows: AdapterFactsV2Texts;
+        used: AdapterFactsV2Text;
+        resetsAt: AdapterFactsV2Text;
+        toMs: number;
+        spent: AdapterFactsV2StopCause;
+        withoutReset: AdapterFactsV2StopCause;
+      };
+      otherwise: AdapterFactsV2StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV2Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV2Match;
+        has: AdapterFactsV2Text;
+        skip?: AdapterFactsV2Match;
+        once?: AdapterFactsV2Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV2Texts;
+        cached: AdapterFactsV2Texts;
+        output: AdapterFactsV2Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV2Text;
+        payload?: AdapterFactsV2Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV2Texts;
+        window: AdapterFactsV2Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV2Operation;
+  classifyStop?: AdapterFactsV2Operation;
+  skills?: AdapterFactsV2Operation;
+  install?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    source: AdapterFactsV2Text;
+  };
+}
+
 /** adapter.unsupported@1 */
 export type AdapterUnsupported = { [key: string]: Array<"startTurn" | "steer" | "followUp" | "interrupt" | "respond" | "history"> };
 
@@ -2518,9 +2800,39 @@ export interface DocPatched {
   evidence?: Array<string>;
 }
 
+/** doc.patched@2 */
+export interface DocPatchedV2 {
+  v: 2;
+  id: string;
+  kind: "doc.patched";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    doc: string;
+    rev: number;
+    patch: string | null;
+    writer: "you" | "shell" | "record" | "agent" | "plugin";
+    achieved: {
+      created: { [key: string]: number };
+      updated: number;
+      deleted: { [key: string]: number };
+      unchanged: boolean;
+    };
+    hash: string;
+    layer: string;
+    thread: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -2635,10 +2947,28 @@ export interface EvidenceStored {
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
 
+/** extension.contract@1 */
+export interface ExtensionContract {
+  stability?: "stable" | "preview";
+  requires?: {
+    preview?: Array<string>;
+  };
+  calls?: Array<string>;
+}
+
 /** extension.edges@1 */
 export interface ExtensionEdges {
   conflicts?: Array<string>;
   kernel?: Array<string>;
+}
+
+/** extension.host@1 */
+export interface ExtensionHost {
+  host?: {
+    runs: "terminals";
+    lives: "past_app";
+    owns: Array<"terminals">;
+  };
 }
 
 /** extension.manifest@1 */
@@ -3683,6 +4013,12 @@ export interface PromiseWoken {
   evidence?: Array<string>;
 }
 
+/** push.record@1 */
+export interface PushRecord {
+  commit: string;
+  pusher: string | null;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
@@ -3929,6 +4265,24 @@ export interface RunFinished {
   evidence?: Array<string>;
 }
 
+/** run.kept@1 */
+export interface RunKept {
+  v: 1;
+  id: string;
+  kind: "run.kept";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.started@1 */
 export interface RunStarted {
   v: 1;
@@ -4020,6 +4374,24 @@ export interface SeedCloned {
     migration: string;
     template: string;
     cloned_at: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.activity@1 */
+export interface SessionActivity {
+  v: 1;
+  id: string;
+  kind: "session.activity";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    activity: string;
   };
   evidence?: Array<string>;
 }
@@ -4203,6 +4575,59 @@ export interface SessionStartV3 {
       digest: string;
       tools?: Array<string>;
     }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.start@4 */
+export interface SessionStartV4 {
+  v: 4;
+  id: string;
+  kind: "session.start";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    agent: string;
+    worktree: string;
+    branch: string | null;
+    thread: string;
+    billing?: { [key: string]: boolean };
+    loads: Array<{
+      kind: "instructions" | "skill" | "hooks" | "mcp";
+      name: string;
+      source: string;
+      digest: string;
+      tools?: Array<string>;
+    }>;
+    parent?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** source.called@1 */
+export interface SourceCalled {
+  v: 1;
+  id: string;
+  kind: "source.called";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    host: string;
+    outcome: "answered" | "timeout" | "unreachable";
+    status?: number;
+    ms: number;
+    bytes: number;
   };
   evidence?: Array<string>;
 }
@@ -4625,6 +5050,136 @@ export interface ToolAfterV2 {
   evidence?: Array<string>;
 }
 
+/** tool.after@3 */
+export interface ToolAfterV3 {
+  v: 3;
+  id: string;
+  kind: "tool.after";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "unknown";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  };
+  evidence?: Array<string>;
+}
+
 /** tool.before@1 */
 export interface ToolBefore {
   v: 1;
@@ -4943,6 +5498,29 @@ export interface UserAsk {
   evidence?: Array<string>;
 }
 
+/** user.ask@2 */
+export interface UserAskV2 {
+  v: 2;
+  id: string;
+  kind: "user.ask";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    msg: number;
+    text: string;
+    tasks: Array<string>;
+    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
+    request?: string;
+    disposition?: "handled";
+  };
+  evidence?: Array<string>;
+}
+
 export type VerdictMadeRequirements = Array<{
   req: string;
   outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
@@ -5214,6 +5792,20 @@ export interface WorkBroke {
     cause: "revert" | "follow_up_fix" | "is_it_done" | "issue";
   };
   evidence?: Array<string>;
+}
+
+/** work.item@1 */
+export interface WorkItem {
+  source_id: string;
+  link: string;
+  title: string;
+  body: string;
+  criteria: Array<string>;
+  authors: Array<{
+    handle: string;
+    role: "owner" | "collaborator" | "outside";
+  }>;
+  updated: string;
 }
 
 /** worktree.created@1 */

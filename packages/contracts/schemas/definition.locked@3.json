@@ -1,6 +1,8 @@
 {
   "title": "definition.locked@3",
   "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author and its check's approved bytes by digest. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "definitions"
   ],

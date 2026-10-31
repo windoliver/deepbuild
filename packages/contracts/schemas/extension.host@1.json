@@ -1,0 +1,62 @@
+{
+  "title": "extension.host@1",
+  "description": "What a manifest declares about the host process its piece runs (#104), beside extension.manifest@1, whose frozen shape doesn't list it: what the host process runs, how long it lives and what it owns. A piece that hosts terminals runs any command you could, so it also asks for the run_as_you access word, which you approve on the trusted path.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "object",
+      "properties": {
+        "runs": {
+          "type": "string",
+          "enum": [
+            "terminals"
+          ],
+          "description": "What the host process runs: terminals, each a program on a pseudo-terminal the host process holds.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "lives": {
+          "type": "string",
+          "enum": [
+            "past_app"
+          ],
+          "description": "How long it lives: past_app, past the app quitting and the hub restarting, until run-as-you is revoked.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "owns": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "terminals"
+            ],
+            "description": "What it owns: its terminals, listed and stopped with it.",
+            "x-closure": {
+              "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+              "reopens": "a new major of this schema",
+              "mark": "exhaustive"
+            }
+          }
+        }
+      },
+      "required": [
+        "runs",
+        "lives",
+        "owns"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

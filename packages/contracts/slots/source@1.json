@@ -1,6 +1,8 @@
 {
   "title": "source@1",
   "description": "A stream source: read(stream, cursor, limit) gives the next page in order and loses nothing after a restart.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

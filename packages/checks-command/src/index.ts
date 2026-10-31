@@ -14,7 +14,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CHECK_RUNTIME, type CheckResult, type CheckRunnerFill, type CheckSpec, type RunOutcome } from '@deepbuild/conformance';
 import { scrubValues } from '@deepbuild/evidence';
-import type { Exit, Host } from '@deepbuild/supervisor';
+import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
@@ -196,6 +196,9 @@ export function commandCheckKind(host: Host): CheckRunnerFill {
 }
 
 async function runOnce(check: CommandCheck, clock: number): Promise<{ run: CommandRun; ran: Ran[] }> {
+  // Refused before anything of the run starts.
+  const bad = badDeadline('deadline', check.deadline);
+  if (bad) throw Error(`a check's ${bad}`);
   const { host, run, spec, plant } = check;
   const secrets = check.secrets ?? {};
   const empty = { stdout: '', stderr: '', sha256: { stdout: sha256(''), stderr: sha256('') } };
@@ -270,7 +273,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       cause = why;
       kill = setTimeout(() => void started.then((s) => (s.status === 'started' ? host.signal(run, 'SIGKILL') : undefined)).catch(() => undefined), SETTLE_MS);
     };
-    let timer: NodeJS.Timeout | undefined;
+    let disarm = (): void => undefined;
     const onStop = (): void => halt('stop');
     if (check.stop?.aborted) halt('stop');
     check.stop?.addEventListener('abort', onStop);
@@ -281,7 +284,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const s = await started;
       if (s.status === 'started') {
         // The deadline counts from the process's start, not from the wait for its sandbox or a lease.
-        timer = setTimeout(() => halt('deadline'), Math.max(1, check.deadline));
+        disarm = after(check.deadline, () => halt('deadline'));
         exit = await host.wait(run);
         // Nothing the run started outlives it: what it left running is stopped through host@1 too, while the output,
         // whole once the process closed, is scrubbed; the evidence files are read only once that stop is done.
@@ -290,7 +293,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
-      clearTimeout(timer);
+      disarm();
       check.stop?.removeEventListener('abort', onStop);
     }
 

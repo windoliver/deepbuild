@@ -1,0 +1,756 @@
+Base run of tests/acceptance/402 (issue #402), at base commit 46e622f8 (origin/main), before any implementation.
+
+command:  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/402 --no-file-parallelism
+date:     2026-10-30T03:02:23Z (final run; the files were corrected once after a first run with the same 35 failures)
+node:     v24.22.0   vitest: 5.0.5   cargo: 1.99.1 (5f94df478 2026-08-27)   rustc: 1.99.1   platform: darwin-arm64
+exit:     1   (10 files, 35 tests, all 35 fail)
+tsc:      npx tsc -p tests/acceptance/402/tsconfig.json  ->  exit 0, no errors
+
+Why each test fails at the base (the missing behavior, never a test mistake):
+
+terminal.test.ts, cellgrid.test.ts (11 tests: AC1 x2, AC4 x2, 5 SCOPE), session.test.ts (4: AC8 x2, AC9, SCOPE),
+streams.test.ts video half (3: AC6, 2 SCOPE), registry.test.ts (the module-call test), budgets.test.ts timing (3: AC1, AC4, AC8):
+  `deep-show run` answers the scenario {"ok": false, "code": "bad_input"}: the base parser has none of the new calls
+  (terminal_open, cells, cell, updates, stream_open, stream, stream_read, session_page, tab, module) or the `install` call
+  of #401, which is not implemented at this base either. Each test fails on "deep-show run answers the scenario ok".
+clipboard.test.ts (3: AC2 x2, SCOPE), backpressure.test.ts (2: AC5 x2), input.test.ts (4: AC7 x3, SCOPE),
+streams.test.ts record half (1: AC6):
+  `deep-show serve` does not exist: the base answers the setup line {"ok": false, "code": "bad_input"}. Each test fails on
+  "deep-show serve accepts the setup" before it starts a process; no PTY, panel host or program has run.
+evidence.test.ts (3: AC3 x3):
+  the verdict engine reads no `cites`: a claim that cites a cell grid alone is a PASS and its reasons name nothing, so
+  "goes back, naming each" fails on an assertion (the claim is PASS, not INVALID), and so does the recorded verdict
+  (outcome PASS in the real SQLite record, not INVALID). The planted twin test fails first on its honest precondition
+  ("the real gate sends it back"), as the criterion's wrong program is what the base is.
+registry.test.ts (the fields test):
+  the base refuses the grid's document with module_missing (no build holds the cells module), so the size, ANSI, frame and
+  palette refusals don't name their fields: "an issue names cols" fails on the module_missing issue it got instead.
+budgets.test.ts perf lane (1: AC1):
+  benchmarks/budgets.json has no task terminal-60hz ("budgets.json has a task terminal-60hz: expected undefined to be
+  defined"); the merge-base git calls come after that assertion and did not run.
+
+Nothing in the suite passes at the base: the 35 failures are the missing surface (a `serve` mode, the terminal, stream,
+cell grid, raw-input, session-tab and module calls, the claim citations and the perf-lane tasks), not a wrong test.
+Not run: any test past its first call (nothing at the base answers it), so the honest and planted halves of each test are
+unproved against a real implementation. Only three of the checks were run, on synthetic readings in a scratch test
+(deleted after): the keep-up check (perfect updates on A and on B pass; a frame late, dropped and merged updates fail),
+the numbered-lines check (a full stream passes; a gap, a missing head, a missing tail, a repeat and no rows fail, the first
+naming the first missing line) and the OKLab distance. The drop-and-count, key-routing, tab-drawing, OSC 52 and send-back
+checks are exercised first by the implementer's run.
+
+----- output (home paths redacted to ~) -----
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/issue-402-tests/tests/acceptance/402
+
+ ❯ streams.test.ts (4 tests | 4 failed) 24017ms
+   ❯ AC6 a video stream paused for 1 s drops and counts 30 frames and shows none late (3)
+     × AC6 a 30 fps stream whose panel is paused for 1 s drops exactly the 30 frames in the pause, counts 30, and shows every other frame on time; one that shows the queue late, and one that drops uncounted, fail, naming the frame 11661ms
+     × SCOPE a sound stream drops late packets and counts them as video does: 50 packets a second, 1 s paused, 50 dropped and counted 65ms
+     × SCOPE only the panels a stream was opened for read it: the panel it was opened for reads it, another plug-in's panel is refused 113ms
+   ❯ AC6 a stream of 10,000 lines holding a planted marker leaves no event in the record carrying it (1)
+     × AC6 10,000 lines, every 250th holding the marker, reach the grid (40 of them), and no event in the record carries the marker; the record is the one the run started with, readable and intact; a stream that writes its lines to the record fails, naming the event 716ms
+ ❯ input.test.ts (4 tests | 4 failed) 68568ms
+   ❯ AC7 keys reach only the focused terminal, and nothing an agent writes (3)
+     × AC7 100 keys from the input seam's test backend, 40 with the pointer in no panel, 30 over A and 30 over B, reach only A: each key's reply and A's program say so, and B's program reads nothing 7034ms
+     × AC7 a router that sends keys to the panel under the pointer fails, naming B 183ms
+     × AC7 a raw-input write from an agent's session into A is refused, naming the session, and reaches nothing; one the hub accepts fails, naming the writer 169ms
+   ❯ SCOPE raw input is keys with press, repeat and release, text, paste, mouse, focus and resize (1)
+     × SCOPE a program that asked for bracketed paste, the mouse and focus events receives each as its escape says; a resize reaches it as a new window size 275ms
+ ❯ session.test.ts (4 tests | 4 failed) 50091ms
+   ❯ AC8 the session page's terminal tab draws the terminal through the cell grid and keeps up at 60 updates a second (2)
+     × AC8 the page has its line, asks and checks tabs and, with them, a terminal tab 4932ms
+     × AC8 fed a 60 a second terminal stream, the tab draws it in a cell grid (the last lines show there and in no other kind of item) and presents each update within its frame; a tab that draws the text outside the grid fails, naming the tab; one that redraws at 30 a second fails, naming the update 25ms
+   ❯ AC9 a session in a terminal the hub doesn't host shows only the line naming where it runs, with Open (1)
+     × AC9 beta's terminal tab says where it runs and has Open, and draws no grid, no image and none of the other terminal's screen; a tab that draws the captured screen fails, naming the tab 22ms
+   ❯ SCOPE on a session's page a terminal's color inside the status distance becomes the nearest allowed one; in a plug-in's panel it is drawn as asked (1)
+     × SCOPE the look's fail color, asked for in truecolor, is moved off the status colors in the tab (at least the look's min_distance from each, near the one asked) and drawn as asked in the plug-in's panel 43ms
+ ❯ cellgrid.test.ts (7 tests | 7 failed) 19724ms
+   ❯ AC4 a cell grid fed by a busy terminal's changes keeps up at 60 updates a second (2)
+     × AC4 600 full-screen repaints at 60 a second: each patch is drawn in its frame on the 120 Hz display, none dropped or late, and the grid ends on the last repaint; a grid a frame late fails, naming the update 9123ms
+     × AC4 the same on the 60 Hz display, popped out onto B: one B frame for each patch 88ms
+   ❯ SCOPE the cell grid carries its cells, cursor, scroll, links, modes and the terminal's title, cwd, progress and bell (4)
+     × SCOPE the escapes fill title, cwd, progress and bell; the grid keeps the cell's grapheme, colors, attributes and link, the cursor's place and shape, and the modes 72ms
+     × SCOPE the alternate screen is a mode: while on, the grid shows it and mode alt_screen is true; leaving it shows the main screen as it was 113ms
+     × SCOPE a patch re-uploads only its rows: an update that changes one row is a patch of one row 72ms
+     × SCOPE a long output scrolls: the rows that leave the top are history, and the offset is 0 at the bottom 147ms
+   ❯ SCOPE the cell grid holds no selection (1)
+     × SCOPE dragging across the grid with the pointer leaves no selection in the grid's state 139ms
+ ❯ backpressure.test.ts (2 tests | 2 failed) 87147ms
+   ❯ AC5 a stopped panel host: backpressure, every line once and in order (2)
+     × AC5 the host stopped for 10 s while the program writes 50 MB of numbered lines: its writes block during the pause, nothing is dropped, and after resume the grid shows all lines once, in order 16234ms
+     × AC5 a stream that drops its oldest chunks when the host is stopped does not block the program and loses lines: the check fails, naming the first missing line 223ms
+ ❯ clipboard.test.ts (3 tests | 3 failed) 33379ms
+   ❯ AC2 a program asking for the clipboard through OSC 52 gets no reply and no byte of the secret (3)
+     × AC2 each of 43 forms of OSC 52 with `?` (introducers, selections, terminators, one byte at a time) gets no byte back, the secret reaches nothing, and your key does reach the program 5043ms
+     × AC2 a terminal that answers every form with the secret fails, naming each form; one that answers only the ESC \ form (with an empty answer) fails, naming that form 128ms
+     × SCOPE clipboard writes are shown and clipboard reads refused: each query counts as a refused read on the terminal, and no write reaches the clipboard without your gesture 123ms
+ ❯ registry.test.ts (2 tests | 2 failed) 110830ms
+   ❯ SCOPE the cells module is in the r2 and full build sets, on the text module (2)
+     × SCOPE the r2 build seals with cells beside text, owning only arrays of its own, and draws a frame; core and r1 hold no cells and refuse its kind with module_missing, naming it 5665ms
+     × SCOPE the grid's fields are checked: a size past u16, fewer than 16 ANSI roles, a frame that isn't cols × rows cells, and a status role in the palette are each refused, naming the field 3402ms
+ ❯ evidence.test.ts (3 tests | 3 failed) 134ms
+   ❯ AC3 a cell grid or a captured screen never counts as evidence of an agent's state (3)
+     × AC3 a claim that cites a cell grid alone, a captured screen alone, or both, goes back, naming each; beside a run that resolves the grid adds nothing, and an uncited claim is as before 6ms
+     × AC3 the recorded verdict of a claim that cites a grid alone is INVALID and names the grid; the one beside a run is a PASS 126ms
+     × AC3 a gate that counts the grid (the engine reading no `cites`) fails the same check: it passes the claim and names nothing 1ms
+ ❯ budgets.test.ts (4 tests | 4 failed) 36097ms
+   ❯ the issue's numbers on the reference Mac (3)
+     × AC1 a terminal keeps up at 60 updates a second: 600 updates, less the same run with none, per update, within one 60 Hz frame (16.67 ms) 15570ms
+     × AC4 a cell grid fed by a busy terminal keeps up at 60 updates a second: a full-screen patch costs under 5% of a core at 60 a second (0.833 ms) 44ms
+     × AC8 the session page's terminal tab keeps up at 60 updates a second: 600 updates through the tab, less the same run with none, per update, within one 60 Hz frame 28ms
+   ❯ budgets in the local preflight, compared with the merge base (1)
+     × AC1 the perf lane has a task for the terminal and one for the cell grid, each a #402 first measurement, valid against the merge base's budgets 7ms
+ ❯ terminal.test.ts (2 tests | 2 failed) 22288ms
+   ❯ AC1 a terminal keeps up at 60 updates a second (2)
+     × AC1 600 updates at 60 a second on the 120 Hz display: each is presented within one frame, none dropped, merged or late, and the grid is what the output makes; a terminal that applies 30 a second fails, naming the update 5172ms
+     × AC1 the same on the 60 Hz display, where each update has one frame to itself: popped out onto B, every update is in its own B frame, one frame late at most 21ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 35 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  backpressure.test.ts > AC5 a stopped panel host: backpressure, every line once and in order > AC5 the host stopped for 10 s while the program writes 50 MB of numbered lines: its writes block during the pause, nothing is dropped, and after resume the grid shows all lines once, in order
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ backpressure.test.ts:94:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/35]⎯
+
+ FAIL  backpressure.test.ts > AC5 a stopped panel host: backpressure, every line once and in order > AC5 a stream that drops its oldest chunks when the host is stopped does not block the program and loses lines: the check fails, naming the first missing line
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ backpressure.test.ts:104:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/35]⎯
+
+ FAIL  budgets.test.ts > the issue's numbers on the reference Mac > AC1 a terminal keeps up at 60 updates a second: 600 updates, less the same run with none, per update, within one 60 Hz frame (16.67 ms)
+AssertionError: 600 terminal updates: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ timed helpers.ts:551:3
+ ❯ perUpdate budgets.test.ts:39:44
+ ❯ budgets.test.ts:43:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/35]⎯
+
+ FAIL  budgets.test.ts > the issue's numbers on the reference Mac > AC4 a cell grid fed by a busy terminal keeps up at 60 updates a second: a full-screen patch costs under 5% of a core at 60 a second (0.833 ms)
+AssertionError: 600 grid updates: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ timed helpers.ts:551:3
+ ❯ perUpdate budgets.test.ts:39:44
+ ❯ budgets.test.ts:48:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/35]⎯
+
+ FAIL  budgets.test.ts > the issue's numbers on the reference Mac > AC8 the session page's terminal tab keeps up at 60 updates a second: 600 updates through the tab, less the same run with none, per update, within one 60 Hz frame
+AssertionError: 600 tab updates: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ timed helpers.ts:551:3
+ ❯ perUpdate budgets.test.ts:39:44
+ ❯ budgets.test.ts:53:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/35]⎯
+
+ FAIL  budgets.test.ts > budgets in the local preflight, compared with the merge base > AC1 the perf lane has a task for the terminal and one for the cell grid, each a #402 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task terminal-60hz: expected undefined to be defined
+ ❯ budgets.test.ts:69:53
+     67|     for (const id of TASKS) {
+     68|       const task = current.tasks.find((t) => t.id === id);
+     69|       expect(task, `budgets.json has a task ${id}`).toBeDefined();
+       |                                                     ^
+     70|       expect(task!.command.length, `${id} names its command`).toBeGrea…
+     71|       expect(String(task!.initialReason), `${id} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/35]⎯
+
+ FAIL  cellgrid.test.ts > AC4 a cell grid fed by a busy terminal's changes keeps up at 60 updates a second > AC4 600 full-screen repaints at 60 a second: each patch is drawn in its frame on the 120 Hz display, none dropped or late, and the grid ends on the last repaint; a grid a frame late fails, naming the update
+AssertionError: a busy terminal opens and you click it: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ play cellgrid.test.ts:34:21
+ ❯ cellgrid.test.ts:43:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/35]⎯
+
+ FAIL  cellgrid.test.ts > AC4 a cell grid fed by a busy terminal's changes keeps up at 60 updates a second > AC4 the same on the 60 Hz display, popped out onto B: one B frame for each patch
+AssertionError: a busy terminal opens and you click it: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ play cellgrid.test.ts:34:21
+ ❯ cellgrid.test.ts:54:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/35]⎯
+
+ FAIL  cellgrid.test.ts > SCOPE the cell grid carries its cells, cursor, scroll, links, modes and the terminal's title, cwd, progress and bell > SCOPE the escapes fill title, cwd, progress and bell; the grid keeps the cell's grapheme, colors, attributes and link, the cursor's place and shape, and the modes
+AssertionError: the escapes: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ cellgrid.test.ts:80:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/35]⎯
+
+ FAIL  cellgrid.test.ts > SCOPE the cell grid carries its cells, cursor, scroll, links, modes and the terminal's title, cwd, progress and bell > SCOPE the alternate screen is a mode: while on, the grid shows it and mode alt_screen is true; leaving it shows the main screen as it was
+AssertionError: the alternate screen: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ cellgrid.test.ts:107:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/35]⎯
+
+ FAIL  cellgrid.test.ts > SCOPE the cell grid carries its cells, cursor, scroll, links, modes and the terminal's title, cwd, progress and bell > SCOPE a patch re-uploads only its rows: an update that changes one row is a patch of one row
+AssertionError: a one-row patch: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ cellgrid.test.ts:118:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/35]⎯
+
+ FAIL  cellgrid.test.ts > SCOPE the cell grid carries its cells, cursor, scroll, links, modes and the terminal's title, cwd, progress and bell > SCOPE a long output scrolls: the rows that leave the top are history, and the offset is 0 at the bottom
+AssertionError: a long output: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ cellgrid.test.ts:126:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/35]⎯
+
+ FAIL  cellgrid.test.ts > SCOPE the cell grid holds no selection > SCOPE dragging across the grid with the pointer leaves no selection in the grid's state
+AssertionError: a drag: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ cellgrid.test.ts:141:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/35]⎯
+
+ FAIL  clipboard.test.ts > AC2 a program asking for the clipboard through OSC 52 gets no reply and no byte of the secret > AC2 each of 43 forms of OSC 52 with `?` (introducers, selections, terminators, one byte at a time) gets no byte back, the secret reaches nothing, and your key does reach the program
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ clipboard.test.ts:80:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/35]⎯
+
+ FAIL  clipboard.test.ts > AC2 a program asking for the clipboard through OSC 52 gets no reply and no byte of the secret > AC2 a terminal that answers every form with the secret fails, naming each form; one that answers only the ESC \ form (with an empty answer) fails, naming that form
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ clipboard.test.ts:86:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/35]⎯
+
+ FAIL  clipboard.test.ts > AC2 a program asking for the clipboard through OSC 52 gets no reply and no byte of the secret > SCOPE clipboard writes are shown and clipboard reads refused: each query counts as a refused read on the terminal, and no write reaches the clipboard without your gesture
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ clipboard.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/35]⎯
+
+ FAIL  evidence.test.ts > AC3 a cell grid or a captured screen never counts as evidence of an agent's state > AC3 a claim that cites a cell grid alone, a captured screen alone, or both, goes back, naming each; beside a run that resolves the grid adds nothing, and an uncited claim is as before
+AssertionError: a claim citing cell_grid alone goes back: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the claim is PASS, not INVALID (sent back)",
++   "no reason names the cell_grid cells:doc:01JB7D0000000000000000AAAA#screen@17 that was cited",
++ ]
+
+ ❯ evidence.test.ts:58:141
+     56|   it('AC3 a claim that cites a cell grid alone, a captured screen alon…
+     57|     for (const cites of [[GRID], [SCREEN], [GRID, SCREEN]]) {
+     58|       expect(goesBackProblems(verdict(cited(...cites)), cites), `a cla…
+       |                                                                                                                                             ^
+     59|     }
+     60|     // The controls: what the gate must not send back.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/35]⎯
+
+ FAIL  evidence.test.ts > AC3 a cell grid or a captured screen never counts as evidence of an agent's state > AC3 the recorded verdict of a claim that cites a grid alone is INVALID and names the grid; the one beside a run is a PASS
+AssertionError: the recorded verdict of the claim that cites the grid alone: expected 'PASS' to be 'INVALID' // Object.is equality
+
+Expected: "INVALID"
+Received: "PASS"
+
+ ❯ evidence.test.ts:74:110
+     72|     const rows = (await record.table('verdicts')).rows;
+     73|     const row = (id: string) => rows.find((r) => String(r['id']) === i…
+     74|     expect(String(row(sent.id)?.['outcome']), 'the recorded verdict of…
+       |                                                                                                              ^
+     75|     expect(String(row(sent.id)?.['reasons']), 'its recorded reasons na…
+     76|     expect(String(row(stood.id)?.['outcome']), 'the recorded verdict o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/35]⎯
+
+ FAIL  evidence.test.ts > AC3 a cell grid or a captured screen never counts as evidence of an agent's state > AC3 a gate that counts the grid (the engine reading no `cites`) fails the same check: it passes the claim and names nothing
+AssertionError: the real gate sends it back: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the claim is PASS, not INVALID (sent back)",
++   "no reason names the cell_grid cells:doc:01JB7D0000000000000000AAAA#screen@17 that was cited",
++ ]
+
+ ❯ evidence.test.ts:82:91
+     80|   it('AC3 a gate that counts the grid (the engine reading no `cites`) …
+     81|     // The honest verdict must send the claim back before the wrong on…
+     82|     expect(goesBackProblems(verdict(cited(GRID)), [GRID]), 'the real g…
+       |                                                                                           ^
+     83|     const counts = verdict(base());
+     84|     const found = goesBackProblems(counts, [GRID]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/35]⎯
+
+ FAIL  input.test.ts > AC7 keys reach only the focused terminal, and nothing an agent writes > AC7 100 keys from the input seam's test backend, 40 with the pointer in no panel, 30 over A and 30 over B, reach only A: each key's reply and A's program say so, and B's program reads nothing
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ input.test.ts:92:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/35]⎯
+
+ FAIL  input.test.ts > AC7 keys reach only the focused terminal, and nothing an agent writes > AC7 a router that sends keys to the panel under the pointer fails, naming B
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ input.test.ts:99:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/35]⎯
+
+ FAIL  input.test.ts > AC7 keys reach only the focused terminal, and nothing an agent writes > AC7 a raw-input write from an agent's session into A is refused, naming the session, and reaches nothing; one the hub accepts fails, naming the writer
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ input.test.ts:106:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/35]⎯
+
+ FAIL  input.test.ts > SCOPE raw input is keys with press, repeat and release, text, paste, mouse, focus and resize > SCOPE a program that asked for bracketed paste, the mouse and focus events receives each as its escape says; a resize reaches it as a new window size
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ input.test.ts:123:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/35]⎯
+
+ FAIL  registry.test.ts > SCOPE the cells module is in the r2 and full build sets, on the text module > SCOPE the r2 build seals with cells beside text, owning only arrays of its own, and draws a frame; core and r1 hold no cells and refuse its kind with module_missing, naming it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run ../305/helpers.ts:147:101
+    145|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    146|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    147|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    148|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    149|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ registry.test.ts:48:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/35]⎯
+
+ FAIL  registry.test.ts > SCOPE the cells module is in the r2 and full build sets, on the text module > SCOPE the grid's fields are checked: a size past u16, fewer than 16 ANSI roles, a frame that isn't cols × rows cells, and a status role in the palette are each refused, naming the field
+AssertionError: cols 70,000 (past u16): an issue names cols: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"requires/modules/cells","actual":"^1","what":"the document requires the cells module, which this build lacks","fix":"Open the document in a build with the module, or remove the field."}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ registry.test.ts:86:114
+     84|       expect(String(replies[i]!['outcome']), `${c.what} is refused`).t…
+     85|       const text = JSON.stringify(arr(replies[i]!['issues'], 'issues')…
+     86|       for (const n of c.names) expect(text.includes(n), `${c.what}: an…
+       |                                                                                                                  ^
+     87|     });
+     88|     expect(String(run(full(), scenario(out(), [show(withCells('Fine', …
+ ❯ registry.test.ts:83:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/35]⎯
+
+ FAIL  session.test.ts > AC8 the session page's terminal tab draws the terminal through the cell grid and keeps up at 60 updates a second > AC8 the page has its line, asks and checks tabs and, with them, a terminal tab
+AssertionError: alpha's terminal tab: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ hosted session.test.ts:50:15
+ ❯ session.test.ts:75:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/35]⎯
+
+ FAIL  session.test.ts > AC8 the session page's terminal tab draws the terminal through the cell grid and keeps up at 60 updates a second > AC8 fed a 60 a second terminal stream, the tab draws it in a cell grid (the last lines show there and in no other kind of item) and presents each update within its frame; a tab that draws the text outside the grid fails, naming the tab; one that redraws at 30 a second fails, naming the update
+AssertionError: alpha's terminal tab: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ hosted session.test.ts:50:15
+ ❯ session.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/35]⎯
+
+ FAIL  session.test.ts > AC9 a session in a terminal the hub doesn't host shows only the line naming where it runs, with Open > AC9 beta's terminal tab says where it runs and has Open, and draws no grid, no image and none of the other terminal's screen; a tab that draws the captured screen fails, naming the tab
+AssertionError: beta's terminal tab: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ unhosted session.test.ts:109:15
+ ❯ session.test.ts:115:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/35]⎯
+
+ FAIL  session.test.ts > SCOPE on a session's page a terminal's color inside the status distance becomes the nearest allowed one; in a plug-in's panel it is drawn as asked > SCOPE the look's fail color, asked for in truecolor, is moved off the status colors in the tab (at least the look's min_distance from each, near the one asked) and drawn as asked in the plug-in's panel
+AssertionError: a cell in the look's fail color: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ session.test.ts:134:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/35]⎯
+
+ FAIL  streams.test.ts > AC6 a video stream paused for 1 s drops and counts 30 frames and shows none late > AC6 a 30 fps stream whose panel is paused for 1 s drops exactly the 30 frames in the pause, counts 30, and shows every other frame on time; one that shows the queue late, and one that drops uncounted, fail, naming the frame
+AssertionError: a 30/s video stream paused for 1 s: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ play streams.test.ts:58:15
+ ❯ streams.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/35]⎯
+
+ FAIL  streams.test.ts > AC6 a video stream paused for 1 s drops and counts 30 frames and shows none late > SCOPE a sound stream drops late packets and counts them as video does: 50 packets a second, 1 s paused, 50 dropped and counted
+AssertionError: a 50/s sound stream paused for 1 s: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ play streams.test.ts:58:15
+ ❯ streams.test.ts:90:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/35]⎯
+
+ FAIL  streams.test.ts > AC6 a video stream paused for 1 s drops and counts 30 frames and shows none late > SCOPE only the panels a stream was opened for read it: the panel it was opened for reads it, another plug-in's panel is refused
+AssertionError: two readers: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ streams.test.ts:98:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/35]⎯
+
+ FAIL  streams.test.ts > AC6 a stream of 10,000 lines holding a planted marker leaves no event in the record carrying it > AC6 10,000 lines, every 250th holding the marker, reach the grid (40 of them), and no event in the record carries the marker; the record is the one the run started with, readable and intact; a stream that writes its lines to the record fails, naming the event
+AssertionError: deep-show serve accepts the setup (README: The surface under test); got {"ok":false,"code":"bad_input"}; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Serve.start helpers.ts:180:152
+    178|     try {
+    179|       const first = await s.call(setup, 120_000);
+    180|       expect(first['ok'], `deep-show serve accepts the setup (${SURFAC…
+       |                                                                                                                                                        ^
+    181|     } catch (e) {
+    182|       await s.close();
+ ❯ withServe helpers.ts:236:13
+ ❯ playRecord streams.test.ts:138:20
+ ❯ streams.test.ts:155:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/35]⎯
+
+ FAIL  terminal.test.ts > AC1 a terminal keeps up at 60 updates a second > AC1 600 updates at 60 a second on the 120 Hz display: each is presented within one frame, none dropped, merged or late, and the grid is what the output makes; a terminal that applies 30 a second fails, naming the update
+AssertionError: the terminal opens and you click it: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ play terminal.test.ts:31:21
+ ❯ terminal.test.ts:44:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/35]⎯
+
+ FAIL  terminal.test.ts > AC1 a terminal keeps up at 60 updates a second > AC1 the same on the 60 Hz display, where each update has one frame to itself: popped out onto B, every update is in its own B frame, one frame late at most
+AssertionError: the terminal opens and you click it: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:130:191
+
+ ❯ Driver.step helpers.ts:147:21
+ ❯ play terminal.test.ts:31:21
+ ❯ terminal.test.ts:56:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/35]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  35 failed (35)
+   Start at  20:02:25
+   Duration  456.24s (tests 100%)
+
+exit 1

@@ -1,6 +1,8 @@
 {
   "title": "delivery.outcome@2",
   "description": "Whether a send-back or an answer arrived.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "deliveries"
   ],

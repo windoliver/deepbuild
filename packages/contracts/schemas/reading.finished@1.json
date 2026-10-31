@@ -1,6 +1,8 @@
 {
   "title": "reading.finished@1",
   "description": "A reading job ended (#63): what it was, the runner jobs it ran, how many findings it kept, dropped and found undelivered, the plan usage it took and the models it answered on.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

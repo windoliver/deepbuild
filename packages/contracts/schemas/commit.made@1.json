@@ -1,6 +1,8 @@
 {
   "title": "commit.made@1",
   "description": "A commit made in a session, read from its worktree at the session's hooks; DeepBuild adds nothing to it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "commits"
   ],

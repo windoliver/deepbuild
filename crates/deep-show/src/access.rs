@@ -41,7 +41,9 @@ fn heard<'a>(doc: &'a Value, hidden: &[String]) -> Vec<(&'a String, &'a Value)> 
                 != "decoration"
         })
         .collect();
-    out.sort_by_key(|(id, item)| (layer_order(item), text(item.get("order")), (*id).clone()));
+    out.sort_by_cached_key(|(id, item)| {
+        (layer_order(item), text(item.get("order")), (*id).clone())
+    });
     out
 }
 
@@ -68,6 +70,17 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
         }
     }
     nodes
+}
+
+/// What a presented frame's view hides.
+pub(crate) fn hidden_of(frame: &Value) -> Vec<String> {
+    frame["hidden"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect()
 }
 
 /// Every readout heard with what it says: a text item in the tree whose `template` fills from
@@ -114,16 +127,7 @@ impl Hub<'_> {
             else {
                 continue;
             };
-            let hidden: Vec<String> = frame
-                .get("hidden")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default();
+            let hidden = hidden_of(frame);
             said.retain(|id, _| revision.pointer(&format!("/items/{id}")).is_some());
             for (id, text) in readouts(revision, &hidden) {
                 if every_frame || said.get(&id) != Some(&text) {

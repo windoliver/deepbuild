@@ -1,6 +1,8 @@
 {
   "title": "panel@1",
   "description": "A view: a JavaScript panel drawn headless under an empty gpui-shell policy; it draws inside its panel, never over the question card, and moves focus or toasts only on your gesture.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

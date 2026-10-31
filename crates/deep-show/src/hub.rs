@@ -10,12 +10,12 @@
 //! Documents several writers share (issue #96) are in [`crate::shared`]: patches, undo, reads,
 //! history, the by-writer lens, the record and the clock's latch.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use deep_canvas::cost::Coefficients;
 use deep_canvas::document::{
     canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
 };
@@ -187,6 +187,20 @@ pub enum Planted {
     ConflictsUnreported,
     /// #401: every key, the escape chord too, goes to the focused panel alone.
     FocusedPanelTakesEscape,
+    /// #402: the terminal applies at most 30 updates a second, merging the rest.
+    Terminal30PerSecond,
+    /// #402: the cell grid draws each patch a frame after the frame it should.
+    CellsAFrameLate,
+    /// #402: a video stream shows the frames a pause queued when its panel resumes.
+    VideoShowsLate,
+    /// #402: a video stream drops frames and its counter stays 0.
+    VideoDropsUncounted,
+    /// #402: the terminal tab draws the terminal's text as text items, outside the cell grid.
+    TabDrawsText,
+    /// #402: the terminal tab redraws at most 30 times a second.
+    TabRedrawsAt30hz,
+    /// #402: a terminal tab for a terminal the hub doesn't host draws its captured screen.
+    TabDrawsCapture,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -196,8 +210,14 @@ pub struct Startup {
     pub seal_ms: f64,
     /// #387: the planted scheduler that orders steps at one time by canvas-module name.
     pub steps_by_name: bool,
+    /// #855: the planted seal let a frame-phase JSON writer in, so its values run and count.
+    pub admits_frame_json: bool,
     /// A build with a test canvas module: every read every operator makes is logged.
     pub test_build: bool,
+    /// #856: the planted hub that shapes a revision's long text on the UI thread at its latch.
+    pub shapes_on_ui_thread: bool,
+    /// #856: the planted shaped-run cache per document.
+    pub run_per_document: bool,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -232,6 +252,10 @@ pub struct Session {
     pub name: String,
     /// The agent's process, the parent its hooks came from: (pid, start time).
     pub process: (u64, i64),
+    /// #402: where a session runs in a terminal the hub doesn't host, and the captured screen
+    /// of it the page must never draw; both `None` for a hosted one or none.
+    pub runs_in: Option<String>,
+    pub capture: Option<Vec<String>>,
 }
 
 pub struct Process {
@@ -285,6 +309,7 @@ pub enum Slot {
 
 /// Who a call came from: an MCP call and the session it bound to, or a `deep` command and its
 /// peer process (pid, start time).
+#[derive(Clone)]
 pub enum Via {
     Mcp(Option<String>),
     Cli(u64, i64),
@@ -295,6 +320,19 @@ pub enum Include {
     Audit,
     Timing,
     Pixels,
+}
+
+/// A `frames` call: `count` frames of a session, `step` apart from `from`; with `paced`, on the
+/// wall clock a step apart; with `revise`, a whole revision arriving at a frame's latch; with
+/// `pixels`, each frame's pixel hash (#387, #856).
+pub struct Frames {
+    pub doc: String,
+    pub count: usize,
+    pub from: i64,
+    pub step: i64,
+    pub paced: bool,
+    pub revise: Option<(usize, Value)>,
+    pub pixels: bool,
 }
 
 pub struct Show {
@@ -324,6 +362,13 @@ pub struct PatchCall {
 pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
+    /// #855: rekeys the process's content keys under a hash, once.
+    Migrate(deep_canvas::schedule::HashVersion),
+    /// #855: computes every content key of a session's revision afresh, `runs` times, timed.
+    Keys {
+        doc: String,
+        runs: usize,
+    },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -370,12 +415,9 @@ pub enum Call {
     /// Seeking against playing, on canonical renders (#488).
     Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
-    Frames {
-        doc: String,
-        count: usize,
-        from: i64,
-        step: i64,
-    },
+    Frames(Box<Frames>),
+    /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
+    ShapedRuns(String),
     /// The replica's `see`: a panel's accessibility tree as data and every announcement it made (#376).
     See(String),
     /// Shows or hides a panel from this call on.
@@ -517,6 +559,8 @@ pub enum Call {
     },
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
+    /// Terminals, streams and the session page's terminal tab (#402).
+    Term(Box<crate::terminal::TermCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -537,6 +581,8 @@ pub struct Eval {
     pub perturb: Option<String>,
     pub pixels: bool,
     pub size: Option<[u16; 2]>,
+    /// #855: each node's Debug text digest beside its result, a diagnostic only.
+    pub debug_text: bool,
 }
 
 pub struct Scenario {
@@ -577,6 +623,8 @@ pub struct Scenario {
     pub epoch_start: u32,
     /// Ties break by a shuffle from this seed instead of by name and order (#387).
     pub shuffle: Option<u32>,
+    /// The hash the process keys with until a `migrate` call (#855).
+    pub hash: deep_canvas::schedule::HashVersion,
     /// The golden store; without it, the repo's committed store (#138).
     pub goldens: Option<PathBuf>,
     /// What every backend reports as its OS and driver for this run (#138).
@@ -644,10 +692,17 @@ pub struct Hub<'a> {
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
+    /// Terminals, streams and session pages (#402).
+    pub terms: crate::terminal::Terms,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
     pub card_down: Option<(i64, String)>,
+    /// Who sent each document's last whole revision: a revision that arrives at a frame's latch
+    /// comes from them (#856).
+    pub vias: BTreeMap<String, Via>,
+    /// The times the shaper shaped each run's key in this process (#856).
+    pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
 }
@@ -707,12 +762,14 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        admits_frame_json: startup.admits_frame_json,
     };
     Options {
         access_log: startup.test_build,
         shuffle: scenario.shuffle,
         planted,
         timing: None,
+        hash: scenario.hash,
     }
 }
 
@@ -762,10 +819,14 @@ impl<'a> Hub<'a> {
                 scenario.layout.as_ref(),
                 scenario.placement_planted,
             ),
+            terms: crate::terminal::Terms::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
+            vias: BTreeMap::new(),
+            shapings: HashMap::new(),
         };
+        deep_text::cache::record();
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
             hub.install_pack(id, dir);
@@ -897,14 +958,7 @@ impl<'a> Hub<'a> {
         size: Option<[u16; 2]>,
     ) -> Result<Raster, ()> {
         let size = size.unwrap_or_else(|| {
-            let s = |i: usize| {
-                doc["size"][i]
-                    .as_f64()
-                    .unwrap_or(1.0)
-                    .round()
-                    .clamp(1.0, 8192.0) as u16
-            };
-            [s(0), s(1)]
+            snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
         let gpu = self.gpu3().ok_or(())?;
@@ -1061,6 +1115,24 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
+        // #856's planted cache per document: each document's runs are keyed apart.
+        if self.startup.run_per_document {
+            let doc = match call {
+                Call::Show(s) => Some(&s.doc),
+                Call::Patch(p) => Some(&p.doc),
+                Call::Eval(e) => Some(&e.doc),
+                Call::Frames(f) => Some(&f.doc),
+                _ => None,
+            };
+            if let Some(doc) = doc {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                std::hash::Hash::hash(doc, &mut h);
+                deep_text::cache::scope(std::hash::Hasher::finish(&h) | 1);
+            }
+        }
+        if let Call::Show(show) = call {
+            self.vias.insert(show.doc.clone(), show.via.clone());
+        }
         let mut reply = match call {
             Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
             Call::Show(show) => {
@@ -1080,6 +1152,8 @@ impl<'a> Hub<'a> {
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
+            Call::Migrate(to) => self.migrate(*to),
+            Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -1092,12 +1166,8 @@ impl<'a> Hub<'a> {
                 to,
             } => self.play(doc, *display_hz, *to),
             Call::Determinism(d) => self.determinism(d),
-            Call::Frames {
-                doc,
-                count,
-                from,
-                step,
-            } => self.frames(doc, *count, *from, *step),
+            Call::Frames(f) => self.frames(f),
+            Call::ShapedRuns(text) => self.shaped_runs(text),
             Call::Panel { panel, visible } => {
                 self.panels_shown.insert(panel.clone(), *visible);
                 json!({"panel": panel, "visible": visible})
@@ -1208,9 +1278,80 @@ impl<'a> Hub<'a> {
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
+            Call::Term(t) => self.term_call(t),
         };
+        for shaping in deep_text::cache::take_log() {
+            *self.shapings.entry(shaping.key).or_default() += 1;
+        }
         self.stamp(&mut reply);
         reply
+    }
+
+    /// #806: a document's current revision as the hub records it once presented: its writer, the
+    /// layer the connection stamped and its canonical document, kept in the evidence store by the
+    /// hash it names; and every layer on screen on its panel, back to front, as the app draws them.
+    pub fn presented_revision(&self, doc: &str) -> Option<Value> {
+        let row = self.current(doc)?;
+        let canonical = canonical_in(&row.doc, &self.startup.sealed.kinds()).ok()?;
+        let hash = evidence::put(&self.scenario.evidence, canonical.bytes.as_bytes()).ok()?;
+        let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
+        let panel = self.scenario.docs.get(doc)?;
+        let rect = self.slot(panel)?;
+        let size = snapshot::px([rect[2], rect[3]]);
+        let record = self.record();
+        let layers: Vec<Value> = self
+            .bands()
+            .iter()
+            .filter(|b| {
+                b.doc
+                    .as_deref()
+                    .is_some_and(|d| self.scenario.docs.get(d) == Some(panel))
+            })
+            .map(|b| {
+                let mut out = b.to_json();
+                let current = b.doc.as_deref().and_then(|d| self.current(d));
+                // The presented document's items this layer draws; another document's layer on the
+                // panel draws none of them.
+                let drawn: Vec<String> = current
+                    .filter(|_| b.doc.as_deref() == Some(doc))
+                    .and_then(|r| r.doc["items"].as_object())
+                    .map(|m| m.keys().cloned().collect())
+                    .unwrap_or_default();
+                // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
+                // kept in the evidence store for the app to draw, by its hash.
+                let picture = current.and_then(|r| {
+                    let doc = r.doc.as_object()?;
+                    let mut renderer = Renderer::new();
+                    let d = renderer
+                        .prepare(
+                            doc,
+                            0,
+                            &self.look.light,
+                            self.look.status.as_ref(),
+                            &record,
+                            &self.scenario.evidence,
+                        )
+                        .ok()?;
+                    let png = snapshot::png(renderer.raster(&d, size, None), size);
+                    evidence::put(&self.scenario.evidence, &png).ok()
+                });
+                out["doc"] = json!(b.doc);
+                out["items"] = json!(drawn);
+                out["picture"] = json!(picture);
+                out
+            })
+            .collect();
+        Some(json!({
+            "doc": doc,
+            "rev": row.rev,
+            "hash": hash,
+            "writer": row.writer.to_json(),
+            "layer": row.writer.layer_id(),
+            "items": items,
+            "panel": panel,
+            "rect": rect,
+            "layers": layers,
+        }))
     }
 
     /// Every canvas reply carries the core's version and the module-set digest (#305;
@@ -1299,7 +1440,7 @@ impl<'a> Hub<'a> {
         let Some((writer, name)) = self.writer(&show.via) else {
             return refused("no_session");
         };
-        let Some(panel) = self
+        let Some(_) = self
             .scenario
             .docs
             .get(&show.doc)
@@ -1343,7 +1484,10 @@ impl<'a> Hub<'a> {
                 let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
-                        let coefficients = Coefficients::reference()
+                        let coefficients = self
+                            .startup
+                            .sealed
+                            .costs
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
@@ -1504,7 +1648,6 @@ impl<'a> Hub<'a> {
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);
         }
-        let _ = panel;
         // The checked revision becomes the session's current one; a snapshot is the session's
         // own frame at `t`.
         let doc = stamped.unwrap_or(Value::Null);
@@ -1600,13 +1743,7 @@ impl<'a> Hub<'a> {
                         Some(drawn3d) => drawn3d.ok(),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
-                            let size = show.size.unwrap_or_else(|| {
-                                let [w, h] = drawn.frame.size;
-                                [
-                                    w.round().clamp(1.0, 8192.0) as u16,
-                                    h.round().clamp(1.0, 8192.0) as u16,
-                                ]
-                            });
+                            let size = show.size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
                             let instanced = crate::packs::instanced(
                                 self.expansions

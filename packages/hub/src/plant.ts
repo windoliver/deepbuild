@@ -45,7 +45,15 @@ export type Plant =
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
   // contradicted claim deleted.
-  | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted';
+  | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
+  // #27's: deep_ask raised without its subject, so a repeated question reaches you.
+  | 'repeat-reaches-you'
+  // #823's: deep_wait reading its ask every 100 ms, and a stopping hub answering waiting calls as a success.
+  | 'deep-wait-polls' | 'stop-answers-waiting'
+  // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
+  | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
+  // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
+  | 'silent-deprecated';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -76,6 +84,10 @@ const PLANTS: readonly string[] = [
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
+  'repeat-reaches-you',
+  'deep-wait-polls', 'stop-answers-waiting',
+  'deep-show-writer-from-payload', 'deep-show-waits-for-app',
+  'silent-deprecated',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -85,3 +97,6 @@ export function plantOf(value: string | undefined): Plant | undefined {
 
 /** The plant the CLI's side of a command acts as (setup, undo, the doctor, status, the bundle): the hub's variable. */
 export const activePlant = (): string | undefined => process.env.DEEP_HUB_PLANT || undefined;
+
+/** #40's wrong program on the hub's side: an answer of a replaced session handed to the session that replaced it. Only tests set it. */
+export const piAcceptsReplaced = (): boolean => process.env.DEEP_PI_PLANT === 'accepts-replaced';

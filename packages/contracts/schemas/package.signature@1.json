@@ -1,6 +1,8 @@
 {
   "title": "package.signature@1",
   "description": "A signed package's signature, beside package.envelope@1, whose frozen shape doesn't list it: the Ed25519 signature, by the envelope's publisher_key (ed25519:<64 lower-case hex of the raw public key>), of the RFC 8785 bytes of the envelope's id, version, digest and publisher_key. The package's digest leaves it out, as it leaves out the digest.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "signature": {
