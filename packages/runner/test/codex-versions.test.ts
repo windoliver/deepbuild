@@ -5,7 +5,9 @@ import { programRoot } from '../src/runner.js';
 // Codex's versions and windows in the runner (#39): a build its facts don't list isn't covered by a listed build's
 // numbers, and a window is the one its length says, as the hub's row reads it.
 import { describe, expect, it } from 'vitest';
-import { codexRefused, codexWindows, shownVersion } from '../src/runner.js';
+import { execFileSync } from 'node:child_process';
+import { seatbelt } from '@deepbuild/supervisor';
+import { codexLogRefused, codexReach, codexRefused, codexSignIn, codexWindows, shownVersion } from '../src/runner.js';
 
 describe('the version Codex shows', () => {
   it('keeps its suffix where versions are exact, so a stable build is not its alpha', () => {
@@ -56,5 +58,41 @@ describe('an agent installed as a package', () => {
     writeFileSync(join(dir, 'codex'), '');
     expect(programRoot(join(dir, 'codex'))).toBe(dir);
     rmSync(dir, { recursive: true });
+  });
+});
+
+describe('A Codex job in its sandbox', () => {
+  // Its HTTP client can't load the system's roots in there: every request failed as "workspace routing discovery failed".
+  it('is told a root certificate file it can read there', async () => {
+    const temp = realpathSync(mkdtempSync(join(tmpdir(), 'codex-roots-')));
+    try {
+      const env = codexReach({ temp, proxy: 'http://127.0.0.1:1', home: '', env: {} });
+      const read = codexSignIn(temp, {});
+      const { argv, cwd } = await seatbelt.confine({ argv: ['/bin/cat', env.SSL_CERT_FILE!], cwd: temp, env }, { read, write: [temp] });
+      expect(execFileSync(argv[0]!, argv.slice(1), { cwd, encoding: 'utf8', maxBuffer: 1 << 24 })).toContain('BEGIN CERTIFICATE');
+    } finally { rmSync(temp, { recursive: true, force: true }); }
+  });
+});
+
+// The shape 0.160.0 writes (live run): its --json carries no item for a shell command, only its session log does.
+const logged = (cmd: string, code: number, output: string): string => [
+  { type: 'response_item', payload: { type: 'custom_tool_call', call_id: 'c1', name: 'exec', input: `text(await tools.exec_command({cmd:${JSON.stringify(cmd)},"max_output_tokens":1000}));\n` } },
+  { type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'c1', output: [{ type: 'input_text', text: 'Script completed\n' }, { type: 'input_text', text: JSON.stringify({ exit_code: code, output }) }] } },
+].map((l) => JSON.stringify(l)).join('\n');
+
+describe('A Codex session log', () => {
+  it('shows a write the sandbox stopped', () => {
+    expect(codexLogRefused(logged("printf 'hello\\n' > out.txt", 71, 'sandbox-exec: sandbox_apply: Operation not permitted\n'))).toBe(true);
+    expect(codexLogRefused(logged("printf 'hello\\n' > out.txt", 1, '/bin/bash: out.txt: Operation not permitted\n'))).toBe(true);
+  });
+  it('shows no refusal for a read stopped the same way, a write that ran, or a broken line', () => {
+    expect(codexLogRefused(logged('cat secret', 1, 'cat: secret: Operation not permitted\n'))).toBe(false);
+    expect(codexLogRefused(logged('echo hi > out.txt', 0, ''))).toBe(false);
+    expect(codexLogRefused('{not json\n')).toBe(false);
+  });
+  it('joins a result to its own call, not to another call in the log', () => {
+    const write = logged('echo hi > out.txt', 0, '');
+    const read = logged('cat secret', 1, 'cat: secret: Operation not permitted\n').replaceAll('c1', 'c2');
+    expect(codexLogRefused(`${write}\n${read}`)).toBe(false);
   });
 });
