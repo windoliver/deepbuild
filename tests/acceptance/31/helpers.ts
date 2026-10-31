@@ -50,7 +50,7 @@ export function tempDir(): string {
 afterAll(() => {
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
   if (HOME) rmSync(HOME, { recursive: true, force: true });
-});
+}, 300_000);
 
 // ---- Real git repos.
 export function git(cwd: string, args: readonly string[], env: Record<string, string> = {}): string {

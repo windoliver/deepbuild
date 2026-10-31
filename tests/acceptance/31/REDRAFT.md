@@ -1,3 +1,17 @@
+# Blind redraft: the temp-folder cleanup's time limit (#31, fixture only)
+
+The `afterAll` in `helpers.ts` alone changed. No assertion, expected value, test name, tag, surface in README.md or other line
+of the file changed, and what the hook removes is the same.
+
+What changed: the hook that removes the file's temp folders has an explicit timeout of 300 000 ms, in place of Vitest's default
+10 s hook limit.
+
+Why: since the redraft of `install`, sample folders hold real copied `node_modules`, and `assertion.test.ts` makes many.
+Removing them can outlast 10 s. In the last two proof lane runs the whole file was failed with `Hook timed out in 10000ms`,
+though its tests passed.
+
+Not run: any test suite, including the proof lanes. Another job is using this worktree's build, so only the diff was reviewed.
+
 # Blind redraft: AC15's hub test builds deep-hook (#31, fixture only)
 
 `lifetime.test.ts` alone changed, and only in AC15's hub test. No assertion, expected value, test name, tag, the deep CLI
