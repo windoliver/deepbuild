@@ -1,6 +1,7 @@
-//! `deep-replica --view <needs-you|sidebar|session> --out <dir>`: the replica. Opens the app's
-//! shell headless at the reference window on gpui's virtual clock, draws the view over the
-//! fixture record, and writes `snapshots/<view>.json` and `screens/<view>.png` under `out`.
+//! `deep-replica --view <needs-you|sidebar|session> --out <dir> [--appearance <light|dark>]`: the
+//! replica. Opens the app's shell headless at the reference window on gpui's virtual clock, draws
+//! the view over the fixture record as macOS would in that appearance (light when none is given),
+//! and writes `snapshots/<view>.json` and `screens/<view>.png` under `out`.
 //! A launch is timed from this process's spawn to the first-frame line it prints.
 
 fn main() {
@@ -21,10 +22,12 @@ mod replica {
     use gpui_kit::test::TestWindowExt;
 
     pub fn run() -> i32 {
-        let (view, out) = match deep_replica::view_args("deep-replica", "dir") {
+        let (view, out, dark) = match deep_replica::view_args("deep-replica", "dir", true) {
             Ok(args) => args,
             Err(code) => return code,
         };
+        // gpui's headless window always reports light, so the chrome is told the appearance instead.
+        deep_app::chrome::force_dark(dark);
 
         let started = std::time::Instant::now();
         let mut phases = Vec::new();

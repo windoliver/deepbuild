@@ -404,6 +404,9 @@ pub struct Planted {
     pub merge_by_finish: bool,
     /// A frame-phase operator may write JSON, which is counted (#855's planted seal).
     pub admits_frame_json: bool,
+    /// A session's own frame runs every node of its frame phases, changed or not (#854's planted
+    /// scheduler).
+    pub runs_every_node: bool,
 }
 
 /// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
@@ -623,6 +626,14 @@ impl<'s> Scheduler<'s> {
         match &mut self.deferred {
             Some(ops) => ops.push(CacheOp::Release(key)),
             None => self.cache.release(key),
+        }
+    }
+
+    /// Caches a result a node just made, unheld.
+    fn insert(&mut self, key: Key, out: Vec<Val>, err: Option<OpError>) {
+        match &mut self.deferred {
+            Some(ops) => ops.push(CacheOp::Insert(key, out, err)),
+            None => self.cache.insert(key, (out, err, 0)),
         }
     }
 
@@ -1054,10 +1065,10 @@ impl Target {
     }
 }
 
-/// What a node visited on the pool comes to: it keeps its result (its key, when the change test
-/// let one be computed), takes a cached one, or ran on a thread.
+/// What a changed node comes to: it keeps its result (its key is the same), takes a cached one, or
+/// ran on a thread.
 enum Fate {
-    Kept(Option<Key>),
+    Kept,
     Hit(Key, Vec<Val>, Option<OpError>),
     Ran(Key, Called, Vec<Access>, Vec<Arc<Value>>, usize),
 }
@@ -1547,6 +1558,124 @@ impl Session {
         issues
     }
 
+    /// A revision that changes only the values of the items `ids` names (#854): each keeps its
+    /// place in the plan (its parent, order, kind and asset, and every operator's `applies`), and
+    /// nothing else in the document changes. Those items are rekeyed and stamped by the classes
+    /// their changed fields fall in, as `load` would stamp them, without compiling the plan again;
+    /// then the revision's check phases run. `None` when the revision reaches further, for `load`.
+    pub fn revise_items(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        doc: &Value,
+        ids: &[&str],
+    ) -> Option<Vec<OpIssue>> {
+        self.sync_hash(s);
+        let v = s.options.hash;
+        let items = doc.get("items")?.as_object()?;
+        let mut fresh = Vec::with_capacity(ids.len());
+        {
+            let l = self.loaded.as_ref()?;
+            if items.len() != l.items.len() {
+                return None;
+            }
+            for (k, value) in doc.as_object()? {
+                if k != "items" && l.doc.get(k) != Some(value) {
+                    return None;
+                }
+            }
+            for id in ids {
+                let &at = l.index.get(*id)?;
+                let mut value = items.get(*id)?.clone();
+                without_negative_zero(&mut value);
+                let was = &l.items[at].value;
+                let same = |p: &str| was.pointer(p) == value.pointer(p);
+                if !["/parent", "/order", "/kind", "/params/asset"]
+                    .iter()
+                    .all(|p| same(p))
+                {
+                    return None;
+                }
+                let applies_alike =
+                    s.sealed
+                        .ops
+                        .iter()
+                        .all(|sop| match (sop.op.applies, sop.op.per) {
+                            (Some(f), Per::Item) => f(&l.doc, id, was) == f(doc, id, &value),
+                            (Some(f), Per::Document) => {
+                                f(&l.doc, "", &Value::Null) == f(doc, "", &Value::Null)
+                            }
+                            (None, _) => true,
+                        });
+                if !applies_alike {
+                    return None;
+                }
+                fresh.push((at, value));
+            }
+        }
+        let epoch = self.bump();
+        let l = self.loaded.as_mut().expect("checked above");
+        let mut any = false;
+        for (at, value) in fresh {
+            let item = &mut l.items[at];
+            if written_alike(&item.value, &value) {
+                continue;
+            }
+            for c in classes_changed(&item.value, &value) {
+                item.changed_at[c as usize] = epoch;
+            }
+            item.key = item_key(v, &value);
+            item.value = Arc::new(value.clone());
+            if let Some(Value::Object(map)) = Arc::make_mut(&mut l.doc).get_mut("items") {
+                map.insert(item.id.clone(), value);
+            }
+            any = true;
+        }
+        if any {
+            self.items_at = epoch;
+            let key = doc_key(v, Arc::make_mut(&mut l.doc), &l.items);
+            if key != l.doc_key {
+                l.doc_key = key;
+                self.refs_at = epoch;
+            }
+        }
+        self.generation += 1;
+        self.frozen = None;
+        let mut report = Report::default();
+        self.frames += 1;
+        let frame = self.frames;
+        let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
+        for g in 0..groups {
+            let op = self.loaded.as_ref().expect("loaded").groups[g].op;
+            if is_check_phase(&s.sealed.ops[op].op.phase) {
+                self.visit_group(s, g, frame, &mut report);
+            }
+        }
+        let issues = report.issues.clone();
+        self.report = report;
+        Some(issues)
+    }
+
+    /// Every value `array` holds in the current revision, with the item each is for, in plan
+    /// order: only the writer's own nodes are read.
+    pub fn values(&self, s: &Scheduler<'_>, array: &str) -> Vec<(Option<&str>, Val)> {
+        let (Some(l), Some(&op)) = (&self.loaded, s.writer.get(array)) else {
+            return Vec::new();
+        };
+        let Some(k) = s.sealed.ops[op].op.writes.iter().position(|w| w == array) else {
+            return Vec::new();
+        };
+        l.groups
+            .iter()
+            .filter(|g| g.op == op)
+            .flat_map(|g| g.nodes.iter())
+            .filter_map(|&n| {
+                let node = &l.nodes[n];
+                let value = node.out.get(k)?.clone();
+                Some((node.item.map(|i| l.items[i].id.as_str()), value))
+            })
+            .collect()
+    }
+
     /// One frame at `t` under `view`: stamps what changed, then visits only the operators whose
     /// read set changed since they last ran. Once warm, a frame with nothing changed allocates
     /// nothing and runs no operator. Returns how many nodes ran.
@@ -1589,6 +1718,10 @@ impl Session {
         self.frames += 1;
         let frame = self.frames;
         let mut report = std::mem::take(&mut self.report);
+        let live = self.mode;
+        if s.options.planted.runs_every_node {
+            self.mode = Mode::Clean;
+        }
         let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
         for g in 0..groups {
             let (op, dirty) = {
@@ -1611,7 +1744,27 @@ impl Session {
             }
             self.visit_group(s, g, frame, &mut report);
         }
+        self.mode = live;
         self.report = report;
+    }
+
+    /// How many nodes of each operator ran in the last frame, by the operator's key (#854).
+    pub fn ran_by_operator(&self, s: &Scheduler<'_>) -> BTreeMap<String, usize> {
+        let mut out = BTreeMap::new();
+        let Some(l) = &self.loaded else {
+            return out;
+        };
+        for g in &l.groups {
+            let ran = g
+                .nodes
+                .iter()
+                .filter(|&&n| l.nodes[n].visited == self.frames && l.nodes[n].run == Run::Ran)
+                .count();
+            if ran > 0 {
+                *out.entry(s.sealed.ops[g.op].key.clone()).or_default() += ran;
+            }
+        }
+        out
     }
 
     /// A clean evaluation at `t` under `view`, with `perturb` changed for it alone: every node
@@ -1803,40 +1956,25 @@ impl Session {
         })
     }
 
+    /// Keeps a live node's result when its inputs didn't change; whether it did.
+    fn unchanged(&mut self, n: usize, frame: u64) -> bool {
+        let l = self.loaded.as_ref().expect("loaded");
+        if self.mode != Mode::Live || self.node_dirty(l, &l.nodes[n]) {
+            return false;
+        }
+        let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
+        node.run = Run::Kept;
+        node.visited = frame;
+        true
+    }
+
     fn visit(&mut self, s: &mut Scheduler<'_>, n: usize, frame: u64, report: &mut Report) {
-        let epoch = self.epoch;
-        if self.mode == Mode::Live {
-            let l = self.loaded.as_ref().expect("loaded");
-            if !self.node_dirty(l, &l.nodes[n]) {
-                let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
-                node.run = Run::Kept;
-                node.visited = frame;
-                return;
-            }
+        if self.unchanged(n, frame) {
+            return;
         }
-        let key = self.key_of(s, n);
-        if self.mode == Mode::Live {
-            let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
-            if node.has_run && node.key == key {
-                node.run = Run::Kept;
-                node.last_run = epoch;
-                node.visited = frame;
-                return;
-            }
-            if let Some((out, err, _)) = s.cache.get(&key) {
-                let (out, err) = (out.clone(), err.clone());
-                self.settle(s, n, key, out, err, Run::Hit, frame, report);
-                return;
-            }
-        }
-        let (out, err, tails) = self.run_node(s, n, report);
-        self.tails.extend(tails);
-        report.ran += 1;
-        if self.mode == Mode::Live {
-            s.cache.insert(key, (out.clone(), err.clone(), 0));
-        }
-        self.settle(s, n, key, out, err, Run::Ran, frame, report);
-        self.loaded.as_mut().expect("loaded").nodes[n].thread = 0;
+        self.tables_of(s, n);
+        let fate = self.fate(s, n, 0);
+        self.land(s, n, fate, frame, report);
     }
 
     /// Visits one wave of an operator's nodes, which have no edge between them: each node's
@@ -1851,21 +1989,10 @@ impl Session {
         frame: u64,
         report: &mut Report,
     ) {
-        let epoch = self.epoch;
         // What didn't change keeps its result here: only the nodes whose inputs changed go to the
         // pool, so a frame with one item changed pays for no thread.
-        let mut nodes: Vec<usize> = Vec::new();
-        for k in wave {
-            let n = self.loaded.as_ref().expect("loaded").groups[g].nodes[k];
-            let l = self.loaded.as_ref().expect("loaded");
-            if self.mode == Mode::Live && !self.node_dirty(l, &l.nodes[n]) {
-                let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
-                node.run = Run::Kept;
-                node.visited = frame;
-            } else {
-                nodes.push(n);
-            }
-        }
+        let mut nodes = self.loaded.as_ref().expect("loaded").groups[g].nodes[wave].to_vec();
+        nodes.retain(|&n| !self.unchanged(n, frame));
         let first = match nodes[..] {
             [] => return,
             // One changed node is visited as without a pool: it pays for no thread.
@@ -1876,34 +2003,8 @@ impl Session {
         self.tables_of(s, first);
         let fates = self.fates(s, &nodes);
         s.deferred = Some(Vec::new());
-        for (n, (fate, hashed)) in nodes.into_iter().zip(fates) {
-            s.hashes.extend(hashed);
-            match fate {
-                Fate::Kept(key) => {
-                    let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
-                    node.run = Run::Kept;
-                    node.visited = frame;
-                    if key.is_some() {
-                        node.last_run = epoch;
-                    }
-                }
-                Fate::Hit(key, out, err) => {
-                    self.settle(s, n, key, out, err, Run::Hit, frame, report);
-                }
-                Fate::Ran(key, (out, err, _, tails), access, json, thread) => {
-                    if s.options.access_log {
-                        report.access.extend(access);
-                    }
-                    s.json_written.extend(json);
-                    self.tails.extend(tails);
-                    report.ran += 1;
-                    if let Some(ops) = s.deferred.as_mut().filter(|_| self.mode == Mode::Live) {
-                        ops.push(CacheOp::Insert(key, out.clone(), err.clone()));
-                    }
-                    self.settle(s, n, key, out, err, Run::Ran, frame, report);
-                    self.loaded.as_mut().expect("loaded").nodes[n].thread = thread;
-                }
-            }
+        for (n, fate) in nodes.into_iter().zip(fates) {
+            self.land(s, n, fate, frame, report);
         }
         // A result the cache lets go is freed on the pool too: freeing a large result costs
         // about as much as making it.
@@ -1916,8 +2017,7 @@ impl Session {
     /// Each node's fate, on the pool, in `nodes`' order; the planted merge stores them in the
     /// order they finished instead, in a session's own frame.
     fn fates(&self, s: &Scheduler<'_>, nodes: &[usize]) -> Vec<(Fate, Vec<Hashed>)> {
-        let pool = s.options.pool.as_deref();
-        let Some(pool) = pool.filter(|_| self.threads > 1 && nodes.len() > 1) else {
+        let Some(pool) = s.options.pool.as_deref() else {
             return nodes.iter().map(|&n| self.fate(s, n, 0)).collect();
         };
         let op = self.loaded.as_ref().expect("loaded").nodes[nodes[0]].op;
@@ -1943,19 +2043,15 @@ impl Session {
             .collect()
     }
 
-    /// What a node comes to this frame, as [`Session::visit`] decides it, touching nothing but
-    /// what it returns: its tables are built.
+    /// What a changed node comes to this frame, touching nothing but what it returns: its tables
+    /// are built.
     fn fate(&self, s: &Scheduler<'_>, n: usize, thread: usize) -> (Fate, Vec<Hashed>) {
         let mut hashed = Vec::new();
-        let l = self.loaded.as_ref().expect("loaded");
-        let node = &l.nodes[n];
-        if self.mode == Mode::Live && !self.node_dirty(l, node) {
-            return (Fate::Kept(None), hashed);
-        }
+        let node = &self.loaded.as_ref().expect("loaded").nodes[n];
         let key = self.key_in(s, n, &mut hashed);
         if self.mode == Mode::Live {
             if node.has_run && node.key == key {
-                return (Fate::Kept(Some(key)), hashed);
+                return (Fate::Kept, hashed);
             }
             if let Some((out, err, _)) = s.cache.get(&key) {
                 return (Fate::Hit(key, out.clone(), err.clone()), hashed);
@@ -1963,6 +2059,42 @@ impl Session {
         }
         let (called, access, json) = self.run_op(s, n, None);
         (Fate::Ran(key, called, access, json, thread), hashed)
+    }
+
+    /// Applies a node's fate and the passes over values its key made: it keeps its result, or
+    /// settles a cached or a new one.
+    fn land(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        n: usize,
+        (fate, hashed): (Fate, Vec<Hashed>),
+        frame: u64,
+        report: &mut Report,
+    ) {
+        let epoch = self.epoch;
+        s.hashes.extend(hashed);
+        match fate {
+            Fate::Kept => {
+                let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
+                node.run = Run::Kept;
+                node.last_run = epoch;
+                node.visited = frame;
+            }
+            Fate::Hit(key, out, err) => self.settle(s, n, key, out, err, Run::Hit, frame, report),
+            Fate::Ran(key, (out, err, _, tails), access, json, thread) => {
+                if s.options.access_log {
+                    report.access.extend(access);
+                }
+                s.json_written.extend(json);
+                self.tails.extend(tails);
+                report.ran += 1;
+                if self.mode == Mode::Live {
+                    s.insert(key, out.clone(), err.clone());
+                }
+                self.settle(s, n, key, out, err, Run::Ran, frame, report);
+                self.loaded.as_mut().expect("loaded").nodes[n].thread = thread;
+            }
+        }
     }
 
     /// Stores a node's new result, stamps its arrays and reports its error; in a perturbed
@@ -2175,18 +2307,6 @@ impl Session {
             }
         }
         h.finish()
-    }
-
-    /// Runs a node's operator on its view; a panic is caught and becomes the operator's error,
-    /// so it freezes nothing but its own node.
-    fn run_node(
-        &self,
-        s: &mut Scheduler<'_>,
-        n: usize,
-        report: &mut Report,
-    ) -> (Vec<Val>, Option<OpError>, Vec<(String, Val)>) {
-        let (out, err, _, tails) = self.call(s, n, None, report);
-        (out, err, tails)
     }
 
     /// Calls a node's operator on its view (with a step's context, for a step). A panic is
@@ -2802,11 +2922,11 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
     for g in &mut groups {
         let mut start = 0;
         for (k, &n) in g.nodes.iter().enumerate() {
-            let first = g.nodes.get(start).copied().unwrap_or(n);
-            let in_wave = nodes[n].reads.iter().any(|b| match b {
-                Bound::Parent(Some(p)) => *p >= first,
-                _ => false,
-            });
+            let first = g.nodes[start];
+            let in_wave = nodes[n]
+                .reads
+                .iter()
+                .any(|b| matches!(b, Bound::Parent(Some(p)) if *p >= first));
             if k == 0 || in_wave {
                 start = k;
                 g.waves.push(k);
