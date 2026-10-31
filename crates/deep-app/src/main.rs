@@ -76,6 +76,8 @@ fn main() {
             ..gpui_kit::component::TitleBar::window_options()
         };
         open_window(options, cx, move |window, cx| {
+            // A script panel reads its colors from the theme, so it holds the look's roles before one mounts.
+            deep_app::chrome::follow(window, cx);
             let panel = panel_dir.as_ref().map(|dir| {
                 let view = mount_panel(&runtime, dir, window, cx)
                     .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()));

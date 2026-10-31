@@ -152,9 +152,7 @@ mod macos {
     use std::{cell::RefCell, ptr::NonNull, rc::Rc, sync::Arc};
 
     use block2::RcBlock;
-    use gpui_kit::{
-        div, img, prelude::*, px, rgb, Context, Pixels, Render, RenderImage, Size, Window,
-    };
+    use gpui_kit::{div, img, prelude::*, px, Context, Pixels, Render, RenderImage, Size, Window};
     use objc2::{rc::Retained, runtime::AnyObject, MainThreadMarker};
     use objc2_app_kit::{
         NSApplication, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSView,
@@ -497,7 +495,8 @@ mod macos {
     }
 
     impl Render for CursorWindow {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let chrome = crate::chrome::of(window);
             let counts = self.gate.borrow().counts.clone();
             let held = self.gate.borrow().held();
             let status = if held {
@@ -512,11 +511,11 @@ mod macos {
                 .size_full()
                 .flex()
                 .flex_col()
-                .bg(rgb(0x111111))
-                .text_color(rgb(0xf5f5f5))
+                .bg(chrome.raised)
+                .text_color(chrome.ink_primary)
                 .text_xs()
                 .border_1()
-                .border_color(if held { rgb(0xfacc15) } else { rgb(0x444444) })
+                .border_color(if held { chrome.accent } else { chrome.divider })
                 .child(div().flex_1().flex().items_center().justify_center().child(
                     match &self.frame {
                         Some((_, image)) => img(image.clone()).size_full().into_any_element(),
