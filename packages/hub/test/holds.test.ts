@@ -44,7 +44,7 @@ describe('a saved approval of an MCP tool', () => {
     const asks = await openAsks({ record, now, deliver: () => undefined, home: root });
     const as = (writer: string, session?: string): Connection => ({ writer, actor: 'you', scope: 'you', ...(session ? { session, agent: 'claude-code' } : {}) });
     const holds = new Holds({
-      raw: (q) => record.raw(q), asks: () => asks, now, plant: undefined, sorter: undefined,
+      raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
     });
     const call = (session: string) => holds.gate({ session, agent: 'claude-code', cwd } as HookMeta, { label: 'forge delete_repo', classes: [], mcp: { server: 'forge', tool: 'delete_repo' } });

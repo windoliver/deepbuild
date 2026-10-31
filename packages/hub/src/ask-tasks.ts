@@ -59,7 +59,7 @@ interface Pending { session: string; agent: string; definition: Definition; hand
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
 
 export interface AskTaskOptions {
-  raw(query: string): Promise<unknown[]>;
+  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   now: () => number;
   plant: Plant | undefined;
@@ -117,7 +117,7 @@ export class AskTasks {
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */
   async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: WorkItem }): Promise<void> {
     // A work item's task is opened once, whichever prompt names it again.
-    if (t.item && (await this.o.raw(`SELECT 1 FROM tasks WHERE task_ref = '${sql(t.task_ref)}' LIMIT 1`)).length) return;
+    if (t.item && (await this.o.raw(`SELECT 1 FROM tasks WHERE task_ref = ? LIMIT 1`, [t.task_ref])).length) return;
     const connection = this.o.connection(t.session, t.agent);
     // The task's ID follows from its prompt's event, and its lock's from the task's: the same hook replayed appends
     // the same events, which the record holds once.
@@ -197,7 +197,7 @@ export class AskTasks {
   }
   /** The task whose locked definition stands on a definition ask's answer, by the ask's key; undefined when none locked on it. */
   async lockedOn(ask: string): Promise<string | undefined> {
-    const [row] = (await this.o.raw(`SELECT key FROM asks WHERE id = '${sql(ask.replace(/^ask:/, ''))}' AND kind = 'definition'`)) as { key: string }[];
+    const [row] = (await this.o.raw(`SELECT key FROM asks WHERE id = ? AND kind = 'definition'`, [ask.replace(/^ask:/, '')])) as { key: string }[];
     if (!row) return undefined;
     const locked = (await this.o.raw("SELECT task_ref, id FROM definitions WHERE state IN ('locked', 'revised')")) as { task_ref: string; id: string }[];
     return locked.find((d) => sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: d.task_ref, digest: d.id })) === row.key)?.task_ref;
@@ -274,7 +274,7 @@ export class AskTasks {
         task_ref, requirements, deliverables: JSON.parse(String(row.deliverables ?? '[]')) as string[], issue_rev: String(row.issue_rev),
         base_commit: String(row.base_commit), budget: JSON.parse(String(row.budget ?? 'null')) as JsonValue,
       };
-      const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${sql(task_ref)}'`) as { n: number }[];
+      const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = ?`, [task_ref]) as { n: number }[];
       const ts = this.o.now();
       const id = ulid(ts);
       const connection = this.o.connection(session, agent);
@@ -293,7 +293,7 @@ export class AskTasks {
       made.push(`claim:${id}`);
       for (const c of changed) {
         const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
-        const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = '${sql(diff)}' LIMIT 1`);
+        const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff]);
         if (known.length) continue;
         const at = this.o.now();
         await this.o.append(connection, {
