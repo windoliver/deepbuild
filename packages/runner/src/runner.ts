@@ -201,7 +201,7 @@ const inlineToml = (value: unknown): string => (isObj(value)
 /** A sandbox's refusal in a failed command's output: the operating system's words, never the agent's. */
 const SANDBOX_REFUSED = /Operation not permitted|Read-only file system/;
 /** A command that writes: output redirected to a file, or a tool whose job is changing files. A read failing the same way is no refusal. */
-const WRITES = /(?<![\d&])>>?\s*(?!\/dev\/)[^\s&]|\b(?:tee|touch|mkdir|rmdir|rm|mv|cp|ln|chmod|chown|truncate|dd|patch)\s|\bsed\s+-i|\bgit\s+(?:add|commit|apply|checkout|reset|merge|rebase|push)\b/;
+const WRITES = />>?\s*(?!\/dev\/)[^\s&]|\b(?:tee|touch|mkdir|rmdir|rm|mv|cp|ln|chmod|chown|truncate|dd|patch)\s|\bsed\s+-i|\bgit\s+(?:add|commit|apply|checkout|reset|merge|rebase|push)\b/;
 /** Its read-only mode refusing a write: a patch it declined, or a write the sandbox stopped. */
 export const codexRefused = (item: { type?: unknown; status?: unknown; command?: unknown; aggregated_output?: unknown }): boolean =>
   (item.status === 'failed' || item.status === 'declined') && (item.type === 'file_change' || (item.type === 'command_execution' && WRITES.test(String(item.command)) && SANDBOX_REFUSED.test(String(item.aggregated_output))));
@@ -221,9 +221,15 @@ export function codexLogRefused(log: string): boolean {
     const p = isObj(e) && isObj(e.payload) ? e.payload : undefined;
     if (!p || typeof p.call_id !== 'string') continue;
     if (p.type === 'custom_tool_call' && p.name === 'exec') {
-      commands.set(p.call_id, [...String(p.input).matchAll(/\bcmd"?:\s*("(?:[^"\\]|\\.)*")/g)].map((m) => String(JSON.parse(m[1]!))));
+      // Each command the script names as a literal, its quoted words dropped: `grep "a -> b"` writes nothing.
+      commands.set(p.call_id, [...String(p.input).matchAll(/\bcmd"?\s*:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/g)]
+        .map((m) => (m[1] ?? m[2] ?? m[3] ?? '').replace(/\\(.)/g, '$1').replace(/"[^"]*"|'[^']*'/g, '""')));
     }
-    if (p.type === 'custom_tool_call_output' && commands.get(p.call_id)?.some((c) => WRITES.test(c)) && SANDBOX_REFUSED.test(JSON.stringify(p.output))) return true;
+    if (p.type !== 'custom_tool_call_output') continue;
+    const asked = commands.get(p.call_id);
+    const result = JSON.stringify(p.output);
+    // A command it can't read counts as a write: only one it can read is known to be just a read.
+    if (asked && (!asked.length || asked.some((c) => WRITES.test(c))) && /exit_code\\*"\s*:\s*[1-9]/.test(result) && SANDBOX_REFUSED.test(result)) return true;
   }
   return false;
 }

@@ -95,4 +95,24 @@ describe('A Codex session log', () => {
     const read = logged('cat secret', 1, 'cat: secret: Operation not permitted\n').replaceAll('c1', 'c2');
     expect(codexLogRefused(`${write}\n${read}`)).toBe(false);
   });
+  it('reads a command written as any script literal, and never throws on one JSON would refuse', () => {
+    const script = (input: string) => [
+      { payload: { type: 'custom_tool_call', call_id: 'c', name: 'exec', input } },
+      { payload: { type: 'custom_tool_call_output', call_id: 'c', output: [{ type: 'input_text', text: JSON.stringify({ exit_code: 71, output: 'Operation not permitted' }) }] } },
+    ].map((l) => JSON.stringify(l)).join('\n');
+    expect(codexLogRefused(script('tools.exec_command({cmd:"echo \\$HOME > out"})'))).toBe(true);
+    expect(codexLogRefused(script("tools.exec_command({cmd:'touch x'})"))).toBe(true);
+    expect(codexLogRefused(script('tools.exec_command({cmd:`touch x`})'))).toBe(true);
+    expect(codexLogRefused(script('tools.exec_command({cmd:"echo hi 1>out"})'))).toBe(true);
+  });
+  it('takes a stopped command it cannot read as refused, since it cannot say it was only a read', () => {
+    const input = 'tools.exec_command({cmd: c})';
+    const log = [{ payload: { type: 'custom_tool_call', call_id: 'c', name: 'exec', input } }, { payload: { type: 'custom_tool_call_output', call_id: 'c', output: [{ type: 'input_text', text: JSON.stringify({ exit_code: 71, output: 'Operation not permitted' }) }] } }].map((l) => JSON.stringify(l)).join('\n');
+    expect(codexLogRefused(log)).toBe(true);
+  });
+  it('is no refusal when the command succeeded though its output says the words, or when the write is only quoted text', () => {
+    expect(codexLogRefused(logged('ls -R ~/Library > $TMPDIR/l; cat $TMPDIR/l', 0, 'ls: Operation not permitted\n'))).toBe(false);
+    expect(codexLogRefused(logged('grep "a -> b" f', 71, 'sandbox-exec: sandbox_apply: Operation not permitted\n'))).toBe(false);
+    expect(codexLogRefused(logged("grep 'rm ' f", 71, 'sandbox-exec: sandbox_apply: Operation not permitted\n'))).toBe(false);
+  });
 });
