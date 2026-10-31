@@ -1,0 +1,197 @@
+{
+  "title": "send.made@1",
+  "description": "A send that leaves your machine for a person (#365), one event per step: asked (waiting on your authority ask), claimed (its key, synced before the request goes out), answered (the provider's status) or refused (you said no, or its run ended first). Never the message itself: its plan's digest stands for it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "send.made"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The send's key: one cause, sent once."
+        },
+        "piece": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+          "maxLength": 8192,
+          "description": "The plug-in whose job it runs."
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "asked",
+            "claimed",
+            "answered",
+            "refused"
+          ],
+          "description": "The step this event records.",
+          "x-closure": {
+            "closed": "a send is asked, claimed, answered or refused, and nothing else happens to one",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The kind of send, such as email."
+        },
+        "to": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A recipient."
+          },
+          "description": "Who it goes to."
+        },
+        "plan": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The digest of the send's plan: what goes where, which an approval binds.",
+          "maxLength": 8192
+        },
+        "schedule": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The schedule whose run sends it, or null."
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^run:[0-9A-Z]{26}$",
+          "maxLength": 8192,
+          "description": "The run that sends it, or null."
+        },
+        "call": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The action call that sends it, or null."
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The standing rule that covers it, or null."
+        },
+        "ask": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The authority ask raised for it, or null."
+        },
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "On an answer: the provider's HTTP status."
+        }
+      },
+      "required": [
+        "key",
+        "piece",
+        "phase",
+        "kind",
+        "to",
+        "plan",
+        "schedule",
+        "run",
+        "call",
+        "rule",
+        "ask"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

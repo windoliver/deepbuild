@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -131,6 +131,15 @@ function ownsLock() {
   } catch {
     return false;
   }
+}
+// A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.
+function judgeTargets(budget) {
+  const last = (out) => JSON.parse(out.trim().split('\n').at(-1));
+  const ran = spawnSync(budget.command[0], budget.command.slice(1), { cwd: root, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 512 * 1024 * 1024 });
+  if (ran.status !== 0) return { status: 'BLOCKED', reason: `${budget.command.join(' ')} exited ${ran.status}: ${ran.stderr.slice(-1000)}` };
+  const judged = spawnSync(budget.command[0], [budget.command[1], 'judge'], { cwd: root, encoding: 'utf8', input: JSON.stringify({ current: last(ran.stdout), base: null }) });
+  if (judged.status !== 0) return { status: 'BLOCKED', reason: `the judge exited ${judged.status}: ${judged.stderr.slice(-1000)}` };
+  return last(judged.stdout);
 }
 function keptCopy(side) {
   const directory = join(keptRoot(), side, 'copy');
@@ -292,6 +301,13 @@ try {
       verdicts.push(['FAIL', error.message, regressed]);
     }
     console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: now, base: then, counter, fingerprint: machine, limits, ...instructions && { instructions } }));
+    // #854: a task with targets is held to them by its bench's judge, on one more run's report; the judge refuses a
+    // reading of any build but release.
+    if (budget.targets) {
+      const verdict = judgeTargets(budget);
+      console.log(JSON.stringify({ task: budget.id, targets: verdict.targets ?? null, status: verdict.status }));
+      if (verdict.status !== 'PASS') verdicts.push([verdict.status, `${budget.id}: targets: ${verdict.reason}`, `Bring ${budget.id} back within its targets in ${manifest}, on a release build.`]);
+    }
     if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within the margin of the merge base's.`]);
     if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."]);
     for (const [metric, { status, reason }] of Object.entries(limits)) {

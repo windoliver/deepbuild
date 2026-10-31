@@ -65,6 +65,10 @@
         "@microsoft/api-extractor": {
           "spec": "7.60.0",
           "why": "Issue #139: API Extractor's report of the TypeScript extension API, compared in the local preflight with the copy committed in contracts/api-report, so an interface change shows in the pull request that made it."
+        },
+        "gpt-tokenizer": {
+          "spec": "4.0.0",
+          "why": "Issue #854: the tokenizer adapters/codex.facts.json pins (o200k_base), which counts a deep_query reply's tokens in the perf lane's scene read."
         }
       }
     },
@@ -109,6 +113,10 @@
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #327: the question card's digests (an ask thread's fold key, a confirmed answer's bytes), the same SHA-256 crate deep-hook already uses."
+        },
+        "chrono": {
+          "spec": "^0.4",
+          "why": "Issue #883: a notification gives the default's time as a clock time in your time zone; already in gpui's tree with its clock."
         }
       },
       "dev-dependencies": {
@@ -129,6 +137,10 @@
         "objc2-foundation": {
           "spec": "^0.3",
           "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
+        },
+        "objc2-user-notifications": {
+          "spec": "^0.3",
+          "why": "Issue #883: the app reads what Notification Center still holds from it on start, so it can withdraw one whose ask closed; `--notification-center` prints it for the Proof. Already in gpui's tree."
         },
         "objc2-core-foundation": {
           "spec": "^0.3",
@@ -715,6 +727,10 @@
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #391: the GPU ledger the GPUI patch adds to the Metal renderer (frame command buffers committed and their GPU time), which shows a still view uses none. Already in the tree under gpui-kit, as the vendored copy."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #854: an idle window's wakeups and CPU, read from the process with proc_pid_rusage and getrusage; already in the lockfile."
         }
       }
     },
@@ -885,6 +901,10 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #138: the kit's GPU backend on the reference Mac, Metal offscreen under the GPU lease: a module's GPU pass draws and its pixels are read back for the snapshot case."
+        },
+        "gpui-pre-apple": {
+          "spec": "=0.3.9",
+          "why": "Issue #854: the GPU ledger the GPUI patch adds to the Metal renderer, for a settled frame's GPU time; the vendored crate the app already uses."
         }
       }
     },
@@ -1065,6 +1085,10 @@
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #854: a replica's cold start timed from the process's spawn, as proc_pidinfo reports its start; already in the lockfile."
         }
       }
     },

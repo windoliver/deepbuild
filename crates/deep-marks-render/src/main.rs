@@ -6,7 +6,9 @@
 //! platform), looks by ID or as look@1, status states, readings with their as-of time, replay and
 //! frame captures, and #882's: `look` answers each theme's roles; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
-//! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`.
+//! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
+//! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
+//! wakeups and CPU read from this process.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -81,6 +83,16 @@ enum Request {
         look: Look,
         steps: Vec<Step>,
         store: Option<PathBuf>,
+    },
+    /// #854: the document held on screen on the real clock.
+    Idle {
+        doc: Map<String, Value>,
+        look: Look,
+        view: View,
+        record: Record,
+        seconds: u64,
+        /// The wrong program: a frame clock that arms a frame each vsync.
+        arms_each_vsync: bool,
     },
     Render {
         out: String,
@@ -367,6 +379,21 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 arms_only_on_readings,
             }
         }
+        "idle" => Request::Idle {
+            doc: doc(input.get("doc"))?,
+            look,
+            view: view(input.get("view"))?,
+            record: record(input)?,
+            seconds: input
+                .get("seconds")?
+                .as_u64()
+                .filter(|s| (1..=600).contains(s))?,
+            arms_each_vsync: match input.get("planted") {
+                None => false,
+                Some(Value::String(p)) if p == "arms_each_vsync" => true,
+                Some(_) => return None,
+            },
+        },
         "session" => {
             let steps = input
                 .get("steps")?
@@ -431,7 +458,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
     if ![
-        "frames", "session", "render", "check", "look", "raster", "geometry",
+        "frames", "session", "render", "check", "look", "raster", "geometry", "idle",
     ]
     .contains(&command.as_str())
     {
