@@ -38,3 +38,22 @@ opt-level = 3
 # Its window captures read 2000 × 1648 frames back through the GPUI patch's Metal renderer.
 [profile.dev.package.gpui-pre-apple]
 opt-level = 3
+# Issue #124: a replica's budgets (an action's round trip under 50 ms plus its wait, a 2,000-node snapshot under
+# 20 ms) are read off the dev `deep-drive` the acceptance tests run, and a replica's frame spends its time in GPUI's
+# layout and paint, a panel's script VM and the path tessellator.
+[profile.dev.package.deep-replica]
+opt-level = 3
+[profile.dev.package.gpui-pre]
+opt-level = 3
+[profile.dev.package.gpui-base]
+opt-level = 3
+[profile.dev.package.gpui-shell]
+opt-level = 3
+[profile.dev.package.taffy]
+opt-level = 3
+[profile.dev.package.lyon_tessellation]
+opt-level = 3
+[profile.dev.package.quickjs-jit-sys]
+opt-level = 3
+[profile.dev.package.quickjs-jit-core]
+opt-level = 3

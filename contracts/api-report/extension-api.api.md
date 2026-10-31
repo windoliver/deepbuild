@@ -29,6 +29,18 @@ export interface Deep {
             kinds?: Array<string>;
         };
     }): Promise<unknown>;
+    "store.get"(params: {
+        kind: string;
+        key: string;
+    }): Promise<unknown>;
+    "store.list"(params: {
+        kind: string;
+    }): Promise<unknown>;
+    "store.put"(params: {
+        kind: string;
+        key: string;
+        value: unknown;
+    }): Promise<unknown>;
     "terminal.list"(params: {
     }): Promise<unknown>;
     "terminal.open"(params: {
@@ -80,6 +92,9 @@ export interface Deep {
         declared: {
             declares: unknown;
             input: { [key: string]: unknown };
+            output?: { [key: string]: unknown };
+            changes?: Array<string>;
+            reads?: Array<string>;
         };
     }): Promise<unknown>;
     registerAdapter(params: {
@@ -131,7 +146,11 @@ export interface Deep {
     }): Promise<unknown>;
     store(params: {
         kind: string;
-        schema: {
+        declared: {
+            generation: number;
+            schema: {
+            };
+            migrates?: Array<number>;
         };
     }): Promise<unknown>;
     use(params: {
