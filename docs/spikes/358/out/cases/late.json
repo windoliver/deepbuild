@@ -5,31 +5,31 @@
    "outside_panel"
   ],
   "firstUpdate": 1,
-  "marker": "ran:108",
+  "marker": "ran:70",
   "area": [
-   121,
-   108,
+   147,
+   112,
    500,
    400
   ],
   "card": [
-   836,
-   331,
+   802,
+   316,
    480,
    240
   ],
-  "question": "Ship build 7328?",
+  "question": "Ship build 1085?",
   "updates": 3,
-  "fill": "#cd06da",
-  "escape": "#e116f5"
+  "fill": "#d705ed",
+  "escape": "#df10f4"
  },
  "status": 1,
  "output": {
   "result": "fail",
   "origin": "agent_built",
   "runtime": "panel_host",
-  "appPid": 79437,
-  "hostPid": 79448,
+  "appPid": 72658,
+  "hostPid": 72664,
   "trees": [
    {
     "kind": "div",
@@ -37,18 +37,18 @@
      {
       "kind": "text",
       "children": [],
-      "text": "ran:108",
+      "text": "ran:70",
       "bounds": [
-       121,
-       108,
+       147,
+       112,
        500,
        26
       ]
      }
     ],
     "bounds": [
-     121,
-     108,
+     147,
+     112,
      500,
      400
     ]
@@ -59,10 +59,10 @@
      {
       "kind": "text",
       "children": [],
-      "text": "ran:108",
+      "text": "ran:70",
       "bounds": [
-       121,
-       108,
+       147,
+       112,
        500,
        26
       ]
@@ -73,26 +73,26 @@
        {
         "kind": "text",
         "children": [],
-        "text": "esc:21",
+        "text": "esc:17",
         "bounds": [
-         13,
-         118,
+         77,
+         122,
          80,
          26
         ]
        }
       ],
       "bounds": [
-       13,
-       118,
+       77,
+       122,
        80,
        80
       ]
      }
     ],
     "bounds": [
-     121,
-     108,
+     147,
+     112,
      500,
      400
     ]
@@ -103,10 +103,10 @@
      {
       "kind": "text",
       "children": [],
-      "text": "ran:108",
+      "text": "ran:70",
       "bounds": [
-       121,
-       108,
+       147,
+       112,
        500,
        26
       ]
@@ -117,26 +117,26 @@
        {
         "kind": "text",
         "children": [],
-        "text": "esc:21",
+        "text": "esc:17",
         "bounds": [
-         13,
-         118,
+         77,
+         122,
          80,
          26
         ]
        }
       ],
       "bounds": [
-       13,
-       118,
+       77,
+       122,
        80,
        80
       ]
      }
     ],
     "bounds": [
-     121,
-     108,
+     147,
+     112,
      500,
      400
     ]
@@ -147,8 +147,8 @@
     "kind": "outside_panel",
     "update": 1,
     "bounds": [
-     13,
-     118,
+     77,
+     122,
      80,
      80
     ]
@@ -157,8 +157,8 @@
     "kind": "outside_panel",
     "update": 1,
     "bounds": [
-     13,
-     118,
+     77,
+     122,
      80,
      26
     ]
@@ -167,8 +167,8 @@
     "kind": "outside_panel",
     "update": 2,
     "bounds": [
-     13,
-     118,
+     77,
+     122,
      80,
      80
     ]
@@ -177,15 +177,15 @@
     "kind": "outside_panel",
     "update": 2,
     "bounds": [
-     13,
-     118,
+     77,
+     122,
      80,
      26
     ]
    }
   ],
   "card": {
-   "question": "Ship build 7328?"
+   "question": "Ship build 1085?"
   }
  }
 }
