@@ -8,7 +8,7 @@
 #           pass because #317's no-deep-restore floor entry is already on main (regression guard).
 
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a854e2303140ebd8a/tests/acceptance/572
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a854e2303140ebd8a/tests/acceptance/572
 
  × backup.test.ts > AC1 #572.f4b300d0 deep backup while 30 scripted sessions append: the copy passes PRAGMA integrity_check and holds every event committed before the backup began; a plain copy of ledger.db taken mid-commit fails, naming the commit > AC1 `deep backup <folder>` under the load of 30 appending sessions exits 0; its ledger.db passes PRAGMA integrity_check and holds every event committed before it began, with the evidence and wiki folders 4433ms
    → `deep backup /private/tmp/dh572-aX3WUY/backups/under-load` must exit 0 with the hub up: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
