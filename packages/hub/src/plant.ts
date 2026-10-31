@@ -97,3 +97,6 @@ export function plantOf(value: string | undefined): Plant | undefined {
 
 /** The plant the CLI's side of a command acts as (setup, undo, the doctor, status, the bundle): the hub's variable. */
 export const activePlant = (): string | undefined => process.env.DEEP_HUB_PLANT || undefined;
+
+/** #40's wrong program on the hub's side: an answer of a replaced session handed to the session that replaced it. Only tests set it. */
+export const piAcceptsReplaced = (): boolean => process.env.DEEP_PI_PLANT === 'accepts-replaced';

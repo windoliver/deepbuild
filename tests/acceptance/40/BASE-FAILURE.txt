@@ -1,0 +1,89 @@
+Suite tests/acceptance/40/ on base commit 244a3455, real pi 1.4.0 from DEEP_PI_CLI, Node 24, 2026-10-30.
+Every test fails, for the reason named: no package, facts, corpus, budget task or runner support for pi.
+
+ FAIL  tests/acceptance/40/budgets.test.ts > AC5 #40.9680351d Budgets: the in-process client adds under 1 ms per event to pi > AC5 the perf lane has the client's task, a #40 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task running benchmarks/pi-client.mjs: expected 0 to be greater than 0
+ FAIL  tests/acceptance/40/budgets.test.ts > AC5 #40.9680351d Budgets: the in-process client adds under 1 ms per event to pi > AC5 `node benchmarks/pi-client.mjs` runs on real pi and exits 0
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/budgets.test.ts > AC5 #40.9680351d Budgets: the in-process client adds under 1 ms per event to pi > AC5 the package's added time per event, five sessions each way after a warm-up, is under 1 ms on the reference Mac
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC1 #40.bb9b6512 An idle pi session starts a turn with the answer > AC1 your answer to a native deep_ask starts one new turn in the idle session through pi.sendUserMessage, delivered once
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC1 #40.bb9b6512 An idle pi session starts a turn with the answer > AC1 the package registers native tools matching the MCP tools: the same names and descriptions as packages/hub/tools.json
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC2 #40.d992de05 A busy session gets it after its current tool calls > AC2 an answer given while two tool calls run reaches the model after both results, with neither interrupted
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 a prompt an extension handles without a run gets one delivery outcome without waiting for agent_start
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 (wrong program) waits-for-agent-start: a delivery that waits on agent_start fails it
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 a run that ends recoverably before final settlement starts no competing continuation
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 (wrong program) continues-on-end: an answer sent at the recoverable agent_end fails it
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 a replaced session refuses a pending answer bound to the old generation
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 (wrong program) accepts-replaced: an answer accepted for a replaced generation fails it
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 a nested record pi marks incomplete past its 256 calls stays incomplete in the record, and its turn did work
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 a nested record cut by over-long arguments stays incomplete too
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 the twin: a nested record pi marks complete reads complete, so the check tells them apart
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/delivery.test.ts > AC4 #40.5fd13825 A handled prompt, a recoverable end, a replaced session and an incomplete nested record > AC4 (wrong program) drops-incomplete: normalizing an incomplete record away fails it
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/install.test.ts > AC6 #40.c666bc59 The package installs with `pi install` and is pinned to a version > AC6 the package is a pi package at an exact version, and pi's facts pin it there
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/install.test.ts > AC6 #40.c666bc59 The package installs with `pi install` and is pinned to a version > AC6 `pi install <the facts' source>` installs it pinned, it loads in a real session, and `pi update` keeps the pin
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/install.test.ts > AC6 #40.c666bc59 The package installs with `pi install` and is pinned to a version > AC6 (wrong program) a floating source moves with the registry, so the pin check tells them apart
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC7 #40.0a086a33 pi's edit tool records as an edit with the same paths as Claude Code's Edit > AC7 through the adapter: the same kind and the same absolute paths, from the shipped facts
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC7 #40.0a086a33 pi's edit tool records as an edit with the same paths as Claude Code's Edit > AC7 (wrong program) a mapping that records pi's edit as a write fails this test, naming the call
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC7 #40.0a086a33 pi's edit tool records as an edit with the same paths as Claude Code's Edit > AC7 real pi's real edit tool, through the package and the hub, records what the hub records for Claude Code's Edit
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 every session is a recorded set of a covered version, with reviewed expected events and nothing personal
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 a prompt handled without a run: disposition handled, recorded as handled, with no agent_start for it
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 two starts before one settle: agent_start twice, one agent_before_settle as the one agent.stop, agent_settled as activity
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 a replaced session's pending answer: the replacement names its parent, and the case names the pending ask bound to it
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 a nested tool record marked incomplete: complete false in the payload, in the stored event and in pi's own transcript
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 the corpus lane holds pi: replay and check pass with pi's set in them, each of its payloads a match
+AssertionError: replay reads pi's set: expected 0 to be greater than 0
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 (wrong program) replay on facts with settled treated as a result fails, naming the cases
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 (wrong program) replay on facts with agent_end treated as a result fails, naming the cases
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 (wrong program) replay on facts with edit mapped as write fails, naming the cases
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC8 #40.c6c858c2 The pi corpus holds a recorded case for each of the four > AC8 pi's facts keep the four apart: only the pre-settle hook may continue a run
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC9 #40.249583fd Scripted pi sessions in RPC mode reproduce the four lifecycle cases the pi corpus records > AC9 a prompt handled without a run: the same case as the corpus's, its disposition from pi itself
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC9 #40.249583fd Scripted pi sessions in RPC mode reproduce the four lifecycle cases the pi corpus records > AC9 two starts before one settle: a retried run reads as the corpus does, with one stop and settled as activity
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC9 #40.249583fd Scripted pi sessions in RPC mode reproduce the four lifecycle cases the pi corpus records > AC9 settled is activity, never a result: a run that settles aborted reads failed at its pre-settle stop, and settled adds no stop
+Error: the pi package is missing: no packages/pi/package.json (README, The surface)
+ FAIL  tests/acceptance/40/mapping.test.ts > AC9 #40.249583fd Scripted pi sessions in RPC mode reproduce the four lifecycle cases the pi corpus records > AC9 a replaced session's pending answer: refused as replaced, and the replacement names its parent as the corpus does
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC9 #40.249583fd Scripted pi sessions in RPC mode reproduce the four lifecycle cases the pi corpus records > AC9 a nested tool record marked incomplete: the stored shape of the corpus's case
+Error: the pi corpus is missing: no adapters/corpus/pi
+ FAIL  tests/acceptance/40/mapping.test.ts > AC9 #40.249583fd Scripted pi sessions in RPC mode reproduce the four lifecycle cases the pi corpus records > AC9 the adapter maps each recorded case as the facts say, with the real mapper: each case's stored events are its own
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/runner.test.ts > AC3 #40.8dc59e9e The runner starts a pi job from its facts, and the job's usage and stop cause are recorded > AC3 pi's facts hold the headless launch: pi --mode json -p with a read-only tool list, no bypass, the versions it covers
+Error: pi's facts are missing: no adapters/pi.facts.json (README, The surface)
+ FAIL  tests/acceptance/40/runner.test.ts > AC3 #40.8dc59e9e The runner starts a pi job from its facts, and the job's usage and stop cause are recorded > AC3 a job runs on real pi: its session, model, prompt, summed usage and final result are recorded
+AssertionError: it ran to its end: expected { state: 'refused', …(2) } to deeply equal { state: 'finished', …(2) }
+ FAIL  tests/acceptance/40/runner.test.ts > AC3 #40.8dc59e9e The runner starts a pi job from its facts, and the job's usage and stop cause are recorded > AC3 a run that ends on an error records the cause its facts name, not a result
+AssertionError: it stopped: {"job":"run:01M6637GP25AFKR54YRX76ZJNQ","kind":"read","agent":"pi","account":null,"state":"refused","folder":"/private/tmp/dh40-9D2rg9/h/.deepbuild/jobs/01M6637GP25AFKR54YRX76ZJNQ","refused":"no agent pi"}: expected 'refused' to be 'stopped' // Object.is equality
+ FAIL  tests/acceptance/40/runner.test.ts > AC3 #40.8dc59e9e The runner starts a pi job from its facts, and the job's usage and stop cause are recorded > AC3 an error its facts don't name is unknown, never a pass
+AssertionError: expected 'refused' to be 'stopped' // Object.is equality
+ FAIL  tests/acceptance/40/runner.test.ts > AC3 #40.8dc59e9e The runner starts a pi job from its facts, and the job's usage and stop cause are recorded > AC3 a read-only job's write is refused by its tool list: no file, and the job still ends
+AssertionError: expected 'refused' to be 'finished' // Object.is equality
+ Test Files  5 failed (5)
+      Tests  43 failed (43)
