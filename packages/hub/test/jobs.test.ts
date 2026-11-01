@@ -3,10 +3,10 @@
 // git could write the job's .git.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { client } from './hub.js';
 
 const ACCOUNT = '0e0e0e0e-1111-4222-8333-444444444444';
 const MAIN = new URL('../../cli/dist/main.js', import.meta.url).pathname;
@@ -18,26 +18,6 @@ afterEach(async () => {
   if (hub && hub.exitCode === null) { hub.kill('SIGTERM'); await new Promise((done) => hub!.once('exit', done)); }
   rmSync(dir, { recursive: true, force: true });
 });
-
-/** A line client of the hub's socket, as the CLI is. */
-async function client(socket: string, token: string): Promise<(method: string, params: object) => Promise<Record<string, unknown>>> {
-  const s = net.connect(socket);
-  let buf = '';
-  const lines: Record<string, unknown>[] = [];
-  s.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
-  const until = async <T>(f: () => T | undefined): Promise<T> => { for (let i = 0; i < 600; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw Error('no answer from the hub'); };
-  await until(() => lines[0]);
-  s.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
-  await until(() => lines.find((l) => l.role));
-  let n = 0;
-  return async (method, params) => {
-    const id = `c${++n}`;
-    s.write(`${JSON.stringify({ v: 1, id, method, params })}\n`);
-    const reply = await until(() => lines.find((l) => l.id === id));
-    if (reply.error) throw Error(JSON.stringify(reply.error));
-    return reply.result as Record<string, unknown>;
-  };
-}
 
 it('checks out a job\'s base commit inside a real hub, whose root no run may otherwise write', async () => {
   dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-jobs-')));

@@ -13,14 +13,13 @@ import { inboxCommand } from './inbox.js';
 import { installCommand } from './install.js';
 import { memoryCommand } from './memory.js';
 import { undoCommand } from './undo.js';
-import { runMcp } from './mcp.js';
 import { resolve } from 'node:path';
 import { installedRoot } from './paths.js';
 import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
-export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, runMcp, setUpFirst, setupCommand, undoCommand, waiterCommand };
+export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
 export { doctorCommand, doctorItems } from './doctor.js';
