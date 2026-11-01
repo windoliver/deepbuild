@@ -6,7 +6,7 @@
 // what a base run proved. A checkout goes once no run on it is running or queued, and a crash's goes at the next open.
 import { execFile, spawn } from 'node:child_process';
 import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
-import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { connect } from 'node:net';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
@@ -189,8 +189,12 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const index = join(dir, 'index');
       const store = o.plant === 'snapshot-into-repo' ? {} : await repoEnv(worktree);
       const env = { ...store, ...(o.plant === 'snapshot-through-index' ? {} : { GIT_INDEX_FILE: index }) };
-      if (existsSync(join(gitDir, 'index'))) await writeFile(index, await readFile(join(gitDir, 'index')));
-      else await git(worktree, ['read-tree', 'HEAD'], env);
+      if (existsSync(join(gitDir, 'index'))) {
+        await writeFile(index, await readFile(join(gitDir, 'index')));
+        // The copy keeps the index's time: git reads a file edited in that second by its bytes only by comparing the two.
+        const { atime, mtime } = await stat(join(gitDir, 'index'));
+        await utimes(index, atime, mtime);
+      } else await git(worktree, ['read-tree', 'HEAD'], env);
       if (o.plant !== 'keeps-skip-worktree') {
         // Marks hide a change from `add`: cleared in the copy, each by its own option, since one call applies only its first.
         // One missing from disk keeps its mark, or `add` would read a sparse checkout's absent files as deleted.
