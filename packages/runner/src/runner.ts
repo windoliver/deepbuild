@@ -25,6 +25,8 @@ const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 const FOLDED = ['job.recorded', 'job.ended', 'process.starting', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted'] as const;
 type Folded = (typeof FOLDED)[number];
 const MINUTE = 60_000;
+/** A Codex window this long or longer is its weekly one (adapters/loops.facts.json: windows.weeklyMinutes). */
+const WEEKLY_MINUTES = 10_080;
 const DAY = 86_400_000;
 /** How long a CLI may keep running after its final result, or after its process ends without one. */
 const GRACE_MS = 5000;
@@ -63,15 +65,21 @@ interface AgentParts {
    */
   confine(mcp: Record<string, McpServer>, subagents: Record<string, Subagent>): string[];
   /** The account the agent records beside your sign-in, or null. */
-  account(home: string): string | null;
+  account(home: string, env: Record<string, string | undefined>): string | null;
   /** Your sign-in files the agent reads in place, never copied into a job's folder. */
-  signIn(home: string): string[];
+  signIn(home: string, env: Record<string, string | undefined>): string[];
   /** Its window snapshot as named windows: used percent and reset time in ms, each it names. */
   windows(rateLimits: unknown): Map<string, { used: number; resets: number | null }>;
   /** The only hosts (host:port) its job reaches, through the forwarder: its own model API. */
   hosts: string[];
   /** What a real agent needs in its job's environment: its own temp folder, the forwarder, and your sign-in token if the hub read one. */
-  reach(o: { temp: string; proxy: string; token?: string }): Record<string, string>;
+  reach(o: { temp: string; proxy: string; token?: string; home: string; env: Record<string, string | undefined> }): Record<string, string>;
+  /** Whether what it left in its job's temp folder shows its read-only mode refusing, where its output doesn't say. */
+  refusedIn?(temp: string): boolean;
+  /** Its facts cover exactly the versions they list, not the range between them. */
+  exactVersions?: true;
+  /** Whether an account has no plan window for a job to wait on: with no plan account signed in, a budget is its only gate. */
+  planless?(account: string | null): boolean;
   /** It installs by npm, so it reads its dependencies around its own folder, and its version check reads what its job's grant names. */
   packaged?: boolean;
   /** It reports no plan window: its job waits for no reading of one. */
@@ -81,6 +89,30 @@ interface AgentParts {
   /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
   expires(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<number | undefined>;
 }
+/** The version a binary shows: its suffix kept where the facts list exact builds, so a stable build is never its alpha. */
+/** What a program reads to run: the package holding it, since a launcher in bin loads the rest from there, or its own folder. */
+export function programRoot(real: string): string {
+  const own = dirname(real);
+  const up = dirname(own);
+  const pkg = readJson(join(up, 'package.json'));
+  const bin = isObj(pkg) ? pkg.bin : undefined;
+  const named = typeof bin === 'string' ? [bin] : isObj(bin) ? Object.values(bin) : [];
+  return named.some((b) => typeof b === 'string' && resolve(up, b) === real) ? up : own;
+}
+export const shownVersion = (text: string, exact: boolean): string | undefined => (exact ? /(\d+\.\d+\.\d+(?:-[\w.]+)?)/ : /(\d+\.\d+\.\d+)/).exec(text)?.[1];
+/** Codex's plan windows, each named by its length as the hub's row reads it, or by its slot where a snapshot gives none. Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows. */
+export function codexWindows(limits: unknown): Map<string, { used: number; resets: number | null }> {
+  const out = new Map<string, { used: number; resets: number | null }>();
+  if (!isObj(limits) || (limits.limit_id !== undefined && limits.limit_id !== 'codex')) return out;
+  for (const [slot, name] of [['primary', 'five_hour'], ['secondary', 'seven_day']] as const) {
+    const w = limits[slot];
+    if (!isObj(w) || typeof w.used_percent !== 'number') continue;
+    const named = typeof w.window_minutes === 'number' ? (w.window_minutes >= WEEKLY_MINUTES ? 'seven_day' : 'five_hour') : name;
+    out.set(named, { used: w.used_percent, resets: typeof w.resets_at === 'number' ? w.resets_at * 1000 : null });
+  }
+  return out;
+}
+
 const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
     facts: new URL('../../../adapters/claude-code.facts.json', import.meta.url),
@@ -126,7 +158,89 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
       return o && typeof o.expiresAt === 'number' ? o.expiresAt : undefined;
     },
   },
+  codex: {
+    facts: new URL('../../../adapters/codex.facts.json', import.meta.url),
+    // The MCP servers go on the command line, since the facts' launch ignores your config. Codex has no sub-agents to name.
+    confine: (mcp, subagents) => {
+      if (Object.keys(subagents).length) throw Error('a Codex job takes no sub-agents');
+      return Object.entries(mcp).flatMap(([name, server]) => ['-c', `mcp_servers.${JSON.stringify(name)}=${inlineToml(server)}`]);
+    },
+    account: (home, env) => {
+      const v = readJson(join(codexHome(home, env), 'auth.json'));
+      const id = isObj(v) && isObj(v.tokens) ? v.tokens.account_id : undefined;
+      return typeof id === 'string' && id ? id : null;
+    },
+    signIn: codexSignIn,
+    // Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows.
+    windows: codexWindows,
+    hosts: ['api.openai.com:443', 'chatgpt.com:443'],
+    reach: codexReach,
+    refusedIn: (temp) => codexLogs(temp).some(codexLogRefused),
+    token: async () => undefined,
+    expires: async () => undefined,
+    exactVersions: true,
+    planless: (account) => account === null,
+  },
 };
+/** The system's root certificates as a file: a Codex job's HTTP client can't load them from the keychain in its sandbox. */
+const CODEX_ROOTS = '/etc/ssl/cert.pem';
+export function codexSignIn(home: string, env: Record<string, string | undefined>): string[] {
+  return [join(codexHome(home, env), 'auth.json'), CODEX_ROOTS];
+}
+// A home of its own in its temp folder, so it writes no rollout or state into yours and your history never counts
+// it as a session of yours, with your sign-in linked in place. The sandbox refuses every write under a folder named
+// .codex, so that home goes by another name, with a link at the place Codex looks by default.
+export function codexReach({ temp, proxy, home, env }: { temp: string; proxy: string; home: string; env: Record<string, string | undefined> }): Record<string, string> {
+  const own = join(temp, 'home');
+  const codex = join(temp, 'codex-home');
+  mkdirSync(own);
+  mkdirSync(codex);
+  symlinkSync(codex, join(own, '.codex'));
+  if (home) symlinkSync(join(codexHome(home, env), 'auth.json'), join(codex, 'auth.json'));
+  return { TMPDIR: temp, HOME: own, CODEX_HOME: codex, HTTPS_PROXY: proxy, https_proxy: proxy, SSL_CERT_FILE: CODEX_ROOTS };
+}
+/** Your Codex home, as its facts name it. */
+const codexHome = (home: string, env: Record<string, string | undefined>): string => env.CODEX_HOME || join(home, '.codex');
+/** An MCP server as the inline TOML table `-c` takes: JSON's strings and arrays read the same there. */
+const inlineToml = (value: unknown): string => (isObj(value)
+  ? `{${Object.entries(value).filter(([, v]) => v !== undefined).map(([k, v]) => `${JSON.stringify(k)}=${inlineToml(v)}`).join(',')}}`
+  : Array.isArray(value) ? `[${value.map(inlineToml).join(',')}]` : JSON.stringify(value));
+/** A sandbox's refusal in a failed command's output: the operating system's words, never the agent's. */
+const SANDBOX_REFUSED = /Operation not permitted|Read-only file system/;
+/** A command that writes: output redirected to a file, or a tool whose job is changing files. A read failing the same way is no refusal. */
+const WRITES = />>?\s*(?!\/dev\/)[^\s&]|\b(?:tee|touch|mkdir|rmdir|rm|mv|cp|ln|chmod|chown|truncate|dd|patch)\s|\bsed\s+-i|\bgit\s+(?:add|commit|apply|checkout|reset|merge|rebase|push)\b/;
+/** Its read-only mode refusing a write: a patch it declined, or a write the sandbox stopped. */
+export const codexRefused = (item: { type?: unknown; status?: unknown; command?: unknown; aggregated_output?: unknown }): boolean =>
+  (item.status === 'failed' || item.status === 'declined') && (item.type === 'file_change' || (item.type === 'command_execution' && WRITES.test(String(item.command)) && SANDBOX_REFUSED.test(String(item.aggregated_output))));
+
+/** Each session log a Codex job left in its own home. */
+function codexLogs(temp: string): string[] {
+  const sessions = join(temp, 'codex-home', 'sessions');
+  if (!existsSync(sessions)) return [];
+  return readdirSync(sessions, { recursive: true, encoding: 'utf8' }).filter((f) => /rollout-.*\.jsonl$/.test(f)).map((f) => readFileSync(join(sessions, f), 'utf8'));
+}
+/** A write the sandbox stopped, from a session log: Codex's --json carries no item for a command run through its exec tool. */
+export function codexLogRefused(log: string): boolean {
+  const commands = new Map<string, string[]>();
+  for (const line of log.split('\n')) {
+    let e: unknown;
+    try { e = JSON.parse(line); } catch { continue; }
+    const p = isObj(e) && isObj(e.payload) ? e.payload : undefined;
+    if (!p || typeof p.call_id !== 'string') continue;
+    if (p.type === 'custom_tool_call' && p.name === 'exec') {
+      // Each command the script names as a literal, its quoted words dropped: `grep "a -> b"` writes nothing.
+      commands.set(p.call_id, [...String(p.input).matchAll(/\bcmd"?\s*:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/g)]
+        .map((m) => (m[1] ?? m[2] ?? m[3] ?? '').replace(/\\(.)/g, (_, c: string) => (c === 'n' ? '\n' : c)).replace(/"[^"]*"|'[^']*'/g, '""')));
+    }
+    if (p.type !== 'custom_tool_call_output') continue;
+    const asked = commands.get(p.call_id);
+    const result = JSON.stringify(p.output);
+    // A command it can't read counts as a write: only one it can read is known to be just a read.
+    if (asked && (!asked.length || asked.some((c) => WRITES.test(c))) && /exit_code\\*"\s*:\s*[1-9]/.test(result) && SANDBOX_REFUSED.test(result)) return true;
+  }
+  return false;
+}
+
 AGENTS.pi = {
   facts: new URL('../../../adapters/pi.facts.json', import.meta.url),
   // pi has no MCP and no sub-agents: a job that names them is refused, never run without them.
@@ -146,8 +260,6 @@ AGENTS.pi = {
   token: async () => undefined,
   expires: async () => undefined,
 };
-/** Codex's launch, `codex exec --json` with `-s read-only`, comes with its adapter. */
-const CODEX_LATER = "Codex's headless launch comes with its adapter (#39); no Codex job runs before it";
 
 interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; errorTexts: { causes?: Record<string, string> }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
@@ -218,7 +330,8 @@ class LocalRunner implements Runner {
   private cursor = 0;
   private closed = false;
   /** Opened with the first job that launches. */
-  private forwarder: Promise<Forwarder> | undefined;
+  /** Each agent's forwarder, so a job reaches its own model API and never another agent's. */
+  private readonly forwarders = new Map<string, Promise<Forwarder>>();
   private readonly timer: NodeJS.Timeout;
 
   constructor(private readonly o: RunnerOptions) {
@@ -338,7 +451,7 @@ class LocalRunner implements Runner {
     mkdirSync(folder, { mode: 0o700 });
     const parts = AGENTS[spec.agent];
     const home = this.o.env.HOME ?? '';
-    const account = spec.account ?? (parts && home ? parts.account(home) : null);
+    const account = spec.account ?? (parts && home ? parts.account(home, this.o.env) : null);
     const rec: JobRecord = { job: id, kind: spec.kind, agent: spec.agent, account, state: 'waiting', folder };
     const job = this.make(rec, spec);
     if (spec.checkout) job.preparing = true;
@@ -347,7 +460,7 @@ class LocalRunner implements Runner {
     await this.append('job.recorded', {
       job: id, kind: spec.kind, agent: spec.agent, account, folder, prompt: sha256(spec.prompt), waiting: [spec.task, spec.claim].filter((x): x is string => typeof x === 'string'),
     }, id);
-    if (!parts) return this.refuse(job, spec.agent === 'codex' ? CODEX_LATER : `no agent ${String(spec.agent)}`);
+    if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
     if (spec.checkout) {
       const failed = await this.checkout(folder, spec.checkout).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
       job.preparing = false;
@@ -465,7 +578,7 @@ class LocalRunner implements Runner {
     const facts = this.facts(job.spec.agent);
     const binary = await this.binary(job, facts);
     if ('refused' in binary) return binary;
-    const covered = this.covers(facts, binary.version);
+    const covered = AGENTS[job.spec.agent]!.exactVersions ? facts.versions.includes(binary.version) : this.covers(facts, binary.version);
     if (!covered && job.spec.kind !== 'smoke') {
       return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover, ${facts.versions[0]} to ${facts.versions[facts.versions.length - 1]}` };
     }
@@ -534,7 +647,7 @@ class LocalRunner implements Runner {
       const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
-      const version = /(\d+\.\d+\.\d+)/.exec(shown.stdout.toString('utf8'))?.[1];
+      const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
       if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
@@ -552,7 +665,7 @@ class LocalRunner implements Runner {
   /** What a job's programs may read and run: the binary's folder and the login shell's PATH. */
   private programs(real: string, parts: AgentParts | undefined): string[] {
     const installed = parts?.packaged ? real.indexOf('/node_modules/') : -1;
-    const dirs = new Set([installed >= 0 ? real.slice(0, installed + '/node_modules'.length) : dirname(real)]);
+    const dirs = new Set([installed >= 0 ? real.slice(0, installed + '/node_modules'.length) : programRoot(real)]);
     for (const dir of this.o.loginPath.split(delimiter)) if (dir && isAbsolute(dir) && existsSync(dir)) dirs.add(realpathSync(dir));
     return [...dirs];
   }
@@ -588,6 +701,7 @@ class LocalRunner implements Runner {
   /** Why the job's account's plan window keeps it waiting, or nothing. */
   private async window(job: Job): Promise<{ blocked: Blocked } | undefined> {
     job.noReading = false;
+    if (AGENTS[job.spec.agent]!.planless?.(job.rec.account)) return undefined;
     const account = job.rec.account ?? 'unknown';
     const reading = this.accounts.get(account);
     const now = this.o.now();
@@ -760,7 +874,7 @@ class LocalRunner implements Runner {
     const parts = AGENTS[job.spec.agent]!;
     const facts = this.facts(job.spec.agent);
     const args = [...facts.launch.readOnlyJob.args];
-    const m = args.indexOf('--model');
+    const m = Math.max(args.indexOf('--model'), args.indexOf('-m'));
     if (job.spec.model) {
       if (m >= 0) args[m + 1] = job.spec.model;
       else args.push('--model', job.spec.model);
@@ -772,17 +886,23 @@ class LocalRunner implements Runner {
     const temp = mkdtempSync(join(realpathSync(tmpdir()), `deep-job-${job.rec.job.slice(job.rec.job.indexOf(':') + 1)}-`));
     job.temp = temp;
     // One that failed to open is tried again with the next job.
-    this.forwarder ??= openForwarder(new Set(Object.values(AGENTS).flatMap((a) => a!.hosts)), this.o.env.HTTPS_PROXY ?? this.o.env.https_proxy)
-      .catch((error: unknown) => { this.forwarder = undefined; throw error; });
-    const { port } = await this.forwarder;
+    let forwarder = this.forwarders.get(facts.agent);
+    if (!forwarder) {
+      const opening = openForwarder(new Set(parts.hosts), this.o.env.HTTPS_PROXY ?? this.o.env.https_proxy)
+        .catch((error: unknown) => { this.forwarders.delete(facts.agent); throw error; });
+      this.forwarders.set(facts.agent, forwarder = opening);
+    }
+    const { port } = await forwarder;
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
-    const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, ...(token ? { token } : {}) }) };
+    const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
     const grant: Grant = {
-      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
+      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
       ...(job.spec.grant?.sockets?.length ? { sockets: job.spec.grant.sockets } : {}),
     };
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {})];
+    // A launch that ends in `-`, the prompt on stdin, keeps it last.
+    const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}), ...stdin];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);
@@ -844,8 +964,32 @@ class LocalRunner implements Runner {
       let e: Obj;
       try { e = JSON.parse(line) as Obj; } catch { continue; }
       if (!isObj(e)) continue;
-      this.event(job, e);
+      if (job.spec.agent === 'codex') this.codexEvent(job, e);
+      else this.event(job, e);
     }
+  }
+  /** One line of `codex exec --json`: its thread, its items, and its turn's end. */
+  private codexEvent(job: Job, e: Obj): void {
+    if (e.type === 'thread.started' && typeof e.thread_id === 'string' && !job.rec.session) job.rec.session = e.thread_id;
+    if (e.type === 'item.completed' && isObj(e.item)) {
+      const item = e.item;
+      if (item.type === 'agent_message' && typeof item.text === 'string') job.rec.result = item.text;
+      // Its read-only mode refusing a write: a patch it declined, or a command the sandbox stopped.
+      if (codexRefused(item)) job.stopCause ??= 'refusal';
+    }
+    if (e.type !== 'turn.completed' && e.type !== 'turn.failed') return;
+    job.resultAt ??= Date.now();
+    for (const cancel of job.timers) cancel();
+    if (isObj(e.usage)) {
+      // Codex's input includes the cached tokens, taken back out (its facts' usage).
+      const u = job.rec.usage ?? { input: 0, cached: 0, output: 0 };
+      u.input += num(e.usage.input_tokens) - num(e.usage.cached_input_tokens);
+      u.cached += num(e.usage.cached_input_tokens);
+      u.output += num(e.usage.output_tokens);
+      job.rec.usage = u;
+    }
+    if (e.type === 'turn.failed') { job.errored = true; job.stopCause ??= 'unknown'; }
+    void this.settle(job, job.resultAt);
   }
   /** A pi job's own stream: its session line, each message once as it ends, and its settling as its result. */
   private piEvent(job: Job, e: Obj): void {
@@ -995,6 +1139,7 @@ class LocalRunner implements Runner {
     job.rec.model = job.answered ?? 'unknown';
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
+    if (job.temp && AGENTS[job.spec.agent]?.refusedIn?.(job.temp)) job.stopCause ??= 'refusal';
     // pi says on stderr what stops a run before its first message, as a missing key does.
     const said = job.failure && !finished && !job.stopCause ? this.piCause(job.failure) : 'unknown';
     const cause = job.stopCause ?? (finished ? undefined : said !== 'unknown' ? said : 'agent_crashed');
@@ -1065,7 +1210,7 @@ class LocalRunner implements Runner {
     clearInterval(this.timer);
     for (const job of this.jobs.values()) for (const cancel of job.timers) cancel();
     await this.chain;
-    await (await this.forwarder?.catch(() => undefined))?.close();
+    for (const forwarder of this.forwarders.values()) await (await forwarder.catch(() => undefined))?.close();
   }
 }
 
