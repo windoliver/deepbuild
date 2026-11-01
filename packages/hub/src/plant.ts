@@ -59,7 +59,9 @@ export type Plant =
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
   // #909's: a hub that never checks its lock again once it holds it.
-  | 'lock-never-rechecked';
+  | 'lock-never-rechecked'
+  // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
+  | 'fills-every-slot' | 'background-subagents-only';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -97,6 +99,7 @@ const PLANTS: readonly string[] = [
   'deep-drive-no-lease',
   'signature-covers-anything',
   'lock-never-rechecked',
+  'fills-every-slot', 'background-subagents-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
