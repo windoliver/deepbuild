@@ -163,34 +163,31 @@ impl Runner {
                 wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             ),
         ];
-        let mut b = 2;
-        for name in &c.textures {
+        let textures = c.textures.iter().map(|name| {
             let sample_type = match c.op.inputs[name].ty {
                 Ty::Tex(Tex::Uint) => wgpu::TextureSampleType::Uint,
                 Ty::Tex(Tex::Depth) => wgpu::TextureSampleType::Depth,
                 _ => wgpu::TextureSampleType::Float { filterable: true },
             };
-            let ty = wgpu::BindingType::Texture {
+            wgpu::BindingType::Texture {
                 sample_type,
                 view_dimension: wgpu::TextureViewDimension::D2,
                 multisampled: false,
-            };
-            entries.push(entry(b, stage, ty));
-            b += 1;
-        }
+            }
+        });
         let storage = |read_only| wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Storage { read_only },
             has_dynamic_offset: false,
             min_binding_size: None,
         };
-        for _ in &c.storage_inputs {
-            entries.push(entry(b, stage, storage(true)));
-            b += 1;
-        }
-        for _ in &c.op.storage {
-            entries.push(entry(b, stage, storage(false)));
-            b += 1;
-        }
+        let buffers = (c.storage_inputs.iter().map(|_| storage(true)))
+            .chain(c.op.storage.iter().map(|_| storage(false)));
+        entries.extend(
+            textures
+                .chain(buffers)
+                .zip(2..)
+                .map(|(ty, b)| entry(b, stage, ty)),
+        );
         let input_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("operator inputs"),
             entries: &entries,
@@ -298,21 +295,15 @@ impl Runner {
                 resource: wgpu::BindingResource::Sampler(&self.sampler),
             },
         ];
-        let mut b = 2;
-        for v in textures {
-            entries.push(wgpu::BindGroupEntry {
-                binding: b,
-                resource: wgpu::BindingResource::TextureView(v),
-            });
-            b += 1;
-        }
-        for buf in storage {
-            entries.push(wgpu::BindGroupEntry {
-                binding: b,
-                resource: buf.as_entire_binding(),
-            });
-            b += 1;
-        }
+        let resources = (textures
+            .iter()
+            .map(|v| wgpu::BindingResource::TextureView(v)))
+        .chain(storage.iter().map(|b| b.as_entire_binding()));
+        entries.extend(
+            resources
+                .zip(2..)
+                .map(|(resource, binding)| wgpu::BindGroupEntry { binding, resource }),
+        );
         let g1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("operator inputs"),
             layout: &self.input_layout,
@@ -376,4 +367,66 @@ impl Runner {
             1,
         );
     }
+}
+
+/// Runs a checked compute operator on the GPU over `inputs` (one buffer of words each, in its
+/// storage inputs' order) and reads back its first storage output.
+pub fn dispatch(device: &deep_gpu::device::Device, c: &Compiled, inputs: &[Vec<u32>]) -> Vec<u32> {
+    use wgpu::util::DeviceExt as _;
+    let d = &device.device;
+    let runner = Runner::new(d, c.clone(), LINEAR);
+    let ins: Vec<wgpu::Buffer> = inputs
+        .iter()
+        .map(|w| {
+            let bytes: Vec<u8> = w.iter().flat_map(|x| x.to_le_bytes()).collect();
+            d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("op input"),
+                contents: &bytes,
+                usage: wgpu::BufferUsages::STORAGE,
+            })
+        })
+        .collect();
+    let n = c
+        .checked
+        .op
+        .storage
+        .values()
+        .next()
+        .map_or(1, |s| s.count.max(1));
+    let out = d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("op output"),
+        size: u64::from(n) * 4,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+    let back = d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("op read back"),
+        size: u64::from(n) * 4,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut bufs: Vec<&wgpu::Buffer> = ins.iter().collect();
+    bufs.push(&out);
+    let values =
+        deep_canvas_effects::interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new());
+    let (g0, g1, _b) = runner.bind(d, &Frame::default(), [1, 1], &values, &[], &bufs);
+    let mut enc = d.create_command_encoder(&Default::default());
+    runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None);
+    enc.copy_buffer_to_buffer(&out, 0, &back, 0, u64::from(n) * 4);
+    device.queue.submit([enc.finish()]);
+    back.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+    let _ = d.poll(wgpu::PollType::wait_indefinitely());
+    let words = back
+        .slice(..)
+        .get_mapped_range()
+        .map(|v| {
+            v.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| u32::from_le_bytes(*b))
+                .collect()
+        })
+        .unwrap_or_default();
+    back.unmap();
+    words
 }

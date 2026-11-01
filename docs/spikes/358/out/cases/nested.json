@@ -1,0 +1,265 @@
+{
+ "want": {
+  "pass": false,
+  "kinds": [
+   "outside_panel"
+  ],
+  "marker": "ran:63",
+  "area": [
+   114,
+   138,
+   500,
+   400
+  ],
+  "card": [
+   833,
+   327,
+   480,
+   240
+  ],
+  "question": "Ship build 1771?",
+  "updates": 3,
+  "fill": "#d415f0",
+  "escape": "#de27d6"
+ },
+ "status": 1,
+ "output": {
+  "result": "fail",
+  "origin": "agent_built",
+  "runtime": "panel_host",
+  "appPid": 72613,
+  "hostPid": 72619,
+  "trees": [
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:63",
+      "bounds": [
+       114,
+       138,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "div",
+        "children": [
+         {
+          "kind": "text",
+          "children": [],
+          "text": "esc:16",
+          "bounds": [
+           657,
+           148,
+           80,
+           26
+          ]
+         }
+        ],
+        "bounds": [
+         657,
+         148,
+         80,
+         80
+        ]
+       }
+      ],
+      "bounds": [
+       514,
+       148,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     114,
+     138,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:63",
+      "bounds": [
+       114,
+       138,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "div",
+        "children": [
+         {
+          "kind": "text",
+          "children": [],
+          "text": "esc:16",
+          "bounds": [
+           657,
+           148,
+           80,
+           26
+          ]
+         }
+        ],
+        "bounds": [
+         657,
+         148,
+         80,
+         80
+        ]
+       }
+      ],
+      "bounds": [
+       514,
+       148,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     114,
+     138,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:63",
+      "bounds": [
+       114,
+       138,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "div",
+        "children": [
+         {
+          "kind": "text",
+          "children": [],
+          "text": "esc:16",
+          "bounds": [
+           657,
+           148,
+           80,
+           26
+          ]
+         }
+        ],
+        "bounds": [
+         657,
+         148,
+         80,
+         80
+        ]
+       }
+      ],
+      "bounds": [
+       514,
+       148,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     114,
+     138,
+     500,
+     400
+    ]
+   }
+  ],
+  "violations": [
+   {
+    "kind": "outside_panel",
+    "update": 0,
+    "bounds": [
+     657,
+     148,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 0,
+    "bounds": [
+     657,
+     148,
+     80,
+     26
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 1,
+    "bounds": [
+     657,
+     148,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 1,
+    "bounds": [
+     657,
+     148,
+     80,
+     26
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 2,
+    "bounds": [
+     657,
+     148,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 2,
+    "bounds": [
+     657,
+     148,
+     80,
+     26
+    ]
+   }
+  ],
+  "card": {
+   "question": "Ship build 1771?"
+  }
+ }
+}

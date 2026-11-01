@@ -29,6 +29,7 @@
         "token_expiring",
         "prompt_failed",
         "deprecated_used",
+        "job_failing",
         "unknown"
       ],
       "description": "What the item found: healthy when the check ran and found nothing wrong; not_checked when nobody ran it, never ok.",

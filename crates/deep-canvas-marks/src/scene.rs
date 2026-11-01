@@ -20,7 +20,7 @@
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use serde_json::{Map, Value};
 
@@ -716,6 +716,13 @@ pub struct Frame {
     pub size: [f64; 2],
     pub ground: Rgb,
     pub layers: Vec<Layer>,
+}
+
+/// The object at `v`, or an empty one when `v` is missing or isn't an object.
+pub(crate) fn object_or_empty(v: Option<&Value>) -> &Map<String, Value> {
+    static EMPTY: OnceLock<Map<String, Value>> = OnceLock::new();
+    v.and_then(Value::as_object)
+        .unwrap_or_else(|| EMPTY.get_or_init(Map::new))
 }
 
 pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
@@ -1553,11 +1560,7 @@ pub fn bound_text(
             changes_at: None,
         }));
     }
-    let empty = Map::new();
-    let bound = doc
-        .get("bound_values")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let bound = object_or_empty(doc.get("bound_values"));
     // All a stale-after duration reads of the document is its transport's frame rate.
     let clock = serde_json::json!({"transport": doc.get("transport")});
     let mut out = None;
@@ -1801,11 +1804,7 @@ const MASK_DEPTH: usize = 4;
 /// for Vello GPU (#385).
 fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refused> {
     let path = format!("items/{id}/params");
-    let empty = Map::new();
-    let p = item
-        .get("params")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let p = object_or_empty(item.get("params"));
     if p.get("shape").and_then(Value::as_str).unwrap_or("rect") != "rect" {
         return refuse("mask_r2", format!("{path}/shape"));
     }
@@ -2151,20 +2150,29 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let Some(layer) = item.get("layer").and_then(Value::as_str) else {
         return refuse("bad_doc", format!("{path}/layer"));
     };
-    let empty = Map::new();
-    let params = item
-        .get("params")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let params = object_or_empty(item.get("params"));
     let place = Place::of(item);
     let pos = place.offset;
-    let paint = params
-        .get("paint")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let paint = object_or_empty(params.get("paint"));
     let fill = paint.get("fill").and_then(Value::as_object);
     let stroke = paint.get("stroke").and_then(Value::as_object);
     let paint_path = format!("{path}/params/paint");
+    let center = || {
+        pair(params.get("center")).ok_or(Refused {
+            code: "bad_doc",
+            path: format!("{path}/params/center"),
+        })
+    };
+    let path_data = || -> Result<(&String, Vec<Verb>), Refused> {
+        let Some(Value::String(d)) = params.get("d") else {
+            return refuse("bad_doc", format!("{path}/params/d"));
+        };
+        let verbs = path::parse(d).ok_or(Refused {
+            code: "bad_path_data",
+            path: format!("{path}/params/d"),
+        })?;
+        Ok((d, verbs))
+    };
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
     let r1 = place.moves() && r1_paint(paint);
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
@@ -2180,10 +2188,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
-                center: pair(params.get("center")).ok_or(Refused {
-                    code: "bad_doc",
-                    path: format!("{path}/params/center"),
-                })?,
+                center: center()?,
                 points: p("points").unwrap_or(5.0),
                 outer_r: p("outer_r").unwrap_or(0.0),
                 inner_r: p("inner_r").unwrap_or(0.0),
@@ -2213,10 +2218,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             }]
         }
         "circle@1" if params.get("arc").is_some() => {
-            let center = pair(params.get("center")).ok_or(Refused {
-                code: "bad_doc",
-                path: format!("{path}/params/center"),
-            })?;
+            let center = center()?;
             let arc = params.get("arc");
             let (Some(from), Some(to)) = (
                 num(arc.and_then(|a| a.get("from"))),
@@ -2246,13 +2248,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     .flatten()
                     .any(|p| p.contains_key("gradient") || p.contains_key("steps")) =>
         {
-            let Some(Value::String(d)) = params.get("d") else {
-                return refuse("bad_doc", format!("{path}/params/d"));
-            };
-            let verbs = path::parse(d).ok_or(Refused {
-                code: "bad_path_data",
-                path: format!("{path}/params/d"),
-            })?;
+            let (_, verbs) = path_data()?;
             vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
         }
         "rect@1" | "circle@1"
@@ -2266,10 +2262,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 };
                 outline::rect(b, num(params.get("radius")).unwrap_or(0.0))
             } else {
-                let center = pair(params.get("center")).ok_or(Refused {
-                    code: "bad_doc",
-                    path: format!("{path}/params/center"),
-                })?;
+                let center = center()?;
                 outline::circle(
                     center,
                     num(params.get("r")).unwrap_or(0.0),
@@ -2361,10 +2354,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 }
             }
             "circle@1" => {
-                let center = pair(params.get("center")).ok_or(Refused {
-                    code: "bad_doc",
-                    path: format!("{path}/params/center"),
-                })?;
+                let center = center()?;
                 let Some(fill) = fill else { return Ok(None) };
                 Mark::Circle {
                     item: id.clone(),
@@ -2379,13 +2369,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 }
             }
             "path@1" => {
-                let Some(Value::String(d)) = params.get("d") else {
-                    return refuse("bad_doc", format!("{path}/params/d"));
-                };
-                let verbs = path::parse(d).ok_or(Refused {
-                    code: "bad_path_data",
-                    path: format!("{path}/params/d"),
-                })?;
+                let (d, verbs) = path_data()?;
                 // One color per path in R1: the stroke's role, else the fill's.
                 let color_role = stroke
                     .and_then(|s| s.get("role"))
@@ -2655,6 +2639,8 @@ fn build(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]
@@ -2668,60 +2654,50 @@ mod tests {
 
     #[test]
     fn a_format_sets_precision_notation_sign_unit_and_grouping() {
-        let f = |v: serde_json::Value| Format::read(Some(&v), None, "f").unwrap();
+        let f = |v: Value| Format::read(Some(&v), None, "f").unwrap();
+        assert_eq!(f(json!({"precision": 2})).show(Some(1234.5)), "1,234.50");
         assert_eq!(
-            f(serde_json::json!({"precision": 2})).show(Some(1234.5)),
-            "1,234.50"
-        );
-        assert_eq!(
-            f(serde_json::json!({"notation": "percent", "precision": 1})).show(Some(0.256)),
+            f(json!({"notation": "percent", "precision": 1})).show(Some(0.256)),
             "25.6%"
         );
         assert_eq!(
-            f(serde_json::json!({"sign": "always", "unit": "ms"})).show(Some(12.0)),
+            f(json!({"sign": "always", "unit": "ms"})).show(Some(12.0)),
             "+12 ms"
         );
-        assert_eq!(
-            f(serde_json::json!({"group": "none"})).show(Some(-98765.0)),
-            "−98765"
-        );
-        assert_eq!(f(serde_json::json!({})).show(None), "—");
-        let compact = f(serde_json::json!({"notation": "compact"}));
+        assert_eq!(f(json!({"group": "none"})).show(Some(-98765.0)), "−98765");
+        assert_eq!(f(json!({})).show(None), "—");
+        let compact = f(json!({"notation": "compact"}));
         assert_eq!(compact.show(Some(950.0)), "950");
         assert_eq!(compact.show(Some(1234.0)), "1.2K");
         assert_eq!(compact.show(Some(-3_456_789.0)), "−3.5M");
         assert_eq!(compact.show(Some(999_950.0)), "1.0M");
-        let duration = f(serde_json::json!({"notation": "duration"}));
+        let duration = f(json!({"notation": "duration"}));
         assert_eq!(duration.show(Some(0.45)), "450 ms");
         assert_eq!(duration.show(Some(3.5)), "3.5 s");
         assert_eq!(duration.show(Some(2.0)), "2 s");
         assert_eq!(duration.show(Some(125.0)), "2 min 05 s");
         assert_eq!(duration.show(Some(3720.0)), "1 h 02 min");
         assert_eq!(
-            f(serde_json::json!({"notation": "duration", "unit": "ms"})).show(Some(1500.0)),
+            f(json!({"notation": "duration", "unit": "ms"})).show(Some(1500.0)),
             "1.5 s"
         );
         assert_eq!(
-            Format::read(None, Some(&serde_json::json!("hide")), "f")
+            Format::read(None, Some(&json!("hide")), "f")
                 .unwrap()
                 .show(None),
             ""
         );
         assert_eq!(
-            Format::read(
-                Some(&serde_json::json!({"notation": "engineering"})),
-                None,
-                "f"
-            )
-            .unwrap_err()
-            .code,
+            Format::read(Some(&json!({"notation": "engineering"})), None, "f")
+                .unwrap_err()
+                .code,
             "format_notation"
         );
     }
 
     #[test]
     fn a_counter_formats_its_bound_value_s_reading_with_tabular_figures() {
-        let doc = serde_json::json!({
+        let doc = json!({
             "size": [100, 40],
             "layers": {"main": {"order": "a0"}},
             "items": {"n": {"id": "n", "kind": "text@1", "layer": "main",
@@ -2730,16 +2706,11 @@ mod tests {
         });
         let doc = doc.as_object().unwrap();
         let items = doc["items"].as_object().unwrap();
-        let palette: Palette = [
-            ("ground".to_string(), [255, 255, 255]),
-            ("ink".to_string(), [0, 0, 0]),
-        ]
-        .into();
         let record = Record {
             readings: [("reading:01JB0000000000000000000001".to_string(), 0.75)].into(),
             ..Record::default()
         };
-        let f = frame(doc, items, &palette, &record, 1.0).unwrap();
+        let f = frame(doc, items, &palette(), &record, 1.0).unwrap();
         let Mark::Text { spec, .. } = &f.layers[0].marks[0].mark else {
             panic!("a text mark")
         };
@@ -2747,8 +2718,8 @@ mod tests {
         assert!(spec.bound, "a counter shapes with tabular figures");
     }
 
-    fn board(items: serde_json::Value) -> serde_json::Value {
-        serde_json::json!({
+    fn board(items: Value) -> Value {
+        json!({
             "size": [200, 100],
             "layers": {"main": {"order": "a0"}, "other": {"order": "a1"}},
             "items": items,
@@ -2756,17 +2727,20 @@ mod tests {
         })
     }
 
-    fn draw(doc: &serde_json::Value) -> Result<Frame, Refused> {
-        let doc = doc.as_object().unwrap();
-        let palette: Palette = [
+    fn palette() -> Palette {
+        [
             ("ground".to_string(), [255, 255, 255]),
             ("ink".to_string(), [0, 0, 0]),
         ]
-        .into();
+        .into()
+    }
+
+    fn draw(doc: &Value) -> Result<Frame, Refused> {
+        let doc = doc.as_object().unwrap();
         frame(
             doc,
             doc["items"].as_object().unwrap(),
-            &palette,
+            &palette(),
             &Record::default(),
             1.0,
         )
@@ -2782,7 +2756,7 @@ mod tests {
 
     #[test]
     fn a_rect_mask_clips_its_children_and_a_collection_to_its_box() {
-        let doc = board(serde_json::json!({
+        let doc = board(json!({
             "m": {"kind": "mask@1", "layer": "main", "params": {"box": [10, 10, 50, 50], "applies_to": "children"}},
             "inner": {"kind": "mask@1", "layer": "main", "parent": "m", "params": {"box": [30, 0, 100, 100], "applies_to": "children"}},
             "a": {"kind": "rect@1", "layer": "main", "parent": "inner", "params": {"box": [0, 0, 200, 100], "paint": {"fill": {"role": "ink"}}}},
@@ -2805,28 +2779,27 @@ mod tests {
 
     #[test]
     fn a_mask_never_clips_another_writer_s_items_and_nests_at_most_four_deep() {
-        let doc = board(serde_json::json!({
+        let doc = board(json!({
             "m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 10, 10]}},
             "x": {"kind": "rect@1", "layer": "other", "parent": "m", "params": {"box": [0, 0, 5, 5], "paint": {"fill": {"role": "ink"}}}},
         }));
         assert_eq!(draw(&doc).unwrap_err().code, "mask_writer");
-        let mut items = serde_json::Map::new();
+        let mut items = Map::new();
         for k in 0..5 {
-            let mut m = serde_json::json!({"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 100, 100]}});
+            let mut m =
+                json!({"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 100, 100]}});
             if k > 0 {
-                m["parent"] = serde_json::json!(format!("m{}", k - 1));
+                m["parent"] = json!(format!("m{}", k - 1));
             }
             items.insert(format!("m{k}"), m);
         }
-        items.insert("deep".into(), serde_json::json!({"kind": "rect@1", "layer": "main", "parent": "m4", "params": {"box": [0, 0, 1, 1], "paint": {"fill": {"role": "ink"}}}}));
+        items.insert("deep".into(), json!({"kind": "rect@1", "layer": "main", "parent": "m4", "params": {"box": [0, 0, 1, 1], "paint": {"fill": {"role": "ink"}}}}));
         assert_eq!(
-            draw(&board(serde_json::Value::Object(items)))
-                .unwrap_err()
-                .code,
+            draw(&board(Value::Object(items))).unwrap_err().code,
             "mask_depth"
         );
         let soft = board(
-            serde_json::json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "feather": 2}}}),
+            json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "feather": 2}}}),
         );
         assert_eq!(draw(&soft).unwrap_err().code, "mask_r2");
     }
@@ -2851,45 +2824,45 @@ mod tests {
     }
 
     /// Three 10 u squares under `g` at x 0, 50 and 100, ordered c, b, a, each stepped by `steps`.
-    fn stepped(steps: serde_json::Value) -> Frame {
+    fn stepped(steps: Value) -> Frame {
         let sq = |x: i32, order: &str| {
-            serde_json::json!({"kind": "rect@1", "layer": "main", "parent": "g", "order": order,
+            json!({"kind": "rect@1", "layer": "main", "parent": "g", "order": order,
                 "params": {"box": [x, 0, 10, 10], "paint": {"fill": {"steps": steps.clone()}}}})
         };
-        let mut doc = board(serde_json::json!({
+        let mut doc = board(json!({
             "g": {"kind": "group@1", "layer": "main", "params": {}},
             "a": sq(0, "a2"), "b": sq(50, "a1"), "c": sq(100, "a0"),
         }));
-        doc["collections"]["ends"] = serde_json::json!({"members": ["a", "c"]});
+        doc["collections"]["ends"] = json!({"members": ["a", "c"]});
         draw(&doc).unwrap()
     }
 
     #[test]
     fn steps_place_a_member_by_its_box_or_its_rank_among_a_collection_s_members() {
-        let stops = serde_json::json!([{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]);
+        let stops = json!([{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]);
         let (ink, ground) = ([0, 0, 0], [255, 255, 255]);
         // By order, a ranks last of the three; by x it stands first.
-        let f = stepped(serde_json::json!({"over": "children", "stops": stops, "by": "order"}));
+        let f = stepped(json!({"over": "children", "stops": stops, "by": "order"}));
         assert_eq!((solid(&f, "a"), solid(&f, "c")), (ground, ink));
-        let f = stepped(serde_json::json!({"over": "children", "stops": stops, "by": "x"}));
+        let f = stepped(json!({"over": "children", "stops": stops, "by": "x"}));
         assert_eq!((solid(&f, "a"), solid(&f, "c")), (ink, ground));
         let mid = solid(&f, "b");
         assert!(mid != ink && mid != ground && mid[0] == mid[1] && mid[1] == mid[2]);
         // By distance from a's center, 100 u out reaches the last stop.
-        let by = serde_json::json!({"distance": {"from": [5, 5], "radius": 100}});
-        let f = stepped(serde_json::json!({"over": "children", "stops": stops, "by": by}));
+        let by = json!({"distance": {"from": [5, 5], "radius": 100}});
+        let f = stepped(json!({"over": "children", "stops": stops, "by": by}));
         assert_eq!(
             (solid(&f, "a"), solid(&f, "b"), solid(&f, "c")),
             (ink, mid, ground)
         );
         // Over a collection of two, c ranks first and a last; b isn't a member.
-        let ends = serde_json::json!({"over": "ends", "stops": stops, "by": "order"});
-        let mut doc = board(serde_json::json!({
+        let ends = json!({"over": "ends", "stops": stops, "by": "order"});
+        let mut doc = board(json!({
             "a": {"kind": "rect@1", "layer": "main", "order": "a1", "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
             "c": {"kind": "rect@1", "layer": "main", "order": "a0", "params": {"box": [100, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
             "b": {"kind": "rect@1", "layer": "main", "params": {"box": [50, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
         }));
-        doc["collections"]["ends"] = serde_json::json!({"members": ["a", "c"]});
+        doc["collections"]["ends"] = json!({"members": ["a", "c"]});
         let r = draw(&doc).unwrap_err();
         assert_eq!(
             (r.code, r.path.as_str()),
@@ -2902,8 +2875,8 @@ mod tests {
 
     #[test]
     fn a_gradient_spans_another_item_s_box_and_runs_along_strokes_alone() {
-        let gradient = |span: &str| serde_json::json!({"gradient": {"span": span, "stops": [{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]}});
-        let doc = board(serde_json::json!({
+        let gradient = |span: &str| json!({"gradient": {"span": span, "stops": [{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]}});
+        let doc = board(json!({
             "g": {"kind": "group@1", "layer": "main", "params": {}},
             "p": {"kind": "rect@1", "layer": "main", "parent": "g", "params": {"box": [20, 10, 30, 30]}},
             "q": {"kind": "rect@1", "layer": "main", "parent": "g", "params": {"box": [120, 30, 40, 30]}},
@@ -2913,7 +2886,7 @@ mod tests {
         let doc = {
             let mut d = doc;
             for k in ["p", "q"] {
-                d["items"][k]["params"]["paint"] = serde_json::json!({"fill": {"role": "ink"}});
+                d["items"][k]["params"]["paint"] = json!({"fill": {"role": "ink"}});
             }
             d
         };
@@ -2933,21 +2906,18 @@ mod tests {
             }
         );
         let mut missing = doc.clone();
-        missing["items"]["r"]["params"]["paint"] = serde_json::json!({"fill": gradient("nowhere")});
+        missing["items"]["r"]["params"]["paint"] = json!({"fill": gradient("nowhere")});
         assert_eq!(draw(&missing).unwrap_err().code, "ref_unresolved");
         let mut fill_along = doc.clone();
-        fill_along["items"]["r"]["params"]["paint"]["fill"]["gradient"]["kind"] =
-            serde_json::json!("along");
+        fill_along["items"]["r"]["params"]["paint"]["fill"]["gradient"]["kind"] = json!("along");
         assert_eq!(draw(&fill_along).unwrap_err().code, "gradient_kind");
     }
 
     #[test]
     fn a_path_draws_at_most_10_000_dashes() {
         let dashed = |count: u64| {
-            board(
-                serde_json::json!({"o": {"kind": "circle@1", "layer": "main",
-                "params": {"center": [50, 50], "r": 40, "paint": {"stroke": {"role": "ink", "dash": {"count": count}}}}}}),
-            )
+            board(json!({"o": {"kind": "circle@1", "layer": "main",
+                "params": {"center": [50, 50], "r": 40, "paint": {"stroke": {"role": "ink", "dash": {"count": count}}}}}}))
         };
         let most = draw(&dashed(10_000)).unwrap();
         let Mark::Shape {
@@ -2969,11 +2939,11 @@ mod tests {
         let set = |k: usize| {
             (
                 format!("s{k:02}"),
-                serde_json::json!({"kind": "marks@1", "layer": "main", "params": {"mark": "point", "n": 1_000_000}}),
+                json!({"kind": "marks@1", "layer": "main", "params": {"mark": "point", "n": 1_000_000}}),
             )
         };
-        let items: serde_json::Map<_, _> = (0..17).map(set).collect();
-        let r = draw(&board(serde_json::Value::Object(items))).unwrap_err();
+        let items: Map<_, _> = (0..17).map(set).collect();
+        let r = draw(&board(Value::Object(items))).unwrap_err();
         assert_eq!(
             (r.code, r.path.as_str()),
             ("out_of_range", "items/s16/params/n")
@@ -2983,20 +2953,18 @@ mod tests {
     #[test]
     fn an_image_is_named_by_its_hash_and_needs_its_alt_text() {
         let hash = "ab".repeat(32);
-        let ok = board(
-            serde_json::json!({"shot": {"kind": "image@1", "layer": "main",
-            "params": {"asset": hash, "box": [0, 0, 100, 50], "fit": "cover", "alt": "The failing step"}}}),
-        );
+        let ok = board(json!({"shot": {"kind": "image@1", "layer": "main",
+            "params": {"asset": hash, "box": [0, 0, 100, 50], "fit": "cover", "alt": "The failing step"}}}));
         let f = draw(&ok).unwrap();
         let Mark::Image { asset, fit, .. } = &f.layers[0].marks[0].mark else {
             panic!("an image")
         };
         assert_eq!((asset.as_str(), *fit), (hash.as_str(), ImageFit::Cover));
         let mut no_alt = ok.clone();
-        no_alt["items"]["shot"]["params"]["alt"] = serde_json::json!("");
+        no_alt["items"]["shot"]["params"]["alt"] = json!("");
         assert_eq!(draw(&no_alt).unwrap_err().code, "alt_missing");
         let mut by_path = ok.clone();
-        by_path["items"]["shot"]["params"]["asset"] = serde_json::json!("/tmp/shot.png");
+        by_path["items"]["shot"]["params"]["asset"] = json!("/tmp/shot.png");
         assert_eq!(draw(&by_path).unwrap_err().code, "bad_asset");
     }
 }

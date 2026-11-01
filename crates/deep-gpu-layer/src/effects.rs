@@ -15,12 +15,13 @@ use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
 use deep_effects_render::compile::{compile_with, validate, Compiled};
 use deep_effects_render::frame::{self as fx, Settings, Sparks};
 use deep_effects_render::reference::{self, Camera};
-use deep_effects_render::runner::{Frame, Runner, LINEAR};
+use deep_effects_render::runner::{dispatch, Frame, Runner, LINEAR};
 use deep_gpu::device::Device;
 use deep_scene3d_render::{draw_offscreen, Planted as Planted3, Post, PostFrame, Renderer};
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
+use crate::view3d::write_named;
 use crate::{refused, App, Planted};
 
 /// An item's seed: a hash of the document's seed and its ID (Effect: `seed: item`).
@@ -289,16 +290,6 @@ fn f32_file(img: &Image) -> Vec<u8> {
         .iter()
         .flat_map(|p| p.iter().flat_map(|v| (*v as f32).to_le_bytes()))
         .collect()
-}
-
-fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
-    let name = hex(bytes);
-    std::fs::write(
-        std::path::Path::new(out).join(format!("{name}.{ext}")),
-        bytes,
-    )
-    .map_err(|e| refused("not_written", e.to_string()))?;
-    Ok(name)
 }
 
 /// A frame's inputs at the effects' place: the linear target, depth, object IDs and the shadow
@@ -618,20 +609,7 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
     match c.kind() {
         Kind::Compute => runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None),
         _ => {
-            let out = d.create_texture(&wgpu::TextureDescriptor {
-                label: Some("check_operator output"),
-                size: wgpu::Extent3d {
-                    width: size[0],
-                    height: size[1],
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: LINEAR,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+            let out = output(d, "check_operator output", size);
             runner.encode(
                 &mut enc,
                 &out.create_view(&Default::default()),
@@ -644,6 +622,24 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
     let _ = d.poll(wgpu::PollType::wait_indefinitely());
     reached.gpu = true;
     Ok(())
+}
+
+/// A linear render target of `size` that nothing reads back.
+fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
+    d.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: LINEAR,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    })
 }
 
 fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
@@ -703,20 +699,7 @@ fn unchecked(device: &Device, op: &Value, reached: &mut Reached) -> Option<Strin
         cache: None,
     });
     reached.pipeline = true;
-    let out = d.create_texture(&wgpu::TextureDescriptor {
-        label: Some("unchecked output"),
-        size: wgpu::Extent3d {
-            width: 64,
-            height: 64,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: LINEAR,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
+    let out = output(d, "unchecked output", [64, 64]);
     let mut enc = d.create_command_encoder(&Default::default());
     {
         let view = out.create_view(&Default::default());
@@ -861,67 +844,6 @@ fn op_graph(name: &str, types: &[Ty], rows: usize) -> Result<(Value, Ty), Value>
             "elements": rows.max(1), "workgroup": 64, "cost": {"ns_per_element": 1000.0}}),
         rty,
     ))
-}
-
-/// Runs a checked compute operator on the GPU over `inputs` (one buffer of words each, in its
-/// storage inputs' order) and reads back its first storage output.
-fn dispatch(device: &Device, c: &Compiled, inputs: &[Vec<u32>]) -> Vec<u32> {
-    use wgpu::util::DeviceExt as _;
-    let d = &device.device;
-    let runner = Runner::new(d, c.clone(), LINEAR);
-    let ins: Vec<wgpu::Buffer> = inputs
-        .iter()
-        .map(|w| {
-            let bytes: Vec<u8> = w.iter().flat_map(|x| x.to_le_bytes()).collect();
-            d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("op input"),
-                contents: &bytes,
-                usage: wgpu::BufferUsages::STORAGE,
-            })
-        })
-        .collect();
-    let n = c
-        .checked
-        .op
-        .storage
-        .values()
-        .next()
-        .map_or(1, |s| s.count.max(1));
-    let out = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("op output"),
-        size: u64::from(n) * 4,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-    let back = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("op read back"),
-        size: u64::from(n) * 4,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut bufs: Vec<&wgpu::Buffer> = ins.iter().collect();
-    bufs.push(&out);
-    let values = interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new());
-    let (g0, g1, _b) = runner.bind(d, &Frame::default(), [1, 1], &values, &[], &bufs);
-    let mut enc = d.create_command_encoder(&Default::default());
-    runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None);
-    enc.copy_buffer_to_buffer(&out, 0, &back, 0, u64::from(n) * 4);
-    device.queue.submit([enc.finish()]);
-    back.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-    let _ = d.poll(wgpu::PollType::wait_indefinitely());
-    let words = back
-        .slice(..)
-        .get_mapped_range()
-        .map(|v| {
-            v.as_chunks::<4>()
-                .0
-                .iter()
-                .map(|b| u32::from_le_bytes(*b))
-                .collect()
-        })
-        .unwrap_or_default();
-    back.unmap();
-    words
 }
 
 /// `op`: a public step over rows of bits, on this GPU and through the CPU interpreter.
