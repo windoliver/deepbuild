@@ -3,30 +3,11 @@
 //! store lacks it or holds other bytes; and a stroke under 1 device px draws at 1 px with its
 //! alpha scaled by its width (Paint: stroke gradients, "It can never").
 
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+mod common;
 
+use common::{run, scratch};
 use deep_canvas_marks::key::sha256_hex;
 use serde_json::{json, Value};
-
-fn raster(line: &Value) -> Value {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-canvas-render"))
-        .arg("raster")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("deep-canvas-render starts");
-    writeln!(child.stdin.take().unwrap(), "{line}").unwrap();
-    let out = child.wait_with_output().unwrap();
-    serde_json::from_str(String::from_utf8(out.stdout).unwrap().trim()).unwrap()
-}
-
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("deep-raster-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(dir.join("store")).unwrap();
-    dir
-}
 
 fn look() -> Value {
     json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0]}})
@@ -71,7 +52,7 @@ fn points(x_data: Value) -> Value {
 
 #[test]
 fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed() {
-    let dir = scratch("sidecar");
+    let dir = scratch("deep-raster", "sidecar");
     let xs = [8.0f32, 20.0, 32.0];
     let bytes: Vec<u8> = xs.iter().flat_map(|v| v.to_le_bytes()).collect();
     let hash = sha256_hex(&bytes);
@@ -79,7 +60,10 @@ fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed()
     let store = dir.join("store");
     let draw = |doc: Value, out: &str| {
         let out = dir.join(out);
-        let answer = raster(&json!({"out": out, "doc": doc, "look": look(), "store": store}));
+        let answer = run(
+            "raster",
+            &json!({"out": out, "doc": doc, "look": look(), "store": store}),
+        );
         (answer, std::fs::read(&out).ok())
     };
     let (inline, inline_png) = draw(points(json!(f32_base64(&xs))), "inline.png");
@@ -95,7 +79,8 @@ fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed()
     std::fs::write(dir.join("store").join(&hash), [0u8; 12]).unwrap();
     let (changed, _) = draw(points(json!({"sidecar": hash})), "changed.png");
     assert_eq!(changed["code"], json!("asset_mismatch"), "{changed}");
-    let missing = raster(
+    let missing = run(
+        "raster",
         &json!({"out": dir.join("missing.png"), "doc": points(json!({"sidecar": "ab".repeat(32)})), "look": look()}),
     );
     assert_eq!(missing["code"], json!("asset_missing"), "{missing}");
@@ -104,13 +89,13 @@ fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed()
 
 #[test]
 fn a_stroke_under_one_device_px_draws_at_one_px_with_its_alpha_scaled_by_its_width() {
-    let dir = scratch("hairline");
+    let dir = scratch("deep-raster", "hairline");
     let out = dir.join("hairline.png");
     let doc = figure(
         json!({"hair": {"id": "hair", "kind": "path@1", "layer": "main", "name": "Hairline", "order": "a0",
         "params": {"d": "M 0 10.5 L 40 10.5", "paint": {"stroke": {"role": "ink", "width": 0.25}}}}}),
     );
-    let answer = raster(&json!({"out": out, "doc": doc, "look": look()}));
+    let answer = run("raster", &json!({"out": out, "doc": doc, "look": look()}));
     assert_eq!(answer["ok"], json!(true), "{answer}");
     let image = image::open(&out).unwrap().to_rgb8();
     for x in 2..38 {

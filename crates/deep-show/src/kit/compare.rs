@@ -9,6 +9,7 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 use crate::hub::{Hub, Planted};
+use crate::optional;
 
 /// A tolerance class.
 #[derive(Clone, Copy, Debug)]
@@ -33,10 +34,7 @@ impl Tolerance {
     pub fn read(v: &Value) -> Option<Tolerance> {
         let within = u8::try_from(v.get("within")?.as_u64()?).ok()?;
         let on = v.get("on")?.as_f64()?;
-        let ceiling = match v.get("ceiling") {
-            None => None,
-            Some(c) => Some(u8::try_from(c.as_u64()?).ok()?),
-        };
+        let ceiling = optional(v.get("ceiling"), |c| u8::try_from(c.as_u64()?).ok())?;
         let window = match v.get("window") {
             None => None,
             Some(w) => Some((

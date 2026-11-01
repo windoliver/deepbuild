@@ -1,0 +1,26 @@
+[package]
+name = "deep-panel-host"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #358: the process agent-built panels run in, on its main thread, with the JIT off. It needs a GPUI app and
+# window for gpui-shell's view, and no screen, so it takes gpui-kit's headless context.
+[dependencies]
+deep-app = { path = "../deep-app" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
+quickjs-jit-runtime = { git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393" }
+serde_json = "1"
+
+[[bin]]
+name = "deep-panel-host"
+path = "src/main.rs"
+
+# The same host with the switch left alone, so the JIT is on: the control that proves the switch is what turns it off.
+# A binary of its own, so the shipping host has no way to turn the JIT on.
+[[bin]]
+name = "deep-panel-host-jit-control"
+path = "src/jit_control.rs"

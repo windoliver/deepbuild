@@ -1,0 +1,80 @@
+// The test brief plug-in (#365): a brief that leaves your machine for a person, by email through api.mail.example.
+// - each schedule probe.json lists (ext.brief.<name>, its cadence): its job sends one email of kind `email` to
+//   probe.json's recipients through deep.send, its key one per schedule and day (`day`) or one per run (`run`), its
+//   subject the key and its body the key, the day and the run, so each day's content differs; with probe.json's
+//   `pause`, the job then reads ext.brief.pause, a source on the same host the provider may hold
+// - ext.brief.send_digest (send): one email through deep.send, its key and recipients the call's input
+// - ext.brief.report: the probe check, reporting every job it ran with its key and what deep.send gave it
+import { readFileSync } from 'node:fs';
+
+interface Probe {
+  schedules: { name: string; every?: number; cron?: string }[];
+  to: string[];
+  key: 'day' | 'run';
+  pause?: boolean;
+  deadline?: number;
+}
+interface Answer { status: number; headers: Record<string, string>; body: string }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerSource('ext.brief.pause', {
+    variant: 'polled',
+    host: 'api.mail.example',
+    path: '/pause',
+    quota: { per_minute: 600, per_day: 100_000 },
+    timeout: 15_000,
+    freshFor: 1,
+    parse(answer: Answer): { value: number; unit: string } {
+      if (answer.status !== 200) throw Error(`no pause in a ${answer.status} answer`);
+      return { value: 1, unit: 'pause' };
+    },
+  });
+
+  const jobs: any[] = [];
+  for (const s of probe.schedules) {
+    const { name, ...cadence } = s;
+    await deep.schedule(`ext.brief.${name}`, {
+      ...cadence,
+      deadline: probe.deadline ?? 4 * 60_000,
+      declares: { readings: probe.pause ? ['ext.brief.pause'] : [], notices: [], stores: [], sends: ['email'], noop: false },
+    }, async (ctx: { run: string; at: number; read(source: string): Promise<any> }) => {
+      const day = new Date(ctx.at).toISOString().slice(0, 10);
+      const key = probe.key === 'run' ? `brief-${ctx.run.toLowerCase().replace(/[^a-z0-9]/g, '')}` : `brief-${name}-${day}`;
+      const job: any = { run: ctx.run, at: ctx.at, key };
+      jobs.push(job);
+      try {
+        job.sent = await deep.send({
+          kind: 'email', key, to: probe.to, subject: key,
+          body: `${key}: the ${name} brief for ${day}, made by ${ctx.run}`,
+          host: 'api.mail.example', path: '/send',
+        });
+      } catch (e: any) {
+        job.refused = String(e?.message ?? e);
+        throw e;
+      }
+      if (probe.pause) {
+        const r = await ctx.read('ext.brief.pause');
+        if (r?.status !== 'reading') throw Error(`no pause reading: ${r?.cause}`);
+      }
+    });
+  }
+
+  deep.registerAction('ext.brief.send_digest', {
+    declares: 'send',
+    input: strict({ key: { type: 'string' }, to: { type: 'string' } }),
+    output: strict({ key: { type: 'string' }, to: { type: 'string' } }),
+  }, async (input: { key: string; to: string }) => {
+    await deep.send({
+      kind: 'email', key: input.key, to: [input.to], subject: input.key,
+      body: `${input.key}: the digest`, host: 'api.mail.example', path: '/send',
+    });
+    return { output: { key: input.key, to: input.to }, report: { verified: true, checked: 'the provider answered the send' } };
+  });
+
+  deep.registerCheck('ext.brief.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ jobs }) }],
+  }));
+}

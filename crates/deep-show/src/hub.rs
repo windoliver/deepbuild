@@ -162,6 +162,10 @@ pub enum Planted {
     CheckpointNearestInDistance,
     /// #857: results of nodes run on several threads merge in the order they finished.
     MergesInFinishOrder,
+    /// #854: a session's frame runs every node of its frame phases, changed or not.
+    RunsEveryNode,
+    /// #854: deep_query answers a paged read with every row, unpaged.
+    Unpaged,
     /// #857: the background jobs' threads run at the live view's priority.
     BackgroundAtLivePriority,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
@@ -249,6 +253,21 @@ pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
     reply.insert("unchanged".into(), json!(diff.unchanged));
     reply.insert("created".into(), json!(diff.created));
     reply.insert("removed".into(), json!(diff.removed));
+}
+
+/// A refused revision's reply. A check that needs a canvas module or a pack version the build
+/// lacks, or that an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
+/// design: Canvas modules; #305; #306).
+pub(crate) fn refused_reply(mut reply: Map<String, Value>, issues: &[Issue], check: bool) -> Value {
+    reply.insert("outcome".into(), json!("refused"));
+    if check {
+        let blocked = crate::packs::blocked(issues) || reply.contains_key("blocked");
+        reply.insert(
+            "result".into(),
+            json!(if blocked { "BLOCKED" } else { "FAIL" }),
+        );
+    }
+    Value::Object(reply)
 }
 
 /// What keeps a frame from settling.
@@ -437,6 +456,10 @@ pub enum Call {
     Frames(Box<Frames>),
     /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
     ShapedRuns(String),
+    /// #854: patches to a shared document, each timed from its arrival to the settled frame.
+    Settle(Box<crate::efficiency::Settle>),
+    /// #854: deep_query's summary or one page of a document's rows.
+    Query(crate::efficiency::Query),
     /// The replica's `see`: a panel's accessibility tree as data and every announcement it made (#376).
     See(String),
     /// Shows or hides a panel from this call on.
@@ -803,6 +826,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
         merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
+        runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
     };
     Options {
         access_log: startup.test_build,
@@ -1215,6 +1239,8 @@ impl<'a> Hub<'a> {
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
             Call::ShapedRuns(text) => self.shaped_runs(text),
+            Call::Settle(s) => self.settle_patches(s),
+            Call::Query(q) => self.query(q),
             Call::Panel { panel, visible } => {
                 self.panels_shown.insert(panel.clone(), *visible);
                 json!({"panel": panel, "visible": visible})
@@ -1680,18 +1706,7 @@ impl<'a> Hub<'a> {
             });
         }
         if error {
-            reply.insert("outcome".into(), json!("refused"));
-            if show.check {
-                // A check that needs a canvas module or a pack version the build lacks, or that
-                // an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
-                // design: Canvas modules; #305; #306).
-                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
-                reply.insert(
-                    "result".into(),
-                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
-                );
-            }
-            return Value::Object(reply);
+            return refused_reply(reply, &issues, show.check);
         }
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);

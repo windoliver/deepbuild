@@ -6,14 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
-import { hookLine, mcp, reply, send, withHub } from './hub.js';
-
-/** Polls the record until the session has `n` events of `kind`, up to 10 s; the count then. */
-function recorded(root: string, session: string, kind: string, n: number): Promise<number> {
-  const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
-  const count = () => (db.prepare('SELECT count(*) AS n FROM events WHERE kind = ? AND session_id = ?').get(kind, session) as { n: number }).n;
-  return (async () => { try { for (const until = Date.now() + 10_000; Date.now() < until && count() < n; await new Promise((r) => setTimeout(r, 50))); return count(); } finally { db.close(); } })();
-}
+import { hookLine, mcp, recorded, reply, send, withHub } from './hub.js';
 
 describe('a deep_claim right after a late-spooled PostToolUse', () => {
   it('is recorded after the replayed call, so the stop keeps the claim: one claim.made, the call before it', async () => {
