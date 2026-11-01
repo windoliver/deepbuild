@@ -20,6 +20,7 @@ These hold in the core and every extension:
 - Use the smallest test on real components: end-to-end for what users see, fast tests for logic, property tests for parsers and numbers. Mock only at boundaries you don't own.
 - Never edit, skip, weaken, special-case, re-record or delete failing tests, goldens or checks to finish, or retry until green; change one that covers a criterion only by an approved proposal. If they can't pass, stop and report `BLOCKED`.
 - Run relevant checks once per meaningful change, and only affected ones after corrections. Full preflight needs a task or release reason. Docs-only edits need diff review, not code tests.
+- Verify with `node scripts/affected.mjs`, not whole neighbouring suites: it runs only the tests that can see the change and sets main's known failures (`scripts/known-failures.json`) apart; report its WIDE and INCONCLUSIVE lines.
 - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
 
 ## Machine and safety
