@@ -23,7 +23,7 @@ const THREAD = /6thread[0-9A-Za-z_]{0,40}?(?:spawn_unchecked|6scoped|5scope)/;
 
 // Reviewed crates that start threads only when std reports more than one core, which it never does on wasm32
 // with threads off, so they run on one thread there and need none. The lane checks the guard is still the only
-// thread use in the crate: every other source file of it names no std::thread.
+// thread use in the crate: every other source file of it, its test-only modules aside, names no std::thread.
 const GUARDED = {
   'deep-canvas': {
     file: 'src/document/check.rs',
@@ -39,7 +39,8 @@ function guarded(crate, manifest) {
   const guard = join(crateDir, entry.file);
   if (!existsSync(guard) || !/available_parallelism\(\)/.test(readFileSync(guard, 'utf8'))) return null;
   const sources = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? sources(join(dir, e.name)) : e.name.endsWith('.rs') ? [join(dir, e.name)] : []));
-  const elsewhere = sources(join(crateDir, 'src')).filter((f) => f !== guard && /\bthread\s*::/.test(readFileSync(f, 'utf8')));
+  // A crate's `tests.rs` modules are test-only (`#[cfg(test)] mod tests;`), never in the build the lane checks.
+  const elsewhere = sources(join(crateDir, 'src')).filter((f) => f !== guard && !f.endsWith('/tests.rs') && /\bthread\s*::/.test(readFileSync(f, 'utf8')));
   return elsewhere.length === 0 ? entry.why : null;
 }
 

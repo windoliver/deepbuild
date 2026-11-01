@@ -822,17 +822,15 @@ mod color_check {
         );
         // A window that stays occluded (a closed lid, another Space) gets no drawable, so
         // nothing can be read back and the check says why and fails.
-        let frame = loop {
-            match surface.get_current_texture() {
-                wgpu::CurrentSurfaceTexture::Success(frame)
-                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => break frame,
-                other => {
-                    println!(
-                        "{}",
-                        json!({"color": 140, "error": format!("no drawable: {other:?}")})
-                    );
-                    std::process::exit(1);
-                }
+        let frame = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            other => {
+                println!(
+                    "{}",
+                    json!({"color": 140, "error": format!("no drawable: {other:?}")})
+                );
+                std::process::exit(1);
             }
         };
         let extent = wgpu::Extent3d {
