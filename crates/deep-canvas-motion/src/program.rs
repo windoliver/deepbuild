@@ -209,7 +209,7 @@ impl Program {
             }
             program.placements.push(writes);
         }
-        for (d, driver) in motion.drivers.iter().enumerate() {
+        for driver in &motion.drivers {
             let path = format!("drivers/{}", driver.id);
             let mut vars = Vec::new();
             for (name, target) in &driver.vars {
@@ -222,7 +222,6 @@ impl Program {
                 code: "bad_doc",
                 path: format!("{path}/expr"),
             })?;
-            debug_assert_eq!(program.drivers.len(), d);
             program.drivers.push((slot, ops));
         }
         for limit in &motion.limits {
