@@ -368,3 +368,65 @@ impl Runner {
         );
     }
 }
+
+/// Runs a checked compute operator on the GPU over `inputs` (one buffer of words each, in its
+/// storage inputs' order) and reads back its first storage output.
+pub fn dispatch(device: &deep_gpu::device::Device, c: &Compiled, inputs: &[Vec<u32>]) -> Vec<u32> {
+    use wgpu::util::DeviceExt as _;
+    let d = &device.device;
+    let runner = Runner::new(d, c.clone(), LINEAR);
+    let ins: Vec<wgpu::Buffer> = inputs
+        .iter()
+        .map(|w| {
+            let bytes: Vec<u8> = w.iter().flat_map(|x| x.to_le_bytes()).collect();
+            d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("op input"),
+                contents: &bytes,
+                usage: wgpu::BufferUsages::STORAGE,
+            })
+        })
+        .collect();
+    let n = c
+        .checked
+        .op
+        .storage
+        .values()
+        .next()
+        .map_or(1, |s| s.count.max(1));
+    let out = d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("op output"),
+        size: u64::from(n) * 4,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+    let back = d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("op read back"),
+        size: u64::from(n) * 4,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut bufs: Vec<&wgpu::Buffer> = ins.iter().collect();
+    bufs.push(&out);
+    let values =
+        deep_canvas_effects::interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new());
+    let (g0, g1, _b) = runner.bind(d, &Frame::default(), [1, 1], &values, &[], &bufs);
+    let mut enc = d.create_command_encoder(&Default::default());
+    runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None);
+    enc.copy_buffer_to_buffer(&out, 0, &back, 0, u64::from(n) * 4);
+    device.queue.submit([enc.finish()]);
+    back.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+    let _ = d.poll(wgpu::PollType::wait_indefinitely());
+    let words = back
+        .slice(..)
+        .get_mapped_range()
+        .map(|v| {
+            v.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| u32::from_le_bytes(*b))
+                .collect()
+        })
+        .unwrap_or_default();
+    back.unmap();
+    words
+}

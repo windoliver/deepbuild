@@ -31,7 +31,7 @@ async function measure(co: Checkout, n: number, plant?: string): Promise<Reading
   const reading: Reading = { checkout: `${co.label}${plant ? ` with ${plant}` : ''}`, ms: [], failures: [], loads: [load()] };
   const { home } = makeHome(co.cli);
   const repo = makeRepo(home);
-  const hub = await startHub(home, { plant });
+  const hub = await startHub(home, { plant, noAskWait: true, shortHold: true });
   try {
     await setup(home, env);
     const sessions = await idleSessions(hub, home, n, { env, cwd: repo.dir });
@@ -69,6 +69,10 @@ describe(`${AC5} Budgets, on the reference Mac in the local preflight, compared 
   });
 
   it(`${AC5} on the reference Mac, over ${RUNS} runs your answer from the CLI reaches the idle session within 2 s at p95, compared with the merge base`, async (ctx) => {
+    // The worst load reading counts, and the first is taken as the runs start: past the core count already, the runs
+    // can only read INCONCLUSIVE, so they aren't taken (#964).
+    const start = load();
+    if (start.one > start.cores) inconclusiveIfUnfit(ctx, [start], 'no readings taken: the machine was loaded past its core count before the first run');
     const warm = await measure(CURRENT, 2);
     console.log(`${AC5} warm-up: ${shownReading(warm)}`);
     const base = await measure(await mergeBase(), RUNS);

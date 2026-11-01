@@ -1,0 +1,68 @@
+{
+  "v": 1,
+  "calls": [
+    {
+      "source": "ext.stocks.quote_nvda",
+      "request": {
+        "url": "https://api.market.example/v1/quote?symbol=NVDA",
+        "method": "GET",
+        "headers": {
+          "x-api-key": "[REDACTED]"
+        }
+      },
+      "answer": {
+        "status": 200,
+        "headers": {
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Sun, 01 Nov 2026 06:45:32 GMT",
+          "keep-alive": "timeout=5",
+          "transfer-encoding": "chunked"
+        },
+        "body": "{\"symbol\":\"NVDA\",\"price\":187.25,\"currency\":\"USD\"}"
+      }
+    },
+    {
+      "source": "ext.stocks.quote_aapl",
+      "request": {
+        "url": "https://api.market.example/v1/quote?symbol=AAPL",
+        "method": "GET",
+        "headers": {
+          "x-api-key": "[REDACTED]"
+        }
+      },
+      "answer": {
+        "status": 200,
+        "headers": {
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Sun, 01 Nov 2026 06:45:32 GMT",
+          "keep-alive": "timeout=5",
+          "transfer-encoding": "chunked"
+        },
+        "body": "{\"symbol\":\"AAPL\",\"price\":231.4,\"currency\":\"USD\"}"
+      }
+    },
+    {
+      "source": "ext.stocks.quote_msft",
+      "request": {
+        "url": "https://api.market.example/v1/quote?symbol=MSFT",
+        "method": "GET",
+        "headers": {
+          "x-api-key": "[REDACTED]"
+        }
+      },
+      "answer": {
+        "status": 200,
+        "headers": {
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Sun, 01 Nov 2026 06:45:32 GMT",
+          "keep-alive": "timeout=5",
+          "transfer-encoding": "chunked"
+        },
+        "body": "{\"symbol\":\"MSFT\",\"price\":512.1,\"currency\":\"USD\"}"
+      }
+    }
+  ]
+}

@@ -1,9 +1,14 @@
 // One hub per root, held by a lock the OS holds and releases when the process dies, never a PID file: an
 // exclusive SQLite transaction on the root's lock file, which takes an fcntl lock the kernel drops with the
 // process, however it ends.
+import { statSync } from 'node:fs';
 import Database from 'better-sqlite3';
 
-export interface Lock { release(): void }
+export interface Lock {
+  release(): void;
+  /** Whether the file at the lock's path is still the one this lock holds (same device and inode). */
+  held(): boolean;
+}
 
 /** How long a start keeps trying: two starts at one instant can each refuse the other once. */
 const TRY_MS = 300;
@@ -17,7 +22,16 @@ export function takeLock(path: string): Lock | undefined {
     try {
       db.pragma('locking_mode = EXCLUSIVE');
       db.exec('BEGIN EXCLUSIVE');
+      const { dev, ino } = statSync(path);
       return {
+        held() {
+          try {
+            const now = statSync(path);
+            return now.dev === dev && now.ino === ino;
+          } catch {
+            return false;
+          }
+        },
         release() {
           try {
             db.exec('ROLLBACK');

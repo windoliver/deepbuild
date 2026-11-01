@@ -36,9 +36,12 @@ DEEP_HARNESS_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=<from `claude setup-token`> npx vite
 DEEP_HUB_PLANT=<name> npx vitest run --root tests/acceptance/27 --no-file-parallelism <file>   # a wrong program, by hand
 ```
 
-- **Fast tests** start no agent and spend nothing. Each starts its own hub; most wait out the hub's 60 s stop hold
-  and deep_ask's 40 s wait, which are protocol, not test overhead. The five fast files take about 20 minutes at the
-  base, most of it `waits.test.ts`'s agent-command case, which waits up to 5 minutes for an overrun.
+- **Fast tests** start no agent and spend nothing. Each starts its own hub. The hub's 60 s stop hold and deep_ask's
+  40 s wait are protocol: `waits.test.ts`'s held stop keeps the full hold and asserts it, and `repeat.test.ts` keeps
+  deep_ask's wait. A test that answers inside neither starts its hub with `noAskWait` (deep_ask says "still waiting"
+  at once) or `shortHold` (a stop held with nothing answered ends after 5 s) (#964). The fast files take about 6
+  minutes, most of it `waits.test.ts`'s deadlines of 1 minute. `budgets.test.ts`'s measurement reads INCONCLUSIVE
+  without taking its runs when the machine is loaded past its core count as it starts.
 - **Live tests** (`session.live.test.ts`) run real interactive Claude Code sessions through the harness on your own
   sign-in. Without `DEEP_HARNESS_LIVE=1` (#48's opt-in), without `CLAUDE_CODE_OAUTH_TOKEN`, without a `claude` on
   `PATH`, with a Claude Code version the facts don't cover, or without the harness's `repeat` route, each fails with
@@ -236,8 +239,8 @@ criterion to its twin folders under `twins/`, each holding `packages/hub/src/pla
 |---|---|---|---|
 | AC1 `#27.778c531d` | the idle session wakes and uses the answer | `wake.test.ts` (one); `session.live.test.ts` AC1 (live) | passes on the base; twin `waiter-never-wakes` ("never woke within 30 s of your answer", checked with `DEEP_HUB_PLANT` at the base) |
 | AC2 `#27.6e863673` | the repeat is answered by the resolver, under decided for you | `repeat.test.ts` (one); `session.live.test.ts` AC2 (live) | the base: B's deep_ask comes back without the answer (`decided` with `answer: null` in one run, `waiting` after 40 s in another), and `deep inbox` has no decided-for-you section; twin `repeat-reaches-you` |
-| AC3 `#27.f8331d25` | the desktop app wakes, or the fallback is a known limit | `desktop.test.ts` (one); `MANUAL.md` | the base: the session's second answer is handed to the waiter that didn't wake (its known limit not kept); twin `wake-assumed` (no `stalled`) |
-| AC4 `#27.e6116d56` | each ask, hold, check run and agent command reaches a recorded outcome by its deadline (and the Oct 9 cases) | `waits.test.ts`: ask, hold, check run, agent command; `outcomes.test.ts`: timed out, replaced, waiter outliving its session, stop held while a subagent runs | the base, for all but the ask: no record of how a hold ended; a check run with no deadline runs on; no overrun recorded; `stalled` where `timed_out` and `replaced` are due; an idle session with its ask open, and one held while its subagent runs, read `finished`. The ask passes on the base: twin `skip-default-at-deadline`. Twins `waiter-outlives-session` and `answer-skips-held-stop` kill the waiter and subagent tests' earlier checks once the base's `finished` is fixed |
+| AC3 `#27.f8331d25` | the desktop app wakes, or the fallback is a known limit | `desktop-redraft-2/desktop.test.ts` (one), the second blind redraft after #906's dispute (`desktop.test.ts` and `desktop-redraft/` read `delivered` before any turn shows the answer, and run by hand only); `MANUAL.md` | the base: the session's second answer is handed to the waiter that didn't wake (its known limit not kept); twin `wake-assumed` (no `stalled`) |
+| AC4 `#27.e6116d56` | each ask, hold, check run and agent command reaches a recorded outcome by its deadline (and the Oct 9 cases) | `waits.test.ts`: ask, hold, check run, agent command; `outcomes-redraft/outcomes.test.ts` (blind redraft after #906's dispute; the earlier `outcomes.test.ts` runs by hand only): timed out, replaced, waiter outliving its session, stop held while a subagent runs | the base, for all but the ask: no record of how a hold ended; a check run with no deadline runs on; no overrun recorded; `stalled` where `timed_out` and `replaced` are due; an idle session with its ask open, and one held while its subagent runs, read `finished`. The ask passes on the base: twin `skip-default-at-deadline`. Twins `waiter-outlives-session` and `answer-skips-held-stop` kill the waiter and subagent tests' earlier checks once the base's `finished` is fixed |
 | AC5 `#27.ffbe7d6f` | 20 runs, within 2 s at p95, reference Mac, local preflight, vs the merge base | `budgets.test.ts` (three) | the base: no lane runs the file; the budget itself was INCONCLUSIVE here (load 26.7 on 12 cores; this checkout p95 337 ms, the merge base 265 ms); `waiter-checks-every-5s` (the instrument's own test, and the twin) |
 
 ## Files
