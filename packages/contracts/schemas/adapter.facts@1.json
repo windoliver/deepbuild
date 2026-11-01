@@ -881,6 +881,38 @@
     "readUsage": {
       "$ref": "#/$defs/operation"
     },
+    "tokenizer": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "name": {
+          "$ref": "#/$defs/text",
+          "description": "The encoding a reply to the agent is counted in."
+        },
+        "package": {
+          "$ref": "#/$defs/text",
+          "description": "The npm package that implements it."
+        },
+        "version": {
+          "$ref": "#/$defs/version",
+          "description": "The package version, exact: a count is only comparable under one."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "name",
+        "package",
+        "version"
+      ],
+      "additionalProperties": false,
+      "description": "The tokenizer the agent counts its context in, pinned (#854): what a scene read costs an agent is measured in its tokens."
+    },
     "classifyStop": {
       "$ref": "#/$defs/operation"
     },

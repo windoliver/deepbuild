@@ -98,7 +98,7 @@ fn one_key(keys: &[Key], v: deep_canvas::schedule::HashVersion) -> Key {
 
 impl Hub<'_> {
     /// A `deep_query` call's reply.
-    pub fn query(&mut self, q: &Query) -> Value {
+    pub fn scene_query(&mut self, q: &Query) -> Value {
         let reader = match &q.plugin {
             Some(p) => Writer {
                 kind: WriterKind::Plugin,

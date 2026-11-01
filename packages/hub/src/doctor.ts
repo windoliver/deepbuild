@@ -10,9 +10,10 @@ import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { claudeSettings, commands, installed, readJson } from './claude-settings.js';
+import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
-import { hubAddress, installedRoot } from './paths.js';
+import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { relationItems } from './setup.js';
 
@@ -58,6 +59,9 @@ const covered = (agent: string, version: string) => {
   const range = facts(agent).versions;
   return range.length > 0 && compare(version, range[0]!) >= 0 && compare(version, range[range.length - 1]!) <= 0;
 };
+/** A job is reported only at this many failures in a row (#909), so one blip stays quiet. */
+const JOB_FAILURES = 3;
+
 const hubAnswers = (socket: string): Promise<boolean> => new Promise((done) => {
   const sock = net.connect(socket);
   const timer = setTimeout(() => { sock.destroy(); done(false); }, 2000);
@@ -86,10 +90,28 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
 
   // The hub and its disk.
   let socket = '';
+  let answering = false;
   try { socket = hubAddress(options.cwd).path; } catch (error) { add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', error instanceof Error ? error.message : String(error), 'Fix ~/.deepbuild/config.json\'s hub.address.'); }
   if (socket) {
-    if (await hubAnswers(socket)) add('hub.socket', 'deepbuild', 'healthy', 'ok', `the hub answers at unix:${socket}`, 'Nothing to do.');
+    answering = await hubAnswers(socket);
+    if (answering) add('hub.socket', 'deepbuild', 'healthy', 'ok', `the hub answers at unix:${socket}`, 'Nothing to do.');
     else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, 'Run `deep hub start`; deep setup installs it as a login service.');
+  }
+  // The hub's background jobs (#909): one failing at its third run in a row or later, each with when the row began.
+  if (answering) {
+    try {
+      const reply = await call(socket, readFileSync(rootOf(root).token, 'utf8').trim(), 'hub.health', {});
+      if ('error' in reply) throw Error(`${reply.error.code}: ${reply.error.remediation}`);
+      const jobs = isObj(reply.result.jobs) ? reply.result.jobs : {};
+      const failing = Object.entries(jobs).flatMap(([name, job]) => {
+        const f = isObj(job) && isObj(job.failing) ? job.failing : undefined;
+        return f && typeof f.failures === 'number' && f.failures >= JOB_FAILURES ? [{ name, failures: f.failures, since: Number(f.since), error: String(f.error) }] : [];
+      });
+      for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
+      if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+    } catch (error) {
+      add('hub.jobs', 'deepbuild', 'not_checked', 'skip', `the hub's health couldn't be read: ${error instanceof Error ? error.message : String(error)}`, 'Run `deep hub status` by hand.');
+    }
   }
   try {
     let at = root;
