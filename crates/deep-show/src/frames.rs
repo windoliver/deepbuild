@@ -797,6 +797,9 @@ pub(crate) fn drawing_of(
             frame,
             runs: d.runs.clone(),
             animated: d.animated.clone(),
+            built: d.built,
+            damage: Vec::new(),
+            basis: None,
         });
     }
     let status = session

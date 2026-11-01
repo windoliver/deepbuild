@@ -22,7 +22,7 @@ const PLANT = 'delivered-on-waiter-exit';
 async function scenario(plant?: string): Promise<void> {
   const env = plant ? { DEEP_HUB_PLANT: plant } : {};
   const { home } = makeHome();
-  const hub = await startHub(home, { plant });
+  const hub = await startHub(home, { plant, noAskWait: true, shortHold: true });
   await setup(home, env);
   const a = await askingSession(hub, home, env);
   await a.claude.configure({ wake: false });
