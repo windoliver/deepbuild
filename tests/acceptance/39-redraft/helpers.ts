@@ -3,7 +3,7 @@
 // payloads and rollouts shaped like adapters/corpus/codex, a stand-in `codex` on a temp PATH, and `deep inbox answer`
 // with the OS-confirmation stub. Nothing here stands in for DeepBuild. Every process is stopped by PID, every folder
 // is under /tmp/dh39r-*, HOME is a temp folder for every child; no live model, no network, no secret.
-import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
@@ -13,6 +13,11 @@ import { fileURLToPath } from 'node:url';
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
 export const DEEP_HOOK = join(REPO, 'target/debug/deep-hook');
+// A fresh checkout has no target/: built at load, so DEEP_HOOK stays a plain path. Cargo's lock serializes files loading this together.
+if (!existsSync(DEEP_HOOK)) {
+  const built = spawnSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, encoding: 'utf8', timeout: 900_000 });
+  if (built.status !== 0 || !existsSync(DEEP_HOOK)) throw Error(`BLOCKED: cargo build --locked -q -p deep-hook failed: ${built.error?.message ?? built.stderr.slice(-3000)}`);
+}
 export const NODE = process.execPath;
 export const ACCOUNT = 'acct-dh39r';
 /** The newest plain release the Codex facts cover: a stand-in and every rollout name it, so no session is watch-only. */
