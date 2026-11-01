@@ -1,0 +1,52 @@
+Base commit: 2f43a669 (Merge pull request #948 from windoliver/worktree-github-issue-411-25d63a)
+Commands (one file at a time, node = ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node first on PATH):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/907/<file>.test.ts
+  after npm ci, npm run build --workspaces and cargo build --locked -q -p deep-hook
+Date: 2026-10-31  Node v24.22.0  vitest 5.0.5  darwin-arm64 (12 cores: the hub's cpu.slot pool is 6)
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/907/tsconfig.json exits 0 at the base.
+
+Every criterion's main test fails at a named assertion, for the reason the issue gives. The wrong-program tests that
+need a plant the base doesn't list fail there too (the hub refuses an unknown DEEP_HUB_PLANT; the base scheduler fails
+the earlier assertion); the two whose wrong program is the base itself pass. Trimmed to the relevant lines.
+
+== slots.test.ts (AC1): exit 1, Tests 3 failed | 1 passed (4)
+The Proof's readings (the lane each check took and when it started, from the stop):
+  AC1 as built: journey:checkout slow lane, started -2067 ms from the stop; journey:checkout slow lane, started -1756 ms from the stop; the stop's lanes: fast [], slow [typecheck]; e2e started: false; slow work held at most 2 of 2 slots
+  AC1 hub as built: pool 6; 6 slow runs started; typecheck not started
+× AC1 #907.64d1cf68 with check slots at 2, two slow journeys and an agent's e2e waiting for a cpu.slot lease, the 3 s typecheck is admitted to the fast lane and starts within 1 s of the stop
+  AssertionError: typecheck: with two slow journeys running and the agent's e2e waiting on 2 check slots, the 3 s typecheck must be admitted to the fast lane; it went to the slow lane: expected [] to include 'typecheck'
+✓ AC1 #907.64d1cf68 (wrong program) a pool that lets slow runs and agents' commands fill every slot (openLeases plant fills-every-slot) sends the typecheck to the slow lane and fails this test, naming the check
+  (passes: the base's pool is that wrong program, and openLeases ignores the plant it doesn't know)
+× AC1 #907.64d1cf68 through the hub: its slow-lane runs never take the last slot of its pool, and its fast-lane typecheck starts within 1 s beside them
+  AssertionError: typecheck: the hub's fast-lane run must start within 1 s beside 6 slow-lane runs on its pool of 6; it had not started after 2.5 s: expected undefined to be defined
+× AC1 #907.64d1cf68 (wrong program) a hub whose pool lets slow runs fill every slot (DEEP_HUB_PLANT=fills-every-slot) fails this test, naming the check
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=fills-every-slot (the planted wrong program this test runs against): …
+  Error: DEEP_HUB_PLANT=fills-every-slot names no planted program
+
+== background.test.ts (AC2): exit 1, Tests 3 failed | 1 passed (4)
+  AC2 scheduler with the background fact: stop 1 ends_turn at 2000, replied 4000, admitted [unit], slow [journey:checkout], line "1 check running · about 5 min"; journey:checkout runs: S1 slow lane, started 4000; S2 slow lane, started 304000
+× AC2 #907.707637ee the recorded session's green stop with `npm run e2e` running in the background reads looping, and the stop after its end notice reads none left
+  AssertionError: the turn ended on a green stop with Bash `npm run e2e` (run_in_background: true, toolu_4bfc93f2517769d65f0c3d70) still running, so the stop reads looping until the command's end notice: agent.stop {"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":{…}}: expected undefined to be 'looping'
+× AC2 #907.707637ee (wrong program) an adapter that counts only subagents (DEEP_HUB_PLANT=background-subagents-only) reads the green stop as not looping and fails this test, naming the call
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=background-subagents-only (the planted wrong program this test runs against): …
+  Error: DEEP_HUB_PLANT=background-subagents-only names no planted program
+× AC2 #907.707637ee given the session's loop facts, the scheduler holds the 300 s journey from the green stop until the end notice, and the stop after it starts the journey
+  AssertionError: Bash `npm run e2e` (run_in_background: true, its call) still ran from stop 1 until its end notice at 122000 ms, so the 300 s journey:checkout waits; it started at once: expected [ 'S1 at 4000 ms' ] to deeply equal []
+✓ AC2 #907.707637ee (wrong program) with the facts an adapter that counts only subagents reads, the journey starts at once and this test fails, naming the call
+  (passes: the base scheduler reads no background fact, so it starts the journey at once either way)
+
+== limit.test.ts (AC3): exit 1, Tests 3 failed (3)
+  AC3 as built, a command that never ends: stop at 2000, ends_turn, replied 4000, line "1 check running · about 5 min"; journey:checkout: S1 slow lane, started 4000 ms (0.07 min); held []
+  AC3 as built, a stop 20 minutes later: stops at 2000 and 1202000 (replied 1204000); journey:checkout: S1 slow lane, started 4000 ms (0.07 min); S2 slow lane, started 1204000 ms (20.07 min); held []
+× AC3 #907.9d0dd243 a green stop with `npm run e2e` still running holds the journey for 30 minutes, then the journey starts and the row names the command
+  AssertionError: npm run e2e still runs in the background, so journey:checkout is held for 30 minutes from the stop: expected [ 'started at 4000 ms' ] to deeply equal []
+× AC3 #907.9d0dd243 a stop 20 minutes later, after the end notice woke the agent and it reran the command in the background, gets 30 minutes of its own
+  AssertionError: the first stop's journey:checkout never starts: the agent's next turn changed its inputs while npm run e2e held it: expected [ 'started at 4000 ms' ] to deeply equal []
+× AC3 #907.9d0dd243 (wrong program) a runner with no limit (simulate plant holds-background-without-limit) leaves the journey pending past 30 minutes and fails this test
+  AssertionError: holds-background-without-limit: the failure must name pending past 30 minutes: expected 'npm run e2e still runs in the backgro…' to contain 'pending past 30 minutes'
+  (the base holds nothing, so it fails the earlier "held for 30 minutes" assertion instead of the limit's)
+
+Not verified: no test was run against an implementation of #907 (none exists), so no planted wrong program has been seen
+to fail its assertion for the criterion's own reason yet, and the expected values are unchecked against a running fix.
+The fast-lane start latency the 1 s bound leaves room for was measured once at the base with free slots: 266-397 ms from
+stopAt to the typecheck's first line (snapshot and checkout 224-357 ms).

@@ -261,7 +261,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
           if (url) meta.pr = url;
         }
       }
-      const loop = loopFact(name, tool, event, payload);
+      const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));
       if (loop) meta.loop = loop;
       break;
     }
@@ -313,8 +313,8 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
 }
 
-/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents. */
-function loopFact(name: string, tool: string, event: string, payload: JsonObject): HookMeta['loop'] {
+/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands. */
+function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);
   const wakeup = isObj(facts.wakeups) ? facts.wakeups[tool] : undefined;
@@ -329,7 +329,10 @@ function loopFact(name: string, tool: string, event: string, payload: JsonObject
   }
   const cancel = isObj(facts.cancels) ? facts.cancels[tool] : undefined;
   if (isObj(cancel)) return { cancelled: String(at(payload, String(cancel.id)) ?? '') };
+  const call = String(payload.tool_use_id ?? '');
   const background = isObj(facts.background) ? facts.background[tool] : undefined;
-  if (typeof background === 'string' && at(payload, background) === true) return { background: true };
+  if (typeof background === 'string' && at(payload, background) === true) return { background: 'subagent', call, what };
+  const command = isObj(facts.commands) ? facts.commands[tool] : undefined;
+  if (typeof command === 'string' && at(payload, command) === true) return { background: 'command', call, what };
   return undefined;
 }
