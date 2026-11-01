@@ -26,17 +26,17 @@ const HOLD: Duration = Duration::from_secs(6);
 /// How long the last frame stays, for a person to walk the tree with VoiceOver.
 const LAST: Duration = Duration::from_secs(180);
 /// The strip under the panel where the controls sit, in px.
-const STRIP: f32 = 40.;
+pub(crate) const STRIP: f32 = 40.;
 
 /// One accessibility node and where it sits in the window.
 #[derive(Clone)]
-struct Node {
-    id: String,
+pub(crate) struct Node {
+    pub(crate) id: String,
     role: accesskit::Role,
-    name: String,
-    value: Option<String>,
+    pub(crate) name: String,
+    pub(crate) value: Option<String>,
     live: bool,
-    bounds: Bounds<Pixels>,
+    pub(crate) bounds: Bounds<Pixels>,
 }
 
 /// What one presented frame draws and exposes.
@@ -47,9 +47,9 @@ struct Frame {
 }
 
 /// An element that draws nothing and is one node of the accessibility tree.
-struct AxNode {
-    node: Node,
-    style: StyleRefinement,
+pub(crate) struct AxNode {
+    pub(crate) node: Node,
+    pub(crate) style: StyleRefinement,
 }
 
 impl IntoElement for AxNode {
@@ -118,6 +118,8 @@ impl Element for AxNode {
     }
 
     fn write_a11y_info(&self, node: &mut accesskit::Node) {
+        // #140: the item or control ID, an assistive client's `accessibilityIdentifier`.
+        node.set_author_id(self.node.id.clone());
         node.set_label(self.node.name.clone());
         if let Some(value) = &self.node.value {
             node.set_value(value.clone());
@@ -152,7 +154,7 @@ fn control_role(role: &str) -> accesskit::Role {
     }
 }
 
-fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
+pub(crate) fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
     Bounds {
         origin: point(px(b[0] as f32), px(b[1] as f32)),
         size: size(px(b[2] as f32), px(b[3] as f32)),
@@ -225,7 +227,7 @@ impl Render for View {
 
 /// The nodes of one frame: the tree `see` reads, each item at its drawn box in the panel and
 /// the controls side by side in the strip under it, and the items heard but drawn in no box.
-fn nodes(
+pub(crate) fn nodes(
     doc: &Value,
     hidden: &[String],
     boxes: &[(String, [f64; 4])],
