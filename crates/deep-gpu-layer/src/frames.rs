@@ -167,6 +167,10 @@ pub struct Frame {
     pub handoff_ms: Option<f64>,
     pub ui_ms: Option<f64>,
     pub encodes: Option<Vec<Encode>>,
+    /// The device it drew on, and every scene pipeline it drew with the epoch of the device that
+    /// compiled it (#140).
+    pub device_epoch: u64,
+    pub pipelines: Vec<(String, u64)>,
 }
 
 impl Frame {
@@ -177,6 +181,8 @@ impl Frame {
             "path": self.path.name(),
             "pixel_hash": self.pixel_hash,
             "settling": self.settling,
+            "device_epoch": self.device_epoch,
+            "pipelines": self.pipelines.iter().map(|(key, epoch)| json!({"key": key, "device_epoch": epoch})).collect::<Vec<_>>(),
         });
         let o = f.as_object_mut().expect("an object");
         if let Some(w) = &self.window {
@@ -243,6 +249,8 @@ enum Drawn {
         pixel_hash: Option<String>,
         handoff: Duration,
         encodes: Vec<Encode>,
+        device_epoch: u64,
+        pipelines: Vec<(String, u64)>,
     },
     /// The device was lost while it drew.
     Lost,
@@ -379,6 +387,8 @@ pub fn drive(
             handoff_ms: None,
             ui_ms: None,
             encodes: None,
+            device_epoch: 0,
+            pipelines: Vec::new(),
         };
         let mut render_handoff = Duration::ZERO;
         let mut presented = false;
@@ -398,6 +408,12 @@ pub fn drive(
                     s.view.wait_free();
                 };
                 let _ = submitted_tx.send(());
+                let device_epoch = s.view.device().epoch;
+                let pipelines = s
+                    .installed
+                    .lock()
+                    .map(|i| i.drawn.clone())
+                    .unwrap_or_default();
                 if lose {
                     s.view.lose_device();
                 }
@@ -416,6 +432,8 @@ pub fn drive(
                     pixel_hash,
                     handoff,
                     encodes: drawn.encodes,
+                    device_epoch,
+                    pipelines,
                 })
             });
             if waits {
@@ -440,8 +458,12 @@ pub fn drive(
                     pixel_hash,
                     handoff,
                     encodes,
+                    device_epoch,
+                    pipelines,
                 } => {
                     frame.settling = settling;
+                    frame.device_epoch = device_epoch;
+                    frame.pipelines = pipelines;
                     frame.pixel_hash = pixel_hash;
                     render_handoff = handoff;
                     #[cfg(feature = "test-pool")]

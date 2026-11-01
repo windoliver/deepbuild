@@ -41,7 +41,7 @@ import { Staging } from './staging.js';
 import { coveredBy, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { GateRunner } from './gate-runner.js';
-import { argsOf, parents, startOf } from './children.js';
+import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
@@ -172,14 +172,16 @@ interface Session {
   /** The queue's drafts in order, until the prompt hook that takes each. */
   queuedTasks?: Draft[];
 }
+/** Background work as a session's row names it: each command in backticks, cut at 80 characters (#907). */
+const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length > 80 ? `${w.slice(0, 80)}…` : w}\``).join(', ');
 /**
  * What the core follows of every session by its hooks, checked or not: its attention, its open calls, the commit
- * its worktree had, and its loop: wake-ups and crons it scheduled and background subagents still to report.
+ * its worktree had, and its loop: wake-ups and crons it scheduled, and background subagents and commands still to report, by call.
  */
 interface Live {
   agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined;
   calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
-  from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: number; looping: boolean;
+  from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number }>; looping: boolean;
   /**
    * Its turns as the verdict line judges them (#83): the turn's count and whether the stop rule reads its stop as a
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
@@ -440,6 +442,7 @@ export class Core {
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run),
       slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
+      capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     });
@@ -497,13 +500,26 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({
+      record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}), ...(this.options.plant === 'fills-every-slot' ? { plant: this.options.plant } : {}),
+    });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
     // so a replica lease an earlier hub left is released.
     await leases.declare('core', REPLICA_LEASE);
     for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.every('leases', 1000, () => leases.tick());
+    // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
+    // ends mid-turn leaves them to the turn's stop.
+    this.every('background', 2000, async () => {
+      for (const [id, live] of this.live) {
+        for (const [call, b] of live.background) {
+          if (!b.group) continue;
+          try { process.kill(-b.group, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') live.background.delete(call); }
+        }
+        if (!live.background.size && live.state !== 'working') this.gate.backgroundEnded(id);
+      }
+    });
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       resources: [port, compose], leases,
@@ -549,7 +565,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = await openTrust({ record: this.record, now: this.now });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
@@ -965,7 +981,7 @@ export class Core {
 
   private liveOf(meta: HookMeta): Live {
     let live = this.live.get(meta.session);
-    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: false }));
+    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: false }));
     return live;
   }
   /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
@@ -1012,15 +1028,23 @@ export class Core {
           const item = await this.tasks.itemOf(String(data.text));
           if (item) this.items.set(draft, item);
         }
-        // A subagent's report ends its wait; a scheduled prompt fires its one-shot crons.
-        if (from === 'subagent') live.background = Math.max(0, live.background - 1);
+        // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest;
+        // a scheduled prompt fires its one-shot crons.
+        if (from === 'subagent') {
+          const named = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(String(data.text))?.[1];
+          live.background.delete(named && live.background.has(named) ? named : [...live.background.keys()][0] ?? '');
+        }
         if (from === 'scheduled') for (const [id, cron] of live.crons) if (!cron.recurring) live.crons.delete(id);
       } else if (draft.kind === 'tool.after' && meta.loop) {
         const fact = meta.loop;
         if ('scheduled' in fact) { if (fact.scheduled !== null) live.wakeups.push(draft.ts + fact.scheduled); }
         else if ('cron' in fact) live.crons.set(fact.cron, { due: fact.due, recurring: fact.recurring });
         else if ('cancelled' in fact) live.crons.delete(fact.cancelled);
-        else live.background += 1;
+        else if (fact.background === 'subagent' || this.options.plant !== 'background-subagents-only') {
+          live.background.set(fact.call, { what: fact.what });
+          // A command also ends when its process group does, read off the agent's process tree.
+          if (fact.background === 'command') void groupUnder(meta.ppid, fact.what).then((group) => { const b = live.background.get(fact.call); if (b && group) b.group = group; });
+        }
       } else if (draft.kind === 'agent.stop' && !draft.data.subagent) {
         await this.stopRecords(draft, meta, session);
         const loop = this.loopAt(live);
@@ -1442,7 +1466,7 @@ export class Core {
 
   /**
    * A stop's loop reading, from the session's own tool calls: looping while a wake-up or cron job it scheduled is
-   * due, or a background subagent it started hasn't reported; a loop with none left once neither holds.
+   * due, or a background subagent or command it started hasn't reported; a loop with none left once neither holds.
    */
   private loopAt(live: Live): Obj | undefined {
     const dues = [...live.wakeups, ...[...live.crons.values()].flatMap((c) => (c.due === null ? [] : [c.due]))];
@@ -1450,9 +1474,9 @@ export class Core {
     let loop: Obj | undefined;
     if (this.options.plant === 'loop-from-origins') {
       // The planted wrong program reads the loop from the prompt's origin alone.
-      loop = live.from === 'scheduled' || live.from === 'subagent' ? { state: 'looping', due: null } : live.wakeups.length || live.background ? { state: 'looping', due } : undefined;
+      loop = live.from === 'scheduled' || live.from === 'subagent' ? { state: 'looping', due: null } : live.wakeups.length || live.background.size ? { state: 'looping', due } : undefined;
     } else if (live.wakeups.length || live.crons.size) loop = { state: 'looping', due };
-    else if (live.background) loop = { state: 'looping', due: null };
+    else if (live.background.size) loop = { state: 'looping', due: null };
     else if (live.looping || live.from === 'scheduled' || live.from === 'subagent') loop = { state: 'none_left' };
     live.looping = loop?.state === 'looping';
     live.wakeups = [];
@@ -2325,12 +2349,23 @@ export class Core {
     // The chat has seen it once it is replied in time; a reply past the hold is not, and the next prompt shows the line.
     if (line && judged && Date.now() < held) judged.delivered = line;
     if (block && line) block = `${line}\n${block}`;
-    // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end.
-    if (lane && judged?.claim && !block && !proceeded) this.gate.turnEnded(judged.claim);
+    // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end, and
+    // while the session still runs work in the background they wait for it, at most 30 minutes (#907).
+    const background = [...(this.live.get(meta.session)?.background.values() ?? [])].map((b) => b.what);
+    if (lane && judged?.claim && !block && !proceeded) {
+      this.gate.turnEnded(judged.claim, background, stopAt);
+      if (background.length && lane.slow.length) await this.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
+    } else if (!block && !background.length) this.gate.backgroundEnded(meta.session);
     if (lane && judged?.claim) {
       await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: lane.readyAt, fastEndedAt: lane.fastEndedAt, replyAt: this.now(), question: false, codeChanging: lane.fast.length + lane.slow.length > 0 }).catch(() => undefined);
     }
     return { ...(block ? { block } : {}), ...(line ? { message: line } : {}) };
+  }
+  /** Background work held a session's slow checks 30 minutes: they start now, and its row names what still runs (#907). */
+  private async backgroundCapped(session: string, checks: string[]): Promise<void> {
+    const live = this.live.get(session);
+    const still = [...(live?.background.values() ?? [])].map((b) => b.what);
+    await this.queue(() => this.appendReading(session, live?.agent ?? 'claude-code', `${checks.join(', ')} waited 30 minutes for work in the background and ${checks.length === 1 ? 'starts' : 'start'} now${still.length ? `; still running: ${backgrounded(still)}, which DeepBuild leaves running` : ''}.`));
   }
   /**
    * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one
@@ -2638,7 +2673,7 @@ export class Core {
       // A session the spool replay already brought back keeps what the replay knew of it.
       const live = this.live.get(row.id);
       if (live) live.judged = true;
-      else this.live.set(row.id, { agent: row.agent ?? 'claude-code', cwd: row.worktree && row.worktree !== '-' ? row.worktree : '', last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: true });
+      else this.live.set(row.id, { agent: row.agent ?? 'claude-code', cwd: row.worktree && row.worktree !== '-' ? row.worktree : '', last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: true });
     }
     // Told before the hub reports ready, so the stop that comes first is held.
     await this.askingNow();
@@ -4419,9 +4454,10 @@ export class Core {
   private async launch(run: Run): Promise<string> {
     this.writeJournal((runs) => { runs[run.run] = run; });
     // Every check run takes a `cpu.slot` from the kernel's lease table first, held for the claim's session (#29):
-    // at most half the cores run checks, and the slot shows in the lease table under that session.
+    // at most half the cores run checks, and the slot shows in the lease table under that session. A fast-lane run
+    // may take the slot the pool keeps for a held stop's quick checks (#907).
     const holder = await this.claimSession(run.claim);
-    const lease = await slot(this.leases, holder, run.run);
+    const lease = await slot(this.leases, holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.now();
     await this.append(this.connection('core'), {

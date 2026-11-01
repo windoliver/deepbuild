@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "id": "film-140",
+  "profile": "film",
+  "title": "A block crosses the frame",
+  "description": "A four-second film: a block slides from left to right under a title, past a ring and along a stroked arc, looping.",
+  "size": [480, 270],
+  "transport": { "span": "4s", "loop": "wrap" },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "back": {
+      "id": "back", "kind": "rect@1", "layer": "main", "name": "Backdrop", "role": "decoration", "order": "a0",
+      "params": { "box": [0, 0, 480, 270], "paint": { "fill": { "role": "muted" } } }
+    },
+    "title": {
+      "id": "title", "kind": "text@1", "layer": "main", "name": "Title", "role": "label", "order": "a1",
+      "params": { "text": "WAVE: AVATAR glides by", "font": "body", "size": 18, "box": { "w": 320, "h": 28 } },
+      "at": { "pos": [24, 20, 0] }
+    },
+    "arc": {
+      "id": "arc", "kind": "path@1", "layer": "main", "name": "Arc", "role": "part", "order": "a2",
+      "params": { "d": "M 24 220 C 140 120 340 120 456 220", "paint": { "stroke": { "role": "ink", "width": 2 } } }
+    },
+    "ring": {
+      "id": "ring", "kind": "circle@1", "layer": "main", "name": "Ring", "role": "part", "order": "a3",
+      "params": { "center": [380, 90], "r": 26, "inner_r": 18, "paint": { "fill": { "role": "accent" } } }
+    },
+    "block": {
+      "id": "block", "kind": "rect@1", "layer": "main", "name": "Block", "role": "part", "order": "a4",
+      "params": { "box": [0, 0, 60, 40], "paint": { "fill": { "role": "ink" } } },
+      "at": { "pos": [24, 150, 0] }
+    }
+  },
+  "channels": {
+    "slide": {
+      "target": "items/block/at/pos/0", "type": "f32",
+      "keys": {
+        "a": { "t": "0s", "value": 24, "interp": { "bezier": { "x1": 0.42, "y1": 0, "x2": 0.58, "y2": 1 } } },
+        "b": { "t": "4s", "value": 396, "interp": "linear" }
+      }
+    }
+  }
+}

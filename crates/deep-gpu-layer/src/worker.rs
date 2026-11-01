@@ -7,12 +7,13 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use deep_gpu::device::{Backend, Gpu, Withheld};
+use deep_gpu::device::{Backend, Gpu};
 use deep_gpu::encode::Pool;
+use deep_gpu::seam::{Refusal, Startup};
 use deep_gpu::surface::Path;
 use deep_gpu::view::{Config, View};
 
-use crate::scene::{Scene, SceneModule};
+use crate::scene::{Installed, Scene, SceneModule};
 
 /// A scene's session: its view, kept from one call to the next.
 pub struct Session {
@@ -20,6 +21,8 @@ pub struct Session {
     pub view: View,
     pub path: Path,
     pub workers: usize,
+    /// The module's own pipelines and those its last frame drew (#140).
+    pub installed: Arc<std::sync::Mutex<Installed>>,
 }
 
 /// A `view3d` call's session: a GPU-layer view drawing scene3d (#378), and what its render module
@@ -74,8 +77,9 @@ impl State {
             if self.submits_on_completion {
                 pool.plant_submit_on_completion();
             }
-            let module = Box::new(SceneModule::new(scene.clone()));
-            let view = View::new(self.gpu.clone(), config, module, pool)?;
+            let module = SceneModule::new(scene.clone());
+            let installed = module.installed();
+            let view = View::new(self.gpu.clone(), config, Box::new(module), pool)?;
             if self.releases_early {
                 view.ui().plant_early_release();
             }
@@ -86,6 +90,7 @@ impl State {
                     view,
                     path,
                     workers,
+                    installed,
                 },
             );
         }
@@ -109,11 +114,11 @@ pub struct Worker {
 impl Worker {
     pub fn start(
         backend: Backend,
-        withheld: Withheld,
+        startup: &Startup,
         submits_on_completion: bool,
         releases_early: bool,
-    ) -> Result<Worker, String> {
-        let gpu = Gpu::open_withholding(backend, withheld)?;
+    ) -> Result<Worker, Refusal> {
+        let gpu = Gpu::start(backend, startup)?;
         let (tx, rx) = mpsc::channel::<Work>();
         let name = "deep-gpu render".to_string();
         thread::Builder::new()
@@ -132,7 +137,7 @@ impl Worker {
                     work(&mut state);
                 }
             })
-            .map_err(|e| format!("no render thread: {e}"))?;
+            .map_err(|e| Refusal::no_device(format!("no render thread: {e}")))?;
         Ok(Worker { tx, thread: name })
     }
 

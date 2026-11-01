@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "id": "locale-140",
+  "profile": "figure",
+  "title": "Flow through the pump",
+  "description": "A readout of the flow through the pump, bound to a reading and grouped as the document's locale writes numbers, under a caption.",
+  "size": [320, 120],
+  "locale": "en-US",
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "caption": {
+      "id": "caption", "kind": "text@1", "layer": "main", "name": "Caption", "role": "label", "order": "a0",
+      "params": { "text": "Flow through the pump, AVATAR", "font": "body", "size": 14, "box": { "w": 288, "h": 22 } },
+      "at": { "pos": [16, 16, 0] }
+    },
+    "amount": {
+      "id": "amount", "kind": "text@1", "layer": "main", "name": "Flow", "role": "data", "order": "a1",
+      "params": { "text": "", "font": "body", "size": 20, "numerals": "tabular", "widest": "9,999,999.9", "box": { "w": 200, "h": 30 } },
+      "at": { "pos": [16, 60, 0] }
+    }
+  },
+  "bound_values": {
+    "amount-value": {
+      "target": "items/amount/params/text",
+      "source": "reading:01JB1400000000000000000001",
+      "format": { "precision": 1, "group": "locale" }
+    }
+  }
+}

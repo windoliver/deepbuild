@@ -57,6 +57,22 @@ export const parents = async (): Promise<Map<number, number>> => {
   if (!r.error) for (const row of r.stdout.split('\n')) { const [pid, ppid] = row.trim().split(/\s+/).map(Number); if (pid && ppid) map.set(pid, ppid); }
   return map;
 };
+/**
+ * The process group of the newest process under `ancestor` whose arguments hold `text`, apart from the ancestor's own
+ * group, or undefined: where a background command an agent started runs (#907).
+ */
+export const groupUnder = async (ancestor: number, text: string): Promise<number | undefined> => {
+  const r = await run('ps', ['-A', '-o', 'pid=,pgid=,ppid=,args='], { env: C(), maxBuffer: 16 << 20 });
+  if (r.error || !text) return undefined;
+  const rows = r.stdout.split('\n').map((row) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s(.*)$/.exec(row)).filter((m) => m !== null).map((m) => ({ pid: Number(m[1]), pgid: Number(m[2]), ppid: Number(m[3]), args: m[4]! }));
+  const byPid = new Map(rows.map((p) => [p.pid, p]));
+  const own = byPid.get(ancestor)?.pgid;
+  const under = (pid: number): boolean => {
+    for (let at = byPid.get(pid), n = 0; at && n < 64; at = byPid.get(at.ppid), n++) if (at.ppid === ancestor) return true;
+    return false;
+  };
+  return rows.filter((p) => p.pgid !== own && p.args.includes(text) && under(p.pid)).sort((a, b) => b.pid - a.pid)[0]?.pgid;
+};
 /** A process's arguments, or nothing once it is gone. */
 export const argsOf = async (pid: number): Promise<string> => {
   const r = await run('ps', ['-o', 'args=', '-p', String(pid)], { env: C() });

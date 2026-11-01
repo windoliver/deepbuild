@@ -959,6 +959,18 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then runs a schedule every second on the real clock until its job ran three times. The issue's 1 s from slot to start stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "seam-suites",
+      "command": [
+        "node",
+        "scripts/seams.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "p50Ms": 180000
+      },
+      "initialReason": "Issue #140 first measurement: the merge base has no platform seams. One run of every seam's conformance suite (node scripts/seams.mjs: the GPU seam's suite and gated fixtures, the network seam's suite through its test relay, the window and input seams' capabilities and the text, accessibility and headless suites), its start to its last line; the issue caps the suites at 3 minutes, which tests/acceptance/140/platform/budgets.test.ts judges on five runs. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
