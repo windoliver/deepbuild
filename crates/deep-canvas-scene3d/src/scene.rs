@@ -68,6 +68,17 @@ pub struct Solid {
     pub shape: Shape,
     pub model: [[f64; 4]; 3],
     pub color: [u8; 3],
+    /// Its stroke slot: an outline around the object (#386).
+    pub stroke: Option<Stroke>,
+}
+
+/// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
+/// binding draws `exact` (unlit, after tone mapping).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Stroke {
+    pub color: [u8; 3],
+    pub width: f64,
+    pub exact: bool,
 }
 
 /// One segment of a line, its ends' widths in its size space.
@@ -507,6 +518,41 @@ fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     }
 }
 
+/// A solid's `paint.stroke {role, width}`: an outline around a box; a cylinder's or a sphere's
+/// isn't drawn yet, so it's refused rather than left out.
+fn stroke(
+    look: &Look3,
+    params: &Value,
+    shape: Shape,
+    path: &str,
+) -> Result<Option<Stroke>, Refused> {
+    let Some(st) = params.get("paint").and_then(|p| p.get("stroke")) else {
+        return Ok(None);
+    };
+    if shape != Shape::Box {
+        return refused("stroke_shape", format!("{path}/paint/stroke"));
+    }
+    let Some(color) = st
+        .get("role")
+        .and_then(Value::as_str)
+        .and_then(|r| look.role(r))
+    else {
+        return refused("ref_unresolved", format!("{path}/paint/stroke/role"));
+    };
+    let width = match st.get("width") {
+        None => 1.0,
+        Some(w) => match num(Some(w)).filter(|w| *w > 0.0) {
+            Some(w) => w,
+            None => return refused("out_of_range", format!("{path}/paint/stroke/width")),
+        },
+    };
+    Ok(Some(Stroke {
+        color,
+        width,
+        exact: false,
+    }))
+}
+
 fn order_key(item: &Value) -> String {
     item.get("order")
         .and_then(Value::as_str)
@@ -804,6 +850,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         shape,
                         model,
                         color: paint(look, params, &path)?,
+                        stroke: stroke(look, params, shape, &path)?,
                     });
                 }
                 "mark.line@1" => {
