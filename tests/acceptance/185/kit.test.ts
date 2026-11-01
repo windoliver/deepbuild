@@ -11,18 +11,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  B, POS, SIM, SIM_MODULE, kit, kitFailures, kitModule, num, obj, published, releaseBuild, run, scenario, show, startupRefusal, str,
+  B, POS, SIM, SIM_MODULE, kit, kitFailures, kitModule, num, obj, published, releaseBuild, show, startupRefusal, str,
   theInterface, useBuilds, useEvidence, type Build, type JsonObject,
 } from './helpers.ts';
 
 const MEASURED: Build = { set: 'core', with: ['test-sim-b'] };
-const WITH_BEHAVIOR: Build = { set: 'core', with: ['test-sim-b', 'test-sim-behavior'] };
 const FALSE_BIT: Build = { set: 'core', with: ['test-sim-b-false-bit'] };
 const OFF: Build = { set: 'core', with: ['test-sim-b-off', 'test-sim-behavior'] };
 /** The behavior answer the planted B lands 2% off: its tolerance, relative. */
 const ONE_PERCENT = 0.01;
 
-const builds = useBuilds([MEASURED, WITH_BEHAVIOR, FALSE_BIT, OFF]);
+const builds = useBuilds([MEASURED, FALSE_BIT, OFF]);
 const evidence = useEvidence();
 
 let dir = '';
@@ -61,29 +60,9 @@ describe('#185.da9aab76 the kit admits B only by the interface\'s behavior part,
     expect(refusal.interface, `the release build's refusal names the interface: ${show(refusal.raw)}`).toBe(SIM);
   }, 7_200_000);
 
-  it('#185.da9aab76 with a behavior part of three fixtures with analytic answers and tolerances, B passes the kit and its release build seals', () => {
-    const p = published(builds.bin(WITH_BEHAVIOR), evidence());
-    const i = theInterface(p, SIM, 'the B build with a behavior part');
-    expect(i.behavior, 'test.sim@1 now holds a behavior part').not.toBe('none');
-    const { ledger, sim } = ledgerOf(WITH_BEHAVIOR, 'behavior');
-    const part = sim.parts.find((x) => x.part === i.behavior);
-    expect(part, `the kit ran test.sim@1's behavior part ${i.behavior} on B; it ran ${sim.parts.map((x) => x.part).join(', ')}`).toBeDefined();
-    const fixtures = new Set(part!.cases.map((c, k) => str(c.fixture, `${i.behavior}.cases[${k}].fixture`)));
-    expect(fixtures.size, 'the behavior part holds three fixtures').toBe(3);
-    for (const [k, c] of part!.cases.entries()) {
-      for (const a of answersOf(c, `${i.behavior}.cases[${k}] (${c.fixture})`)) {
-        expect(off(a), `${c.fixture} ${a.answer}: B lands within its tolerance (expected ${a.expected}, got ${a.got}, tolerance ${a.tolerance})`).toBeLessThanOrEqual(a.tolerance);
-      }
-    }
-    expect(part!.verdict, 'B passes the behavior part').toBe('PASS');
-    expect(sim.verdict, `B passes its interface's kit: ${show(kitFailures(sim))}`).toBe('PASS');
-    const built = releaseBuild(WITH_BEHAVIOR, ledger, dir);
-    expect(built.error, 'the release build compiles').toBe('');
-    const [reg, sch] = run(built.bin, scenario(evidence(), [{ call: 'registry' }, { call: 'schedule' }]));
-    expect(reg!['state'], 'the release build seals').toBe('sealed');
-    const chosen = obj(obj(obj(sch!['interfaces'], 'schedule: interfaces')[SIM], `schedule: interfaces["${SIM}"]`)['implementation'], 'implementation');
-    expect(chosen['name'], 'with B as test.sim@1\'s implementation').toBe(B);
-  }, 7_200_000);
+  // "with a behavior part of three fixtures …, B passes and seals" is proven by the blind redraft
+  // redraft/kit-behavior-redraft.test.ts, swapped in with the owner's approval: this draft's core-set ledger
+  // records look and text FAIL at the base too, so its release build never sealed (redraft/DISPUTE.md).
 
   it('#185.da9aab76 a planted B that declares bit while one kit fixture\'s hash differs from A\'s fails the kit, naming the fixture and the first field', () => {
     const i = theInterface(published(builds.bin(FALSE_BIT), evidence()), SIM, 'the planted bit B build');

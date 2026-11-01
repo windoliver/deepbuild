@@ -188,7 +188,7 @@ seals; a planted B that declares bit while one kit fixture's hash differs from A
 fixture and the first field; and a planted B that lands 2% off an answer whose tolerance is 1% fails, naming the
 fixture, the answer and the tolerance"
 
-`kit.test.ts` (4):
+`kit.test.ts` (3, with item 2 in the redraft):
 1. `core,test-sim-b`: the plan shows B measured and `behavior: "none"`; the kit over the build writes a ledger; the
    release build embedding it exits 2 with `interface: "test.sim@1"`. Wrong program: an interface with no behavior
    part that admits a measured implementation (the release build starts).
@@ -196,6 +196,9 @@ fixture, the answer and the tolerance"
    answer within its tolerance by the reply's own numbers, the part and B PASS; the release build embedding that
    ledger seals with B chosen. Wrong programs: a behavior part with fewer fixtures or none; a release gate that
    refuses B anyway.
+   Swapped out with the owner's approval for the blind redraft `redraft/kit-behavior-redraft.test.ts`, which
+   builds `full,test-sim-b,test-sim-behavior`: a `core`-set ledger records look and text FAIL at the base too, so
+   this draft's release build never sealed (`redraft/DISPUTE.md`).
 3. `core,test-sim-b-false-bit`: B declares bit; the kit over `test.sim` FAILs with a failure naming a fixture the
    kit ran and a `field` in `test.sim.pos`. Wrong program: a kit that takes bit on trust and never compares B's
    hashes with A's.
