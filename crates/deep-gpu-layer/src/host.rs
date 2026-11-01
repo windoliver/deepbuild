@@ -24,7 +24,9 @@ use sha2::{Digest, Sha256};
 use crate::frames::{hex, Capture};
 use crate::session3::{self, lock};
 use crate::status;
-use crate::view3d::{apply_patch, pair, png, write_named, FLICKS_PER_SECOND};
+use crate::view3d::{
+    apply_patch, pair, picks_json, png, write_final, write_named, FLICKS_PER_SECOND,
+};
 use crate::{effects, plugin, refused, App, Planted};
 
 const KINDS: [&str; 3] = ["return_card", "lod_open", "sheet_cell"];
@@ -369,26 +371,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             );
             frame.insert("cache".into(), json!({"key": key, "hit": hit}));
             if capture && !shown.bytes.is_empty() && args.targets.contains(&"final".to_string()) {
-                let mut rgba = shown.bytes.clone();
-                for p in rgba.as_chunks_mut::<4>().0 {
-                    p.swap(0, 2);
-                }
-                frame.insert(
-                    "final".into(),
-                    json!(write_named(out, &png(&rgba, size)?, "png")?),
-                );
+                frame.insert("final".into(), json!(write_final(out, &shown.bytes, size)?));
             }
             if let (true, Some((_, ids))) = (capture && wants_targets, &shown.targets) {
                 frame.insert(
                     "ids".into(),
                     json!(write_named(out, &png(ids, size)?, "png")?),
                 );
-                let picks: Map<String, Value> = shown
-                    .picks
-                    .iter()
-                    .map(|(id, p)| (p.to_string(), json!(id)))
-                    .collect();
-                frame.insert("picks".into(), Value::Object(picks));
+                frame.insert("picks".into(), picks_json(&shown.picks));
             }
             frames.push(Value::Object(frame));
         }

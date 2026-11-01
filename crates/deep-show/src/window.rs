@@ -23,7 +23,7 @@ const CARD_ORDER: &str = "a0";
 const OUTLINE_PX: f32 = 1.;
 const NAME_TAB: f32 = 18.;
 
-fn hsla(c: Rgb) -> Hsla {
+pub(crate) fn hsla(c: Rgb) -> Hsla {
     Rgba {
         r: f32::from(c[0]) / 255.,
         g: f32::from(c[1]) / 255.,
@@ -33,7 +33,7 @@ fn hsla(c: Rgb) -> Hsla {
     .into()
 }
 
-fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
+pub(crate) fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
     Bounds {
         origin: point(px(b[0] as f32), px(b[1] as f32)),
         size: size(px(b[2] as f32), px(b[3] as f32)),

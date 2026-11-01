@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6Y",
+  "kind": "send.made",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "key": "brief-weekly-2026-11-02",
+    "piece": "acme/brief",
+    "phase": "answered",
+    "kind": "email",
+    "to": ["you@example.invalid"],
+    "plan": "9d56bcb682cb79274e26056b96a2b0b81dfa10b8b89e1845901576c05572db18",
+    "schedule": "ext.brief.weekly",
+    "run": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "call": null,
+    "rule": "rule:01K74G3A5C7E9G1J3M5P7R9T1W",
+    "ask": null,
+    "status": 200
+  }
+}

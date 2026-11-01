@@ -17,6 +17,11 @@
 //
 // Sources and secrets (#364): the hub makes every call a polled source needs, adding a secret by its handle only on
 // the source's host (./sources.ts), and a stream source is held to source@1's kit at install, wherever it runs.
+//
+// Schedules, notices and sends (#365): a plug-in's jobs run on the hub's timer, one run of a schedule at a time, each
+// judged by what the hub recorded for it (./schedules.ts); a notice goes out only for a subscription you made and only
+// on fresh readings; and a send leaves only under your standing rule or your yes, its key claimed before it goes out
+// (./sends.ts).
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
@@ -36,6 +41,8 @@ import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/su
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
+import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings } from './schedules.js';
+import { Sends, type SendRow, type SendRule } from './sends.js';
 import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { Terminals, type OpenSpec } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
@@ -247,6 +254,26 @@ export interface ExtensionHost {
    * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
    */
   readStream(name: string, limit: number): Promise<StreamRead>;
+  /** The hub's timer at now() (#365): every run due starts, or queues behind its schedule's running run; resolves once each is dispatched. */
+  tick(): Promise<void>;
+  /** Resolves once nothing the schedules started is still going and nothing due can start. */
+  idle(): Promise<void>;
+  /** The schedules list: each row's state in words, its next run from the hub's own schedule and its last result from its last run. */
+  schedules(): Promise<ScheduleRow[]>;
+  /** A schedule's runs, as the hub recorded them. */
+  runs(schedule: string): Promise<ScheduleRun[]>;
+  /** Every send, as the hub recorded it. */
+  sends(): Promise<SendRow[]>;
+  /** Your edit of a schedule's cadence, on the trusted path. */
+  editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void>;
+  /** Run now, on the trusted path: a run at once, or queued behind the one running. */
+  runNow(connection: Connection, name: string): Promise<void>;
+  /** Your resume of a paused schedule, on the trusted path. */
+  resumeSchedule(connection: Connection, name: string): Promise<void>;
+  /** You asked to be told of a notice kind's cause, on the trusted path: recorded as notice.subscribed. Its event's ID. */
+  subscribeNotice(connection: Connection, kind: string, key: string): Promise<string>;
+  /** Your standing rule for sends, on the trusted path. Its handle. */
+  setSendRule(connection: Connection, rule: SendRule): Promise<string>;
   /** Stops every process it started, but the terminals of a piece whose manifest's host lives past the app. */
   close(): Promise<void>;
 }
@@ -295,6 +322,10 @@ const INDEX = 'index@1';
 const SOURCE = 'source@1';
 /** The hub's own connection, for what only the core appends. */
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** How often the hub's timer looks for a schedule's run that is due (#365). */
+const TIMER_MS = 250;
+/** The notices one plug-in may send in a minute (#365). */
+const NOTICES_PER_MINUTE = 10;
 /** A source's name, as the manifest contract holds it. */
 const SOURCE_NAME = /^ext\.[a-z0-9][a-z0-9_-]*\.[a-z][a-z0-9_]*$/;
 const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
@@ -338,8 +369,10 @@ interface Action {
   /** Why agents aren't offered it, or null: its input schema uses a keyword a model API's strict tool schemas reject. */
   leftOut: string | null;
 }
-/** A store a piece declared (#363): the generation its items are held to, and their check against its schema. */
-interface Store { generation: number; check: (value: unknown) => string | undefined }
+/** A store a piece declared (#363): the generation its items are held to, their check against its schema, and its quota in bytes (#365). */
+interface Store { generation: number; check: (value: unknown) => string | undefined; quota: number | null }
+/** A scheduled run under way (#365): what its job may do, and what the hub saw and recorded for it. */
+interface RunCtx { run: string; decl: ScheduleDecl; changes: string[]; blocked: string | null; held: string | null; ended: boolean }
 interface Ext {
   entry: Entry;
   /** Its project folder's real path, resolved when it loads, which the hook path asks trust about (#881). */
@@ -365,6 +398,8 @@ interface Ext {
   hubBound: boolean;
   /** The sources it registered, by name, as declared (#364); their functions stay with the package. */
   sources: Map<string, Declared>;
+  /** The sources each check kind it registered reads, as declared (#365). */
+  checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
   starts: number;
   /** How to take its resolver back from the asks core, once it registered one. */
@@ -627,6 +662,15 @@ class Host implements ExtensionHost {
   private starting: Promise<void> = Promise.resolve();
   private closed = false;
   private readonly sources: Sources;
+  private readonly scheduler: Schedules;
+  private readonly sending: Sends;
+  /** The runs under way, by the scope token their job's calls carry (#365). */
+  private readonly runCtx = new Map<string, RunCtx>();
+  /** The times of each plug-in's notices in the last minute, which its limit counts (#365). */
+  private readonly noticeTimes = new Map<string, number[]>();
+  /** Each store's items as the record holds them, and their bytes in all, kept as they are put (#365): only this host writes them. */
+  private readonly storeItems = new Map<string, { items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }>();
+  private timer: NodeJS.Timeout | undefined;
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
@@ -641,6 +685,19 @@ class Host implements ExtensionHost {
       now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
       // Each call's cost and each new reading, as the core: the hub makes every source call.
       append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
+    });
+    this.sending = new Sends({
+      record: options.record, now: options.now, http: options.http ?? nodeHttp, asks: options.asks,
+      rules: () => this.read<SendRule>('send-rules.json'), saveRules: (rules) => this.save('send-rules.json', rules),
+    });
+    this.scheduler = new Schedules({
+      now: options.now,
+      newRun: () => `run:${ulid(options.now())}`,
+      append: async (data: RunEvent) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind: 'schedule.run', ts: options.now(), data: data as unknown as JsonValue }); },
+      ready: (decl) => this.exts.get(decl.plugin)?.live === true,
+      blocked: (decl) => this.blockedRun(decl),
+      dispatch: (decl, run) => this.dispatchRun(decl, run),
+      saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
   }
 
@@ -970,7 +1027,10 @@ class Host implements ExtensionHost {
     if (typeof value !== 'string' || !value) throw Error(`a value for ${name} is a string`);
     const ext = this.exts.get(extension);
     const tested = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.keyTest !== null);
-    return this.sources.enter(extension, name, value, tested);
+    const entered = await this.sources.enter(extension, name, value, tested);
+    // A schedule BLOCKED on it runs at the next tick (#365).
+    if (entered.saved) this.scheduler.supplied();
+    return entered;
   }
   async readSource(name: string): Promise<SourceRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
@@ -988,8 +1048,14 @@ class Host implements ExtensionHost {
   async removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }> {
     this.trustedPath(connection, 'a secret is removed');
     this.secretOf(extension, name);
-    // What its packages registered needing it; schedules and checks name sources, so they go BLOCKED through them.
-    const blocked = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name).sort();
+    // What plug-ins declared needing it: its sources, and the schedules and checks that read them (#365).
+    const sources = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name);
+    const reads = (r: string[]): boolean => r.some((x) => sources.includes(x));
+    const blocked = [
+      ...sources,
+      ...this.scheduler.decls().filter((d) => reads(d.declares.readings)).map((d) => d.name),
+      ...[...this.exts.values()].flatMap((e) => [...e.checkReads].filter(([, r]) => reads(r)).map(([kind]) => kind)),
+    ].sort();
     const yes = [...(answer?.yes ?? [])].sort();
     if (!answer || yes.length !== blocked.length || yes.some((s, i) => s !== blocked[i])) return { removed: false, blocked };
     await this.sources.remove(extension, name, blocked);
@@ -1001,7 +1067,9 @@ class Host implements ExtensionHost {
     const ext = this.exts.get(extension);
     const source = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.oauth !== null);
     if (!source) throw Error(`no loaded source of ${extension} signs in for ${name}`);
-    return this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+    const signed = await this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+    this.scheduler.supplied();
+    return signed;
   }
   async readStream(name: string, limit: number): Promise<StreamRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'stream');
@@ -1027,6 +1095,63 @@ class Host implements ExtensionHost {
     }
     this.save('cursors.json', { ...cursors, [name]: p!.cursor });
     return { status: 'events', source: name, events };
+  }
+  async tick(): Promise<void> {
+    if (!this.closed) await this.scheduler.tick();
+  }
+  async idle(): Promise<void> {
+    await this.scheduler.idle();
+  }
+  async schedules(): Promise<ScheduleRow[]> {
+    const last = new Map<string, ScheduleRow['last']>();
+    for (const d of this.scheduler.decls()) {
+      const ended = (await this.runs(d.name)).filter((r) => r.verdict !== null).sort((a, b) => a.ended! - b.ended!).at(-1);
+      last.set(d.name, ended ? { run: ended.run, at: ended.dispatched ?? ended.due, verdict: ended.verdict } : null);
+    }
+    return this.scheduler.rows((name) => last.get(name) ?? null);
+  }
+  async runs(schedule: string): Promise<ScheduleRun[]> {
+    const rows = (await this.options.record.raw("SELECT ts, data FROM events WHERE kind = 'schedule.run' AND json_extract(data, '$.schedule') = ? ORDER BY log_pos", [schedule])) as { ts: number; data: string }[];
+    const runs = new Map<string, ScheduleRun>();
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as RunEvent;
+      const r = runs.get(d.run) ?? { run: d.run, schedule, due: d.due, dispatched: null, ended: null, verdict: null, cause: null, stopped: null, sends: [], changes: [] };
+      if (d.phase === 'dispatched') r.dispatched ??= row.ts;
+      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
+      runs.set(d.run, r);
+    }
+    // Whether each send a run started went out: one still waiting on your answer has not.
+    for (const send of await this.sending.rows()) if (send.run) runs.get(send.run)?.sends.push({ key: send.key, outcome: send.outcome === 'waiting' ? 'not sent' : send.outcome });
+    return [...runs.values()];
+  }
+  async sends(): Promise<SendRow[]> {
+    return this.sending.rows();
+  }
+  async editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void> {
+    this.trustedPath(connection, 'a schedule is edited');
+    await this.scheduler.edit(name, cadenceOf(cadence));
+  }
+  async runNow(connection: Connection, name: string): Promise<void> {
+    this.trustedPath(connection, 'a schedule is run now');
+    await this.scheduler.runNow(name);
+  }
+  async resumeSchedule(connection: Connection, name: string): Promise<void> {
+    this.trustedPath(connection, 'a schedule is resumed');
+    await this.scheduler.resume(name);
+  }
+  async subscribeNotice(connection: Connection, kind: string, key: string): Promise<string> {
+    this.trustedPath(connection, 'a notice is subscribed to');
+    if (!Object.values(this.entries).some((e) => (manifestOf(e.folder).notices ?? []).includes(kind))) throw Error(`no installed plug-in declares the notice kind ${kind}`);
+    if (typeof key !== 'string' || !key) throw Error(`a subscription to ${kind} names what it is for`);
+    const now = this.options.now();
+    const id = ulid(now);
+    await this.options.record.append(connection, { v: 1, id, kind: 'notice.subscribed', ts: now, data: { notice_kind: kind, key, by: connection.actor } });
+    return id;
+  }
+  async setSendRule(connection: Connection, rule: SendRule): Promise<string> {
+    this.trustedPath(connection, 'a standing rule for sends is set');
+    if (!this.entries[rule?.piece]) throw Error(`${String(rule?.piece)} isn't installed`);
+    return this.sending.setRule(rule);
   }
   /** The secret a package's manifest names, or a refusal naming it. */
   private secretOf(extension: string, name: string): void {
@@ -1105,7 +1230,7 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), starts: 0,
+      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), checkReads: new Map(), starts: 0,
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -1267,7 +1392,11 @@ class Host implements ExtensionHost {
     const returned = await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
     if (ext.mode === 'loaded' && isPlain(returned)) this.loadResults.set(ext.entry.id, structuredClone(returned));
     // Its handlers, actions and outputs publish only now that it started, and only while it's still the one loaded.
-    if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) ext.live = true;
+    if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) {
+      ext.live = true;
+      // A schedule BLOCKED on a source it registers checks again (#365).
+      this.scheduler.supplied();
+    }
   }
   private async sandboxed(ext: Ext): Promise<void> {
     const { supervisor } = this.options;
@@ -1338,7 +1467,10 @@ class Host implements ExtensionHost {
   private async unload(ext: Ext): Promise<void> {
     ext.live = false;
     ext.detached = true;
-    if (this.exts.get(ext.entry.id) === ext) this.exts.delete(ext.entry.id);
+    if (this.exts.get(ext.entry.id) === ext) {
+      this.exts.delete(ext.entry.id);
+      this.scheduler.drop(ext.entry.id);
+    }
     ext.resolverDrop?.();
     delete ext.resolverDrop;
     for (const name of ext.adapters) {
@@ -1468,6 +1600,12 @@ class Host implements ExtensionHost {
           if (owner && owner !== ext) owner.kinds = owner.kinds.filter((k) => k !== type);
         }
         if (!ext.kinds.includes(type)) ext.kinds.push(type);
+        // The sources it reads (#365), from what its plug-in declares: removing a secret they need lists it.
+        const reads = (args[1] as { readings?: unknown } | undefined)?.readings;
+        if (reads !== undefined) {
+          if (!texts(reads) || (reads as string[]).some((r) => !(ext.manifest.sources ?? []).some((x) => x.name === r))) throw Error(`deep.registerCheck: ${type} declares the readings it reads as sources its manifest lists`);
+          ext.checkReads.set(type, [...(reads as string[])]);
+        }
         return null;
       }
       case 'deep.registerEnvironment': {
@@ -1604,7 +1742,7 @@ class Host implements ExtensionHost {
       }
       // A piece's store (#363): its items are events of a kind its manifest declares, written by the piece alone.
       case 'deep.store': {
-        const [kind, declared] = args as [unknown, { generation?: unknown; schema?: unknown; migrates?: unknown } | undefined];
+        const [kind, declared] = args as [unknown, { generation?: unknown; schema?: unknown; migrates?: unknown; quota?: unknown } | undefined];
         if (typeof kind !== 'string' || !(ext.manifest.stores ?? []).includes(kind)) throw Error(`deep.store: ${String(kind)} isn't a store kind ${id}'s manifest declares`);
         const generation = declared?.generation;
         if (!Number.isSafeInteger(generation) || (generation as number) < 1) throw Error(`deep.store: ${kind} gives the generation of its schema, a whole number from 1`);
@@ -1617,7 +1755,10 @@ class Host implements ExtensionHost {
         if (skipped) throw Error(`deep.store: ${kind}'s schema has a rule the host can't check: ${skipped}`);
         const items = registry([{ name: kind, schema: schema as Schema }]);
         items.validate(kind, {});
-        const store: Store = { generation: generation as number, check: (value) => { const held = items.validate(kind, value); return held.ok ? undefined : `${held.issues[0]!.path || '/'}: ${held.issues[0]!.code}`; } };
+        // Its quota in bytes (#365): what its items hold, each as JSON, never grows past it.
+        const quota = (declared!.quota as { bytes?: unknown } | undefined)?.bytes;
+        if (declared!.quota !== undefined && (!Number.isSafeInteger(quota) || (quota as number) < 1)) throw Error(`deep.store: ${kind}'s quota is a number of bytes, a whole number from 1`);
+        const store: Store = { generation: generation as number, quota: (quota as number | undefined) ?? null, check: (value) => { const held = items.validate(kind, value); return held.ok ? undefined : `${held.issues[0]!.path || '/'}: ${held.issues[0]!.code}`; } };
         if (!conformance) await this.migrate(ext, kind, store, migrates as number[]);
         ext.stores.set(kind, store);
         return null;
@@ -1629,22 +1770,31 @@ class Host implements ExtensionHost {
         if (typeof key !== 'string' || !key) throw Error(`${method}: ${String(kind)}'s items each have a key, a non-empty string`);
         const broke = store.check(value);
         if (broke) throw Error(`${method}: the item for ${key} fails ${String(kind)}'s schema at ${broke}`);
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        if (run && !run.decl.declares.stores.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the stores it writes`);
+        const held = await this.store(kind as string);
+        const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
+        const total = held.bytes - (held.items.get(key)?.bytes ?? 0) + bytes;
+        if (store.quota !== null && total > store.quota) throw Error(`${method}: ${String(kind)} would hold ${total} bytes with the item for ${key}, past its quota of ${store.quota}`);
         const now = this.options.now();
         const call = scope === undefined ? null : ext.callOf.get(scope) ?? null;
         await this.options.record.append(connection, { v: 1, id: ulid(now), kind: kind as string, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call } });
+        held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
+        held.bytes = total;
+        run?.changes.push(`${String(kind)}:${key}`);
         return null;
       }
       case 'deep.store.get': {
         quiet();
         const [kind, key] = args;
         this.storeOf(ext, kind, method);
-        return (await this.items(kind as string)).get(String(key))?.value ?? null;
+        return structuredClone((await this.items(kind as string)).get(String(key))?.value ?? null);
       }
       case 'deep.store.list': {
         quiet();
         const [kind] = args;
         this.storeOf(ext, kind, method);
-        return [...(await this.items(kind as string))].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, item]) => ({ key, value: item.value }));
+        return [...(await this.items(kind as string))].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, item]) => ({ key, value: structuredClone(item.value) }));
       }
       case 'deep.provide': {
         const [name, kind] = args;
@@ -1693,16 +1843,65 @@ class Host implements ExtensionHost {
         return void this.terminals.input(args[0] as string, args[1] as string);
       case 'deep.notices.send': {
         quiet();
-        const readings = (args[0] as { readings?: unknown } | undefined)?.readings;
+        // #348's wrong program checks nothing here, as it checks no grant but deep.record.query's.
+        const planted = this.options.plant === 'grants-only-in-record-query';
+        const given = (isPlain(args[0]) ? args[0] : {}) as { readings?: unknown; key?: unknown };
+        const subject = planted ? undefined : await this.noticeAllowed(ext, args[0], scope);
+        if (subject?.sent) return subject.sent;
         const notice = `notice:${ulid(this.options.now())}`;
         const now = this.options.now();
         await this.options.record.append(connection, {
-          v: 1, id: ulid(now), kind: 'notice.sent', ts: now, data: { notice, cites: Array.isArray(readings) ? readings : [] },
+          v: 1, id: ulid(now), kind: 'notice.sent', ...(subject ? { subject: subject.subject } : {}), ts: now, data: { notice, cites: Array.isArray(given.readings) ? given.readings : [] },
         });
-        // Sent for an action call, it is part of what that call changed (#363).
+        // Sent for an action call, it is part of what that call changed (#363); in a run, of what the run changed (#365).
         const call = scope === undefined ? undefined : ext.callOf.get(scope);
         if (call !== undefined) this.notices.get(call)?.push(notice);
+        if (scope !== undefined) this.runCtx.get(scope)?.changes.push(notice);
         return notice;
+      }
+      // Schedules and sends (#365).
+      case 'deep.schedule': {
+        const [name, declared] = args;
+        const decl = declareSchedule(name, declared, { plugin: id, sources: (ext.manifest.sources ?? []).map((x) => x.name), notices: ext.manifest.notices ?? [], stores: ext.manifest.stores ?? [] });
+        if (conformance) return null;
+        const owner = this.scheduler.has(decl.name);
+        if (owner && owner.plugin !== id) throw Error(`deep.schedule: ${decl.name} is already registered by ${owner.plugin}`);
+        await this.scheduler.register(decl, { runs: await this.runs(decl.name), settings: this.read<Settings>('schedules.json')[decl.name] ?? {} });
+        return null;
+      }
+      case 'deep.schedule.read': {
+        quiet();
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        if (!run) throw Error(`${method}: only a scheduled job reads through its run`);
+        const [source] = args;
+        if (typeof source !== 'string' || !run.decl.declares.readings.includes(source)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(source)} among the readings it reads`);
+        const owner = [...this.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+        if (!owner) {
+          run.blocked ??= `missing source ${source}`;
+          return { status: 'BLOCKED', source, cause: run.blocked };
+        }
+        const got = await this.sources.readOne(owner.entry.id, owner.sources.get(source) as Polled, (answer) => this.ask(owner, CALL_MS, `${source}'s parser`, 'source.parse', { name: source, answer }));
+        if (got.read.status === 'reading') {
+          if (got.handle) run.changes.push(got.handle);
+          return { status: 'reading', reading: { ...got.read.reading, handle: got.handle } };
+        }
+        if (got.read.status === 'BLOCKED') run.blocked ??= got.read.cause;
+        else if (got.held) run.held ??= got.read.cause;
+        return got.read;
+      }
+      case 'deep.send': {
+        quiet();
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        const kind = (args[0] as { kind?: unknown } | undefined)?.kind;
+        if (run && !run.decl.declares.sends.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the sends it makes`);
+        const now = this.options.now();
+        const sent = await this.sending.send(args[0], {
+          piece: id, hosts: (ext.entry.grant.hosts ?? []).map((h) => h.host), schedule: run?.decl.name ?? null, run: run?.run ?? null,
+          call: run || scope === undefined ? null : ext.callOf.get(scope) ?? null,
+          until: now + (run ? run.decl.deadline : CALL_MS), ended: () => (run ? run.ended : scope !== undefined && !ext.scopes.has(scope)),
+        });
+        run?.changes.push(`send:${sent.key}`);
+        return sent;
       }
       default:
         throw Error(`${method} isn't wired into this host yet`);
@@ -1730,18 +1929,29 @@ class Host implements ExtensionHost {
     if (!store) throw Error(`${method}: ${String(kind)} isn't a store ${ext.entry.id} declared with deep.store`);
     return store;
   }
-  /** A store's items as the record holds them now: the newest item for each key. */
-  private async items(kind: string): Promise<Map<string, { value: unknown; generation: number }>> {
-    const items = new Map<string, { value: unknown; generation: number }>();
+  /**
+   * A store's items as the record holds them now: the newest item for each key, read from the record once and then
+   * kept as this host puts them, since only this host writes a store's kind (#365: a lookup reads no log).
+   */
+  private async items(kind: string): Promise<Map<string, { value: unknown; generation: number; bytes: number }>> {
+    return (await this.store(kind)).items;
+  }
+  private async store(kind: string): Promise<{ items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }> {
+    const kept = this.storeItems.get(kind);
+    if (kept) return kept;
+    const items = new Map<string, { value: unknown; generation: number; bytes: number }>();
     for (let after = 0; ;) {
       const page = await this.options.record.read({ after, limit: PAGE, kinds: [kind] });
       for (const e of page) {
         const { key, value, generation } = e.data as { key: string; value: unknown; generation: number };
-        items.set(key, { value, generation });
+        items.set(key, { value, generation, bytes: Buffer.byteLength(JSON.stringify(value) ?? 'null') });
       }
-      if (page.length < PAGE) return items;
+      if (page.length < PAGE) break;
       after = page[page.length - 1]!.log_pos;
     }
+    // Read while another call read it too: the first map read stays the one kept.
+    if (!this.storeItems.has(kind)) this.storeItems.set(kind, { items, bytes: [...items.values()].reduce((sum, i) => sum + i.bytes, 0) });
+    return this.storeItems.get(kind)!;
   }
   /**
    * A store's items moved forward to the generation a load declares (#363): each item at a generation it migrates
@@ -1758,6 +1968,10 @@ class Host implements ExtensionHost {
       if (broke) throw Error(`deep.store: ${id}'s migration of ${kind}'s item ${key} from generation ${item.generation} fails generation ${store.generation}'s schema at ${broke}`);
       const now = this.options.now();
       await this.options.record.append(this.connection(ext, undefined), { v: 1, id: ulid(now), kind, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call: null } });
+      const held = await this.store(kind);
+      const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
+      held.bytes += bytes - item.bytes;
+      held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
     }
   }
   /** Whether a kind is another plug-in's: an `ext.<plugin>.` kind of a plug-in other than this one. */
@@ -1891,6 +2105,81 @@ class Host implements ExtensionHost {
       chunks.push(chunk);
     }
     return { status: answer.status, body: Buffer.concat(chunks).toString('utf8') };
+  }
+
+  /**
+   * Whether a notice may go out (#365), refused naming why: a notice kind its manifest declares (and, in a run, its job
+   * declares), for a cause you subscribed to, each reading it cites one the hub recorded that is still fresh, within the
+   * plug-in's limit a minute. Its subject keys its cause, so the notice already sent for one is answered again.
+   */
+  private async noticeAllowed(ext: Ext, given: unknown, scope: string | undefined): Promise<{ subject: string; sent?: string }> {
+    const id = ext.entry.id;
+    const n = (isPlain(given) ? given : {}) as { kind?: unknown; subscription?: unknown; key?: unknown; readings?: unknown };
+    const refuse = (why: string): never => { throw Error(`deep.notices.send: ${why}`); };
+    const run = scope === undefined ? undefined : this.runCtx.get(scope);
+    const kind = typeof n.kind === 'string' && (ext.manifest.notices ?? []).includes(n.kind) ? n.kind : refuse(`${String(n.kind)} isn't a notice kind ${id}'s manifest declares`);
+    if (run && !run.decl.declares.notices.includes(kind)) refuse(`${run.decl.name} doesn't declare ${kind} among the notices it may send`);
+    if (typeof n.key !== 'string' || !n.key) refuse('a notice has a key, its one cause');
+    const [sub] = (await this.options.record.raw(`SELECT id FROM events WHERE kind = 'notice.subscribed' AND json_extract(data, '$.notice_kind') = ? AND json_extract(data, '$.key') = ?
+      ORDER BY log_pos DESC LIMIT 1`, [kind, String(n.subscription)])) as { id: string }[];
+    if (!sub) refuse(`nobody subscribed to ${kind} for ${String(n.subscription)}; a notice goes out only because you asked for it`);
+    if (!texts(n.readings)) refuse('a notice cites the readings behind it, as a list of their handles');
+    const now = this.options.now();
+    for (const handle of n.readings as string[]) {
+      const [r] = (await this.options.record.raw('SELECT source, as_of FROM readings WHERE reading = ?', [handle])) as { source: string; as_of: number }[];
+      const source = r && [...this.exts.values()].map((e) => e.sources.get(r.source)).find((x): x is Polled => x?.variant === 'polled');
+      if (!r || !source) return refuse(`${handle} is no reading of a loaded source the hub recorded`);
+      if (now - r.as_of >= source.freshFor) refuse(`${handle} is past its freshness of ${source.freshFor} ms, so the notice would cite a stale reading`);
+    }
+    const subject = `notice:${sub!.id}#${sha256Hex(new TextEncoder().encode(n.key as string)).slice(0, 40)}`;
+    const [sent] = (await this.options.record.raw("SELECT json_extract(data, '$.notice') AS notice FROM events WHERE kind = 'notice.sent' AND subject = ? LIMIT 1", [subject])) as { notice: string }[];
+    if (sent) return { subject, sent: sent.notice };
+    const times = (this.noticeTimes.get(id) ?? []).filter((t) => now - t < 60_000);
+    if (times.length >= NOTICES_PER_MINUTE) refuse(`${id} sent ${NOTICES_PER_MINUTE} notices in the last minute, its limit`);
+    this.noticeTimes.set(id, [...times, now]);
+    return { subject };
+  }
+  /** What keeps a schedule's run from starting (#365): a source it reads that no loaded plug-in registers, or a secret one needs that isn't held. */
+  private async blockedRun(decl: ScheduleDecl): Promise<string | null> {
+    for (const name of decl.declares.readings) {
+      const owner = [...this.exts.values()].find((e) => e.live && e.sources.has(name));
+      const source = owner?.sources.get(name);
+      if (!owner || !source) return `missing source ${name}: no loaded plug-in registers it`;
+      if (source.variant === 'polled' && source.secret && !(await this.sources.holds(owner.entry.id, source.secret))) return `missing secret ${source.secret}, which ${name} needs`;
+    }
+    return null;
+  }
+  /** Hands a run to its plug-in's job (#365), its calls carrying the run's scope; resolves with the run's verdict. */
+  private dispatchRun(decl: ScheduleDecl, run: { run: string; due: number }): Promise<Ended> | undefined {
+    const ext = this.exts.get(decl.plugin);
+    if (!ext?.live || !ext.ask) return undefined;
+    const scope = randomUUID();
+    const ctx: RunCtx = { run: run.run, decl, changes: [], blocked: null, held: null, ended: false };
+    ext.scopes.set(scope, CORE);
+    ext.callOf.set(scope, run.run);
+    this.runCtx.set(scope, ctx);
+    return ext.ask('schedule.run', { name: decl.name, run: run.run, at: run.due, scope }).then((returned) => this.judged(ext, ctx, returned, undefined), (e) => this.judged(ext, ctx, undefined, e ?? 'failed'))
+      .finally(() => {
+        ctx.ended = true;
+        ext.scopes.delete(scope);
+        ext.callOf.delete(scope);
+        this.runCtx.delete(scope);
+      });
+  }
+  /**
+   * A run's verdict, from what the hub saw and recorded for it, never the job's word (#365): its process gone is
+   * INVALID; a declared no-op uncounted; a declared change PASS; else a source missing or its secret is BLOCKED, a
+   * rate limit, a 5xx or the quota INCONCLUSIVE, and anything else FAIL. A run the hub's stop cut short is interrupted.
+   */
+  private judged(ext: Ext, ctx: RunCtx, returned: unknown, error: unknown): Ended {
+    if (this.closed) return 'interrupted';
+    const changes = [...new Set(ctx.changes)];
+    if (error !== undefined && (!ext.live || this.exts.get(ext.entry.id) !== ext)) return { verdict: 'INVALID', cause: `${ext.entry.id}'s process ended while the run was under way`, changes };
+    if (error === undefined && ctx.decl.declares.noop && isPlain(returned) && 'noop' in returned) return { verdict: 'uncounted', cause: 'a no-op its job declares', changes };
+    if (error === undefined && changes.length) return { verdict: 'PASS', cause: null, changes };
+    if (ctx.blocked) return { verdict: 'BLOCKED', cause: ctx.blocked, changes };
+    if (ctx.held) return { verdict: 'INCONCLUSIVE', cause: ctx.held, changes };
+    return { verdict: 'FAIL', cause: error === undefined ? 'it ended with no change its job declares' : `its job failed${ext.released ? `: ${message(error)}` : ''}`, changes };
   }
 
   async hook(request: HookRequest): Promise<HookReply>;
@@ -2066,13 +2355,16 @@ class Host implements ExtensionHost {
     const changed: string[] = [];
     const notices = this.notices.get(entered.call) ?? [];
     this.notices.delete(entered.call);
-    const kinds = [...(ext.manifest.stores ?? []), ...(notices.length ? ['notice.sent'] : [])];
+    const kinds = [...(ext.manifest.stores ?? []), ...(notices.length ? ['notice.sent'] : []), 'send.made'];
     for (let after = entered.at; kinds.length;) {
       const page = await this.options.record.read({ after, limit: PAGE, kinds });
       for (const e of page) {
-        const item = e.data as { key: string; call: string | null; notice: string };
+        const item = e.data as { key: string; call: string | null; notice: string; phase?: string };
         if (e.kind === 'notice.sent') {
           if (notices.includes(item.notice)) changed.push(item.notice);
+        } else if (e.kind === 'send.made') {
+          // A send the hub made for the call (#365): claimed, so it went out or may have.
+          if (item.call === entered.call && item.phase === 'claimed') changed.push(`send:${item.key}`);
         } else if (item.call === entered.call) changed.push(`${e.kind}:${item.key}`);
       }
       if (page.length < PAGE) break;
@@ -2252,6 +2544,9 @@ class Host implements ExtensionHost {
   async ready(): Promise<void> {
     if (this.isReady) return this.starting;
     this.isReady = true;
+    // The hub's own timer: schedules fire from it, never from the app's clock (#365).
+    this.timer = setInterval(() => void this.tick().catch(() => undefined), TIMER_MS);
+    this.timer.unref();
     this.starting = (async () => {
       const failed: string[] = [];
       for (const ext of [...this.exts.values()]) {
@@ -2351,6 +2646,8 @@ class Host implements ExtensionHost {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    clearInterval(this.timer);
+    this.sending.close();
     // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
     await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);
