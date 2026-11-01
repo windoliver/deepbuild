@@ -161,7 +161,8 @@ function usedIn(list: readonly RecordEvent[]): Used[] {
     const input = num(t?.input);
     const cached = num(t?.cached);
     const tokens = input + cached + num(t?.output);
-    const cost = e.data.cost as Cost;
+    // No cost at all is unpriced, never $0.
+    const cost = (typeof e.data.cost === 'object' && e.data.cost !== null ? e.data.cost : { basis: 'unpriced' }) as Cost;
     if (e.data.covers === 'session') {
       const usd = 'usd' in cost ? cost.usd : 0;
       // A running total is a baseline, never new use: what a resumed thread starts from was counted already. One that

@@ -11,7 +11,7 @@ export { checkSource } from './own.js';
 export type { ApprovedCheck } from './own.js';
 export { headTrust, pushRecordKit, runPushRecordKit } from './head.js';
 export type { HeadInput, HeadPlan, HeadResult, ProviderPush, PushKit, PushReading, PushRecordReader } from './head.js';
-export { checkoutOf, executeClaim, runHeavy, runTiming, slot, snapshotOf, verdictMemory } from './exec.js';
+export { checkoutOf, executeClaim, runHeavy, runTiming, slot, snapshotOf, treeOf, verdictMemory } from './exec.js';
 export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, HeavyResult, Load, TimedRun, VerdictMemory } from './exec.js';
 export { attributeStack } from './stack.js';
 export type { Served, StackRecords, Trees } from './stack.js';

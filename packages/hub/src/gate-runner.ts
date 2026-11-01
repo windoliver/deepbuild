@@ -6,9 +6,8 @@
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
 // check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
 // with its split. Pure rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
-import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';
-import { checkoutOf, snapshotOf } from '@deepbuild/gate';
+import { checkoutOf, snapshotOf, treeOf } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 
 
@@ -32,9 +31,6 @@ export interface GateOptions {
 /** A claim's check on one snapshot: its runs, its lane, and whether a newer claim outdated it. */
 interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean; newer?: string }
 interface Claim { claim: string; session: string; checkout: string | null; tree: string | undefined; entries: Map<string, Entry> }
-const treeOf = (checkout: string): Promise<string | undefined> => new Promise((done) => {
-  execFile('git', ['-C', checkout, 'rev-parse', 'HEAD^{tree}'], { timeout: 5000 }, (error, stdout) => done(error ? undefined : stdout.trim()));
-});
 
 const RESULT = (outcome: string | null): 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'pending' =>
   outcome === null ? 'pending' : outcome === 'passed' ? 'PASS' : outcome === 'failed' || outcome === 'overran' ? 'FAIL' : outcome === 'missing' ? 'BLOCKED' : 'INCONCLUSIVE';
@@ -63,7 +59,7 @@ export class GateRunner {
     const checkout = await checkoutOf(r.cwd, snapshot);
     const readyAt = this.o.now();
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
-    const tree = await treeOf(checkout);
+    const tree = await treeOf(r.cwd, snapshot);
     const claim: Claim = { claim: r.claim, session: r.session, checkout, tree, entries: new Map() };
     const older = this.claims.get(r.session) ?? [];
     const last = older.at(-1)?.tree;
@@ -74,7 +70,8 @@ export class GateRunner {
       const key = `${r.session}\0${c.check}`;
       const queued = this.queue.get(key);
       if (queued) { queued.stale = true; this.queue.delete(key); }
-      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; e.newer ??= r.claim; } }
+      // Outdated only by a snapshot that changed the inputs: the same tree carries the run (#45).
+      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: (await this.expectedMs(c.check)) ?? 0 })));

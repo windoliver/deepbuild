@@ -34,15 +34,21 @@ describe('turn.usage at a stop', () => {
       const hook = (event: string, extra: Record<string, unknown> = {}) => send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, { session_id: SESSION, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra }, { ppid: claude.pid }));
       const usages = () => {
         const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
-        try { return (db.prepare("SELECT data FROM events WHERE kind = 'turn.usage'").all() as { data: string }[]).map((r) => JSON.parse(r.data) as { covers: string; tokens: { input: number; cached: number; output: number } }); } finally { db.close(); }
+        try { return (db.prepare("SELECT data FROM events WHERE kind = 'turn.usage'").all() as { data: string }[]).map((r) => JSON.parse(r.data) as { covers: string; turn: string; tokens: { input: number; cached: number; output: number } }); } finally { db.close(); }
       };
       const until = async (n: number) => { for (let i = 0; i < 100 && usages().length < n; i++) await new Promise((r) => setTimeout(r, 100)); };
       await hook('SessionStart', { source: 'startup' });
       await until(0);
-      appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'go' } })}\n${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'claude-haiku-5-5', usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 20, cache_creation_input_tokens: 1 } } })}\n`);
+      appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: 'u1', promptId: 'p1', message: { role: 'user', content: 'go' } })}\n`);
+      await hook('UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' });
+      appendFileSync(transcript, `${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'claude-haiku-5-5', usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 20, cache_creation_input_tokens: 1 } } })}\n`);
       await hook('Stop', { stop_hook_active: false, last_assistant_message: 'ok' });
       await until(1);
       expect(usages().map((u) => [u.covers, u.tokens.input, u.tokens.cached, u.tokens.output])).toEqual([['session', 11, 20, 5]]);
+      // The turn is the user.ask that began it, the handle every other reading of the turn carries (#45).
+      const asks = (() => { const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true }); try { return (db.prepare("SELECT id FROM events WHERE kind = 'user.ask' ORDER BY log_pos").all() as { id: string }[]).map((r) => r.id); } finally { db.close(); } })();
+      expect(asks, 'the prompt was recorded').toHaveLength(1);
+      expect(usages()[0]!.turn, 'its usage names the ask that began the turn').toBe(asks[0]);
       await hook('SubagentStop', { agent_id: 'a1', stop_hook_active: false });
       await new Promise((r) => setTimeout(r, 500));
       expect(usages(), 'a subagent\'s stop adds no row').toHaveLength(1);
