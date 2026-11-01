@@ -204,6 +204,19 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     }
   }, 60_000);
 
+  it('a check kind in the hub gets host@1 with each run as ctx.host, the supervisor\'s, beside the checkout and deadline (#30 AC5)', async () => {
+    // The kind reports what its context held: passed only with a host whose start, signal and wait are functions.
+    const body = "(spec, ctx) => { const h = ctx && ctx.host; const ok = h && ['start', 'signal', 'wait'].every((m) => typeof h[m] === 'function') && typeof ctx.checkout === 'string' && ctx.deadline === 10_000; return { outcome: ok ? 'passed' : 'failed', testsRun: 1, failures: ok ? [] : [{ test: 'ctx', file: 'index.ts', line: 1, stack: null, assertion: false, message: `ctx keys ${Object.keys(ctx ?? {}).join(',')}` }], evidence: [], read: [], mask: null }; }";
+    const folder = pkgOf('test/hosted', `export default function (deep: any): void {\n  deep.registerCheck('ext.hosted.run', ${body});\n}\n`, { checks: ['ext.hosted.run'] });
+    const { h } = await world({ release: [{ id: 'test/hosted', version: '1.0.0', digest: packageDigest(folder) }] });
+    const p = await h.install({ from: folder, builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    const load = await h.load(p);
+    expect(load.status === 'loaded' && load.place).toBe('hub');
+    const r = await h.runCheck('ext.hosted.run', { ...SPEC, kind: 'ext.hosted.run' }, { checkout: temp(), deadline: 10_000 });
+    expect(r.outcome, r.failures[0]?.message).toBe('passed');
+  }, 60_000);
+
   it('closing the host while a load is starting its process stops that process, and the load is refused', async () => {
     const { h, record } = await world();
     const p = await h.install({ from: stuck(PASSES), builtBy: null });
