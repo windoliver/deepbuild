@@ -1775,6 +1775,13 @@ export class Core {
     }
     // The planted wrong program keeps no answer in flight, so each later route sends it again without reading the session.
     if (this.options.plant === 'sends-shown-again') return this.answerText(rows);
+    // Codex's rollout shows no hook's context, and its facts name no stable format to read one from (#39): its reply is
+    // delivered as written, and one deep-hook had already given up on reads stalled and goes by the next route.
+    if (this.sessions.get(hook.session)?.agent === 'codex') {
+      const outcome = this.abandoned.has(hook.id) ? 'stalled' : 'delivered';
+      for (const row of rows) await this.outcome(row.id, via, outcome);
+      return outcome === 'delivered' ? this.answerText(rows) : undefined;
+    }
     const shown = await this.shown(hook.session, rows.map((row) => said(row.id)));
     const fresh: Answer[] = [];
     for (const row of rows) {

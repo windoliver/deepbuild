@@ -32,6 +32,8 @@ function ran(program: string, args: string[], input?: string): Promise<{ code: n
       if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') return done(null);
       done({ code: error ? (typeof error.code === 'number' ? error.code : null) : 0, out: String(out), err: String(err) });
     });
+    // A program that exits before reading its input (a stub, a quick `--version`) closes the pipe: no crash of doctor's.
+    child.stdin?.on('error', () => undefined);
     child.stdin?.end(input ?? '');
   });
 }
