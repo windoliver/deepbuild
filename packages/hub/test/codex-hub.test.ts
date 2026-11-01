@@ -456,4 +456,24 @@ describe('a subagent\'s stop', () => {
     const said = await waitFor(async () => { const r = readings(await allEvents(hub), t.id).filter((x) => x.startsWith('SubagentStart')); return r.length ? r : undefined; }, 10_000, 'the reading');
     expect(said).toEqual([`SubagentStart: subagent ${child} (default) started`]);
   }, 120_000);
+
+  it('a child\'s rollout never binds the root across a restart, and only SubagentStart may name one', async () => {
+    const h = makeHome();
+    let hub = await startHub(h);
+    const t = newThread(h);
+    await begin(h, t);
+    await stopHub(hub);
+    hub = await startHub(h);
+    const child = randomUUID();
+    const own = { agent_id: child, agent_type: 'default', transcript_path: join(h.codexHome, 'sessions', `rollout-2026-10-31T17-50-13-${child}.jsonl`) };
+    await codexHook(h, t, 'SubagentStart', own);
+    await codexHook(h, t, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 'call_root', });
+    await codexHook(h, t, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'pwd' }, tool_use_id: 'call_child', ...own });
+    await codexHook(h, t, 'Stop', {}, 60_000);
+    const mine = ofSession(await allEvents(hub), t.id);
+    expect(mine.filter((e) => e.kind === 'agent.stop').at(-1)!.verified).toBe(true);
+    const tools = mine.filter((e) => JSON.stringify(e.data).includes('call_child'));
+    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.every((e) => e.verified === false)).toBe(true);
+  }, 120_000);
 });
