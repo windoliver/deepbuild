@@ -1,0 +1,483 @@
+# Base run: commit c9225aa3, before any implementation, on this Mac (M-series, loaded: load average ~60 on 12 cores during the run).
+# CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/385 --no-file-parallelism
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-385-abe7d9/tests/acceptance/385
+
+ ❯ blend.test.ts (6 tests | 6 failed) 40861ms
+   ❯ C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens (6)
+     × C2 every mode, blended over the ramp, matches its formula on the same 8-bit premultiplied inputs within one code value on 99.9% of the golden's pixels 2427ms
+     × C2 Vello GPU matches each golden within one code value, six for color dodge and two for color burn, at every pixel 10603ms
+     × C2 a blended group never blends with another writer's layer: where its own layer drew nothing it composites over the plate as source-over, in the golden 333ms
+     × C2 a blended group leaves another writer's layer as it was, drawn by Vello CPU and by Vello GPU 265ms
+     × C2 a blended group never changes a status color: the status mark under it is the same pixels with and without the group, in the golden 286ms
+     × C2 in the app's window, a blended group never changes the card or a status color: both are the same pixels with and without the group 251ms
+ ❯ gate.test.ts (3 tests | 3 failed) 132783ms
+   ❯ C5 Vello GPU draws only after its spike passes, masks only once its mask layers do; goldens and snapshots stay Vello CPU (3)
+     × C5 the shipped spike record is five runs of at least 300 frames of Vello GPU, judged here; Vello GPU is on exactly when it passes; alpha, luminance and feathered masks never draw on it 2128ms
+     × C5 with a record over budget Vello GPU is off and those layers are refused module_missing; with one under budget it draws them; the planted program that ignores the record fails 25ms
+     × C5 goldens and render-back snapshots of a layer Vello GPU can draw are Vello CPU's pixels, whether the spike passed or not 1197ms
+ ❯ goldens.test.ts (2 tests | 2 failed) 15647ms
+   ❯ C4 goldens: Vello CPU's f32 pipeline at the scalar SIMD level (2)
+     × C4 every golden names Vello CPU, f32, scalar; and the same fixture at the NEON level differs by at most one code value per channel 2974ms
+     × C4 a golden asked at the detected SIMD level, or through the u8 pipeline, is refused naming the setting, and writes nothing; the same asked as a reading draws 196ms
+ ❯ seams.test.ts (2 tests | 2 failed) 60949ms
+   ❯ C8 no conflation seams: eight sectors of one color tile a disc (2)
+     × C8 every pixel on the shared edges is within one code value of the disc's color in Vello CPU, GPUI and Vello GPU, before and after the sectors move apart and back 4496ms
+     × C8 a planted renderer that composites each sector source-over leaves a seam over 20 code values lighter and fails, naming the edge, in each renderer 125ms
+ ❯ oklab.test.ts (1 test | 1 failed) 60725ms
+   ❯ C3 an OKLab gradient from black to grey 51 (1)
+     × C3 reads 13 at its midpoint with identical rows in Vello CPU, in Vello GPU and in GPUI's exact gradient mode, and GPUI's own OKLab option fails the same measure 4998ms
+ ❯ linear.test.ts (1 test | 1 failed) 30706ms
+   ❯ C6 a multiply group around a title: linear light in a 3D writer layer, sRGB-encoded in a 2D one (1)
+     × C6 in the layer with a box, the layer is 3D and the group blends in linear light; in the layer without, it is 2D and blends in sRGB-encoded space 4612ms
+ ❯ deps.test.ts (2 tests | 2 failed) 37133ms
+   ❯ C7 the canvas links Vello GPU and Vello CPU, never Vello's compute renderer (2)
+     × C7 on the dependency tree: deep-gpu-layer links vello_gpu 0.3 and vello_cpu 0.3, Vello GPU on the GPU layer's wgpu; nothing in the workspace or Cargo.lock is Vello's compute renderer 3671ms
+     × C7 the spike measures the renderer the decision names: Vello GPU at the locked version 5ms
+ ❯ parity.test.ts (3 tests | 3 failed) 24410ms
+   ❯ C1 a 2D writer layer by GPUI and by the GPU layer, through the perceptual oracle (3)
+     × C1 interior pixels within one code value on 99.9% (the two-stop gradient band included), and each glyph run and stroke within 2% of Vello CPU's coverage and 0.1 device px of its centroid 7117ms
+     × C1 a planted two-code shift of a fill on the GPU layer (--planted shifts_fill_two_codes) fails the interior comparison 33ms
+     × C1 a planted half-pixel shift of GPUI's glyph quads (--planted shifts_glyph_quads) fails, naming the glyph run's item and no other 20ms
+ ❯ spike.test.ts (1 test | 1 failed) 16648ms
+   ❯ C5 the spike: a second 2D handoff under 1 ms a frame, on the reference Mac (1)
+     × C5 five runs of 600 frames of Vello GPU through its own surface: each p95 handoff within 1 ms 110ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blend.test.ts > C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens > C2 every mode, blended over the ramp, matches its formula on the same 8-bit premultiplied inputs within one code value on 99.9% of the golden's pixels
+AssertionError: normal: blend_inputs is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ goldens blend.test.ts:42:18
+ ❯ blend.test.ts:63:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  blend.test.ts > C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens > C2 Vello GPU matches each golden within one code value, six for color dodge and two for color burn, at every pixel
+AssertionError: blend-normal: layers is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ readLayers helpers.ts:199:24
+ ❯ blend.test.ts:95:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  blend.test.ts > C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens > C2 a blended group never blends with another writer's layer: where its own layer drew nothing it composites over the plate as source-over, in the golden
+AssertionError: blend_inputs is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ blend.test.ts:109:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  blend.test.ts > C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens > C2 a blended group leaves another writer's layer as it was, drawn by Vello CPU and by Vello GPU
+AssertionError: across: layers is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ readLayers helpers.ts:199:24
+ ❯ blend.test.ts:138:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  blend.test.ts > C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens > C2 a blended group never changes a status color: the status mark under it is the same pixels with and without the group, in the golden
+AssertionError: the group does blend: beside the mark, multiply is not normal: expected 1 to be less than 0.5
+ ❯ blend.test.ts:154:114
+    152|     const [a, b, n] = out.map((o, i) => readDrawn(lines[i]!, o, ['the …
+    153|     expect(statusProblems(a!, b!), 'the status mark in the golden').to…
+    154|     expect(within(a!, n!, 1, WASH_STRIP).share, 'the group does blend:…
+       |                                                                                                                  ^
+    155|   }, 1_800_000);
+    156|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  blend.test.ts > C2 the W3C modes and add on a group: Vello CPU goldens against the f64 formula, Vello GPU against the goldens > C2 in the app's window, a blended group never changes the card or a status color: both are the same pixels with and without the group
+AssertionError: the window with the group in normal: its hash is a string, got undefined: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ str helpers.ts:43:92
+     41| }
+     42| export function str(value: JsonValue | undefined, what: string): strin…
+     43|   expect(typeof value, `${what} is a string, got ${JSON.stringify(valu…
+       |                                                                                            ^
+     44|   return value as string;
+     45| }
+ ❯ outFile helpers.ts:179:13
+ ❯ outPng helpers.ts:187:100
+ ❯ blend.test.ts:165:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  deps.test.ts > C7 the canvas links Vello GPU and Vello CPU, never Vello's compute renderer > C7 on the dependency tree: deep-gpu-layer links vello_gpu 0.3 and vello_cpu 0.3, Vello GPU on the GPU layer's wgpu; nothing in the workspace or Cargo.lock is Vello's compute renderer
+AssertionError: deep-gpu-layer links vello_gpu 0.3 (it links []): expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ deps.test.ts:41:155
+     39|     const gpuLayer = packages(tree(['-p', 'deep-gpu-layer', '-e', 'nor…
+     40|     const has = (name: string): string[] => [...(gpuLayer.get(name) ??…
+     41|     expect(has('vello_gpu').filter((v) => v.startsWith('0.3.')), `deep…
+       |                                                                                                                                                           ^
+     42|     expect(has('vello_cpu').filter((v) => v.startsWith('0.3.')), `deep…
+     43|     const direct = packages(tree(['-p', 'deep-gpu-layer', '-e', 'norma…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  deps.test.ts > C7 the canvas links Vello GPU and Vello CPU, never Vello's compute renderer > C7 the spike measures the renderer the decision names: Vello GPU at the locked version
+AssertionError: Cargo.lock holds vello_gpu: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ deps.test.ts:52:78
+     50|
+     51|   it('C7 the spike measures the renderer the decision names: Vello GPU…
+     52|     expect(lockedVersions('vello_gpu').length, 'Cargo.lock holds vello…
+       |                                                                              ^
+     53|     needsMac();
+     54|     const [vg] = gpuReplies(builds.bin(DEEP_GPU), dir(), [{ call: 'vel…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  gate.test.ts > C5 Vello GPU draws only after its spike passes, masks only once its mask layers do; goldens and snapshots stay Vello CPU > C5 the shipped spike record is five runs of at least 300 frames of Vello GPU, judged here; Vello GPU is on exactly when it passes; alpha, luminance and feathered masks never draw on it
+AssertionError: vello_gpu: renderer is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:31:96
+     29| }
+     30| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     31|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     32|   return value as JsonObject;
+     33| }
+ ❯ gate.test.ts:61:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  gate.test.ts > C5 Vello GPU draws only after its spike passes, masks only once its mask layers do; goldens and snapshots stay Vello CPU > C5 with a record over budget Vello GPU is off and those layers are refused module_missing; with one under budget it draws them; the planted program that ignores the record fails
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-spike: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-spike failed:
++ error: none of the selected packages contains this feature: test-spike
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there is a similarly named feature: test-peek
++
+
+ ❯ Object.bin helpers.ts:87:81
+     85|       const entry = made.get(key(b));
+     86|       if (!entry) throw Error(`the file didn't list the build ${key(b)…
+     87|       expect(entry.error, `the binary builds: cargo ${cargoArgs(b).joi…
+       |                                                                                 ^
+     88|       return entry.bin;
+     89|     },
+ ❯ gate.test.ts:79:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  gate.test.ts > C5 Vello GPU draws only after its spike passes, masks only once its mask layers do; goldens and snapshots stay Vello CPU > C5 goldens and render-back snapshots of a layer Vello GPU can draw are Vello CPU's pixels, whether the spike passed or not
+AssertionError: the golden is Vello CPU, f32, scalar: expected undefined to match object { name: 'vello_cpu', …(2) }
+
+- Expected:
+{
+  "name": "vello_cpu",
+  "pipeline": "f32",
+  "simd": "scalar",
+}
+
++ Received:
+undefined
+
+ ❯ gate.test.ts:102:79
+    100|     const line = drawLine(d, doc, look);
+    101|     const golden = readDrawn(line, answers(builds.bin(RENDER), ['raste…
+    102|     expect(golden.report['renderer'], 'the golden is Vello CPU, f32, s…
+       |                                                                               ^
+    103|     const [ref] = gpuReplies(builds.bin(DEEP_GPU), d, [layersCall(doc,…
+    104|     const vello = readLayers(d, ref!, 'rounded').get('main')!.drawn.ve…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  goldens.test.ts > C4 goldens: Vello CPU's f32 pipeline at the scalar SIMD level > C4 every golden names Vello CPU, f32, scalar; and the same fixture at the NEON level differs by at most one code value per channel
+AssertionError: writer: the golden: the answer's renderer is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:31:96
+     29| }
+     30| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     31|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     32|   return value as JsonObject;
+     33| }
+ ❯ rendererOf goldens.test.ts:24:10
+ ❯ goldens.test.ts:37:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  goldens.test.ts > C4 goldens: Vello CPU's f32 pipeline at the scalar SIMD level > C4 a golden asked at the detected SIMD level, or through the u8 pipeline, is refused naming the setting, and writes nothing; the same asked as a reading draws
+AssertionError: a golden at the detected SIMD level is refused, naming simd: expected { ok: true, width: 320, …(4) } to match object { ok: false, …(2) }
+(9 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "golden_config",
+-   "ok": false,
+-   "path": "simd",
++   "ok": true,
+  }
+
+ ❯ goldens.test.ts:56:78
+     54|     const readingU8 = drawLine(d, writerDoc(), LOOK, { golden: false, …
+     55|     const [a, b, c, e, f] = answers(builds.bin(RENDER), ['raster'], [d…
+     56|     expect(a, 'a golden at the detected SIMD level is refused, naming …
+       |                                                                              ^
+     57|     expect(b, 'a golden through the u8 pipeline is refused, naming pip…
+     58|     expect(c!['ok'], 'a golden with both is refused').toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  linear.test.ts > C6 a multiply group around a title: linear light in a 3D writer layer, sRGB-encoded in a 2D one > C6 in the layer with a box, the layer is 3D and the group blends in linear light; in the layer without, it is 2D and blends in sRGB-encoded space
+AssertionError: title-3d: layers is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ readLayers helpers.ts:199:24
+ ❯ linear.test.ts:44:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  oklab.test.ts > C3 an OKLab gradient from black to grey 51 > C3 reads 13 at its midpoint with identical rows in Vello CPU, in Vello GPU and in GPUI's exact gradient mode, and GPUI's own OKLab option fails the same measure
+AssertionError: oklab: layers is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ readLayers helpers.ts:199:24
+ ❯ oklab.test.ts:53:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  parity.test.ts > C1 a 2D writer layer by GPUI and by the GPU layer, through the perceptual oracle > C1 interior pixels within one code value on 99.9% (the two-stop gradient band included), and each glyph run and stroke within 2% of Vello CPU's coverage and 0.1 device px of its centroid
+AssertionError: writer-385: layers is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ readLayers helpers.ts:199:24
+ ❯ problems parity.test.ts:22:18
+ ❯ parity.test.ts:30:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  parity.test.ts > C1 a 2D writer layer by GPUI and by the GPU layer, through the perceptual oracle > C1 a planted two-code shift of a fill on the GPU layer (--planted shifts_fill_two_codes) fails the interior comparison
+AssertionError: deep-gpu run --planted shifts_fill_two_codes exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ answers helpers.ts:121:140
+    119|   const shown = `${bin.split('/').pop()} ${args.join(' ')}`;
+    120|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    121|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    122|   expect(s.lines.length, `${shown}: one output line per input line; st…
+    123|   return s.lines.map((l, i) => obj(l, `${shown}: answer ${i}`));
+ ❯ gpuReplies helpers.ts:171:20
+ ❯ problems parity.test.ts:21:19
+ ❯ parity.test.ts:34:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  parity.test.ts > C1 a 2D writer layer by GPUI and by the GPU layer, through the perceptual oracle > C1 a planted half-pixel shift of GPUI's glyph quads (--planted shifts_glyph_quads) fails, naming the glyph run's item and no other
+AssertionError: deep-gpu run --planted shifts_glyph_quads exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ answers helpers.ts:121:140
+    119|   const shown = `${bin.split('/').pop()} ${args.join(' ')}`;
+    120|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    121|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    122|   expect(s.lines.length, `${shown}: one output line per input line; st…
+    123|   return s.lines.map((l, i) => obj(l, `${shown}: answer ${i}`));
+ ❯ gpuReplies helpers.ts:171:20
+ ❯ problems parity.test.ts:21:19
+ ❯ parity.test.ts:41:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  seams.test.ts > C8 no conflation seams: eight sectors of one color tile a disc > C8 every pixel on the shared edges is within one code value of the disc's color in Vello CPU, GPUI and Vello GPU, before and after the sectors move apart and back
+AssertionError: sectors at t = 0 s: layers is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:35:100
+     33| }
+     34| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     35|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     36|   return value as JsonValue[];
+     37| }
+ ❯ readLayers helpers.ts:199:24
+ ❯ seams.test.ts:34:39
+ ❯ liveFrames seams.test.ts:34:25
+ ❯ seams.test.ts:56:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  seams.test.ts > C8 no conflation seams: eight sectors of one color tile a disc > C8 a planted renderer that composites each sector source-over leaves a seam over 20 code values lighter and fails, naming the edge, in each renderer
+AssertionError: Vello CPU at t = 0 s answered ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ok helpers.ts:128:89
+    126| /** One answer that must be `ok: true`. */
+    127| export function ok(answer: JsonObject, what: string): JsonObject {
+    128|   expect(answer['ok'], `${what} answered ok: ${JSON.stringify(answer).…
+       |                                                                                         ^
+    129|   return answer;
+    130| }
+ ❯ readDrawn helpers.ts:154:3
+ ❯ seams.test.ts:28:71
+ ❯ cpuFrames seams.test.ts:28:57
+ ❯ seams.test.ts:67:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  spike.test.ts > C5 the spike: a second 2D handoff under 1 ms a frame, on the reference Mac > C5 five runs of 600 frames of Vello GPU through its own surface: each p95 handoff within 1 ms
+AssertionError: INCONCLUSIVE: the spike's handoff budget counts on a quiet reference Mac only (the machine is loaded: 1-minute load average 64.4 on 12 cores)
+ ❯ inconclusive helpers.ts:524:10
+    522| /** Fails the test as INCONCLUSIVE (never a pass, never a skip), with …
+    523| export function inconclusive(reason: string, readings: string[] = []):…
+    524|   expect.fail(`INCONCLUSIVE: ${reason}${readings.length ? `\n${reading…
+       |          ^
+    525| }
+    526| /** The GPU and GPUI parts need macOS (Metal; GPUI's offscreen Metal r…
+ ❯ spike.test.ts:28:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  21 failed (21)
+   Start at  10:34:04
+   Duration  421.62s (tests 100%)
+
+vitest exit 1

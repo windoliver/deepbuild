@@ -1,7 +1,8 @@
 // The process table as the supervisor reads it: `ps` under LC_ALL=C (start times as `ps -o lstart=` prints
 // them, as the hub does), a process's run token read back from its environment, and the native helper's scan.
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 /** The native helper (native/helper.c), built beside the package's JavaScript. */
@@ -20,6 +21,17 @@ function run(file: string, args: string[]): Promise<string> {
 }
 
 export interface Proc { pid: number; ppid: number; pgid: number; start: string }
+/**
+ * A process's start time read before the event loop turns: a child that has already exited is still in the table,
+ * since nothing has reaped it yet, where an asynchronous read would find it gone (a run of `true` through bubblewrap).
+ */
+export function startNow(pid: number): string {
+  try {
+    return execFileSync('/bin/ps', ['-p', String(pid), '-o', 'lstart='], { env: { ...process.env, LC_ALL: 'C' }, encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+}
 /** Every process on the machine, or only those given. */
 export async function table(pids?: readonly number[]): Promise<Map<number, Proc>> {
   if (pids && !pids.length) return new Map();
@@ -36,6 +48,11 @@ export async function table(pids?: readonly number[]): Promise<Map<number, Proc>
 /** The SHA-256 of the run token in a process's environment: null when it has none, undefined when it can't be read. */
 export async function tokenOf(pid: number): Promise<string | null | undefined> {
   try {
+    if (process.platform === 'linux') {
+      // The environment as the kernel keeps it, NUL between variables; `ps` on Linux shows none of it.
+      const m = /(?:^|\0)DEEP_RUN_TOKEN=([^\0]+)/.exec(await readFile(`/proc/${pid}/environ`, 'latin1'));
+      return m ? sha256(m[1]!) : null;
+    }
     const shown = await run('/bin/ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)]);
     if (!shown.trim()) return undefined;
     const m = / DEEP_RUN_TOKEN=(\S+)/.exec(shown);

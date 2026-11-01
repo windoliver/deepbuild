@@ -1119,6 +1119,42 @@
     }
   },
   {
+    "source": "extension.remove",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Remove acme/ci? acme/brief needs its ext.ci.status@1, and no other piece provides it.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Remove acme/ci",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "3b0a7f2c4c1e6d8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "3b0a7f2c4c1e6d8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "action.change",
     "kind": "authority",
     "fixture": {

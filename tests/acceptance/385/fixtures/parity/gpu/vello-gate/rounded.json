@@ -1,0 +1,83 @@
+{
+  "format": 1,
+  "id": "gate-rounded",
+  "profile": "figure",
+  "title": "Vello GPU gate: rounded",
+  "description": "A layer with a frame's rounded overflow mask: a mask by shape, which GPUI can't draw.",
+  "size": [
+    240,
+    160
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a1"
+    }
+  },
+  "items": {
+    "back": {
+      "id": "back",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "back",
+      "order": "a0",
+      "params": {
+        "box": [
+          0,
+          0,
+          240,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "panel"
+          }
+        }
+      }
+    },
+    "card": {
+      "id": "card",
+      "kind": "frame@1",
+      "layer": "main",
+      "name": "card",
+      "order": "a1",
+      "params": {
+        "box": [
+          20,
+          20,
+          200,
+          120
+        ],
+        "radius": 40,
+        "overflow": "mask",
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "over": {
+      "id": "over",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "over",
+      "order": "a2",
+      "params": {
+        "box": [
+          0,
+          60,
+          240,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "parent": "card"
+    }
+  }
+}

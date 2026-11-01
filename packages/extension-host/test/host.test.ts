@@ -614,7 +614,7 @@ describe('#350 review regressions', () => {
     const reading = read(h);
     await sleep(500);
     await enable(h, provider('return { n: 2 };'));
-    expect(await reading).toEqual({ status: 'done', output: { value: { n: 1 } } });
+    expect(await reading).toEqual({ status: 'done', output: { value: { n: 1 }, handle: expect.stringMatching(/^reading:/) } });
   }, 60_000);
 
   it('a hook handler from outside the release that throws or names an undeclared template puts none of its text in the reply', async () => {

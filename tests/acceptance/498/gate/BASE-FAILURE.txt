@@ -1,0 +1,111 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-498-62f1c5/agent-a05c2745526820bcf/tests/acceptance/498/gate
+
+ ❯ owner.test.ts (2 tests | 2 failed) 68919ms
+   ❯ criterion 9: sound stops with its owner (2)
+     × C9 a panel playing three strips that opens another document mid-block is silent from one audio block after the switch until you press Play again; its own request, your earlier press and an agent don't restart it, and the new Play plays only the new document; a gate that keeps the previous document's voices fails, naming the panel 1620ms
+     × C9 a panel playing three strips that closes mid-block is silent from one audio block after the close; reopened, it stays silent through its own request, your earlier press and an agent until you press Play again; a gate that fades its voices out over 5 ms on close fails, naming the panel 173ms
+ ❯ chime.test.ts (1 test | 1 failed) 82112ms
+   ❯ criterion 5: a sound too like the question chime is refused at load, naming the chime (1)
+     × C5 the app's question chime, sped up a semitone and lowered 3 dB, is refused when a document holding it opens, naming the chime, and never sounds; the chime itself is refused too; a noise burst loads and sounds; a comparer that matches by hash admits the shifted chime and fails 1338ms
+ ❯ silent.test.ts (1 test | 1 failed) 56768ms
+   ❯ criterion 1: no panel plays sound before you start it, checked across every shipped plug-in (1)
+     × C1 every shipped plug-in in the app's inventory, mounted with a document of strips, stays silent at the device through its own request, an agent's and a click elsewhere, its gate suspended and owned by it, until you press Play in its panel, which grants the gate by that press's serial and sounds 1564ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  chime.test.ts > criterion 5: a sound too like the question chime is refused at load, naming the chime > C5 the app's question chime, sped up a semitone and lowered 3 dB, is refused when a document holding it opens, naming the chime, and never sounds; the chime itself is refused too; a noise burst loads and sounds; a comparer that matches by hash admits the shifted chime and fails
+AssertionError: the reserved sounds: deep-show run answers the scenario ok (the panels' `shipped` field and the `open`, `close`, `play`, `gate`, `output` and `reserved` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:120:190
+    118| export function runShow(bin: string, s: JsonObject, what: string): Jso…
+    119|   const answer = answerOf(runRaw(bin, s), what);
+    120|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    121|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    122|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:188:21
+ ❯ theChime chime.test.ts:27:15
+ ❯ chime.test.ts:68:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  owner.test.ts > criterion 9: sound stops with its owner > C9 a panel playing three strips that opens another document mid-block is silent from one audio block after the switch until you press Play again; its own request, your earlier press and an agent don't restart it, and the new Play plays only the new document; a gate that keeps the previous document's voices fails, naming the panel
+AssertionError: the switch: documents and clicks: deep-show run answers the scenario ok (the panels' `shipped` field and the `open`, `close`, `play`, `gate`, `output` and `reserved` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:120:190
+    118| export function runShow(bin: string, s: JsonObject, what: string): Jso…
+    119|   const answer = answerOf(runRaw(bin, s), what);
+    120|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    121|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    122|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:188:21
+ ❯ run owner.test.ts:93:20
+ ❯ owner.test.ts:124:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  owner.test.ts > criterion 9: sound stops with its owner > C9 a panel playing three strips that closes mid-block is silent from one audio block after the close; reopened, it stays silent through its own request, your earlier press and an agent until you press Play again; a gate that fades its voices out over 5 ms on close fails, naming the panel
+AssertionError: the close: documents and clicks: deep-show run answers the scenario ok (the panels' `shipped` field and the `open`, `close`, `play`, `gate`, `output` and `reserved` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:120:190
+    118| export function runShow(bin: string, s: JsonObject, what: string): Jso…
+    119|   const answer = answerOf(runRaw(bin, s), what);
+    120|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    121|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    122|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:188:21
+ ❯ run owner.test.ts:136:20
+ ❯ owner.test.ts:165:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  silent.test.ts > criterion 1: no panel plays sound before you start it, checked across every shipped plug-in > C1 every shipped plug-in in the app's inventory, mounted with a document of strips, stays silent at the device through its own request, an agent's and a click elsewhere, its gate suspended and owned by it, until you press Play in its panel, which grants the gate by that press's serial and sounds
+AssertionError: deepbuild/extension: the panel, your clicks: deep-show run answers the scenario ok (the panels' `shipped` field and the `open`, `close`, `play`, `gate`, `output` and `reserved` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:120:190
+    118| export function runShow(bin: string, s: JsonObject, what: string): Jso…
+    119|   const answer = answerOf(runRaw(bin, s), what);
+    120|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    121|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    122|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:188:21
+ ❯ sweep silent.test.ts:43:16
+ ❯ silent.test.ts:97:35
+ ❯ silent.test.ts:97:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  10:28:40
+   Duration  209.16s (tests 100%)
+
