@@ -18,7 +18,7 @@ import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
 import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
 import { listSource } from '../src/listing.js';
 import { under } from '../src/report.js';
-import { absent, hiddenChild, maskIn, untraced } from '../src/shell.js';
+import { absent, hiddenChild, maskIn, maskOf, programsIn, untraced } from '../src/shell.js';
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const VITEST: CheckSpec = { kind: 'command', runner: 'node_modules/.bin/vitest run', inputs: [], depth: 'unit', oracle: 'code', contract: null };
@@ -895,5 +895,32 @@ describe('paths under the checkout', () => {
     expect(under('/repo', '/repo/node_modules/vitest/dist/index.js')).toBe('node_modules/vitest/dist/index.js');
     expect(under('/repo', '/repo/src/../etc/passwd')).toBe('etc/passwd');
     expect(under('/repo', '/repo/../etc/passwd')).toBeNull();
+  });
+});
+
+// #30, the hub's drafted checks: a shell script the command runs (`sh file`) is read as the command itself, with
+// no model: its command lines (comments and the `#!` line left out) are what the tracers must see into, a mask in
+// them is the command's, and its programs are named. A script that can't be read is a program the tracers can't see into.
+describe('a shell script the command runs is read as the command', () => {
+  const path = `${join(REPO, 'node_modules/.bin')}:${join(process.execPath, '..')}:/usr/bin:/bin`;
+  const scripts = (files: Record<string, string>) => folder(Object.fromEntries(Object.entries(files).map(([name, text]) => [`.deepbuild/checks/${name}`, text])));
+  it('its Node command lines are traced; a program the tracers can\'t see into is named with the file; a missing script is the shell itself', () => {
+    const cwd = scripts({ 'node.sh': '#!/bin/sh\n# Drafted check: the token is rejected.\n\nnode --test spec/auth.test.mjs\n', 'grep.sh': '#!/bin/sh\ngrep -q "Date.now" src/auth.ts\n' });
+    expect(untraced('sh .deepbuild/checks/node.sh', cwd, path)).toBeNull();
+    expect(untraced('/bin/sh .deepbuild/checks/node.sh', cwd, path)).toBeNull();
+    expect(untraced('sh .deepbuild/checks/grep.sh', cwd, path)).toBe('program grep in .deepbuild/checks/grep.sh');
+    expect(untraced('sh .deepbuild/checks/none.sh', cwd, path)).toBe('program sh');
+    expect(untraced('sh -e .deepbuild/checks/node.sh', cwd, path), 'a shell with options is read as a program, not a script').toBe('program sh');
+    expect(programsIn('sh .deepbuild/checks/node.sh', cwd), 'the script\'s programs are the command\'s').toEqual(['sh', 'node']);
+    const nested = scripts({ 'self.sh': '#!/bin/sh\nsh .deepbuild/checks/self.sh\n', 'outer.sh': '#!/bin/sh\nsh .deepbuild/checks/node.sh\n', 'node.sh': 'node --test spec/a.test.mjs\n' });
+    expect(untraced('sh .deepbuild/checks/self.sh', nested, path), 'a script that runs itself is a program, never read without end').toBe('program sh in .deepbuild/checks/self.sh');
+    expect(untraced('sh .deepbuild/checks/outer.sh', nested, path), 'a script a script runs is a program the tracers can\'t see into').toBe('program sh in .deepbuild/checks/outer.sh');
+  });
+  it('a mask in the script is the command\'s, named with the file; two command lines mask the first\'s exit as `;` does', () => {
+    const cwd = scripts({ 'masked.sh': '#!/bin/sh\nnode --test spec/auth.test.mjs || true\n', 'two.sh': '#!/bin/sh\ncd spec\nnode --test auth.test.mjs\n', 'one.sh': '#!/bin/sh\nnode --test spec/auth.test.mjs\n' });
+    expect(maskOf('sh .deepbuild/checks/masked.sh', cwd)).toBe('|| true in .deepbuild/checks/masked.sh');
+    expect(maskOf('sh .deepbuild/checks/two.sh', cwd)).toBe('; node in .deepbuild/checks/two.sh');
+    expect(maskOf('sh .deepbuild/checks/one.sh', cwd)).toBeNull();
+    expect(maskOf('sh .deepbuild/checks/one.sh || true', cwd), 'the command\'s own mask comes first').toBe('|| true');
   });
 });

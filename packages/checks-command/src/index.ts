@@ -15,10 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { CHECK_RUNTIME, type CheckResult, type CheckRunnerFill, type CheckSpec, type RunOutcome } from '@deepbuild/conformance';
 import { scrubValues } from '@deepbuild/evidence';
 import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
+import { segmentsOf } from '@deepbuild/gate';
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { absent, filtersIn, GO_TEST, hiddenChild, maskIn, programsIn, untraced, type Spawned } from './shell.js';
+import { absent, filtersIn, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -114,7 +115,7 @@ function interpreterOf(path: string): string | null {
 function linkPrograms(runner: string, checkout: string, bin: string): { roots: string[]; refused: string[] } {
   const roots: string[] = [];
   const refused: string[] = [];
-  for (const name of programsIn(runner)) {
+  for (const name of programsIn(runner, checkout)) {
     if (name.includes('/')) {
       // A link or a `#!` line in the checkout can point anywhere: only a Python it comes to gets its install.
       const at = resolve(checkout, name);
@@ -206,9 +207,10 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     run, outcome, testsRun: 0, failures: [], evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [],
     contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, compared: null, largest_error: null })) : null, clock, ...rest,
   });
-  const mask = maskIn(spec.runner);
-  if (mask !== null && plant !== 'exit-code-only') return { run: result('uncounted', { mask }), ran: [] };
   if (!existsSync(check.checkout)) return { run: result('missing'), ran: [] };
+  // The command's mask, or one in a script it runs (the hub's drafted checks run as `sh file`), by the core's one rule.
+  const mask = maskOf(spec.runner, check.checkout);
+  if (mask !== null && plant !== 'exit-code-only') return { run: result('uncounted', { mask }), ran: [] };
   // The tracer and the reporters name files by their real paths; a checkout reached through a link is compared by its real path too.
   const checkout = realpathSync(check.checkout);
 
@@ -342,6 +344,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const read = new Set<string>();
       for (const path of new Set(reads?.lines ?? [])) { const rel = under(checkout, path); if (rel) read.add(rel); }
       for (const t of ran) if (t.file) read.add(t.file);
+      // The shell read the script it ran, which no tracer records: it's the check's own file, read all the same.
+      for (const segment of segmentsOf(spec.runner)) { const script = scriptOf(segment, checkout); const rel = script && under(checkout, script.file); if (rel) read.add(rel); }
       const readSet = [...read].sort();
       const counts = (output: string): { compared: number | null; largest_error: number | null } => {
         const given = ran.map((t) => (t.meta.contract as Record<string, { compared?: unknown; largest_error?: unknown }> | undefined)?.[output]).filter((c) => c !== undefined);

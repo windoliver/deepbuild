@@ -94,6 +94,14 @@ describe('claimVerdict (#30)', () => {
       expect(full.requirements[0]!.outcome).toBe('PASS');
     });
   });
+  it('a check whose only run is uncounted is pending while the gate may start more, and short of clean runs once it ended', () => {
+    const uncounted = recorded('uncounted', { mask: 'untraced program grep in .deepbuild/checks/a.sh' });
+    expect(claimVerdict(claimOf({ runs: [uncounted] })).outcome).toBe('pending');
+    const ended = claimVerdict(claimOf({ runs: [uncounted], state: 'ended' }));
+    expect(ended.outcome).toBe('INCONCLUSIVE');
+    expect(said(ended)).toMatch(/0 of 1 clean runs/);
+    expect(ended.key.check_digests[0], 'the check\'s digest as the record names one').toMatch(/^d1:[0-9a-f]{64}$/);
+  });
   it('a run that never started is missing, and the claim is BLOCKED naming its cause', () => {
     const v = claimVerdict(claimOf({ runs: [recorded('missing', { failures: [{ ...failing('(run)'), message: 'pnpm isn\'t on the run\'s PATH' }] })] }));
     expect(v.outcome).toBe('BLOCKED');
