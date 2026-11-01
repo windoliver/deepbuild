@@ -1,0 +1,71 @@
+{
+  "#31.5a0437de": [
+    "no-base-run"
+  ],
+  "#31.f79bde6b": [
+    "no-base-run",
+    "own-from-base"
+  ],
+  "#31.95ac64f6": [
+    "leaves-stash"
+  ],
+  "#31.9afbd40a": [
+    "no-smallest"
+  ],
+  "#31.21807e6b": [
+    "writes-repo-ref",
+    "fetches"
+  ],
+  "#31.814af360": [
+    "writes-every-file"
+  ],
+  "#31.79cb5a05": [
+    "no-base-run",
+    "plants-ignored"
+  ],
+  "#31.81951b2c": [
+    "any-nonzero",
+    "no-base-run",
+    "plants-ignored"
+  ],
+  "#31.6485de3c": [
+    "through-index",
+    "tracked-only",
+    "keeps-skip",
+    "plants-ignored"
+  ],
+  "#31.4e4739a3": [
+    "links",
+    "plants-ignored"
+  ],
+  "#31.e96da3bd": [
+    "any-collected",
+    "deadline-unread",
+    "deadline-any",
+    "no-base-run",
+    "plants-ignored"
+  ],
+  "#31.0c42ed7c": [
+    "wrong-forms",
+    "random-hash",
+    "forms-for-all",
+    "stands-in",
+    "plants-ignored"
+  ],
+  "#31.2f87995e": [
+    "stamps",
+    "clean-writes",
+    "plants-ignored"
+  ],
+  "#31.ab1f7997": [
+    "keeps-all",
+    "drops-decisions",
+    "carries-gone",
+    "plants-ignored"
+  ],
+  "#31.a271090e": [
+    "late-removal",
+    "plants-ignored",
+    "no-sweep"
+  ]
+}

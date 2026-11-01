@@ -1,0 +1,26 @@
+Base commit: 244a3455 (Merge pull request #819 from windoliver/perf/fold-only-read-kinds)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/31   (node first on PATH = ~/.nvm/versions/node/v24.22.0/bin/node), after npm ci, npm run build --workspaces and cargo build -p deep-hook
+Date: 2026-10-30  Node v24.22.0  vitest 5.0.5  darwin-arm64  1-minute load 13.7 at the start
+Exit code: 1
+Result: Test Files 8 failed (8); Tests 52 failed (52). None passed, none skipped.
+
+Why they fail:
+- 51 tests fail with: TypeError: openCheckouts is not a function
+  (helpers.ts, World.service: @deepbuild/gate at the base has no such export, the surface the README defines). The service is opened outside every wrong program's catch, so a missing service never reads as a wrong program caught. On the before lane these are no failures at an assertion: they need planted wrong programs (README, Proof on a wrong program).
+- 1 test fails at its assertion, on the base's real hub:
+  lifetime.test.ts, AC15 a hub killed with SIGKILL during a run leaves its checkout, and its next start removes it
+  AssertionError: the checkouts the killed hub left: /private/tmp/dh29-GirEEN/t/deep-checkout-hQbt5a: expected [ Array(1) ] to deeply equal []
+  The base's hub ran the drafted check in a temporary checkout, was killed, restarted, and left that checkout there.
+
+AC6's two budget tests reached the service here, so this Mac passed the reference gate (a reference Mac on mains power) and they failed with the TypeError above before making any 1 GB repo. Off a reference Mac they skip as INCONCLUSIVE.
+
+Type check (node node_modules/typescript/bin/tsc -p tests/acceptance/31/tsconfig.json): exit 2, ten errors, all TS2305 or TS2724 on the not-yet-existing exports ClaimRun, openCheckouts, CheckoutPlant, Checkouts, Snapshot, DeclaredSurface, BaseCheckout and StandIn.
+
+Fixtures read on the real command check kind, by a throwaway test not kept here, in a plain checkout of the merge base with the check's own files laid over it (Node v24.22.0, the real supervisor and Vitest):
+  test/cart.test.ts      failed, 1 test, at test/cart.test.ts:5, assertion true: expected 100 to be 90
+  test/coupon.test.ts    failed, 1 test, at test/coupon.test.ts:7, assertion false: applyCoupon is not a function
+  test/fix.test.ts       failed, 0 tests, at test/fix.test.ts:2, assertion false: Cannot find module '../src/helper.ts'
+  no dependencies        missing, 0 tests: node_modules/.bin/vitest isn't on the run's PATH
+  the hang, 5 s deadline overran, 0 tests, no failures
+
+Not verified: no test body has run against an implementation of the surface, so no planted wrong program has been seen to fail its assertion, and the expected values are unchecked against a running service. The AC6 budgets have not been measured.

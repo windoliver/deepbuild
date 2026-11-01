@@ -2,7 +2,7 @@
 // session never read goes back naming it before any check runs; a claim's check runs in a temporary checkout of its
 // snapshot, never the live worktree, as the fast lane inside the stop's hold, and the hold's reply carries its FAIL;
 // each run records where it ran and what it needed, and each stop its held time and split.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -16,11 +16,11 @@ const CHECK = '.deepbuild/checks/rejects.sh';
  * A world whose BEHAVIOR ask's R1 is checked by a script that fails until `src/auth.ts` says Date.now, and first
  * writes whether it can read a file of your home folder, outside its checkout, into its output (`home: yes|no`).
  */
-async function world(): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
+async function world(script?: string): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
   const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK })], deliverables: ['src/auth.ts'] })] });
   const { writeFileSync, chmodSync } = await import('node:fs');
   writeFileSync(join(w.home, 'secret.txt'), 'yours\n');
-  writeFileSync(join(w.repo, CHECK), `#!/bin/sh\nif cat '${join(w.home, 'secret.txt')}' >/dev/null 2>&1; then echo home: yes; else echo home: no; fi\ngrep -q "Date.now" src/auth.ts\n`);
+  writeFileSync(join(w.repo, CHECK), script ?? `#!/bin/sh\nif cat '${join(w.home, 'secret.txt')}' >/dev/null 2>&1; then echo home: yes; else echo home: no; fi\ngrep -q "Date.now" src/auth.ts\n`);
   chmodSync(join(w.repo, CHECK), 0o755);
   const { execFileSync } = await import('node:child_process');
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: w.repo });
@@ -108,6 +108,28 @@ describe('the gate runner at a real stop', () => {
       const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
       expect(started, 'the check still runs, in the sandbox').toBeDefined();
       expect(stdoutOf(hub, started!, events), 'an untrusted head\'s run reads none of your files').toContain('home: no');
+    } finally { await stopHub(hub); }
+  }, 240_000);
+
+  it('a fix check that passes on the merge base makes the claim INVALID and sends it back, and its checkouts are gone (#31)', async () => {
+    const { hub, s, ref, repo } = await world('#!/bin/sh\nexit 0\n');
+    try {
+      const base = readFileSync(join(repo, '.git/refs/heads/main'), 'utf8').trim();
+      await s.read('src/auth.ts');
+      await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
+      const r = await s.stop('checkToken now compares `src/auth.ts:2` with the clock.');
+      const reply = JSON.parse(r.stdout || '{}') as { decision?: string; reason?: string };
+      expect(reply.decision, `sent back: ${r.stdout}`).toBe('block');
+      expect(reply.reason).toContain(`${CHECK} INVALID`);
+      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
+      const [claim] = claimsOf(events, ref);
+      const runs = events.filter((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
+      expect(runs.map((e) => e.data.commit), 'on the snapshot, then on the merge base').toEqual([expect.not.stringMatching(base), base]);
+      const verdict = events.find((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`);
+      expect(verdict?.data.outcome).toBe('INVALID');
+      expect(JSON.stringify(verdict?.data.reasons)).toContain('passes on the merge base');
+      await settle(hub, () => readdirSync(join(hub.root, 'checkouts')).length === 0, HELD_WAIT);
+      expect(readdirSync(join(hub.root, 'checkouts')), 'no checkout is left once no run is on it').toEqual([]);
     } finally { await stopHub(hub); }
   }, 240_000);
 
