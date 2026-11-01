@@ -34,7 +34,7 @@ const SAMPLES = 20;
 async function scenario(n: number, plant?: string): Promise<number[]> {
   const env = plant ? { DEEP_HUB_PLANT: plant } : {};
   const { home } = makeHome();
-  const hub = await startHub(home, { plant });
+  const hub = await startHub(home, { plant, noAskWait: true, shortHold: true });
   await setup(home, env);
   const sessions = await idleSessions(hub, home, n, env);
   return await answerEach('AC2', home, sessions, plant);

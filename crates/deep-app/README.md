@@ -6,7 +6,7 @@ The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105 and o
 
 ## Where new code goes
 
-- One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `capture.rs` and so on), declared in `src/lib.rs`; new command-line modes go in `src/main.rs`.
+- One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `commands.rs` for ⌘K, `capture.rs` and so on), declared in `src/lib.rs`; new command-line modes go in `src/main.rs`.
 - Hub calls go through `src/hub.rs`, and the record is read only through `src/record.rs`.
 - Canvas text goes through deep-text-gpui (`src/text.rs`), never GPUI's text system, which stays for the chrome.
 - Unit tests sit in a `#[cfg(test)]` module in the file; integration tests in `tests/`; pixel tests rendered offscreen in `screens.rs`.

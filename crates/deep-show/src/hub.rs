@@ -162,10 +162,28 @@ pub enum Planted {
     CheckpointNearestInDistance,
     /// #857: results of nodes run on several threads merge in the order they finished.
     MergesInFinishOrder,
+    /// #854: a session's frame runs every node of its frame phases, changed or not.
+    RunsEveryNode,
+    /// #854: deep_query answers a paged read with every row, unpaged.
+    Unpaged,
+    /// #896: the session takes each patch's revision by loading the whole document.
+    ReloadsRevision,
+    /// #896: `marks2d.frame` rebuilds the whole draw list on every frame.
+    RebuildsDrawList,
+    /// #896: the bench view uploads every mark on every frame.
+    RepaintsEveryMark,
     /// #857: the background jobs' threads run at the live view's priority.
     BackgroundAtLivePriority,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
     AcceptsEverySampleRate8To192k,
+    /// #411: `items/<id>/modifiers/<k>#out` reads the stack's final result for every k.
+    PrefixReadsFinal,
+    /// #411: a why names its canvas module and operator and no document field or default.
+    WhyNamesOperatorOnly,
+    /// #411: a why lists only the first write to its value.
+    WhyNamesKeyOnly,
+    /// #411: deep_query's cut keeps the first rows by ID, parents or not.
+    CutsByRowOrder,
     /// #488: `rate`'s index forms t × p in i64.
     FrameIndexI64Product,
     /// #488: `rate`'s index divides truncating toward 0.
@@ -249,6 +267,21 @@ pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
     reply.insert("unchanged".into(), json!(diff.unchanged));
     reply.insert("created".into(), json!(diff.created));
     reply.insert("removed".into(), json!(diff.removed));
+}
+
+/// A refused revision's reply. A check that needs a canvas module or a pack version the build
+/// lacks, or that an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
+/// design: Canvas modules; #305; #306).
+pub(crate) fn refused_reply(mut reply: Map<String, Value>, issues: &[Issue], check: bool) -> Value {
+    reply.insert("outcome".into(), json!("refused"));
+    if check {
+        let blocked = crate::packs::blocked(issues) || reply.contains_key("blocked");
+        reply.insert(
+            "result".into(),
+            json!(if blocked { "BLOCKED" } else { "FAIL" }),
+        );
+    }
+    Value::Object(reply)
 }
 
 /// What keeps a frame from settling.
@@ -379,6 +412,10 @@ pub struct PatchCall {
 }
 
 pub enum Call {
+    /// #411: deep_query, and deep.canvas.read for a check plug-in.
+    SceneQuery(Box<crate::query::Query>),
+    /// #411: a deep_show or deep show call in a diagnostic mode.
+    Mode(Box<Show>, String),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #855: rekeys the process's content keys under a hash, once.
@@ -437,6 +474,10 @@ pub enum Call {
     Frames(Box<Frames>),
     /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
     ShapedRuns(String),
+    /// #854: patches to a shared document, each timed from its arrival to the settled frame.
+    Settle(Box<crate::efficiency::Settle>),
+    /// #854: deep_query's summary or one page of a document's rows.
+    Query(crate::efficiency::Query),
     /// The replica's `see`: a panel's accessibility tree as data and every announcement it made (#376).
     See(String),
     /// Shows or hides a panel from this call on.
@@ -803,6 +844,8 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
         merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
+        runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
+        forgets_changes: scenario.planted == Some(Planted::RebuildsDrawList),
     };
     Options {
         access_log: startup.test_build,
@@ -1160,6 +1203,20 @@ impl<'a> Hub<'a> {
             .find(|r| r.state == "current")
     }
 
+    /// A deep_show or deep show call's reply, on a shared document or a sole writer's.
+    pub fn show_call(&mut self, show: &Show) -> Value {
+        if self.shared.contains_key(&show.doc) {
+            return self.show_shared(show);
+        }
+        let reply = self.show(show);
+        let rev = self.current(&show.doc).map(|r| r.rev);
+        let seen = self.shown_at.entry(show.doc.clone()).or_default();
+        if let Some(rev) = rev.filter(|r| seen.last().is_none_or(|(_, l)| l != r)) {
+            seen.push((self.now, rev));
+        }
+        reply
+    }
+
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
         // #856's planted cache per document: each document's runs are keyed apart.
@@ -1181,21 +1238,17 @@ impl<'a> Hub<'a> {
             self.vias.insert(show.doc.clone(), show.via.clone());
         }
         let mut reply = match call {
-            Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
-            Call::Show(show) => {
-                let reply = self.show(show);
-                let rev = self.current(&show.doc).map(|r| r.rev);
-                let seen = self.shown_at.entry(show.doc.clone()).or_default();
-                if let Some(rev) = rev.filter(|r| seen.last().is_none_or(|(_, l)| l != r)) {
-                    seen.push((self.now, rev));
-                }
-                reply
+            Call::Show(show) => self.show_call(show),
+            Call::Mode(show, mode) => {
+                self.vias.insert(show.doc.clone(), show.via.clone());
+                self.mode_show(show, mode)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
@@ -1215,6 +1268,8 @@ impl<'a> Hub<'a> {
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
             Call::ShapedRuns(text) => self.shaped_runs(text),
+            Call::Settle(s) => self.settle_patches(s),
+            Call::Query(q) => self.query(q),
             Call::Panel { panel, visible } => {
                 self.panels_shown.insert(panel.clone(), *visible);
                 json!({"panel": panel, "visible": visible})
@@ -1680,18 +1735,7 @@ impl<'a> Hub<'a> {
             });
         }
         if error {
-            reply.insert("outcome".into(), json!("refused"));
-            if show.check {
-                // A check that needs a canvas module or a pack version the build lacks, or that
-                // an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
-                // design: Canvas modules; #305; #306).
-                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
-                reply.insert(
-                    "result".into(),
-                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
-                );
-            }
-            return Value::Object(reply);
+            return refused_reply(reply, &issues, show.check);
         }
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);

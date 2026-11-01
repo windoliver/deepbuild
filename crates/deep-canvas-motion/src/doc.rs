@@ -110,11 +110,40 @@ pub struct Transport {
     pub holds: bool,
 }
 
+/// A driver (canvas primitives: Driver): writes its target from an expression over its vars,
+/// after the channels and before the item's transform is composed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Driver {
+    pub id: String,
+    pub target: Target,
+    /// The expression as written, and in postfix order.
+    pub text: String,
+    pub expr: Vec<deep_canvas::document::packs::ExprStep>,
+    /// Each var's name and the document path it reads, in name order.
+    pub vars: Vec<(String, Target)>,
+}
+
+/// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
+pub type Bounds = [Option<(f64, f64)>; 3];
+
+/// A `limit` constraint (canvas primitives: Constraint): holds one of its owner's transform
+/// groups within per-axis bounds, after the channels and drivers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Limit {
+    pub id: String,
+    pub owner: String,
+    /// The group it holds: `at/pos`, `at/rot` or `at/scale`.
+    pub group: &'static str,
+    pub bounds: Bounds,
+}
+
 /// Everything motion reads, with each map in ID order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Motion {
     pub transport: Transport,
     pub channels: Vec<Channel>,
+    pub drivers: Vec<Driver>,
+    pub limits: Vec<Limit>,
     pub clips: Vec<Clip>,
     pub placements: Vec<Placement>,
     pub markers: Vec<Marker>,
@@ -229,6 +258,95 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
         owner: owner.to_string(),
         field: field.iter().map(|f| f.to_string()).collect(),
     })
+}
+
+fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
+    let path = format!("drivers/{id}");
+    let Some(Value::String(target)) = d.get("target") else {
+        return refuse("bad_path", format!("{path}/target"));
+    };
+    let target = target_of(target, false, &format!("{path}/target"))?;
+    let Some(Value::String(text)) = d.get("expr") else {
+        return refuse("bad_doc", format!("{path}/expr"));
+    };
+    let expr = deep_canvas::document::packs::postfix(text)
+        .or_else(|_| refuse("bad_doc", format!("{path}/expr")))?;
+    let mut vars = Vec::new();
+    for (name, v) in d
+        .get("vars")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let vpath = format!("{path}/vars/{name}");
+        let Value::String(text) = v else {
+            return refuse("bad_path", vpath);
+        };
+        vars.push((name.clone(), target_of(text, false, &vpath)?));
+    }
+    vars.sort_by(|a, b| a.0.cmp(&b.0));
+    // Every name the expression reads is a var: a driver reads nothing it doesn't declare.
+    for step in &expr {
+        if let deep_canvas::document::packs::ExprStep::Name(n) = step {
+            if !vars.iter().any(|(v, _)| v == n) {
+                return refuse("ref_unresolved", format!("{path}/expr"));
+            }
+        }
+    }
+    Ok(Driver {
+        id: id.to_string(),
+        target,
+        text: text.clone(),
+        expr,
+        vars,
+    })
+}
+
+/// A constraint motion evaluates: `limit` lands here; every other kind is read elsewhere or later.
+fn limit_of(id: &str, c: &Map<String, Value>) -> Result<Option<Limit>, Refused> {
+    if c.get("kind").and_then(Value::as_str) != Some("limit") {
+        return Ok(None);
+    }
+    let path = format!("constraints/{id}");
+    let Some(owner) = c
+        .get("owner")
+        .and_then(Value::as_str)
+        .filter(|o| !o.is_empty())
+    else {
+        return refuse("bad_path", format!("{path}/owner"));
+    };
+    let group = match c.get("what").and_then(Value::as_str) {
+        Some("location") => "pos",
+        Some("rotation") => "rot",
+        Some("scale") => "scale",
+        _ => return refuse("bad_doc", format!("{path}/what")),
+    };
+    let Some(Value::Array(list)) = c.get("bounds") else {
+        return refuse("bad_doc", format!("{path}/bounds"));
+    };
+    if list.len() != 3 {
+        return refuse("bad_doc", format!("{path}/bounds"));
+    }
+    let mut bounds = [None; 3];
+    for (k, b) in list.iter().enumerate() {
+        bounds[k] = match b {
+            Value::Null => None,
+            Value::Array(mm) => match (
+                mm.first().and_then(Value::as_f64),
+                mm.get(1).and_then(Value::as_f64),
+            ) {
+                (Some(lo), Some(hi)) if mm.len() == 2 && lo <= hi => Some((lo, hi)),
+                _ => return refuse("out_of_range", format!("{path}/bounds/{k}")),
+            },
+            _ => return refuse("bad_doc", format!("{path}/bounds/{k}")),
+        };
+    }
+    Ok(Some(Limit {
+        id: id.to_string(),
+        owner: owner.to_string(),
+        group,
+        bounds,
+    }))
 }
 
 fn channel_of(
@@ -423,9 +541,21 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     let mut placements = resolve_series(raw, &clips, seed)?;
     let cuts = cuts_of(doc, &mut placements, &clips)?;
     let parents = parents_of(doc)?;
+    let mut drivers = Vec::new();
+    for (id, d) in section(doc, "drivers")? {
+        drivers.push(driver_of(id, d)?);
+    }
+    let mut limits = Vec::new();
+    for (id, c) in section(doc, "constraints")? {
+        if let Some(limit) = limit_of(id, c)? {
+            limits.push(limit);
+        }
+    }
     Ok(Motion {
         transport,
         channels,
+        drivers,
+        limits,
         clips,
         placements,
         markers,

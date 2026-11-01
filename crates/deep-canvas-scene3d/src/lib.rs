@@ -3,6 +3,7 @@
 pub mod frames;
 pub mod label;
 pub mod look;
+pub mod modifiers;
 pub mod module;
 pub mod overlay;
 pub mod scene;

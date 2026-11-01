@@ -152,6 +152,60 @@ fn a_revision_stamps_only_the_classes_its_change_falls_in() {
     );
 }
 
+#[test]
+fn a_revision_of_item_values_alone_leaves_what_a_whole_load_leaves() {
+    let sealed = Registry::new(BuildSet::Core).seal().expect("seals");
+    // A scheduler each, so neither session reads the other's results from the cache.
+    let (mut s, mut s2) = (
+        Scheduler::new(&sealed, Options::default()),
+        Scheduler::new(&sealed, Options::default()),
+    );
+    let first = board(false);
+    let (mut whole, mut items) = (
+        Session::new(0, BTreeMap::new()),
+        Session::new(0, BTreeMap::new()),
+    );
+    whole.load(&mut s, &first);
+    items.load(&mut s2, &first);
+    whole.frame(&mut s, 0, &default_view(&first));
+    items.frame(&mut s2, 0, &default_view(&first));
+
+    let mut moved = first.clone();
+    moved["items"]["a"]["at"] = json!({"pos": [3, 0, 0]});
+    moved["items"]["a"]["params"]["box"] = json!([0, 0, 12, 10]);
+    whole.load(&mut s, &moved);
+    let issues = items.revise_items(&mut s2, &moved, &["a"]);
+    assert_eq!(issues, Some(Vec::new()));
+    let ran = (
+        whole.frame(&mut s, 0, &default_view(&moved)),
+        items.frame(&mut s2, 0, &default_view(&moved)),
+    );
+    assert_eq!(ran.0, ran.1);
+    assert!(ran.0 > 0, "the change ran the item's nodes");
+    let seen = |session: &Session,
+                s: &Scheduler<'_>|
+     -> Vec<(String, Option<String>, String, String, &'static str)> {
+        session
+            .nodes(s)
+            .into_iter()
+            .map(|n| (n.operator, n.item, n.key, n.result, n.run.name()))
+            .collect()
+    };
+    assert_eq!(seen(&whole, &s), seen(&items, &s2));
+    for class in [Class::Transform, Class::Geometry, Class::Shading] {
+        assert_eq!(whole.changed_at("a", class), items.changed_at("a", class));
+    }
+    assert_eq!(whole.document(), items.document());
+
+    // A change that moves an item in the plan is the whole load's.
+    let mut reordered = moved.clone();
+    reordered["items"]["a"]["order"] = json!("z9");
+    assert_eq!(items.revise_items(&mut s2, &reordered, &["a"]), None);
+    let mut grown = moved.clone();
+    grown["items"]["c"] = json!({"id": "c", "kind": "rect@1", "params": {"box": [0, 0, 1, 1]}});
+    assert_eq!(items.revise_items(&mut s2, &grown, &["c"]), None);
+}
+
 /// Real threads, each taking the next job, so shards apply in whatever order they finish.
 #[derive(Debug)]
 struct Threads;
@@ -258,5 +312,84 @@ fn deferred_cache_changes_apply_as_in_node_order() {
         let sharded: BTreeMap<_, _> = s.apply_deferred(4).into_iter().collect();
         assert_eq!(cached(&s.cache), cached(&serial), "seed {seed}: the cache");
         assert_eq!(sharded, held, "seed {seed}: each node's hold");
+    }
+}
+
+/// A board of `n` rects, every third one a child of the item before it, so a move reaches the
+/// children through their `parent` reads.
+fn family(n: usize) -> Value {
+    let mut items = serde_json::Map::new();
+    for i in 0..n {
+        let id = format!("i{i:03}");
+        let mut item = json!({"id": id, "kind": "rect@1", "order": format!("a{i:03}"),
+                              "params": {"box": [0, 0, 4, 4]}, "at": {"pos": [i, 0, 0]}});
+        if i % 3 == 2 {
+            item["parent"] = json!(format!("i{:03}", i - 1));
+        }
+        items.insert(id, item);
+    }
+    json!({"format": 1, "size": [400, 400], "items": items})
+}
+
+/// A frame after revisions of item values, which visits only the nodes their changes reach
+/// (#896), leaves every node's key, result and run as a frame after loading each revision whole
+/// does, over many revisions in a row, two of them before one frame, and moves of parents, on
+/// one thread and on a pool's.
+#[test]
+fn frames_that_visit_what_changes_reach_leave_what_whole_loads_leave() {
+    for pooled in [false, true] {
+        reached_as_whole(pooled);
+    }
+}
+
+fn reached_as_whole(pooled: bool) {
+    let sealed = Registry::new(BuildSet::Core).seal().expect("seals");
+    let options = Options {
+        pool: pooled.then(|| std::sync::Arc::new(Threads) as std::sync::Arc<dyn Pool>),
+        threads: pooled.then_some(4),
+        ..Options::default()
+    };
+    let (mut s, mut s2) = (
+        Scheduler::new(&sealed, Options::default()),
+        Scheduler::new(&sealed, options),
+    );
+    let mut doc = family(60);
+    let (mut whole, mut items) = (
+        Session::new(0, BTreeMap::new()),
+        Session::new(0, BTreeMap::new()),
+    );
+    whole.load(&mut s, &doc);
+    items.load(&mut s2, &doc);
+    whole.frame(&mut s, 0, &default_view(&doc));
+    items.frame(&mut s2, 0, &default_view(&doc));
+    let seen =
+        |session: &Session, s: &Scheduler<'_>| -> Vec<(String, Option<String>, String, String)> {
+            session
+                .nodes(s)
+                .into_iter()
+                .map(|n| (n.operator, n.item, n.key, n.result))
+                .collect()
+        };
+    for k in 0..40usize {
+        let id = format!("i{:03}", (k * 17) % 60);
+        doc["items"][&id]["at"]["pos"] = json!([k, k % 7, 0]);
+        if k % 5 == 0 {
+            doc["items"][&id]["params"]["box"] = json!([0, 0, 4 + k % 3, 4]);
+        }
+        whole.load(&mut s, &doc);
+        assert!(items.revise_items(&mut s2, &doc, &[&id]).is_some());
+        if k % 4 == 3 {
+            // A second revision before the frame.
+            let other = format!("i{:03}", (k * 29 + 1) % 60);
+            doc["items"][&other]["at"]["pos"] = json!([k, 9, 0]);
+            whole.load(&mut s, &doc);
+            assert!(items.revise_items(&mut s2, &doc, &[&other]).is_some());
+        }
+        let ran = (
+            whole.frame(&mut s, 0, &default_view(&doc)),
+            items.frame(&mut s2, 0, &default_view(&doc)),
+        );
+        assert_eq!(ran.0, ran.1, "revision {k} runs as many nodes");
+        assert_eq!(seen(&whole, &s), seen(&items, &s2), "revision {k}");
     }
 }

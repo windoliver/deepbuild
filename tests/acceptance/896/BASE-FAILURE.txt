@@ -1,0 +1,93 @@
+Base commit: 3b57aa1d ("Merge pull request #911 from windoliver/feat/854-efficiency-bar"), the worktree's HEAD
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/896 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci;
+the base's release deep-show was built beforehand (cargo build --locked --release -p deep-show --bin deep-show), as
+patch-settled builds it anyway. Paths are redacted to <checkout>. Trimmed to the test list and each failure's assertion.
+Every one of the 10 tests fails for the expected reason, at a named assertion:
+- settled.test.ts, recording: the base's patch-settled ran (release build, five runs of 200 patches on 10,000 items)
+  and failed at "run 1, patch 1: stages (the time each stage took, so a failure can name one) is an object, got
+  undefined".
+- settled.test.ts, planted: "node benchmarks/canvas.mjs patch-settled --planted reloads_revision exits 0": deep-show
+  answered {"ok":false,"code":"bad_input"} (no such planted program).
+- settled.test.ts, made-up readings: the base's judge passed the twin within 4 ms and failed the 9 ms reading, then the
+  test failed at "the failure names each run's stage that took the time" (no `stage <name>` in the reason).
+- dirty.test.ts, budgets: "budgets.json has the task canvas-patch-dirty: expected undefined to be defined" (the lane's
+  validator accepted the base's budgets.json first).
+- dirty.test.ts, four recordings (shipped twice, both planted): "node benchmarks/canvas.mjs patch-dirty [--planted
+  rebuilds_draw_list | repaints_every_mark] exits 0": "Error: Unknown task patch-dirty".
+- dirty.test.ts, two made-up readings: "canvas.mjs judge exits 0 on a canvas-patch-dirty report": the base's judge
+  takes it for a budget-class report ("Error: Unknown class undefined").
+This Mac is a Mac15,7 (Apple M3 Pro, 36 GiB, a reference Mac) on battery with a load average near 55, so the
+reference-Mac gate was open; no test got as far as a timing judgment.
+Date: 2026-10-31  Node v23.9.0  vitest 5.0.5 darwin-arm64
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/896
+
+ ❯ dirty.test.ts (7 tests | 7 failed) 500ms
+   ❯ #896.18600d21 the same task's CPU per patch at 1,000 and at 10,000 items differs by under 25%; a planted marks2d.frame that rebuilds the whole list fails, naming the operator and its marks (4)
+     × #896.18600d21 #896.6987c701 budgets.json has the task canvas-patch-dirty: it runs node benchmarks/canvas.mjs patch-dirty, holds cpu_growth 0.25 and upload_bytes_per_item 64, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets 276ms
+     × #896.18600d21 canvas-patch-dirty times the same 200 one-item patches at 1,000 and at 10,000 items, no operator building a mark for 1% of the board on one patch, and on the reference Mac the CPU per patch at the two sizes differs by under 25% in all five runs and the lane passes cpu_growth 37ms
+     × #896.18600d21 a planted marks2d.frame that rebuilds the whole list builds a mark for every item of each board on each one-item patch, and on the reference Mac the lane fails its CPU per patch, naming marks2d.frame and its marks in every run 33ms
+     × #896.18600d21 the lane's judge fails a reading whose CPU per patch doubles from 1,000 to 10,000 items, naming in each run the operator that built the most marks and how many; passes its twin within 25%; and passes no reading without a 1,000-item board or with its ratio taken from two 10,000-item boards 46ms
+   ❯ #896.6987c701 a one-item patch uploads at most 64 B per changed item to the GPU; a planted view that repaints every mark fails, naming the bytes it uploaded (3)
+     × #896.6987c701 each one-item patch of canvas-patch-dirty uploads between 1 and 64 B to the GPU at 1,000 and at 10,000 items, and the lane passes upload_bytes_per_item on any Mac 33ms
+     × #896.6987c701 a planted view that repaints every mark uploads at least a byte per mark of the board on each one-item patch, and the lane fails it on any Mac, naming each run's bytes 32ms
+     × #896.6987c701 the lane's judge fails a reading whose one-item patch uploads 640 KB, naming each run's bytes; passes its twin at 48 B; and passes no reading that doesn't report the bytes 41ms
+ ❯ settled.test.ts (3 tests | 3 failed) 176635ms
+   ❯ #896.b89e4aff patch to settled frame holds 4 ms at p95 over 200 one-item patches on a 10,000-item board, CPU plus GPU, on the reference Mac; a planted session that reloads the whole revision on each patch fails, naming the stage that took the time (3)
+     × #896.b89e4aff canvas-patch-settled times each one-item patch by stage (patch, session, frame, present, gpu) adding up to its CPU plus GPU, and on the reference Mac each run's p95 is within 4 ms (five runs after warm-up) and the lane's judge passes it 80335ms
+     × #896.b89e4aff a planted session that reloads the whole revision on each patch spends at least 5 times the shipped session's stage on each one-item patch, and on the reference Mac the lane fails it past 4 ms, naming for each run the stage that took the most of its slowest patch 96127ms
+     × #896.b89e4aff the lane's judge fails a reading past 4 ms in all five runs, naming for each run the stage that took the most of its slowest patch and no stage that didn't, and passes its twin within 4 ms 172ms
+
+
+ FAIL  dirty.test.ts > #896.18600d21 the same task's CPU per patch at 1,000 and at 10,000 items differs by under 25%; a planted marks2d.frame that rebuilds the whole list fails, naming the operator and its marks > #896.18600d21 #896.6987c701 budgets.json has the task canvas-patch-dirty: it runs node benchmarks/canvas.mjs patch-dirty, holds cpu_growth 0.25 and upload_bytes_per_item 64, compares wit
+AssertionError: budgets.json has the task canvas-patch-dirty: expected undefined to be defined
+ FAIL  dirty.test.ts > #896.18600d21 the same task's CPU per patch at 1,000 and at 10,000 items differs by under 25%; a planted marks2d.frame that rebuilds the whole list fails, naming the operator and its marks > #896.18600d21 canvas-patch-dirty times the same 200 one-item patches at 1,000 and at 10,000 items, no operator building a mark for 1% of the board on one patch, and on the reference Mac 
+AssertionError: node benchmarks/canvas.mjs patch-dirty exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:674
+Error: Unknown task patch-dirty; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, scene-read, idle, replica-cold-start, capture-save
+ FAIL  dirty.test.ts > #896.18600d21 the same task's CPU per patch at 1,000 and at 10,000 items differs by under 25%; a planted marks2d.frame that rebuilds the whole list fails, naming the operator and its marks > #896.18600d21 a planted marks2d.frame that rebuilds the whole list builds a mark for every item of each board on each one-item patch, and on the reference Mac the lane fails its CPU per 
+AssertionError: node benchmarks/canvas.mjs patch-dirty --planted rebuilds_draw_list exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:674
+Error: Unknown task patch-dirty; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, scene-read, idle, replica-cold-start, capture-save
+ FAIL  dirty.test.ts > #896.18600d21 the same task's CPU per patch at 1,000 and at 10,000 items differs by under 25%; a planted marks2d.frame that rebuilds the whole list fails, naming the operator and its marks > #896.18600d21 the lane's judge fails a reading whose CPU per patch doubles from 1,000 to 10,000 items, naming in each run the operator that built the most marks and how many; passes its 
+AssertionError: canvas.mjs judge exits 0 on a canvas-patch-dirty report; stderr: file://<checkout>/benchmarks/canvas.mjs:416
+Error: Unknown class undefined
+ FAIL  dirty.test.ts > #896.6987c701 a one-item patch uploads at most 64 B per changed item to the GPU; a planted view that repaints every mark fails, naming the bytes it uploaded > #896.6987c701 each one-item patch of canvas-patch-dirty uploads between 1 and 64 B to the GPU at 1,000 and at 10,000 items, and the lane passes upload_bytes_per_item on any Mac
+AssertionError: node benchmarks/canvas.mjs patch-dirty exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:674
+Error: Unknown task patch-dirty; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, scene-read, idle, replica-cold-start, capture-save
+ FAIL  dirty.test.ts > #896.6987c701 a one-item patch uploads at most 64 B per changed item to the GPU; a planted view that repaints every mark fails, naming the bytes it uploaded > #896.6987c701 a planted view that repaints every mark uploads at least a byte per mark of the board on each one-item patch, and the lane fails it on any Mac, naming each run's bytes
+AssertionError: node benchmarks/canvas.mjs patch-dirty --planted repaints_every_mark exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:674
+Error: Unknown task patch-dirty; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, scene-read, idle, replica-cold-start, capture-save
+ FAIL  dirty.test.ts > #896.6987c701 a one-item patch uploads at most 64 B per changed item to the GPU; a planted view that repaints every mark fails, naming the bytes it uploaded > #896.6987c701 the lane's judge fails a reading whose one-item patch uploads 640 KB, naming each run's bytes; passes its twin at 48 B; and passes no reading that doesn't report the bytes
+AssertionError: canvas.mjs judge exits 0 on a canvas-patch-dirty report; stderr: file://<checkout>/benchmarks/canvas.mjs:416
+Error: Unknown class undefined
+ FAIL  settled.test.ts > #896.b89e4aff patch to settled frame holds 4 ms at p95 over 200 one-item patches on a 10,000-item board, CPU plus GPU, on the reference Mac; a planted session that reloads the whole revision on each patch fails, naming the stage that took the time > #896.b89e4aff canvas-patch-settled times each one-item patch by stage (patch, session, frame, present, gpu) adding up to its 
+AssertionError: canvas-patch-settled: run 1, patch 1: stages (the time each stage took, so a failure can name one) is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  settled.test.ts > #896.b89e4aff patch to settled frame holds 4 ms at p95 over 200 one-item patches on a 10,000-item board, CPU plus GPU, on the reference Mac; a planted session that reloads the whole revision on each patch fails, naming the stage that took the time > #896.b89e4aff a planted session that reloads the whole revision on each patch spends at least 5 times the shipped session's s
+AssertionError: node benchmarks/canvas.mjs patch-settled --planted reloads_revision exits 0; stderr:     Blocking waiting for file lock on package cache
+Error: deep-show answered {"ok":false,"code":"bad_input"}
+ FAIL  settled.test.ts > #896.b89e4aff patch to settled frame holds 4 ms at p95 over 200 one-item patches on a 10,000-item board, CPU plus GPU, on the reference Mac; a planted session that reloads the whole revision on each patch fails, naming the stage that took the time > #896.b89e4aff the lane's judge fails a reading past 4 ms in all five runs, naming for each run the stage that took the most o
+AssertionError: the failure names each run's stage that took the time: expected [ …(5) ] to deeply equal []
+
+ FAIL  settled.test.ts > #896.b89e4aff patch to settled frame holds 4 ms at p95 over 200 one-item patches on a 10,000-item board, CPU plus GPU, on the reference Mac; a planted session that reloads the whole revision on each patch fails, naming the stage that took the time > #896.b89e4aff the lane's judge fails a reading past 4 ms in all five runs, naming for each run the stage that took the most of its slowest patch and no stage that didn't, and passes its twin within 4 ms
+AssertionError: the failure names each run's stage that took the time: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run 1: the reason doesn't name stage session, which took the most of its slowest patch",
++   "run 2: the reason doesn't name stage frame, which took the most of its slowest patch",
++   "run 3: the reason doesn't name stage present, which took the most of its slowest patch",
++   "run 4: the reason doesn't name stage gpu, which took the most of its slowest patch",
++   "run 5: the reason doesn't name stage session, which took the most of its slowest patch",
+
+
+
+ Test Files  2 failed (2)
+      Tests  10 failed (10)
+   Start at  15:31:07
+   Duration  177.53s (tests 100%)
+

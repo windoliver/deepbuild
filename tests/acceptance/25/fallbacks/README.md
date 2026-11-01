@@ -26,8 +26,9 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/fallbacks/tsconfig.j
 DEEP_HUB_PLANT=no-stop-count npx vitest run --root tests/acceptance/25/fallbacks --no-file-parallelism cap.test.ts   # a wrong program
 ```
 
-- `--no-file-parallelism`: each file starts a hub. The suite takes several minutes: a stop held for an open ask waits
-  out the hub's 60 s hold, and a `deep_ask` call ends "still waiting" after the hub's 40 s.
+- `--no-file-parallelism`: each file starts a hub. The suite takes about a minute: a `deep_ask` call nobody answers
+  ends "still waiting" at once (`NO_ASK_WAIT`, not the hub's 40 s), and AC5's and AC9's stops held for an open ask
+  end after 5 s (`SHORT_HOLD`, not 60 s); AC10 answers during holds of the full 60 s (#964).
 - Every test makes its folders under `/tmp/dh25f-*` (a socket path must fit in 104 bytes), sets `HOME` to `<tmp>/h`
   for every process it starts, and never touches the real `~/.deepbuild`, `~/.claude` or `~/.codex`. It stops only
   processes it started, by PID. No child inherits a billing key, a `CLAUDE*` variable or a `DEEP_*` setting of the
@@ -39,7 +40,7 @@ DEEP_HUB_PLANT=no-stop-count npx vitest run --root tests/acceptance/25/fallbacks
 - Machine load: deep-hook gives up on a hub that hasn't acknowledged within 50 ms (#315), so on a badly loaded Mac a
   hook can miss the hub. A test that then fails on one hook's reply should be rerun, with the run's machine state kept.
   A missed Stop acknowledgement lets the stop through while the hub still holds it, so AC5 and AC9 answer an idle
-  session only once 61 s have passed since its stop's hook started (`pastHold`), past any hold. AC10 answers during
+  session only once 1 s past the hub's hold has passed since its stop's hook started (`pastHold`), past any hold. AC10 answers during
   holds and has no such guard: a missed acknowledgement there fails a continuation, and the run is rerun.
 
 ## The surface under test
