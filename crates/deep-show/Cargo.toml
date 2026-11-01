@@ -131,6 +131,8 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 # Issue #140: the platform seams and their conformance suites.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
+# Issue #309: the network seam's macOS backend and relay@1.
+deep-relay = { path = "../deep-relay" }
 deep-gpu = { path = "../deep-gpu" }
 deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
