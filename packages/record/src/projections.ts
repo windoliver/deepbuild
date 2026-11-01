@@ -41,7 +41,8 @@ const TABLES: readonly TableDef[] = [
   T('runs', ['id'], 'id TEXT, check_id TEXT, claim_id TEXT, host TEXT, needs TEXT, commit_sha TEXT, env_fingerprint TEXT, started INTEGER, ended INTEGER, outcome TEXT, tests_run INTEGER, passed INTEGER, evidence TEXT, assertion TEXT, expected TEXT, actual TEXT, step TEXT, points_to TEXT'),
   T('verdicts', ['id'], 'id TEXT, handle TEXT, claim_id TEXT, outcome TEXT, reasons TEXT, requirements TEXT, smallest TEXT, points_to TEXT, commit_sha TEXT, key TEXT, created INTEGER, stale INTEGER NOT NULL DEFAULT 0, because TEXT'),
   T('asks', ['id'], 'id TEXT, kind TEXT, key TEXT, question TEXT, options TEXT, recommended TEXT, default_option TEXT, provisional INTEGER, session_id TEXT, owner TEXT, fallback TEXT, deadline INTEGER, later_until INTEGER, pinned_to TEXT, status TEXT NOT NULL DEFAULT \'open\', outcome TEXT NOT NULL DEFAULT \'unanswered\', batch_id TEXT, created INTEGER, answered INTEGER, answer TEXT, decision TEXT'),
-  T('decisions', ['id'], 'id TEXT, key TEXT, scope TEXT, answer TEXT, by TEXT, ask_id TEXT, state TEXT, created INTEGER, overruled_by TEXT, applied INTEGER NOT NULL DEFAULT 0'),
+  // Indexed by scope: a session starting reads its own decisions back (#824).
+  T('decisions', ['id'], 'id TEXT, key TEXT, scope TEXT, answer TEXT, by TEXT, ask_id TEXT, state TEXT, created INTEGER, overruled_by TEXT, applied INTEGER NOT NULL DEFAULT 0', ['scope']),
   T('leases', ['kind', 'key'], 'kind TEXT, key TEXT, host TEXT, mode TEXT, holder TEXT, expires INTEGER, state TEXT'),
   T('evidence', ['hash'], 'hash TEXT, kind TEXT, type TEXT, size INTEGER, source TEXT, origin TEXT, redaction TEXT, license TEXT, step_times TEXT, derived_from TEXT'),
   T('commits', ['sha'], 'sha TEXT, session_id TEXT, worktree TEXT, created INTEGER'),

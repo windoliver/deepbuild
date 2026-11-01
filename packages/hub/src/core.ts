@@ -301,9 +301,9 @@ export class Core {
   private readonly counters = new Map<string, Counter>();
   /** The work items prompts name, read off the hook's parse, for the append that opens their tasks. */
   private readonly items = new WeakMap<Draft, WorkItem>();
-  /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   /** The sessions that ended, oldest end first. */
   private readonly endedOrder = new Set<string>();
+  /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   private stamps: Stamp[] = [];
   /** How long each run still going is expected to take, in seconds, by run handle: what the line's "about" reads (#83). */
   private readonly expected = new Map<string, number>();
@@ -1554,7 +1554,7 @@ export class Core {
     // One that ended long ago has left memory; the record still names its thread.
     const known = this.sessions.get(from)?.thread;
     if (known) return known;
-    const [row] = (await this.record.raw(`SELECT thread_id FROM sessions WHERE id = '${sql(from)}'`)) as { thread_id: string | null }[];
+    const [row] = (await this.record.raw('SELECT thread_id FROM sessions WHERE id = ?', [from])) as { thread_id: string | null }[];
     return row?.thread_id ?? from;
   }
   /** Links a session whose agent process another session's agent process started, such as `codex exec` run by Claude Code, as its child. */
@@ -2978,9 +2978,13 @@ export class Core {
     const ended = [...this.endedOrder].filter((id) => { const s = this.sessions.get(id)!; return !s.closed.length && !s.pending.size && !owning.has(`mcp:${id}`); });
     for (const id of ended.slice(0, Math.max(0, ended.length - ENDED_KEPT))) {
       this.endedOrder.delete(id);
+      // Its agent's start time, kept for the checks of its hooks; a watch has no process of its own.
+      const pid = this.sessions.get(id)!.pid;
+      if (pid && ![...this.sessions.values()].some((s) => s.id !== id && s.pid === pid)) this.starts.delete(pid);
       this.sessions.delete(id);
-      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects]) kept.delete(id);
+      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects, this.tasted]) kept.delete(id);
       this.versioned.delete(id);
+      this.firstPrompted.delete(id);
       for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
     }
   }

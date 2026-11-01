@@ -19,8 +19,8 @@ export { evidence, judge, type Evidence } from './rules.js';
 
 interface Saved { handle: string; key: string; scope: string; answer: string; bound: number | null; revoked: boolean; overruled: Set<string>; pos: number }
 
-const KINDS = ['session.start', 'session.end', 'ask.created', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'spend.approved'] as const;
-/** How many ended sessions' asks and session decisions stay in memory; the record keeps them all. */
+const KINDS = ['session.start', 'session.end', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'spend.approved'] as const;
+/** How many ended sessions' decisions at their own scope stay in memory; the record keeps them all. */
 const ENDED_KEPT = 64;
 const PAGE = 1000;
 /** How the ledger knows the one extension that answers a paid run's request for you. */
@@ -35,32 +35,64 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
   let cursor = 0;
   const byKey = new Map<string, Saved[]>();
   const byHandle = new Map<string, Saved>();
-  /** The size of each ask's change, by ask handle, for the bound a decision saved from it sets. */
-  const lines = new Map<string, number>();
-  /** Who each ask was raised for, by ask handle: whom an answer naming a budget is made for. */
-  const raisedFor = new Map<string, { actor: string; scope: string }>();
   /** The project budgets you approved, by the repo they cover, in the order you approved them. */
   const projects = new Map<string, string[]>();
-  /** The asks raised in each session, and the sessions that ended, oldest first. */
-  const asked = new Map<string, string[]>();
+  /** The sessions that ended, oldest first. */
   const ended = new Set<string>();
 
-  /** Past the newest ended sessions, each one's asks and the decisions only it could use leave memory. */
+  /**
+   * Past the newest ended sessions, each one's decisions at its own scope leave memory (#824). The record keeps them
+   * all: the session starting again reads them back (`rehydrate`), so it is never asked what it answered (invariant 4).
+   * One overruled at a scope stays, since the record's table doesn't keep the scopes.
+   */
   const forgetEnded = (): void => {
     for (const session of [...ended].slice(0, Math.max(0, ended.size - ENDED_KEPT))) {
-      for (const ask of asked.get(session) ?? []) {
-        lines.delete(ask);
-        raisedFor.delete(ask);
-      }
-      asked.delete(session);
       ended.delete(session);
-      for (const saved of [...byHandle.values()].filter((s) => s.scope === `session:${letters(session)}`)) {
+      for (const saved of [...byHandle.values()].filter((s) => s.scope === `session:${letters(session)}` && !s.overruled.size)) {
         byHandle.delete(saved.handle);
         const rest = (byKey.get(saved.key) ?? []).filter((s) => s !== saved);
         if (rest.length) byKey.set(saved.key, rest);
         else byKey.delete(saved.key);
       }
     }
+  };
+  /** An ask as it was raised, from the record: the size of its change, and whom it was raised for. */
+  const askOf = async (ask: string): Promise<{ lines: number | undefined; who: { actor: string; scope: string } } | undefined> => {
+    const [row] = (await options.record.raw('SELECT actor, scope, data FROM events WHERE id = ? AND kind = ?', [ask.slice(4), 'ask.created'])) as { actor: string; scope: string; data: string }[];
+    if (!row) return undefined;
+    const d: unknown = JSON.parse(row.data);
+    const change = isObj(d) && isObj(d.subject) && isObj(d.subject.change) ? d.subject.change : undefined;
+    return { lines: typeof change?.lines === 'number' ? change.lines : undefined, who: { actor: row.actor, scope: row.scope } };
+  };
+  const bound = (lines: number | undefined): number | null => (lines === undefined ? null : Math.max(2 * lines, 50));
+  /** Holds a decision once: one already held, read back or folded, stays as it is. */
+  const hold = (saved: Saved): void => {
+    if (byHandle.has(saved.handle)) return;
+    byHandle.set(saved.handle, saved);
+    byKey.set(saved.key, [...(byKey.get(saved.key) ?? []), saved]);
+  };
+  /** A decision held from the record's table row: one that left memory with its session (#824). */
+  const readBack = async (row: { id: string; key: string; scope: string; answer: string; ask_id: string; state: string; log_pos: number | bigint }): Promise<Saved> => {
+    const from = await askOf(`ask:${row.ask_id}`);
+    const saved: Saved = { handle: `decision:${row.id}`, key: row.key, scope: String(JSON.parse(row.scope)), answer: String(JSON.parse(row.answer)), bound: bound(from?.lines), revoked: row.state === 'revoked', overruled: new Set(), pos: Number(row.log_pos) };
+    hold(saved);
+    return byHandle.get(saved.handle)!;
+  };
+  const COLUMNS = 'd.id, d.key, d.scope, d.answer, d.ask_id, d.state, e.log_pos FROM decisions d JOIN events e ON e.id = d.id';
+  /** A decision by its handle: held, or read back for one that left memory, so what happens to it later still lands on it. */
+  const savedOf = async (handle: string): Promise<Saved | undefined> => {
+    const known = byHandle.get(handle);
+    if (known) return known;
+    const [row] = (await options.record.raw(`SELECT ${COLUMNS} WHERE d.id = ?`, [handle.replace(/^decision:/, '')])) as Parameters<typeof readBack>[0][];
+    return row ? readBack(row) : undefined;
+  };
+  /**
+   * A session starting: the decisions saved at its scope before that, which left memory with it, come back from the
+   * record (#824). Later ones arrive through the log, so a replay holds each once.
+   */
+  const rehydrate = async (session: string, before: number): Promise<void> => {
+    const rows = (await options.record.raw(`SELECT ${COLUMNS} WHERE d.scope = ? AND e.log_pos < ?`, [JSON.stringify(`session:${letters(session)}`), before])) as Parameters<typeof readBack>[0][];
+    for (const row of rows) if (!byHandle.has(`decision:${row.id}`)) await readBack(row);
   };
 
   const sync = async (): Promise<void> => {
@@ -71,16 +103,14 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
         cursor = e.log_pos;
         const d = isObj(e.data) ? e.data : {};
         if (e.kind === 'session.start') {
-          if (e.session) ended.delete(e.session);
+          if (e.session) {
+            ended.delete(e.session);
+            await rehydrate(e.session, e.log_pos);
+          }
         } else if (e.kind === 'session.end') {
           // Only a verified end counts: an unverified one ends nothing, as in the hub.
           if (e.session && !e.unverified) ended.add(e.session);
           forgetEnded();
-        } else if (e.kind === 'ask.created') {
-          if (e.session) asked.set(e.session, [...(asked.get(e.session) ?? []), `ask:${e.id}`]);
-          const change = isObj(d.subject) && isObj(d.subject.change) ? d.subject.change : undefined;
-          if (typeof change?.lines === 'number') lines.set(`ask:${e.id}`, change.lines);
-          raisedFor.set(`ask:${e.id}`, { actor: e.actor, scope: e.scope });
         } else if (e.writer !== 'core') {
           // Only the core records a decision or a budget you approved; anything else is no decision of yours.
         } else if (e.kind === 'spend.approved') {
@@ -89,16 +119,12 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
             projects.set(repo, [...(projects.get(repo) ?? []), e.id]);
           }
         } else if (e.kind === 'decision.created') {
-          const size = lines.get(String(d.ask));
-          const saved: Saved = {
-            handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer),
-            bound: size === undefined ? null : Math.max(2 * size, 50), revoked: false, overruled: new Set(), pos: e.log_pos,
-          };
-          byHandle.set(saved.handle, saved);
-          byKey.set(saved.key, [...(byKey.get(saved.key) ?? []), saved]);
+          // The bound comes from the ask it was saved from, read from the record: nothing here keeps every ask.
+          hold({ handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), bound: bound((await askOf(String(d.ask)))?.lines), revoked: false, overruled: new Set(), pos: e.log_pos });
         } else {
-          // Revoked, overruled everywhere or at one scope, or judged: a frozen rule keeps deciding at its scope.
-          const saved = byHandle.get(String(d.decision));
+          // Revoked, overruled everywhere or at one scope, or judged: a frozen rule keeps deciding at its scope. One that
+          // left memory is read back for it, and an overrule at a scope then keeps it, since the table has no scopes.
+          const saved = await savedOf(String(d.decision));
           if (!saved) continue;
           if (e.kind === 'decision.overruled' && typeof d.at === 'string') saved.overruled.add(d.at);
           else if (e.kind !== 'decision.judged' || d.state === 'revoked') saved.revoked = true;
@@ -118,7 +144,7 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
    */
   const fromBudget = async (ledger: Ledger, ask: ResolverAsk): Promise<ResolverAnswer | undefined> => {
     const allow = ask.options.find((o) => o.decision === 'allow');
-    const who = raisedFor.get(ask.ask);
+    const who = (await askOf(ask.ask))?.who;
     if (!allow || !who || ask.repo === null) return undefined;
     const connection: Connection = { writer: WRITER, ...who, ...(ask.session ? { session: ask.session } : {}) };
     let refused: BudgetLeft | undefined;

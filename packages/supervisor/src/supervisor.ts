@@ -626,9 +626,20 @@ class LocalSupervisor implements Supervisor {
 
   async status(run: string): Promise<RunStatus> {
     const r = this.runs.get(run);
-    if (!r) throw Error(`${run} is no run of this supervisor`);
+    if (!r) {
+      if (await this.recorded(run)) return { run, state: 'cleaned' };
+      throw Error(`${run} is no run of this supervisor`);
+    }
     const waiter = this.waiters.find((w) => w.spec.run === run);
     return { run, state: r.state, ...(waiter ? { on: waiter.on } : {}) };
+  }
+
+  /** A clean run that left memory (#824), as the record has its cleanup; undefined for one this supervisor never cleaned. */
+  private async recorded(run: string): Promise<Cleanup | undefined> {
+    const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'run.cleaned' AND writer = 'core' AND subject = ? ORDER BY log_pos DESC LIMIT 1", [run])) as { data: string }[];
+    if (!row) return undefined;
+    const d = JSON.parse(row.data) as { outcome: Cleanup['outcome']; left: string[]; stopped: number[] };
+    return { run, outcome: d.outcome, left: d.left, stopped: d.stopped };
   }
 
   cleanup(run: string): Promise<Cleanup> {
@@ -639,7 +650,8 @@ class LocalSupervisor implements Supervisor {
     if (!r) {
       // A start still in its first pass, given up on before it was held: it never starts.
       const waiter = this.waiters.find((w) => w.spec.run === run);
-      if (!waiter) return Promise.reject(Error(`${run} is no run of this supervisor`));
+      // One cleaned and since forgotten answers as it did then.
+      if (!waiter) return this.recorded(run).then((cleaned) => cleaned ?? Promise.reject(Error(`${run} is no run of this supervisor`)));
       this.waiters.splice(this.waiters.indexOf(waiter), 1);
       this.runs.set(run, blank(run, waiter.spec.cwd, 'BLOCKED'));
       waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: waiter.spec.leases?.[0]?.kind ?? '' });

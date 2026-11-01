@@ -31,3 +31,28 @@ test('a run as you can rename no folder above a guarded path', async () => {
     await record.close();
   }
 }, 60_000);
+
+// Past the newest 64 cleaned, a clean run leaves the supervisor's memory (#824); its handle still answers as it did,
+// from the record, so a stack taken down long after its run ended, or a terminal stopped twice, sees its cleanup and no error.
+test('a clean run forgotten past the newest 64 still answers status and cleanup from the record', async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
+  dirs.push(dir);
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+  try {
+    for (let i = 0; i < 66; i++) {
+      const run = `run:R${String(i).padStart(3, '0')}`;
+      const started = await sup.start({ run, argv: ['/usr/bin/true'], cwd: dir, grant: { run_as_you: true } });
+      expect(started.status).toBe('started');
+      await sup.wait(run);
+      expect((await sup.cleanup(run)).outcome).toBe('clean');
+    }
+    expect((await sup.status('run:R000')).state).toBe('cleaned');
+    expect(await sup.cleanup('run:R000')).toMatchObject({ run: 'run:R000', outcome: 'clean', left: [] });
+    await expect(sup.cleanup('run:NEVER')).rejects.toThrow('is no run of this supervisor');
+  } finally {
+    await sup.close();
+    await record.close();
+  }
+}, 180_000);
