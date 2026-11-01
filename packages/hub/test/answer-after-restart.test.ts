@@ -1,38 +1,16 @@
 // A Claude Code session idle across a hub restart sends no hook, so the hub doesn't know it: its waiter asks again,
 // and your answer still wakes it through that waiter.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import net from 'node:net';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
-import { hookLine, mcp, reply, withHub } from './hub.js';
+import { hookLine, mcp, reply, session, waiter, withHub } from './hub.js';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-
-function waiter(root: string, session: string, cwd: string): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(join(root, 'hub.sock'));
-    let got = '';
-    let said = 0;
-    sock.setEncoding('utf8');
-    sock.on('data', (chunk: string) => {
-      got += chunk;
-      const lines = got.split('\n');
-      while (lines.length - 1 > said) {
-        const line = JSON.parse(lines[said]!) as Record<string, unknown>;
-        said++;
-        if ('hello' in line) sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token: readFileSync(join(root, 'control.token'), 'utf8').trim() })}\n`);
-        else if (line.role === 'cli') sock.write(`${JSON.stringify({ v: 1, id: 'w1', method: 'session.wait', params: { session, cwd, since: Date.now() } })}\n`);
-        else if (line.id === 'w1') { sock.destroy(); if ('error' in line) reject(Error(JSON.stringify(line.error))); else resolve(line.result as Record<string, unknown>); }
-      }
-    });
-    sock.on('error', reject);
-  });
-}
 
 it('wakes an idle session the restarted hub has not heard from', async () => {
   const id = '7c4d5e60-1111-4222-8333-444455558888';
@@ -41,12 +19,7 @@ it('wakes an idle session the restarted hub has not heard from', async () => {
     writeFileSync(join(home, 'confirm'), 'confirmed\n');
     const env = { DEEP_HUB_TEST_CONFIRM: join(home, 'confirm') };
     await hub.restart(env);
-    const work = join(home, 'work');
-    const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
-    mkdirSync(work, { recursive: true });
-    mkdirSync(projects, { recursive: true });
-    const transcript = join(projects, `${id}.jsonl`);
-    writeFileSync(transcript, '');
+    const { work, transcript } = session(home, id);
     await reply(join(root, 'hub.sock'), hookLine(ulid(Date.now()), 'SessionStart', { session_id: id, transcript_path: transcript, cwd: work, hook_event_name: 'SessionStart', source: 'startup' }, { ppid: process.pid }));
     const tools = mcp(home, work, false);
     await tools.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } });

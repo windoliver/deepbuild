@@ -1,34 +1,17 @@
 // #44's lease kinds past what its acceptance tests reach: the table keeps a kind for the hub's life and has no
 // undeclare, so a package loaded again keeps its own kinds, and a manifest with one bad kind declares none of them.
 // Each runs a real package through a real host, record, supervisor and lease table.
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { openAsks } from '@deepbuild/asks';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRecord, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
-import { openExtensionHost, openTrust, packageDigest, type ExtensionHost } from '../src/index.js';
+import { openExtensionHost, openTrust, type ExtensionHost } from '../src/index.js';
+import { cleanup, closing, pkgOf as pkg, temp } from './package.js';
 
-/** The preview methods a package's code calls, which its manifest lists by name since #139 (requires.preview). */
-const PREVIEW = /\bdeep\.(on|registerResolver|registerSource|registerEnvironment|lease|registerView|readNow|registerAdapter|registerRoute|registerIndex|record\.append|record\.query|evidence\.put|asks\.create|config\.get|notices\.send|store|schedule|secret|send|provide|use|read|fetch|registerAction)\(/g;
-const previewOf = (code: string): { requires?: { preview: string[] } } => {
-  const used = [...new Set([...code.matchAll(PREVIEW)].map((m) => `deep.${m[1]}`))].sort();
-  return used.length ? { requires: { preview: used } } : {};
-};
-
-const dirs: string[] = [];
-const closing: { close(): Promise<void> }[] = [];
-afterAll(async () => {
-  for (const c of closing.reverse()) await c.close();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
-const temp = (): string => {
-  const d = realpathSync(mkdtempSync(join(tmpdir(), 'deep-ext-lease-')));
-  dirs.push(d);
-  return d;
-};
+afterAll(cleanup);
 
 const RIG = { name: 'device.rig', match: 'exact', cap: 10, cooldown: 0, cost: 0 };
 const CODE = "export default function (deep: any): void {\n  deep.registerCheck('ext.x.run', () => ({ outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null }));\n}\n";
@@ -36,15 +19,7 @@ const CODE = "export default function (deep: any): void {\n  deep.registerCheck(
 /** Leases rig-1 of device.rig for itself as it loads; at its conformance run, where nothing reaches the record, the lease is refused. */
 const LEASES = "export default async function (deep: any): Promise<void> {\n  deep.registerCheck('ext.x.run', () => null);\n  await deep.lease({ kind: 'device.rig', key: 'rig-1' }, 'exclusive').catch(() => undefined);\n}\n";
 
-function pkgOf(version: string, leases: unknown[], code = CODE): string {
-  const folder = temp();
-  writeFileSync(join(folder, 'index.ts'), code);
-  const manifest = { id: 'test/x', version, digest: '', checks: ['ext.x.run'], leases, ...previewOf(code) };
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  manifest.digest = packageDigest(folder);
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  return folder;
-}
+const pkgOf = (version: string, leases: unknown[], code = CODE): string => pkg('test/x', code, { version, checks: ['ext.x.run'], leases });
 /**
  * `left` names runs whose cleanup reads unfinished: a process that outlives SIGKILL can't be made here, so the real
  * cleanup runs and stops everything, and its result alone is read as a process left running.

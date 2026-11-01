@@ -325,10 +325,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             out: input.get("out")?.as_str()?.to_string(),
             doc: doc(input.get("doc"))?,
             view: view(input.get("view"))?,
-            t: match input.get("t") {
-                None => 0,
-                Some(t) => t.as_i64()?,
-            },
+            t: input.get("t").map_or(Some(0), Value::as_i64)?,
             record: record(input)?,
             store: store(input.get("store"))?,
             planted,
@@ -373,10 +370,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     .ok()
                     .filter(|n| *n <= 100_000)?,
                 store: store(input.get("store"))?,
-                start: match input.get("start") {
-                    None => 0,
-                    Some(t) => t.as_i64()?,
-                },
+                start: input.get("start").map_or(Some(0), Value::as_i64)?,
                 replay: match input.get("replay") {
                     None => None,
                     Some(r) => Some(r.get("record_t")?.as_i64()?),
@@ -450,10 +444,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 doc: doc(input.get("doc"))?,
                 look,
                 view: view(input.get("view"))?,
-                t: match input.get("t") {
-                    None => 0,
-                    Some(t) => t.as_i64()?,
-                },
+                t: input.get("t").map_or(Some(0), Value::as_i64)?,
                 record: record(input)?,
                 gpui_oklab,
                 store: store(input.get("store"))?,
@@ -476,19 +467,11 @@ fn main() {
         );
         std::process::exit(2);
     }
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
+    let mut out = io::stdout().lock();
     #[cfg(target_os = "macos")]
     let mut renderer = macos::Renderer::new();
-    let mut buf = Vec::new();
-    let mut reader = stdin.lock();
-    loop {
-        buf.clear();
-        match reader.read_until(b'\n', &mut buf) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
+    for buf in io::stdin().lock().split(b'\n') {
+        let Ok(buf) = buf else { break };
         let line = std::str::from_utf8(&buf).map(|l| l.trim_end_matches(['\n', '\r']));
         let request = match line.map(serde_json::from_str::<Value>) {
             Ok(Ok(Value::Object(mut input))) => match inline_sidecars(&mut input) {

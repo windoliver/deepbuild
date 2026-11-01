@@ -211,7 +211,8 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
   const { memoryCommand } = await import('@deepbuild/hub');
   process.exitCode = await memoryCommand(args.slice(1));
 } else if (args[0] === 'mcp' && (args.length === 1 || (args.length === 2 && args[1] === 'actions'))) {
-  const { runMcp } = await import('@deepbuild/hub');
+  // Its own entry: an agent keeps its deep mcp open all session, and the hub's whole module graph would ride along.
+  const { runMcp } = await import('@deepbuild/hub/mcp');
   process.exitCode = await runMcp(args[1] === 'actions' ? 'deep-actions' : 'deep');
 } else if (args[0] === 'read' || args[0] === 'find') {
   // Read-only over the hub's root (#63), with or without the hub running.
