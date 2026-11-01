@@ -25,3 +25,10 @@ vello_cpu = { version = "0.3", default-features = false, features = ["std", "tex
 # atlas rasterizes at that level so every platform computes the same alpha (design: Decided, Goldens).
 fearless_simd = { version = "0.7", features = ["force_support_fallback"] }
 serde_json = "1"
+# Issue #140: the fonts seam's backend names itself as the platform seams name every backend.
+deep-canvas-seams = { path = "../deep-canvas-seams" }
+
+[features]
+# Issue #140: the same fonts backend at its next version and nothing else, for the test that a
+# backend with a new version misses the caches it keyed; no shipped build has it.
+test-fonts-next = []

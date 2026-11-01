@@ -2,13 +2,16 @@
 //! is handed to the render worker's shaper here, which shapes it into the shaped-run cache; until
 //! its [`Pending`] is ready the caller draws the text's last run and reports the frame settling
 //! (canvas primitives: Text `text@1`; Render worker).
+//!
+//! Issue #140: it lives with the host, not in deep-text, so the canvas's text crate starts no
+//! thread and builds for wasm32 with threads off.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread;
 
-use crate::shape::{Shaper, Spec};
+use deep_text::shape::{Shaper, Spec};
 
 /// A text handed to the worker: ready once its run is in the shaped-run cache.
 #[derive(Clone, Debug)]

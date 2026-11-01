@@ -1753,13 +1753,16 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-core-media",
  "objc2-foundation 0.3.2",
+ "objc2-quartz-core 0.3.2",
  "objc2-screen-capture-kit",
  "objc2-user-notifications",
+ "pollster 0.4.0",
  "quickjs-jit-runtime",
  "raw-window-handle",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "wgpu 30.0.1",
 ]
 
 [[package]]
@@ -1836,6 +1839,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-seams"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-sheet"
 version = "0.0.0"
 dependencies = [
@@ -1874,11 +1884,13 @@ name = "deep-gpu"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-seams",
  "objc2-core-foundation",
  "objc2-core-video",
  "objc2-io-surface",
  "objc2-metal 0.3.2",
  "pollster 0.4.0",
+ "serde_json",
  "wgpu 30.0.1",
 ]
 
@@ -1895,10 +1907,12 @@ dependencies = [
  "deep-canvas-motion",
  "deep-canvas-record",
  "deep-canvas-scene3d",
+ "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
  "deep-effects-render",
  "deep-gpu",
+ "deep-marks-render",
  "deep-replica",
  "deep-scene3d-render",
  "deep-text",
@@ -1935,6 +1949,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-canvas-seams",
  "deep-marks-gpui",
  "deep-marks-vello",
  "deep-replica",
@@ -1945,6 +1960,7 @@ dependencies = [
  "image",
  "libc",
  "serde_json",
+ "skrifa 0.44.0",
  "vello_cpu",
 ]
 
@@ -2007,6 +2023,7 @@ dependencies = [
  "deep-canvas-motion",
  "deep-canvas-record",
  "deep-canvas-scene3d",
+ "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
  "deep-effects-render",
@@ -2020,6 +2037,8 @@ dependencies = [
  "gpui-pre-apple",
  "image",
  "libc",
+ "objc2 0.6.5",
+ "raw-window-handle",
  "serde_json",
  "sha2 0.10.9",
  "vello_cpu",
@@ -2030,6 +2049,7 @@ dependencies = [
 name = "deep-text"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas-seams",
  "fearless_simd",
  "icu_properties",
  "icu_segmenter",
@@ -3717,6 +3737,7 @@ dependencies = [
  "metal",
  "objc2 0.6.5",
  "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-core-text",
  "objc2-core-video",
  "objc2-foundation 0.3.2",

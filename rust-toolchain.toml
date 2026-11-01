@@ -1,3 +1,5 @@
 [toolchain]
 channel = "1.99.1"
 components = ["rustfmt", "clippy"]
+# Issue #140: the canvas core's crates build for the web's platform in the wasm32 lane.
+targets = ["wasm32-unknown-unknown"]
