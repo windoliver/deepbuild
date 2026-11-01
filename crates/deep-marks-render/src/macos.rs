@@ -452,6 +452,87 @@ fn color_space(gpui_oklab: bool) -> ColorSpace {
     }
 }
 
+/// #140: `marks` alone over transparent black at `size` px, drawn by GPUI's frame path (the draws
+/// `present` makes, with no layer cache) in a window of `cx` at scale 1, read back from GPUI's
+/// offscreen Metal renderer; straight alpha. That renderer's frames are opaque, so the marks draw
+/// twice, over a black ground and over a white one: where they leave `1 - a` of the ground showing,
+/// the two differ by `(1 - a) · 255`, and the color over black is the marks' premultiplied color.
+pub(crate) fn picture(
+    cx: &mut HeadlessAppContext,
+    marks: &[&Drawn],
+    size: [u32; 2],
+) -> Result<image::RgbaImage, Value> {
+    gpui_draws(marks.iter().copied())?;
+    let mut session = Renderer::new_session();
+    let list = Renderer::draws(
+        &mut session,
+        marks,
+        path::bucket(1.0),
+        1.0,
+        false,
+        &mut BTreeSet::new(),
+    )?;
+    let whole = rect([0.0, 0.0, f64::from(size[0]), f64::from(size[1])]);
+    let over = |ground: u8| {
+        let mut over = vec![(Draw::Quad(fill_quad(whole, hsla([ground; 3]))), None)];
+        over.extend(list.iter().cloned());
+        over
+    };
+    let (over_black, over_white) = (over(0), over(255));
+    let draws = Rc::new(RefCell::new(over_black));
+    let canvas = Canvas {
+        draws: draws.clone(),
+    };
+    let (handle, _) = cx
+        .update(|cx| {
+            open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds {
+                        origin: Point::default(),
+                        size: gpui_kit::size(px(size[0] as f32), px(size[1] as f32)),
+                    })),
+                    focus: false,
+                    show: false,
+                    ..Default::default()
+                },
+                cx,
+                |_, cx| cx.new(|_| canvas),
+            )
+        })
+        .map_err(|_| refused("no_window", ""))?;
+    cx.simulate_scale_factor_change(handle, 1.0);
+    // A forced frame request draws the window again, as the display link's does.
+    let capture = |cx: &mut HeadlessAppContext| {
+        cx.present_frame(handle);
+        cx.capture_screenshot(handle).ok()
+    };
+    let black = capture(cx);
+    *draws.borrow_mut() = over_white;
+    let white = capture(cx);
+    let _ = cx.update_window(handle, |_, w, _| w.remove_window());
+    let (Some(black), Some(white)) = (black, white) else {
+        return Err(refused("no_capture", ""));
+    };
+    if black.dimensions() != (size[0], size[1]) || white.dimensions() != black.dimensions() {
+        return Err(refused("no_capture", "size"));
+    }
+    let mut out = image::RgbaImage::new(size[0], size[1]);
+    for ((o, b), w) in out.pixels_mut().zip(black.pixels()).zip(white.pixels()) {
+        let shown = (0..3)
+            .map(|c| f64::from(w[c]) - f64::from(b[c]))
+            .sum::<f64>()
+            / (3.0 * 255.0);
+        let a = (1.0 - shown).clamp(0.0, 1.0);
+        let a8 = (a * 255.0).round() as u8;
+        if a8 == 0 {
+            continue;
+        }
+        let un = |c: u8| (f64::from(c) / a).round().min(255.0) as u8;
+        *o = image::Rgba([un(b[0]), un(b[1]), un(b[2]), a8]);
+    }
+    Ok(out)
+}
+
 impl Renderer {
     pub fn new() -> Self {
         Renderer {
@@ -781,7 +862,12 @@ impl Renderer {
         let palette = palette_of(look, view.theme);
         let frame = scene::frame(doc, &items, palette, record, view.zoom)
             .map_err(|r| refused(r.code, &r.path))?;
-        gpui_draws(&frame)?;
+        gpui_draws(
+            frame
+                .layers
+                .iter()
+                .flat_map(|l| l.marks.iter().map(|m| &**m)),
+        )?;
         let shown =
             scene::bound_texts(doc, &items, record).map_err(|r| refused(r.code, &r.path))?;
         let status = scene::status_marks(doc, &items, record, look.status.as_ref(), palette)
@@ -1283,8 +1369,8 @@ fn gpui_lacks(item: &str) -> Value {
     refused("module_missing", &format!("items/{item}"))
 }
 
-fn gpui_draws(frame: &scene::Frame) -> Result<(), Value> {
-    for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+fn gpui_draws<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Result<(), Value> {
+    for drawn in marks {
         let solid = |f: &Fill| matches!(f, Fill::Solid(_));
         let lacks = match &drawn.mark {
             Mark::Shape { fill, stroke, .. } => {

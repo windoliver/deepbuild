@@ -376,6 +376,33 @@ fn draw(req: &Request) -> Result<Value, Value> {
     }))
 }
 
+/// #140: `marks` alone over transparent black at `size` px and zoom 1, as `draw` paints them with
+/// no ground and no status marks; straight alpha.
+pub(crate) fn picture(marks: &[&scene::Drawn], size: [u32; 2]) -> Result<image::RgbaImage, Value> {
+    let (Ok(w), Ok(h)) = (u16::try_from(size[0]), u16::try_from(size[1])) else {
+        return Err(refused("out_of_range", "size"));
+    };
+    let mut p = Painter {
+        ctx: RenderContext::new_with(w, h, settings()),
+        resources: Resources::new(),
+        store: None,
+        scopes: Scopes::new(false),
+        zoom: 1.0,
+        spans_apart: false,
+        texts: Map::new(),
+    };
+    for drawn in marks {
+        p.scopes.enter(&mut p.ctx, &mut p.resources, &drawn.scopes);
+        p.mark(&drawn.mark)?;
+    }
+    p.scopes.enter(&mut p.ctx, &mut p.resources, &[]);
+    let mut pixmap = Pixmap::new(w, h);
+    p.ctx
+        .render_with(&mut pixmap, &mut p.resources, rasterizer());
+    image::RgbaImage::from_raw(size[0], size[1], pixmap.take_rgba8(ImageAlphaType::Alpha))
+        .ok_or_else(|| refused("not_written", "picture"))
+}
+
 /// Every look role a document names, in black: geometry needs the outline, never its colors.
 fn any_roles(value: &Value, palette: &mut scene::Palette) {
     match value {
