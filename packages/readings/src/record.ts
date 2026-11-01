@@ -7,6 +7,9 @@ const RECORD = 'record';
 const WINDOW_30S = 30_000;
 /** The fast-lane budget the hub's gate runs under, the band of held time. */
 const BUDGET_MS = 10_000;
+/** A turn's context from this many tokens up is read for its cache hits; under this share of hits, most of it was billed again. */
+const CACHE_FLOOR = 50_000;
+const CACHE_LOW_SHARE = 0.2;
 /** Kinds whose meaning isn't a session's: a reading, an ask and a verdict are read across the record. */
 const ACROSS = new Set(['reading.recorded', 'ask.created', 'ask.answered', 'verdict.made']);
 
@@ -141,12 +144,12 @@ export function billingMode(sessionStart: RecordEvent): 'api_key' | 'plan' | 'un
   return set.includes(true) ? 'api_key' : set.length ? 'plan' : 'unknown';
 }
 /** A session's spend as turn.usage records it: per turn as it stands, a running total as the difference from the one before. */
-interface Used { id: string; turn: string; tokens: number; cost: Cost; ts: number; tasks: string[]; mode: ReturnType<typeof billingMode> }
+interface Used { id: string; turn: string; tokens: number; input: number; cached: number; cost: Cost; ts: number; tasks: string[]; mode: ReturnType<typeof billingMode> }
 const tasksOf = (ask: RecordEvent): string[] => (Array.isArray(ask.data.tasks) ? (ask.data.tasks as string[]) : []);
 function usedIn(list: readonly RecordEvent[]): Used[] {
   const out: Used[] = [];
   let tasks: string[] = [];
-  let last = { tokens: 0, usd: 0 };
+  let last = { tokens: 0, input: 0, cached: 0, usd: 0 };
   // The mode in force when the tokens were spent: a resume can change it.
   let mode: ReturnType<typeof billingMode> = 'unknown';
   for (const e of list) {
@@ -155,16 +158,18 @@ function usedIn(list: readonly RecordEvent[]): Used[] {
     if (e.kind === 'user.ask' && tasksOf(e).length) tasks = tasksOf(e);
     if (e.kind !== 'turn.usage') continue;
     const t = e.data.tokens as { input?: unknown; cached?: unknown; output?: unknown } | undefined;
-    const tokens = num(t?.input) + num(t?.cached) + num(t?.output);
+    const input = num(t?.input);
+    const cached = num(t?.cached);
+    const tokens = input + cached + num(t?.output);
     const cost = e.data.cost as Cost;
     if (e.data.covers === 'session') {
       const usd = 'usd' in cost ? cost.usd : 0;
       // A running total is a baseline, never new use: what a resumed thread starts from was counted already. One that
       // hasn't grown says nothing about the turn, which stays unknown rather than reading zero.
       if (tokens <= last.tokens) continue;
-      out.push({ id: e.id, turn: String(e.data.turn), tokens: tokens - last.tokens, cost: 'usd' in cost ? { ...cost, usd: Math.max(0, usd - last.usd) } : cost, ts: e.ts, tasks, mode });
-      last = { tokens, usd: Math.max(usd, last.usd) };
-    } else out.push({ id: e.id, turn: String(e.data.turn), tokens, cost, ts: e.ts, tasks, mode });
+      out.push({ id: e.id, turn: String(e.data.turn), tokens: tokens - last.tokens, input: Math.max(0, input - last.input), cached: Math.max(0, cached - last.cached), cost: 'usd' in cost ? { ...cost, usd: Math.max(0, usd - last.usd) } : cost, ts: e.ts, tasks, mode });
+      last = { tokens, input: Math.max(input, last.input), cached: Math.max(cached, last.cached), usd: Math.max(usd, last.usd) };
+    } else out.push({ id: e.id, turn: String(e.data.turn), tokens, input, cached, cost, ts: e.ts, tasks, mode });
   }
   return out;
 }
@@ -224,7 +229,7 @@ function foldSession(session: string, list: RecordEvent[]): Part {
   const tasks = new Map<string, Spend>();
   const own = new Map<string, Spend>();
   const used = usedIn(list);
-  const byTurn = new Map<string, { usd: number | null; cost: Cost; as_of: number }>();
+  const byTurn = new Map<string, { usd: number | null; cost: Cost; as_of: number; input: number; cached: number }>();
   let tokens = 0;
   let plan = 0;
   for (const u of used) {
@@ -233,19 +238,25 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     const usd = 'usd' in u.cost ? u.cost.usd : null;
     // Two stops of one turn are one row: what the turn spent.
     const turn = byTurn.get(u.turn);
-    if (!turn) byTurn.set(u.turn, { usd, cost: u.cost, as_of: u.ts });
+    const context = { input: (turn?.input ?? 0) + u.input, cached: (turn?.cached ?? 0) + u.cached };
+    if (!turn) byTurn.set(u.turn, { usd, cost: u.cost, as_of: u.ts, ...context });
     // An unpriced part leaves the turn unpriced, and any estimated part makes it an estimate.
-    else if (turn.usd === null || usd === null) byTurn.set(u.turn, { usd: null, cost: { basis: 'unpriced' }, as_of: u.ts });
+    else if (turn.usd === null || usd === null) byTurn.set(u.turn, { usd: null, cost: { basis: 'unpriced' }, as_of: u.ts, ...context });
     else {
       const sum = turn.usd + usd;
       const card = turn.cost.basis === 'estimated' ? turn.cost.rate_card : u.cost.basis === 'estimated' ? u.cost.rate_card : null;
-      byTurn.set(u.turn, { usd: sum, cost: card ? { basis: 'estimated', usd: sum, rate_card: card } : { basis: 'reported', usd: sum }, as_of: u.ts });
+      byTurn.set(u.turn, { usd: sum, cost: card ? { basis: 'estimated', usd: sum, rate_card: card } : { basis: 'reported', usd: sum }, as_of: u.ts, ...context });
     }
     const s: Spend = { usd: usd ?? 0, priced: usd !== null, card: u.cost.basis === 'estimated' ? u.cost.rate_card : null, complete: usd !== null, as_of: u.ts };
     addSpend(own, subject, s);
     for (const task of u.tasks) addSpend(tasks, task, s);
   }
-  for (const [turn, t] of byTurn) readings.push({ id: 'cost.turn', subject: turn, value: t.usd, unit: 'usd', source: RECORD, as_of: t.as_of, basis: t.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: t.cost });
+  for (const [turn, t] of byTurn) {
+    readings.push({ id: 'cost.turn', subject: turn, value: t.usd, unit: 'usd', source: RECORD, as_of: t.as_of, basis: t.cost.basis === 'estimated' ? 'modeled' : 'observed', cost: t.cost });
+    // A big context mostly billed again is outside its band: the hit rate, in percent of the context, as its reading.
+    const context = t.input + t.cached;
+    if (context >= CACHE_FLOOR && t.cached < CACHE_LOW_SHARE * context) readings.push({ id: 'cache.low', subject: turn, value: (t.cached / context) * 100, unit: '%', source: RECORD, as_of: t.as_of, basis: 'observed', band: 'over' });
+  }
   // A turn with no usage, such as one that crashed, leaves what it sums short: the session's, and its tasks'. A turn runs
   // from its first ask to its usage: a message typed mid-turn is the same turn, a subagent's stop ends none, and an ask no
   // model read opens none. After a failed stop or a new start the next ask opens another, but usage first means the turn

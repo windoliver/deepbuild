@@ -11,6 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { call } from '../src/client.js';
 import { Forge } from '../src/forge.js';
+import { numbersLines } from '../src/numbers.js';
 import { search } from '../src/search.js';
 import { startOf, ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
@@ -125,6 +126,18 @@ describe('labelling a period from before the hub', () => {
       expect((await decision()).refused.find((r) => r.id === 'is_it_done')?.why, 'ids nothing holds count for nothing').toMatch(/over 2 messages/);
     });
   }, 120_000);
+});
+
+describe('deep numbers', () => {
+  it('a low cache reading\'s line says most of the context was billed again, and an unknown cost reads unknown, never 0 (#45)', () => {
+    const lines = numbersLines([
+      { id: 'cache.low', subject: 'msg_low', value: 7.5, unit: '%', source: 'record', age_ms: 1000, basis: 'observed', status: 'current', agreement: null, band: 'over' },
+      { id: 'cost.turn', subject: 'msg_low', value: null, unit: 'usd', source: 'record', age_ms: 1000, basis: 'observed', status: 'current', agreement: null, cost: { basis: 'unpriced' } },
+    ]);
+    expect(lines[0]).toContain('cache.low msg_low: 7.5 % cache hit rate low: most of the context was billed again · record');
+    expect(lines[1]).toContain('cost.turn msg_low: unknown usd unpriced');
+    expect(lines[1]).not.toContain('0 usd');
+  });
 });
 
 describe('deep_search', () => {
