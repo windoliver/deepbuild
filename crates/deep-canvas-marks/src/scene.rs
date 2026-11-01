@@ -29,6 +29,7 @@ use crate::key::{ContentKey, KeyBuilder};
 use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
+use deep_canvas::schedule::{Key, KeyTree};
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
@@ -706,8 +707,83 @@ impl Mark {
 pub struct Layer {
     pub id: String,
     /// Its marks, shared with the items that made them (#857): a frame places them uncopied.
-    pub marks: Vec<Arc<Drawn>>,
+    pub marks: MarkList,
     pub key: ContentKey,
+}
+
+/// The marks a [`MarkList`] holds in each block.
+const BLOCK: usize = 512;
+
+/// A layer's marks in draw order, in blocks shared between the frames that hold them (#896): a
+/// frame that replaces one mark of the last frame's list copies that mark's block, not the list.
+#[derive(Clone, Default)]
+pub struct MarkList {
+    blocks: Vec<Arc<Vec<Arc<Drawn>>>>,
+}
+
+type Block = Arc<Vec<Arc<Drawn>>>;
+pub type MarkListIter<'a> = std::iter::FlatMap<
+    std::slice::Iter<'a, Block>,
+    std::slice::Iter<'a, Arc<Drawn>>,
+    fn(&'a Block) -> std::slice::Iter<'a, Arc<Drawn>>,
+>;
+
+impl MarkList {
+    pub fn len(&self) -> usize {
+        self.blocks.iter().map(|b| b.len()).sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.blocks.is_empty()
+    }
+
+    pub fn iter(&self) -> MarkListIter<'_> {
+        let each: fn(&Block) -> std::slice::Iter<'_, Arc<Drawn>> = |b| b.iter();
+        self.blocks.iter().flat_map(each)
+    }
+
+    /// Puts `drawn` at `at`, copying only its block when another list shares it.
+    pub fn set(&mut self, at: usize, drawn: Arc<Drawn>) {
+        Arc::make_mut(&mut self.blocks[at / BLOCK])[at % BLOCK] = drawn;
+    }
+}
+
+impl std::ops::Index<usize> for MarkList {
+    type Output = Arc<Drawn>;
+
+    fn index(&self, at: usize) -> &Arc<Drawn> {
+        &self.blocks[at / BLOCK][at % BLOCK]
+    }
+}
+
+impl<'a> IntoIterator for &'a MarkList {
+    type Item = &'a Arc<Drawn>;
+    type IntoIter = MarkListIter<'a>;
+
+    fn into_iter(self) -> MarkListIter<'a> {
+        self.iter()
+    }
+}
+
+impl FromIterator<Arc<Drawn>> for MarkList {
+    fn from_iter<I: IntoIterator<Item = Arc<Drawn>>>(marks: I) -> MarkList {
+        let all: Vec<Arc<Drawn>> = marks.into_iter().collect();
+        MarkList {
+            blocks: all.chunks(BLOCK).map(|c| Arc::new(c.to_vec())).collect(),
+        }
+    }
+}
+
+impl PartialEq for MarkList {
+    fn eq(&self, other: &MarkList) -> bool {
+        self.len() == other.len() && self.iter().eq(other.iter())
+    }
+}
+
+impl std::fmt::Debug for MarkList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
 }
 
 /// A frame's draw list.
@@ -2078,7 +2154,7 @@ fn frame_shown(
     bound: &BTreeMap<String, Shown>,
     row_readings: &BTreeMap<String, data::BoundRows>,
 ) -> Result<Frame, Refused> {
-    let (frame, wants_boxes) = build(
+    let (frame, wants_boxes, _) = build(
         doc,
         (items, &[]),
         palette,
@@ -2495,8 +2571,9 @@ pub fn item_placed(
     (!paints.wants_boxes.get()).then_some(placed)
 }
 
-/// [`frame_with`] with `prebuilt` items placed as given and left out of `items`; `None` when a
-/// paint asks for boxes, which only a frame built from every item can give.
+/// [`frame_with`] with `prebuilt` items placed as given and left out of `items`, and where each
+/// item's marks sit; `None` when a paint asks for boxes, which only a frame built from every item
+/// can give.
 pub fn frame_prebuilt(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
@@ -2505,9 +2582,9 @@ pub fn frame_prebuilt(
     bound: &BTreeMap<String, Shown>,
     record: &Record,
     prebuilt: &[(&str, &Placed)],
-) -> Result<Option<Frame>, Refused> {
+) -> Result<Option<(Frame, Places)>, Refused> {
     let row_readings = bound_rows(doc, record);
-    let (frame, wants_boxes) = build(
+    let (frame, wants_boxes, places) = build(
         doc,
         (items, prebuilt),
         palette,
@@ -2516,7 +2593,28 @@ pub fn frame_prebuilt(
         Planted::None,
         None,
     )?;
-    Ok((!wants_boxes).then_some(frame))
+    Ok((!wants_boxes).then_some((frame, places)))
+}
+
+/// Each item's layer, first mark and mark count in a frame's list.
+pub type Spots = BTreeMap<String, (u32, u32, u32)>;
+
+/// Where a frame's marks sit (#896): each item's layer, first mark and mark count, when every
+/// item's marks sit together, and each layer's tree over its marks' keys in draw order. A frame
+/// replaces one item's marks by these, and rekeys the layer by their path in its tree.
+#[derive(Clone, Debug)]
+pub struct Places {
+    pub at: Option<Arc<Spots>>,
+    pub trees: Vec<KeyTree>,
+}
+
+/// A writer layer's key: its ID, the frame's size and zoom, then its marks' count and the root
+/// of the tree over their keys in draw order (#896: one changed mark rekeys it by its path).
+pub fn layer_key(id: &str, size: [f64; 2], zoom: f64, marks: &KeyTree) -> ContentKey {
+    let mut k = KeyBuilder::new("layer@marks2d.3");
+    k.text(id).number(size[0]).number(size[1]).number(zoom);
+    k.int(marks.len() as i64).bytes(&marks.root().0);
+    k.finish()
 }
 
 /// The frame, and whether a paint asked for boxes that `boxes` doesn't yet hold.
@@ -2530,7 +2628,7 @@ fn build(
     zoom: f64,
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
-) -> Result<(Frame, bool), Refused> {
+) -> Result<(Frame, bool, Places), Refused> {
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
@@ -2612,21 +2710,31 @@ fn build(
         }
     }
     layers.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    let mut at = Some(BTreeMap::new());
+    let mut trees = Vec::with_capacity(layers.len());
     let layers = layers
         .into_iter()
-        .map(|(_, id, mut marks)| {
+        .enumerate()
+        .map(|(li, (_, id, mut marks))| {
             marks.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
-            let mut k = KeyBuilder::new("layer@marks2d.2");
-            k.text(&id).number(size[0]).number(size[1]).number(zoom);
-            for m in &marks {
-                k.key(&m.4);
+            for (k, m) in marks.iter().enumerate() {
+                let Some(places) = at.as_mut() else { break };
+                let e = places
+                    .entry(m.2.to_string())
+                    .or_insert((li as u32, k as u32, 0));
+                // An item whose marks sit apart (two items under one order key) can't be
+                // replaced in place: the next frame builds them all.
+                if e.1 + e.2 != k as u32 {
+                    at = None;
+                    continue;
+                }
+                e.2 += 1;
             }
-            let marks: Vec<Arc<Drawn>> = marks.into_iter().map(|m| Arc::clone(m.3)).collect();
-            Layer {
-                key: k.finish(),
-                id,
-                marks,
-            }
+            let tree = KeyTree::new(marks.iter().map(|m| Key(m.4 .0)).collect());
+            let key = layer_key(&id, size, zoom, &tree);
+            trees.push(tree);
+            let marks: MarkList = marks.into_iter().map(|m| Arc::clone(m.3)).collect();
+            Layer { key, id, marks }
         })
         .collect();
     let frame = Frame {
@@ -2634,7 +2742,11 @@ fn build(
         ground,
         layers,
     };
-    Ok((frame, paints.wants_boxes.get()))
+    let places = Places {
+        at: at.map(Arc::new),
+        trees,
+    };
+    Ok((frame, paints.wants_boxes.get(), places))
 }
 
 #[cfg(test)]
