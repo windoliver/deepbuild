@@ -46,7 +46,7 @@ describe(`${AC4} Fixtures show each ask, hold, check run and agent command reach
   it(`${AC4} a stop held for an open ask nobody answers goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true });
     await setup(home);
     const a = await (await beginAsk(hub, home, { cwd: repo.dir })).finish();
     const before = (await allEvents(hub)).at(-1)!.log_pos;
@@ -69,7 +69,7 @@ describe(`${AC4} Fixtures show each ask, hold, check run and agent command reach
     const { home } = makeHome();
     const marker = `dh27run${tag(4)}`;
     const repo = makeRepo(home, { '.deepbuild/done.yaml': `checks:\n  forever:\n    type: command\n    run: "sh -c 'sleep 600; : ${marker}'"\n    deadline: ${DEADLINE}\n` });
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true });
     await setup(home);
     const a = await (await beginAsk(hub, home, { cwd: repo.dir })).finish();
     const claimed = await a.claude.tool(a.s, 'deep_claim', { task_ref: `session:${a.s.id.replace(/[^0-9A-Za-z]/g, '')}#start`, attempt: 1, commit: repo.commit, scope: 'session', predictions: null });
@@ -91,7 +91,7 @@ describe(`${AC4} Fixtures show each ask, hold, check run and agent command reach
   it(`${AC4} an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true });
     await setup(home);
     const a = await (await beginAsk(hub, home, { cwd: repo.dir })).finish();
     const command = `node -e "setTimeout(() => {}, 1500)"`;
