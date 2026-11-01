@@ -42,12 +42,16 @@ export interface CommandCheck {
   hosts?: string[];
   /** A numeric contract (#28, the verdict engine's NumericContract): the outputs whose counts the report gives. */
   contract?: { tolerances: { output: string; size: number }[] };
+  /** A timing check (#87): how many timed repeats it runs, numbered 1 to `repeats`; each says in the report whether its caches were flushed. */
+  timing?: { repeats: number };
   /** The hub going down: the run is stopped and ends stopped. */
   stop?: AbortSignal;
   plant?: Plant;
 }
 export interface Attempt { test: string; outcome: 'passed' | 'failed' }
 export interface ContractCount { output: string; size: number; compared: number | null; largest_error: number | null }
+/** One timed repeat: flushed only when the tool's report says so for it; a repeat the report leaves out is not flushed, never cold. */
+export interface TimedRepeat { repeat: number; flushed: boolean }
 export interface CommandRun extends CheckResult {
   run: string;
   exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' } | null;
@@ -62,6 +66,8 @@ export interface CommandRun extends CheckResult {
   seeded: Seeded[];
   /** Per output of the contract, from the tool's report; null without a contract. */
   contract: ContractCount[] | null;
+  /** One per timed repeat the check declares, from the tool's report; null without a timing declaration. */
+  timing: TimedRepeat[] | null;
   /** Ms the run's clock was moved ahead. */
   clock: number;
 }
@@ -196,6 +202,19 @@ export function commandCheckKind(host: Host): CheckRunnerFill {
   };
 }
 
+/**
+ * A timing check's repeats, 1 to `repeats`: each flushed only when a test's report says so for it (`task.meta.timing`,
+ * as the contract's counts are read), never from printed output; a repeat no test reports is not flushed, never cold.
+ */
+function repeatsOf(repeats: number, ran: Ran[]): TimedRepeat[] {
+  const said = new Set<number>();
+  for (const t of ran) {
+    const timing = t.meta.timing as { repeat?: unknown; flushed?: unknown } | undefined;
+    if (typeof timing?.repeat === 'number' && timing.flushed === true) said.add(timing.repeat);
+  }
+  return Array.from({ length: Math.max(0, Math.floor(repeats)) }, (_, i) => ({ repeat: i + 1, flushed: said.has(i + 1) }));
+}
+
 async function runOnce(check: CommandCheck, clock: number): Promise<{ run: CommandRun; ran: Ran[] }> {
   // Refused before anything of the run starts.
   const bad = badDeadline('deadline', check.deadline);
@@ -205,7 +224,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
   const empty = { stdout: '', stderr: '', sha256: { stdout: sha256(''), stderr: sha256('') } };
   const result = (outcome: RunOutcome, rest: Partial<CommandRun> = {}): CommandRun => ({
     run, outcome, testsRun: 0, failures: [], evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [],
-    contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, compared: null, largest_error: null })) : null, clock, ...rest,
+    contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, compared: null, largest_error: null })) : null,
+    timing: check.timing ? repeatsOf(check.timing.repeats, []) : null, clock, ...rest,
   });
   if (!existsSync(check.checkout)) return { run: result('missing'), ran: [] };
   // The command's mask, or one in a script it runs (the hub's drafted checks run as `sh file`), by the core's one rule.
@@ -358,6 +378,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         ...ended, testsRun: ran.length, failures, read: readSet, seeded: seededBy(checkout, readSet),
         attempts: ran.flatMap((t) => t.attempts.map((outcome) => ({ test: t.test, outcome }))),
         contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, ...counts(t.output) })) : null,
+        timing: check.timing ? repeatsOf(check.timing.repeats, ran) : null,
       };
       const code = exit!.code;
       if (cause === 'deadline') return done('overran', rest, ran);
