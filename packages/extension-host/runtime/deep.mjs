@@ -47,6 +47,8 @@ export const API = Object.freeze([
   { method: 'deep.schedule', needs: null },
   { method: 'deep.schedule.read', needs: null },
   { method: 'deep.send', needs: 'hosts' },
+  // #366: a model job on your own agent through the runner, its inputs by handle, its answer a reading.
+  { method: 'deep.runner.run', needs: 'agent' },
   // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
   // only from the panel you focused, through the app.
   { method: 'deep.terminal.open', needs: 'run_as_you' },
@@ -59,9 +61,10 @@ export const API = Object.freeze([
  * kept here unless the host refuses the call; and `serve`, what the host asks of the package. `load` runs the
  * package's code with its `deep` and the host's `load` params. Every call made while the package serves an action
  * goes with that action call's scope, the token the host gave it, across every await, so the host acts for that
- * call's caller and no other.
+ * call's caller and no other. `imports` loads one of the package's own test files, by its path in the folder and,
+ * from a sandbox, the source the host stripped of its types.
  */
-export function extensionSide(call, load) {
+export function extensionSide(call, load, imports = (file) => import(file)) {
   const checks = new Map();
   const handlers = new Map();
   const routes = new Map();
@@ -201,6 +204,23 @@ export function extensionSide(call, load) {
         if (!job) throw Error(`no schedule ${params?.name} is registered here`);
         const ctx = { run: params.run, at: params.at, read: (source) => call('deep.schedule.read', [source], params.scope) };
         return (await scope.run(params.scope, () => job(ctx))) ?? null;
+      }
+      // The package's own tests in one file (#366): each named test in turn, given `t`, whose calls the host answers
+      // on its recording and clock. A test fails by throwing.
+      if (method === 'test') {
+        const tests = (await imports(params.file, params.source)).default;
+        const t = { call: (action, input) => call('test.call', [action, input]), read: (source) => call('test.read', [source]), now: () => params.now };
+        const ran = [];
+        for (const [test, fn] of Object.entries(tests && typeof tests === 'object' ? tests : {})) {
+          if (typeof fn !== 'function') continue;
+          try {
+            await fn(t);
+            ran.push({ test, error: null });
+          } catch (error) {
+            ran.push({ test, error: String(error?.message ?? error) });
+          }
+        }
+        return ran;
       }
       if (method === 'output') {
         const fn = outputs.get(params?.name);

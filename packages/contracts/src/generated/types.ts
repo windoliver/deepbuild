@@ -4098,6 +4098,30 @@ export interface RunStartedV2 {
   evidence?: Array<string>;
 }
 
+/** runner.answered@1 */
+export interface RunnerAnswered {
+  v: 1;
+  id: string;
+  kind: "runner.answered";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    piece: string;
+    job: string;
+    value: unknown;
+    cites: Array<string>;
+    as_of: number;
+    stale_at: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** sandbox.denied@1 */
 export interface SandboxDenied {
   v: 1;

@@ -13,7 +13,17 @@ The same check twice, `ext.<plugin>.relative`: it passes when every input a chec
 - [`extension-guide/typescript`](extension-guide/typescript/): `index.ts`, calling `deep.registerCheck` in-process style through the `deep` object the host hands it.
 - [`extension-guide/json-rpc`](extension-guide/json-rpc/): `main`, a Python program that answers the host's `load` by calling `deep.registerCheck` over JSON-RPC, then answers each `run`.
 
+And a plug-in, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.
+
+## The manifest
+
+`deepbuild.json` holds `id`, `version`, `digest` and `access.words` (`hosts` for a source's host, `agent` for model jobs), then every name the package adds, each `ext.<plugin>.<name>`: `stores`, `actions`, `notices`, `checks` and `events` as lists of names; `secrets` as `{ name, for }`; `sources` as `{ name, variant }`. `requires.preview` lists every preview method its code calls, or the call is refused. Nothing else goes in it: a view, a schedule and a source's host and quota are declared in code, and the hosts it may reach are granted at install.
+
 To build one, copy the folder, write `packageDigest` of it into `deepbuild.json`'s `digest`, and point a `main`'s `#!/usr/bin/env` line at its interpreter. Then install it, run its conformance, load it, and run its check.
+
+## A package's own tests
+
+Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file's default export is an object of named tests, each an async function given `t`: `t.call(action, input)` calls one of the package's actions as the app would and returns its output, `t.read(source)` reads one of its polled sources through the hub, and `t.now()` is the hub's clock. A test fails by throwing; `node:assert` works. DeepBuild runs them in the package's sandbox on recorded source calls and a clock it controls, never live.
 
 ## A first plug-in
 
@@ -31,15 +41,16 @@ Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.s
 
 ### `deep.registerView`
 
-In R1 · preview · `d1:13a87be727b3bee24e988056df0a299ae55bc59ff858ea6e9bb1ff9e09aaeb98`
+In R1 · preview · `d1:229b6e15fbbc0e66f687dc4b56b394c2e4aa7c35fe0e00e27a42fa32e8df417a`
 
-A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules.
+A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel's `init` as `props.page`), and its ⌘K commands, each running one of its actions. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9_.-]*$` | yes |
 | `panel` | string | yes |
 | `area` | `sidebar` · `home` · `tab` · `line` | yes |
+| `view` | object | no |
 
 ### `deep.registerSource`
 
@@ -300,6 +311,19 @@ Reads the latest item under every key of the plug-in's own store.
 | Parameter | Type | Required |
 |---|---|---|
 | `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+
+### `deep.runner.run`
+
+In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`
+
+A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the plug-in's grant before the job starts. The job answers one JSON object, `{ value, cites }`; the plug-in gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `prompt` | string | yes |
+| `inputs` | array | yes |
+| `budget` | object | yes |
+| `deadline` | integer | yes |
 
 ### `deep.read`
 
