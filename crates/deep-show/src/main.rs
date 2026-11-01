@@ -1193,7 +1193,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     })
 }
 
-fn answer(command: &str, startup: &Startup, line: &str) -> Value {
+/// A line's input object and the scenario it holds; `None` for a line that isn't one.
+fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
     // A number past f64's range is the document's fault, refused at its path by the check
     // (#387: "a NaN or an infinity in a param is refused with out_of_range"), not the line's.
     let parsed = serde_json::from_str::<Value>(line).or_else(|e| match tame_overflow(line) {
@@ -1201,9 +1202,14 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
         None => Err(e),
     });
     let Ok(Value::Object(input)) = parsed else {
-        return bad_input();
+        return None;
     };
-    let Some(scenario) = scenario(&input) else {
+    let scenario = scenario(&input)?;
+    Some((input, scenario))
+}
+
+fn answer(command: &str, startup: &Startup, line: &str) -> Value {
+    let Some((input, scenario)) = read_line(line) else {
         return bad_input();
     };
     match command {
@@ -1222,7 +1228,6 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             };
             screen(&scenario, startup, out)
         }
-        "live" => live(&scenario, startup),
         _ => bad_input(),
     }
 }
@@ -1339,16 +1344,29 @@ fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
-/// `live` (#376): the screen-reader smoke run's window, on macOS.
+/// `live` (#376): the screen-reader smoke run's window, on macOS; with a `live` object (#140),
+/// the window paced, watched, read back and played to as it asks. The run keeps its scenario
+/// for the life of the process, which ends with the window.
 #[cfg(target_os = "macos")]
-fn live(scenario: &Scenario, startup: &Startup) -> Value {
-    let mut hub = hub::Hub::new(scenario, startup);
-    hub.run_calls();
-    live::show(&mut hub)
+fn live(startup: &'static Startup, line: &str) -> Value {
+    let Some((input, scenario)) = read_line(line) else {
+        return bad_input();
+    };
+    match input.get("live") {
+        None => {
+            let mut hub = hub::Hub::new(&scenario, startup);
+            hub.run_calls();
+            live::show(&mut hub)
+        }
+        Some(options) => match watch::parse(options, call) {
+            Some(options) => watch::run(Box::leak(Box::new(scenario)), startup, options),
+            None => bad_input(),
+        },
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
-fn live(_: &Scenario, _: &Startup) -> Value {
+fn live(_: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -1974,8 +1992,8 @@ fn main() {
         }
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
-    let startup = match seal(fault, coefficients) {
-        Ok(startup) => startup,
+    let startup: &'static Startup = match seal(fault, coefficients) {
+        Ok(startup) => Box::leak(Box::new(startup)),
         Err(err) => {
             let line = json!({
                 "ok": false,
@@ -2000,8 +2018,9 @@ fn main() {
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         let reply = match command.as_str() {
-            "canvas" => canvas.line(&startup, &line),
-            _ => answer(&command, &startup, &line),
+            "canvas" => canvas.line(startup, &line),
+            "live" => live(startup, &line),
+            _ => answer(&command, startup, &line),
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
@@ -2013,5 +2032,7 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod live;
+#[cfg(target_os = "macos")]
+mod watch;
 #[cfg(target_os = "macos")]
 mod window;

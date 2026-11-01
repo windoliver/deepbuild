@@ -147,3 +147,8 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "n
 deep-replica = { path = "../deep-replica" }
 deep-text-gpui = { path = "../deep-text-gpui" }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+# Issue #140: `deep-show live`'s options: the GPUI patch's presentation feedback, and the
+# window's occlusion state and accessibility tree read through AppKit; all already in the lockfile.
+gpui-pre-apple = "=0.3.9"
+objc2 = "0.6"
+raw-window-handle = "0.6"
