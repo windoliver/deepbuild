@@ -9,15 +9,21 @@
 // answer each in turn; each session wakes with its answer, p95 within 2 s, judged as in AC2. Setup's waiter entry
 // carries a timeout of at least 30 minutes, and Claude Code ran each waiter with it; with a 2-hour deadline in your
 // settings, setup again gives it at least 2 hours.
+//
+// Amended Oct 29 (#85): setup writes the waiter's entry under Stop and under StopFailure, with the same command and
+// timeout, and the design's waiter guardrail holds for each of them. So both entries are read and each must carry the
+// timeout; a setup that writes the waiter under Stop only (the merge base; the plant `waiter-under-stop-only`) fails
+// here, naming that cause.
 
 import { afterAll, describe, expect, it } from 'vitest';
 import {
-  MINUTE, answerEach, cleanup, editConfig, idleSessions, judgeP95, makeHome, readSettings, setup, startHub, stopHub, waiterEntry,
+  MINUTE, answerEach, cleanup, editConfig, idleSessions, judgeP95, makeHome, readSettings, setup, startHub, stopHub, waiterEntries,
 } from './helpers.ts';
 
 afterAll(cleanup, 60_000);
 
 const PLANT = 'waiter-gives-up-at-600s';
+const STOP_ONLY = 'waiter-under-stop-only';
 const SAMPLES = 20;
 const deadlines = (longest: string) => ({ taste: longest, authority: '10m', unblock: '15m', exception: '15m', choice: longest, definition: '4m' });
 
@@ -27,8 +33,10 @@ async function scenario(n: number, plant?: string): Promise<number[]> {
   editConfig(home, (config) => { config.asks = { ...(config.asks ?? {}), deadline: deadlines('30m') }; });
   let hub = await startHub(home, { plant, noAskWait: true, shortHold: true });
   await setup(home, env);
-  const entry = waiterEntry(readSettings(home)).hook;
-  expect(entry.timeout, `AC6 the waiter entry setup wrote carries a timeout at least as long as your longest ask deadline, 30 minutes: ${JSON.stringify(entry)}`).toBeGreaterThanOrEqual(30 * 60);
+  const written = waiterEntries(readSettings(home));
+  for (const { event, hook: entry } of [written.stop, written.failure]) {
+    expect(entry.timeout, `AC6 the waiter entry setup wrote under ${event} carries a timeout at least as long as your longest ask deadline, 30 minutes: ${JSON.stringify(entry)}`).toBeGreaterThanOrEqual(30 * 60);
+  }
 
   const sessions = await idleSessions(hub, home, n, env);
   for (const a of sessions) {
@@ -45,8 +53,10 @@ async function scenario(n: number, plant?: string): Promise<number[]> {
   // A longer deadline in your settings: setup again gives the waiter at least as long.
   editConfig(home, (config) => { config.asks = { ...(config.asks ?? {}), deadline: deadlines('2h') }; });
   await setup(home, env);
-  const longer = waiterEntry(readSettings(home)).hook;
-  expect(longer.timeout, `AC6 with a 2-hour deadline in your settings, setup's waiter entry carries at least 2 hours: ${JSON.stringify(longer)}`).toBeGreaterThanOrEqual(2 * 3600);
+  const again = waiterEntries(readSettings(home));
+  for (const { event, hook: longer } of [again.stop, again.failure]) {
+    expect(longer.timeout, `AC6 with a 2-hour deadline in your settings, setup's waiter entry under ${event} carries at least 2 hours: ${JSON.stringify(longer)}`).toBeGreaterThanOrEqual(2 * 3600);
+  }
   return ms;
 }
 
@@ -61,5 +71,11 @@ describe('AC6 #25.6367a6a9 An answer given 20 minutes after a stop wakes the idl
     let failure = '';
     try { await scenario(2, PLANT); } catch (error) { failure = (error as Error).message; }
     expect(failure, `the 20-minute wake check must fail on ${PLANT}`).toMatch(/AC6 idle session \S+ \(1 of 2 answered\) never woke within 30 s of its answer to ask:/);
+  }, 900_000);
+
+  it(`AC6 #25.6367a6a9 (wrong program) a setup that writes the waiter's entry under Stop only (${STOP_ONLY}) fails this test, naming that cause`, async () => {
+    let failure = '';
+    try { await scenario(2, STOP_ONLY); } catch (error) { failure = (error as Error).message; }
+    expect(failure, `the waiter entry check must fail on ${STOP_ONLY}, naming the missing StopFailure entry`).toMatch(/setup wrote the waiter's entry under Stop only: a turn that ends on an API error fires only StopFailure/);
   }, 900_000);
 });

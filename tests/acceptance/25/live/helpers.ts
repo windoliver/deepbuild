@@ -168,11 +168,20 @@ export function deepEntries(settings: Line): Entry[] {
     .flatMap((group) => (Array.isArray(group?.hooks) ? group.hooks : []).map((hook: Line) => ({ event, hook }))))
     .filter((e) => isDeepBuild(e.hook.command));
 }
-/** DeepBuild's waiter: its one entry with asyncRewake (design: What each agent gives us). */
+/**
+ * DeepBuild's waiter: its asyncRewake entry, written once under Stop and once under StopFailure with the same command
+ * and timeout (design: What each agent gives us, amended Oct 29). Returns the Stop one; a setup that writes the
+ * waiter under Stop only fails here, naming that cause.
+ */
 export function waiterEntry(settings: Line): Entry {
   const found = deepEntries(settings).filter((e) => e.hook.asyncRewake === true);
-  if (found.length !== 1) throw Error(`setup must write one asyncRewake waiter entry of DeepBuild's into ~/.claude/settings.json; found ${found.length}: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
-  return found[0]!;
+  const shownAll = JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })));
+  const stop = found.filter((e) => e.event === 'Stop');
+  const failure = found.filter((e) => e.event === 'StopFailure');
+  if (stop.length === 1 && found.length === 1) throw Error(`setup wrote the waiter's entry under Stop only: a turn that ends on an API error fires only StopFailure, so setup must also write it under StopFailure, with the same command and timeout: ${shownAll}`);
+  if (stop.length !== 1 || failure.length !== 1 || found.length !== 2) throw Error(`setup must write DeepBuild's asyncRewake waiter entry once under Stop and once under StopFailure, and nowhere else, into ~/.claude/settings.json; found ${stop.length} under Stop, ${failure.length} under StopFailure, ${found.length} in all: ${shownAll}`);
+  if (stop[0]!.hook.command !== failure[0]!.hook.command || stop[0]!.hook.timeout !== failure[0]!.hook.timeout) throw Error(`setup must write the waiter's entry under Stop and under StopFailure with the same command and timeout: ${shownAll}`);
+  return stop[0]!;
 }
 /** The words of a shell command as `sh -c` would split it, for the simple quoting setup writes ('…' and bare words). */
 export function shellWords(command: string): string[] {

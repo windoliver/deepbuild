@@ -590,6 +590,52 @@
     }
   },
   {
+    "source": "stop.block",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "Sign in again? The sign-in the sessions used was revoked.",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          },
+          {
+            "id": "wait",
+            "label": "Leave it blocked",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "wait",
+        "provisional": false,
+        "owner": "you",
+        "key": "6e3f0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+        },
+        "steps": [
+          "Sign in again where the agent runs (Claude Code: /login)",
+          "Its check passes, the task closes by itself, and every session it unblocks resumes"
+        ],
+        "where": "your terminal",
+        "why": "session 01K74G4B6D8F0H2K4M6P8R0T2V stopped: sign_in_required, block sig:00a1b2c3d4e5f607, which only you can clear",
+        "unblocks": [
+          "session:01K74G4B6D8F0H2K4M6P8R0T2V"
+        ],
+        "proves": "sign_in_required@sig:00a1b2c3d4e5f607"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "runner.window",
     "kind": "unblock",
     "fixture": {

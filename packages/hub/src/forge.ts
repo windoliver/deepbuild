@@ -115,6 +115,18 @@ export class Forge {
     }
     return items;
   }
+  /**
+   * The web URL of the pull request `repo` (owner/name) holds for `branch`, open or closed (#85): null when it holds
+   * none, undefined when the forge doesn't answer.
+   */
+  async pullFor(repo: string, branch: string): Promise<string | null | undefined> {
+    const owner = repo.split('/')[0] ?? '';
+    let pulls: unknown;
+    try { pulls = await this.get(`/repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=10`); } catch { return undefined; }
+    if (!Array.isArray(pulls)) return undefined;
+    const match = pulls.find((p) => isObj(p) && isObj(p.head) && p.head.ref === branch);
+    return isObj(match) && typeof match.html_url === 'string' ? match.html_url : null;
+  }
   /** The PR's state as the forge shows it now, with its body and the issue it closes; undefined when the forge doesn't answer. */
   async pull(pr: Pr): Promise<{ state: PrState; closes: number | undefined } | undefined> {
     let p: unknown;
