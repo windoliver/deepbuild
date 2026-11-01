@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "kind": "runner.answered",
+  "subject": "reading:01K74FKZVK8Q2X5R7M3N9P4T7B",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "reading": "reading:01K74FKZVK8Q2X5R7M3N9P4T7B",
+    "piece": "acme/stocks",
+    "job": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "value": "NVDA is under its 200 target",
+    "cites": [
+      "reading:01K74FKZVK8Q2X5R7M3N9P4T6Z"
+    ],
+    "as_of": 1760013300000,
+    "stale_at": 1760013600000
+  }
+}

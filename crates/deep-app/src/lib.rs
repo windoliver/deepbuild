@@ -14,6 +14,7 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
+pub mod commands;
 pub mod confirm;
 pub mod events;
 pub mod gpu_view;
@@ -240,6 +241,7 @@ pub fn init(cx: &mut App) {
     gpui_shell::components::init(cx);
     views::register_views(cx);
     card::init(cx);
+    commands::init(cx);
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
@@ -260,6 +262,33 @@ pub fn mount_panel(
         anyhow::bail!("{}", fetch_refusal(&dependency));
     }
     let loaded = runtime.load_application(dir, "main.js")?;
+    runtime.mount_application(&loaded, window, cx)
+}
+
+/// The entry a view's page mounts through, written beside its panel's `main.js`.
+const PAGE_ENTRY: &str = ".deepbuild-page.js";
+
+/// Mounts one of a view's pages (#366): the panel in `dir`, its script's `init` given `props.page`. gpui-shell gives a
+/// top-level script no props, so a small entry beside the panel's `main.js` creates the panel as a nested view with
+/// them; the page is the panel's own code, reading nothing more.
+pub fn mount_page(
+    runtime: &Rc<ShellRuntime>,
+    dir: &Path,
+    page: &serde_json::Value,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<Entity<ScriptView>> {
+    if let Some(dependency) = fetched_dependency(dir) {
+        anyhow::bail!("{}", fetch_refusal(&dependency));
+    }
+    let props = serde_json::json!({ "page": page });
+    std::fs::write(
+        dir.join(PAGE_ENTRY),
+        format!(
+            "import {{ View }} from \"gpui-kit\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
+        ),
+    )?;
+    let loaded = runtime.load_application(dir, PAGE_ENTRY)?;
     runtime.mount_application(&loaded, window, cx)
 }
 

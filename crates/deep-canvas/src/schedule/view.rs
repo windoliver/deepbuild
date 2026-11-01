@@ -36,6 +36,8 @@ pub struct View<'a> {
     noted: Option<(i64, i64)>,
     /// The tails the operator wrote this frame, by key.
     tails: Vec<(String, Val)>,
+    /// [`View::changed`] answers `None` (#896's planted rebuild).
+    forgets_changes: bool,
 }
 
 /// What an operator left when its view finished: its writes, its reads, what a step noted and
@@ -57,6 +59,7 @@ impl<'a> View<'a> {
         tables: BTreeMap<String, TableValue>,
         log: bool,
         step: Option<StepCtx<'a>>,
+        forgets_changes: bool,
     ) -> View<'a> {
         let sop = &sealed.ops[node.op];
         View {
@@ -72,6 +75,7 @@ impl<'a> View<'a> {
             step,
             noted: None,
             tails: Vec::new(),
+            forgets_changes,
         }
     }
 
@@ -323,6 +327,92 @@ impl<'a> View<'a> {
             out.push((l.items[i].id.as_str(), v));
         }
         Ok(out)
+    }
+
+    /// Per document: the IDs of the items whose `name`, an item array it declared, changed since
+    /// this node last ran, in ID order (#896). With [`View::last`] an operator can replace only
+    /// those items' part of its last result, which must equal what a pass over [`View::every`]
+    /// builds. `None` when that isn't known: before this node ran in the current plan, when the
+    /// change logs were dropped since, in a clean evaluation, or when its contributions changed.
+    pub fn changed(&mut self, name: &str) -> Result<Option<Vec<&'a str>>, OpError> {
+        let k = self.declared(name)?;
+        let (node, l, session) = (self.node, self.l, self.session);
+        let Bound::Array {
+            writers,
+            contributions,
+            ..
+        } = &node.reads[k]
+        else {
+            return Ok(None);
+        };
+        let last = node.last_run;
+        if self.forgets_changes
+            || session.mode != super::Mode::Live
+            || node.item.is_some()
+            || !node.has_run
+            || last < session.log_floor
+            || contributions
+                .iter()
+                .any(|(_, c)| l.nodes[*c].changed_at > last)
+        {
+            return Ok(None);
+        }
+        let Some(op) = writers.first().map(|w| l.nodes[*w].op) else {
+            return Ok(Some(Vec::new()));
+        };
+        let from = session.changes.partition_point(|e| e.0 <= last);
+        let mut ids: Vec<&'a str> = Vec::new();
+        for n in session.changes[from..]
+            .iter()
+            .map(|e| &l.nodes[e.1 as usize])
+        {
+            match n.item {
+                _ if n.op != op => {}
+                Some(i) => ids.push(l.items[i].id.as_str()),
+                // A writer per document changed what every item reads.
+                None => return Ok(None),
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        Ok(Some(ids))
+    }
+
+    /// Per document: an item array the operator declared, on the item `id`, with its
+    /// contributions folded in; `None` where nothing wrote it there (#896: one item's value,
+    /// found by the item, not a pass over every writer).
+    pub fn at(&mut self, name: &str, id: &str) -> Result<Option<Val>, OpError> {
+        let k = self.declared(name)?;
+        let (node, l) = (self.node, self.l);
+        let Bound::Array {
+            name,
+            writers,
+            contributions,
+        } = &node.reads[k]
+        else {
+            return Ok(None);
+        };
+        let (Some(&i), Some(op)) = (l.index.get(id), writers.first().map(|w| l.nodes[*w].op))
+        else {
+            return Ok(None);
+        };
+        let Some(w) = l.item_nodes.get(i).find(|n| l.nodes[*n].op == op) else {
+            return Ok(None);
+        };
+        let own = contributions
+            .iter()
+            .filter(|(_, cn)| l.nodes[*cn].item == Some(i));
+        self.fold(name, w, own).map(Some)
+    }
+
+    /// This node's own last result for `own`, one of its writes, in the session's own frame;
+    /// `None` before it ran and in a clean evaluation (#896).
+    pub fn last(&self, own: &str) -> Option<Val> {
+        let k = self.sop.op.writes.iter().position(|w| w == own)?;
+        let live = self.session.mode == super::Mode::Live && self.node.err.is_none();
+        (live && self.node.has_run)
+            .then(|| self.node.out.get(k).cloned())
+            .flatten()
     }
 
     /// `parent`: on the item's parent, what this operator wrote there to `own`, one of its
