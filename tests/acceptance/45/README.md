@@ -8,6 +8,8 @@ job that never saw an implementation. The implementing agent doesn't edit these 
 blind redraft of this job.
 
 All 16 checkbox criteria are tested, in issue order, as AC1 … AC16, each test named with its criterion's tag (`#45.<h8>`).
+AC17, the low cache reading, was added to the issue later; `cache.test.ts` was written for it by the same kind of blind job,
+without the implementation.
 
 ```sh
 npm ci                                    # once, if node_modules is missing
@@ -59,6 +61,9 @@ export interface Reading {
   cost?: Cost;                       // on cost.turn
   complete?: boolean;                // on spend.usd: false when a turn it sums is unpriced
   classifier?: ClassifierCheck | null;   // on a classifying reading: its check, or null when it has none
+  band?: 'inside' | 'over';          // a reading with a band says which side it is on; cache.low (subject: the turn, value: its
+                                     // hit rate in percent of the context, unit '%') is 'over' and exists only for a turn of at
+                                     // least 50,000 input tokens (uncached + cached) with cache hits under 20% of them
 }
 export type ReadingsState = unknown; // opaque
 export function recompute(events: RecordEvent[]): ReadingsState;
@@ -71,8 +76,10 @@ export interface PanelRow {
   source: string; age_ms: number; basis: 'observed' | 'modeled';
   status: 'current' | 'STALE';       // STALE past fresh_for[source]; a source with no entry is current here, and the hub holds the defaults
   agreement: { share: number; n: number; status: ClassifierCheck['status'] } | null;
+  band?: 'inside' | 'over';          // the reading's band, carried through
 }
 export function panelRows(readings: Reading[], options: { now: number; fresh_for: Record<string, number> }): PanelRow[];
+// Rows with band 'over' come first, before every row inside its band or without one.
 
 /* ================= Classifying readings ================= */
 export interface LabelledMessage { message: string; text: string; label: boolean; period: 'baseline' | 'dogfood'; dates_hidden: boolean; labelled_by: string }
@@ -197,6 +204,7 @@ So `Closes #45` needs those inputs to have been there; otherwise the PR says `Pa
 | AC14 | `counts-over-hold`, `counts-each-fail` |
 | AC15 | `stale-no-origin`, `stale-per-day` |
 | AC16 | `places-as-runs`, `wait-from-first` |
+| AC17 | `cache-never-low`, `cache-ignores-floor` |
 
 No test asserts with `toThrow`; each compares values, so a wrong program fails at an `expect` line.
 
@@ -210,6 +218,10 @@ No test asserts with `toThrow`; each compares values, so a wrong program fails a
 6. **A waiter's wake.** The scope says a failure's turn is "a waiter's wake or the next prompt". AC14 names only "the turn its FAIL started", and the test uses the next prompt; a wake's record fact isn't defined here.
 7. **Scope without a criterion.** Failed calls by signature, review wait, blocked time, git and GitHub lifecycle numbers, and Codex's counting rules (cached input taken out, a running total as a baseline) are in the issue's Scope and have no acceptance criterion, so no test here. A reading's `basis` for a recorded reading isn't asserted beyond being one of the two.
 8. **An estimate as "modeled".** The issue doesn't say which costs are modeled; these tests read an estimate from a rate card as modeled and a reported cost as observed.
+9. **The low cache reading's shape.** The issue names no id, value or band for it; `cache.test.ts` reads it as `cache.low` with
+   `band: 'over'` (the surface's only "outside" value), its value the hit rate in percent, and its row first in `panelRows`, as
+   "listed with the other readings outside their band". The sentence "cache hit rate low: most of the context was billed
+   again" is its label in the panel and isn't asserted. Its "input tokens" are the whole context, `tokens.input + tokens.cached`.
 
 ## Retired first drafts
 
