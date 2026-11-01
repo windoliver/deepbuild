@@ -58,6 +58,7 @@ pub const PLACES: &[&str] = &[
     "tone_mapping",
     "finish",
     "status_guard",
+    "upscale",
     "status_colors",
     "overlays",
 ];

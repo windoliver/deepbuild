@@ -172,11 +172,11 @@ function sceneDoc({ title, budgetClass, size, boxes }) {
 /** `deep-gpu run` with one live call per entry of `calls`, each over its own documents: the replies. */
 function liveCalls(dir, calls) {
   const look = JSON.parse(readFileSync(LOOK, 'utf8'));
-  const lines = calls.map(({ docs, ...call }, c) => {
+  const lines = calls.map(({ docs, surface, ...call }, c) => {
     const sessions = docs.map((doc, i) => {
       const path = join(dir, `doc-${c}-${i}.json`);
       writeFileSync(path, JSON.stringify(doc));
-      return { session: `s-${i}`, writer: `agent:bench-${i}`, doc: path };
+      return { session: `s-${i}`, writer: `agent:bench-${i}`, doc: path, ...(surface ? { surface } : {}) };
     });
     return { call: 'live', look, sessions, ...call };
   });
@@ -354,6 +354,48 @@ workloads.class = () => {
       });
     }
     console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #386: the upscale's two passes on a 1080p frame of 12 px labels and thin diagonal lines, drawn at
+// internal scale 0.5 through the edge-adaptive upscale: each frame's time the two passes cover, by their
+// timestamps, five runs after a warm-up one.
+const UPSCALE_PASSES = ['surface.upscale', 'surface.sharpen'];
+function typeDoc() {
+  const items = { cam: { id: 'cam', kind: 'camera@1', name: 'Camera', order: 'a0', params: { projection: 'orthographic', target: [0, 0, 0], orbit: { azimuth: 0, elevation: 0, distance: 20 }, view_width: 32 } } };
+  for (let i = 0; i < 48; i++) {
+    items[`t-${i}`] = { id: `t-${i}`, kind: 'mark.text@1', name: `Label ${i}`, order: `b${String(i).padStart(2, '0')}`,
+      params: { text: `Latency p95 ${i}.${i % 10} ms`, size: 12, font: 'body', paint: { fill: { role: 'ink' } } }, at: { pos: [-13.5 + (i % 6) * 5.4, 7.2 - Math.floor(i / 6) * 2.05, 0] } };
+  }
+  for (let i = 0; i < 24; i++) {
+    const a = ((15 + (i * 60) / 23) * Math.PI) / 180;
+    items[`l-${i}`] = { id: `l-${i}`, kind: 'mark.line@1', name: `Line ${i}`, order: `c${String(i).padStart(2, '0')}`,
+      params: { points: [[0, 0, 0], [5 * Math.cos(a), 5 * Math.sin(a), 0]], width: 2, paint: { fill: { role: 'ink' } } }, at: { pos: [-14 + (i % 8) * 4, -6.5 + Math.floor(i / 8) * 5.5, 0] } };
+  }
+  return { format: 1, profile: 'scene', title: 'Labels and diagonals', description: 'A #386 bench document.', size: [1920, 1080], camera: 'cam',
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, transport: { span: '60s' }, items,
+    channels: { slide: { target: 'items/l-0/at/pos/0', type: 'f32', keys: { k0: { t: '0s', value: -14, interp: 'linear' }, k1: { t: '60s', value: -10, interp: 'linear' } } } } };
+}
+workloads.upscale = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const surface = { internal_scale: 0.5, upscale: 'edge_adaptive', sharpen: 0.2 };
+    const call = () => ({ docs: [typeDoc()], frames: 90, fps: 60, report: ['passes'] });
+    const runs = Array.from({ length: RUNS + 1 }, () => {
+      const [reply] = liveCalls(dir, [call()].map((c) => ({ ...c, surface })));
+      const covered = reply.frames.slice(WARM_UP).map((f) => {
+        const ps = f.passes.filter((p) => UPSCALE_PASSES.includes(p.name)).sort((a, b) => a.start_ns - b.start_ns);
+        if (ps.length !== 2) throw Error(`frame ${f.frame}: the upscale's passes didn't both run: ${JSON.stringify(f.passes).slice(0, 600)}`);
+        let ns = 0;
+        let end = -Infinity;
+        for (const p of ps) { ns += Math.max(0, p.end_ns - Math.max(p.start_ns, end)); end = Math.max(end, p.end_ns); }
+        return ns / 1e6;
+      });
+      return { frames: covered.length, upscale_p95_ms: p95(covered) };
+    }).slice(1);
+    console.log(JSON.stringify({ task: 'upscale', fingerprint: fingerprint(), runs }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

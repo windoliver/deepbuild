@@ -2,7 +2,8 @@
 //! ladder): its document drawn by the canvas core into the GPU surface's slots, each frame at the
 //! rung its ladder holds, every pass timed by timestamp writes where the device has them and by
 //! its CPU encode time where it doesn't. Below internal scale 1 the frame renders smaller and
-//! the upscale's two passes bring it to the slot; frame history, when the look asks for it,
+//! the upscale's two passes bring it to the slot, then thin lines and outlines draw at full size
+//! (#386); frame history, when the look asks for it,
 //! resolves the window's frames into the linear target. What the view allocates is counted at
 //! the sizes the device reports. Once warm, a frame allocates nothing on the core's side.
 
@@ -18,23 +19,17 @@ use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
-use deep_gpu::surface::{allocate, Handoff, Path, FORMAT};
+use deep_gpu::surface::{allocate, Handoff, Path};
+use deep_scene3d_render::surface::{Filter, Surface, OUTLINE_PASS};
+pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
 use deep_scene3d_render::{Planted as Planted3, Renderer, LINEAR};
+use serde_json::Value;
 
 pub const SLOTS: u32 = 3;
-pub const UPSCALE: &str = "surface.upscale";
-pub const SHARPEN: &str = "surface.sharpen";
 pub const HISTORY: &str = "look.history";
 pub const PLACEHOLDER: &str = "surface.placeholder";
 
 const SHADER: &str = include_str!("effects.wgsl");
-
-/// The upscale's pipelines, which a rung below scale 1 adds: compiled off-screen before it
-/// takes effect.
-pub struct Upscale {
-    pub upscale: wgpu::RenderPipeline,
-    pub sharpen: wgpu::RenderPipeline,
-}
 
 /// What every live view on the device shares: the effect shader's layouts and sampler, and the
 /// pipelines every rung has.
@@ -46,6 +41,8 @@ pub struct Kit {
     /// Adds an effect target into the linear target.
     #[cfg(feature = "test-meter")]
     pub composite: wgpu::RenderPipeline,
+    /// The upscale's pipelines, which a rung below scale 1 adds: compiled off-screen before it
+    /// takes effect.
     pub upscale: Option<Arc<Upscale>>,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Pipes,
@@ -101,13 +98,9 @@ fn shader(device: &Device) -> wgpu::ShaderModule {
         })
 }
 
-/// The upscale's two pipelines, as the compile thread builds them.
-pub fn compile_upscale(device: &Device, source: &wgpu::BindGroupLayout) -> Upscale {
-    let module = shader(device);
-    Upscale {
-        upscale: pipeline(device, source, &module, "upscale", FORMAT, None),
-        sharpen: pipeline(device, source, &module, "sharpen", FORMAT, None),
-    }
+/// The upscale's pipelines, as the compile thread builds them.
+pub fn compile_upscale(device: &Device) -> Upscale {
+    Upscale::new(device)
 }
 
 impl Kit {
@@ -347,6 +340,35 @@ impl Timer {
     }
 }
 
+/// A view's `surface` field (#386): `{internal_scale: 0.5 to 1 = 1, upscale: edge_adaptive |
+/// bilinear = edge_adaptive, sharpen: 0 to 1 = 0.2}`; absent, the default.
+pub fn surface_of(v: Option<&Value>) -> Result<Surface, String> {
+    let mut s = Surface::default();
+    let Some(v) = v.filter(|v| !v.is_null()) else {
+        return Ok(s);
+    };
+    let o = v.as_object().ok_or("surface is an object")?;
+    if let Some(k) = o.get("internal_scale") {
+        s.scale = k
+            .as_f64()
+            .filter(|k| (0.5..=1.0).contains(k))
+            .ok_or("surface.internal_scale is 0.5 to 1")?;
+    }
+    if let Some(u) = o.get("upscale") {
+        s.upscale = u
+            .as_str()
+            .and_then(Filter::parse)
+            .ok_or("surface.upscale is edge_adaptive or bilinear")?;
+    }
+    if let Some(k) = o.get("sharpen") {
+        s.sharpen = k
+            .as_f64()
+            .filter(|k| (0.0..=1.0).contains(k))
+            .ok_or("surface.sharpen is 0 to 1")?;
+    }
+    Ok(s)
+}
+
 /// The frame's internal size at `scale`.
 pub fn scaled(size: [u32; 2], scale: f64) -> [u32; 2] {
     [
@@ -377,39 +399,6 @@ fn texture(
         usage,
         view_formats: &[],
     })
-}
-
-/// Below scale 1: the frame's output at its internal size and the full-size target between the
-/// upscale's two passes.
-struct Low {
-    size: [u32; 2],
-    view: wgpu::TextureView,
-    up_view: wgpu::TextureView,
-    low_bind: wgpu::BindGroup,
-    up_bind: wgpu::BindGroup,
-    bytes: Option<u64>,
-}
-
-impl Low {
-    fn new(device: &Device, kit: &Kit, internal: [u32; 2], size: [u32; 2]) -> Low {
-        let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        let ((low, up), bytes) = memory::across(device, || {
-            (
-                texture(device, "live low", internal, 1, FORMAT, usage),
-                texture(device, "live upscaled", size, 1, FORMAT, usage),
-            )
-        });
-        let view = low.create_view(&Default::default());
-        let up_view = up.create_view(&Default::default());
-        Low {
-            size: internal,
-            low_bind: kit.bind_source(device, &view),
-            up_bind: kit.bind_source(device, &up_view),
-            view,
-            up_view,
-            bytes,
-        }
-    }
 }
 
 /// Frame history: the window's frames at the internal size, one array layer each.
@@ -494,7 +483,10 @@ pub struct View {
     /// The internal scale and history window that fit, at the class's base rung.
     pub scale: f64,
     pub window: u32,
-    low: Option<Low>,
+    /// How it returns to full size below scale 1, and its sharpen (#386).
+    pub surface: Surface,
+    /// The internal scale and the upscale its last frame drew through.
+    pub drew: (f64, &'static str),
     history: Option<History>,
     /// What the view allocated beyond `low` and `history`, as the device reports it.
     base_bytes: Option<u64>,
@@ -521,7 +513,7 @@ impl View {
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, Planted3::default());
             let mut frames = frames;
-            if let Ok(scene) = frames.at(0, scaled(size, scale), &Offsets::default(), labels) {
+            if let Ok(scene) = frames.at(0, size, &Offsets::default(), labels) {
                 renderer.prepare(device, scene, look);
             }
             (slots, renderer, frames)
@@ -535,7 +527,8 @@ impl View {
             frames,
             scale,
             window,
-            low: None,
+            surface: Surface::default(),
+            drew: (1.0, "none"),
             history: None,
             base_bytes,
             #[cfg(feature = "test-meter")]
@@ -545,7 +538,7 @@ impl View {
 
     /// What the view itself holds on the device, as the device reports it.
     pub fn own_bytes(&self) -> Option<u64> {
-        let low = self.low.as_ref().map_or(Some(0), |l| l.bytes);
+        let low = Some(self.renderer.low_bytes());
         let history = self.history.as_ref().map_or(Some(0), |h| h.bytes);
         #[cfg(feature = "test-meter")]
         let test = self.test.bytes();
@@ -563,6 +556,11 @@ impl View {
     /// Render pipelines its document has needed so far.
     pub fn pipelines(&self) -> u32 {
         self.renderer.pipelines()
+    }
+
+    /// Plants the upscale's wrong programs (#386).
+    pub fn plant(&mut self, planted: deep_scene3d_render::surface::Planted) {
+        self.renderer.plant_upscale(planted);
     }
 
     /// The history window it draws with now, 0 without history.
@@ -599,7 +597,19 @@ impl View {
         } else {
             drawing.rung.scale(self.scale)
         };
-        let internal = scaled(self.size, scale);
+        // The scene is evaluated at the view's size; the renderer draws it at the internal size
+        // and returns it to full size through the upscale, once its pipelines are compiled.
+        self.renderer.upscale = kit.upscale.clone();
+        self.renderer.surface = Surface {
+            scale,
+            ..self.surface
+        };
+        let internal = self.renderer.internal_size(self.size);
+        self.drew = if internal == self.size {
+            (1.0, "none")
+        } else {
+            (scale, self.surface.upscale.name())
+        };
         let slot = self.next;
         self.next = (self.next + 1) % self.slots.len();
         self.shown = Some(slot);
@@ -626,7 +636,7 @@ impl View {
             self.after(encoder, slot);
             return Ok(());
         }
-        let scene = self.frames.at(t, internal, &drawing.offsets, labels)?;
+        let scene = self.frames.at(t, self.size, &drawing.offsets, labels)?;
         let clip = scene.camera.clip(Depth::Reversed);
         self.renderer.prepare(device, scene, look);
         let i = timer.start(GEOMETRY_PASS, session);
@@ -670,38 +680,31 @@ impl View {
                 session,
             );
         }
-        if scale < 1.0 {
-            if self.low.as_ref().is_none_or(|l| l.size != internal) {
-                self.low = Some(Low::new(device, kit, internal, self.size));
-            }
-            let low = self.low.as_ref().expect("made above");
-            let i = timer.start(OUTPUT_PASS, session);
-            self.renderer
-                .record_output(encoder, &low.view, timer.writes(i));
-            timer.end(i);
-            if let Some(up) = kit.upscale.as_ref() {
-                for (name, pipeline, bind, target) in [
-                    (UPSCALE, &up.upscale, &low.low_bind, &low.up_view),
-                    (SHARPEN, &up.sharpen, &low.up_bind, &slot_view),
-                ] {
-                    let i = timer.start(name, session);
-                    full_pass(
-                        encoder,
-                        name,
-                        target,
-                        pipeline,
-                        bind,
-                        false,
-                        timer.writes(i),
-                    );
+        let i = timer.start(OUTPUT_PASS, session);
+        match self.renderer.low_view(device) {
+            Some(low) => {
+                self.renderer.record_output(encoder, &low, timer.writes(i));
+                timer.end(i);
+                for step in self
+                    .renderer
+                    .surface_steps(device, &slot_view)
+                    .into_iter()
+                    .flatten()
+                {
+                    let i = timer.start(step.name(), session);
+                    step.record(encoder, timer.writes(i));
                     timer.end(i);
                 }
             }
-        } else {
-            self.low = None;
-            let i = timer.start(OUTPUT_PASS, session);
-            self.renderer
-                .record_output(encoder, &slot_view, timer.writes(i));
+            None => {
+                self.renderer
+                    .record_output(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
+        }
+        if let Some(draw) = self.renderer.outline_draw(false) {
+            let i = timer.start(OUTLINE_PASS, session);
+            draw.record(encoder, &slot_view, timer.writes(i));
             timer.end(i);
         }
         self.after(encoder, slot);

@@ -23,10 +23,12 @@ use serde_json::{json, Map, Value};
 
 use crate::frames::{hex, Capture};
 use crate::levels::Levels;
+use crate::liveview::surface_of;
 use crate::session3::{self, lock};
 use crate::status;
 use crate::window::OverlayPicture;
 use crate::{effects, refused, App, Planted};
+use deep_scene3d_render::surface::{self, Surface, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 pub const FLICKS_PER_SECOND: u64 = 705_600_000;
 
@@ -72,6 +74,8 @@ struct Args {
     theme: String,
     /// The look's status map, when it has one (#382).
     status: Option<Status>,
+    /// The GPU surface the view draws through (#386).
+    surface: Surface,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -234,6 +238,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         theme,
         status,
         cold: call["cold"].as_bool().unwrap_or(false),
+        surface: surface_of(call.get("surface")).map_err(|e| bad(&e))?,
     })
 }
 
@@ -435,6 +440,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let size = args.size;
     let timings = args.timings && !noop;
     let opened = session3::open(app, size, timings, shows)?;
+    session3::surface(app, args.surface)?;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
     // What the view compiled as it opened, before its first frame (#854).
     let mut cold = args.cold.then(|| (session3::pipelines(app), Value::Null));
@@ -459,6 +465,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut labels = Labels::new();
     labels.fixed_em = app.planted == Some(Planted::LabelMask);
     let mut frames = Vec::new();
+    // Whether any frame drew an object's outline.
+    let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
     let wants_targets = args.targets.contains("linear") || args.targets.contains("ids");
@@ -492,10 +500,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
             let (composed, resident) = levels.compose(&args.doc);
-            let scene = Arc::new(
-                evaluate(&composed, t, &args.look, &mut labels)
-                    .map_err(|r| refused(r.code, r.path))?,
-            );
+            let mut scene = evaluate(&composed, t, &args.look, &mut labels)
+                .map_err(|r| refused(r.code, r.path))?;
+            // A stroke binding draws its outline around the object, exact (#386).
+            if let Some(status) = status.as_ref().filter(|_| bound) {
+                status::strokes(&mut scene, status, &bindings, &args.states)?;
+            }
+            strokes |= scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .any(|s| s.stroke.is_some());
+            let scene = Arc::new(scene);
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
             let seeding = match app.planted {
@@ -718,9 +734,27 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         );
     }
     passes.push(json!({"name": OUTPUT_PASS, "reads": ["linear"], "writes": ["final"]}));
+    // Below internal scale 1, the guard writes the internal frame, the upscale and sharpen
+    // return it to full size, and thin lines, outlines and status colors draw after them,
+    // depth-tested (#386); the planted status colors draw before the upscale.
+    let below = args.surface.scale < 1.0 && !noop;
+    let early = below && app.planted == Some(Planted::StatusBeforeUpscale);
     if shows {
         passes.push(json!({"name": GUARD_PASS, "reads": ["final"], "writes": ["final"]}));
-        passes.push(json!({"name": COLORS_PASS, "reads": ["final"], "writes": ["final"]}));
+    }
+    let colors = json!({"name": COLORS_PASS, "reads": ["final", "depth"], "writes": ["final"]});
+    if shows && early {
+        passes.push(colors.clone());
+    }
+    if below {
+        passes.push(json!({"name": UPSCALE_PASS, "reads": ["final"], "writes": ["upscaled"]}));
+        passes.push(json!({"name": SHARPEN_PASS, "reads": ["upscaled"], "writes": ["final"]}));
+    }
+    if strokes || below {
+        passes.push(json!({"name": OUTLINE_PASS, "reads": ["depth"], "writes": ["final"]}));
+    }
+    if shows && !early {
+        passes.push(colors);
     }
     let status_report = status::report(
         shows,
@@ -730,7 +764,19 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         report.0,
         report.1,
     );
-    let mut reply = json!({"frames": frames, "passes": passes, "status": status_report});
+    let internal = if below {
+        surface::scaled(size, args.surface.scale)
+    } else {
+        size
+    };
+    let drew = json!({
+        "internal_scale": if below { args.surface.scale } else { 1.0 },
+        "upscale": if below { args.surface.upscale.name() } else { "none" },
+        "sharpen": args.surface.sharpen,
+        "size_px": size, "internal_px": internal,
+    });
+    let mut reply =
+        json!({"frames": frames, "passes": passes, "status": status_report, "surface": drew});
     if let Some((_, report)) = cold {
         reply["cold"] = report;
     }

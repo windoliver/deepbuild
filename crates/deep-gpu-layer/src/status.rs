@@ -10,7 +10,7 @@ use std::sync::Arc;
 use deep_canvas::color::{srgb_to_oklab, Srgb};
 use deep_canvas_marks::look::{self, Status, STATES};
 use deep_canvas_scene3d::look::Look3;
-use deep_canvas_scene3d::scene::Scene;
+use deep_canvas_scene3d::scene::{Scene, Shape, Stroke};
 use deep_scene3d_render::status::{Guard, Layer, Mode};
 use deep_text::{Atlas, Role, Shaper, Spec, PAGE};
 use serde_json::{json, Map, Value};
@@ -163,9 +163,8 @@ pub struct Binding {
 }
 
 /// The document's status bindings, in ID order. A 3D object has a material, not a paint, so a
-/// binding takes its stroke or badge slot; a fill slot is refused (Status binding). The stroke
-/// slot's outline isn't drawn here yet, so a stroke binding is refused too rather than shown as
-/// a badge (nothing missing passes).
+/// binding takes its stroke slot, drawn as an outline around it (#386), or its badge; a fill slot
+/// is refused (Status binding).
 pub fn bindings(doc: &Value) -> Result<Vec<Binding>, Value> {
     let refused = |code: &str, path: String| json!({"ok": false, "code": code, "path": path});
     let mut out = Vec::new();
@@ -177,7 +176,8 @@ pub fn bindings(doc: &Value) -> Result<Vec<Binding>, Value> {
         let parts: Vec<&str> = target.split('/').collect();
         let (item, slot) = match parts.as_slice() {
             ["items", item, "params", "paint", "badge"] => (*item, "badge"),
-            ["items", _, "params", "paint", "fill" | "stroke"] => {
+            ["items", item, "params", "paint", "stroke"] => (*item, "stroke"),
+            ["items", _, "params", "paint", "fill"] => {
                 return Err(refused("status_slot_kind", format!("{path}/target")))
             }
             _ => return Err(refused("bad_doc", format!("{path}/target"))),
@@ -193,6 +193,47 @@ pub fn bindings(doc: &Value) -> Result<Vec<Binding>, Value> {
         });
     }
     Ok(out)
+}
+
+/// Each stroke binding's outline on its solid, in its state's color, exact, at least the status
+/// treatment's core width (#386). A state the record doesn't hold is left to [`layer`], which
+/// refuses it; a cylinder's or a sphere's outline isn't drawn yet, so binding one is refused.
+pub fn strokes(
+    scene: &mut Scene,
+    status: &Status,
+    bindings: &[Binding],
+    states: &BTreeMap<String, String>,
+) -> Result<(), Value> {
+    for b in bindings.iter().filter(|b| b.slot == "stroke") {
+        let Some(&state) = states
+            .get(&b.source)
+            .and_then(|s| STATES.iter().find(|x| *x == s))
+        else {
+            continue;
+        };
+        let color = status.colors[state];
+        for solid in scene
+            .layers
+            .iter_mut()
+            .flat_map(|l| &mut l.solids)
+            .filter(|s| s.id == b.item)
+        {
+            if solid.shape != Shape::Box {
+                return Err(json!({"ok": false, "code": "stroke_shape",
+                    "path": format!("status_bindings/{}/target", b.id)}));
+            }
+            let width = solid
+                .stroke
+                .map_or(0.0, |s| s.width)
+                .max(status.core_min_px);
+            solid.stroke = Some(Stroke {
+                color,
+                width,
+                exact: true,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// The glyph run's size and weight for a badge chip and for a legend row.
@@ -401,6 +442,8 @@ pub fn layer(
         ink: Rgb,
         run: Run,
         label: [f64; 4],
+        /// A stroke mark's glyph draws in its color beside the outline, with no chip.
+        bare: bool,
     }
     let mut drawn: Vec<Chip> = Vec::new();
     for b in bindings {
@@ -460,6 +503,7 @@ pub fn layer(
             ink,
             run,
             label,
+            bare: b.slot == "stroke",
         });
     }
     // The legend: every state on screen, in the status map's order, in the first corner clear of
@@ -520,8 +564,12 @@ pub fn layer(
     }
     // The marks after the legend, so nothing covers them.
     for c in &drawn {
-        canvas.round_rect(c.rect, c.rect[3] / 2.0, c.color);
-        canvas.text(text, &c.run, [c.label[0], c.label[1]], c.ink);
+        if c.bare {
+            canvas.text(text, &c.run, [c.label[0], c.label[1]], c.color);
+        } else {
+            canvas.round_rect(c.rect, c.rect[3] / 2.0, c.color);
+            canvas.text(text, &c.run, [c.label[0], c.label[1]], c.ink);
+        }
     }
     Ok((
         Layer {

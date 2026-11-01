@@ -32,8 +32,9 @@ use deep_gpu::surface::Path;
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
-use crate::liveview::{compile_upscale, Drawing, Kit, Timer, Upscale, View, SLOTS};
+use crate::liveview::{compile_upscale, surface_of, Drawing, Kit, Timer, Upscale, View, SLOTS};
 use crate::{refused, App, Planted};
+use deep_scene3d_render::surface::Surface;
 
 const FLICKS_PER_SECOND: i64 = 705_600_000;
 /// The thread every live frame is drawn on, and the name of the one that never draws.
@@ -51,6 +52,8 @@ pub struct Plants {
     compiles_at_swap: bool,
     cache: cache::Planted,
     shares_meter_with_worker: bool,
+    exports_live_surface: bool,
+    upscale: deep_scene3d_render::surface::Planted,
 }
 
 impl Plants {
@@ -72,6 +75,8 @@ impl Plants {
                 keeps_unread: p == Some(Planted::KeepsUnreadResults),
             },
             shares_meter_with_worker: p == Some(Planted::SharesMeterWithWorker),
+            exports_live_surface: p == Some(Planted::ExportsLiveSurface),
+            upscale: crate::session3::upscale_planted(p),
         }
     }
 }
@@ -103,6 +108,8 @@ struct Open {
     size: Option<[u32; 2]>,
     /// The window its view draws in, an index into the call's windows.
     window: usize,
+    /// Its GPU surface's internal scale, upscale and sharpen (#386).
+    surface: Surface,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,6 +218,7 @@ fn open_of(v: &Value, windows: &[String]) -> Option<Open> {
             None | Some(Value::Null) => None,
             Some(s) => Some(pair(s)?),
         },
+        surface: surface_of(v.get("surface")).ok()?,
     })
 }
 
@@ -276,10 +284,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
     {
         events.push((
             1,
-            Event::Open(
-                open_of(s, &windows)
-                    .ok_or_else(|| bad("a session is {session, writer, doc, size?, window?}"))?,
-            ),
+            Event::Open(open_of(s, &windows).ok_or_else(|| {
+                bad("a session is {session, writer, doc, size?, window?, surface?}")
+            })?),
         ));
     }
     for e in call["events"].as_array().into_iter().flatten() {
@@ -483,6 +490,9 @@ struct Session {
     view_changed: bool,
     over_ops: u32,
     ops_resolution: f64,
+    surface: Surface,
+    /// Each revision's check time, ms, from receipt to its verdict (#386).
+    checks: BTreeMap<u64, f64>,
 }
 
 impl Session {
@@ -643,6 +653,7 @@ struct ViewRow {
     gpu: f64,
     cpu: f64,
     scale: f64,
+    upscale: &'static str,
     history: u32,
 }
 
@@ -739,8 +750,8 @@ impl Live {
         let compile = CompileThread::new();
         // The planted swap compiles nothing ahead.
         let warming = (!plants.compiles_at_swap).then(|| {
-            let (device, layout) = (device.clone(), kit.source.clone());
-            compile.compile(move || Arc::new(compile_upscale(&device, &layout)))
+            let device = device.clone();
+            compile.compile(move || Arc::new(compile_upscale(&device)))
         });
         Live {
             kit,
@@ -806,9 +817,9 @@ impl Live {
             self.changes[change].thread = Some(COMPILE_THREAD);
             // The compile the window started as it opened, or a new one.
             self.warming.take().unwrap_or_else(|| {
-                let (device, layout) = (self.device.clone(), self.kit.source.clone());
+                let device = self.device.clone();
                 self.compile
-                    .compile(move || Arc::new(compile_upscale(&device, &layout)))
+                    .compile(move || Arc::new(compile_upscale(&device)))
             })
         });
         if needs && self.plants.compiles_at_swap {
@@ -846,7 +857,7 @@ impl Live {
                 self.changes[change].compiled_by = Some(frame - 1);
             } else if !self.changes[change].pipelines.is_empty() && self.kit.upscale.is_none() {
                 // The planted swap: compiled here, in the frame it takes effect.
-                self.kit.upscale = Some(Arc::new(compile_upscale(&self.device, &self.kit.source)));
+                self.kit.upscale = Some(Arc::new(compile_upscale(&self.device)));
                 self.changes[change].compiled_by = Some(frame);
             }
             let to = p.to;
@@ -882,7 +893,14 @@ impl Live {
             view_changed: false,
             over_ops: 0,
             ops_resolution: 1.0,
+            surface: o.surface,
+            checks: BTreeMap::new(),
         });
+        // A view that draws below scale 1 from its first frame has the upscale's pipelines
+        // before that frame.
+        if o.surface.scale < 1.0 && self.kit.upscale.is_none() {
+            self.kit.upscale = Some(Arc::new(compile_upscale(&self.device)));
+        }
         self.revise(n, &o.doc);
         // The first revision latches as the session opens.
         self.latch(n);
@@ -903,6 +921,7 @@ impl Live {
             let ses = &self.sessions[s];
             (ses.writer.clone(), ses.doc_id.clone(), ses.size)
         };
+        let received = Instant::now();
         let admitted = admit(
             doc,
             &writer,
@@ -913,6 +932,8 @@ impl Live {
             &mut self.labels,
         );
         let ses = &mut self.sessions[s];
+        ses.checks
+            .insert(number, received.elapsed().as_secs_f64() * 1e3);
         match admitted {
             Err(issues) => ses.revisions.push((number, "refused", issues)),
             Ok(Admitted {
@@ -1023,7 +1044,12 @@ impl Live {
                     &self.args.look,
                     &mut self.labels,
                 ) {
-                    Ok(v) => ses.view = Some(v),
+                    Ok(mut v) => {
+                        v.plant(self.plants.upscale);
+                        v.surface = ses.surface;
+                        v.scale = v.scale.min(ses.surface.scale);
+                        ses.view = Some(v)
+                    }
                     Err(e) => {
                         row.1 = "failed";
                         row.2 = vec![issue("no_view", "size", Value::Null, &e)];
@@ -1034,7 +1060,7 @@ impl Live {
             }
             Some(v) => {
                 v.frames = frames;
-                v.scale = rev.fit.scale;
+                v.scale = rev.fit.scale.min(ses.surface.scale);
                 v.window = rev.fit.history;
             }
         }
@@ -1221,7 +1247,7 @@ impl Live {
                     effects_resolution: ses.ops_resolution,
                     canonical: false,
                 };
-                let (scale, history) = match ses.view.as_mut() {
+                let (scale, upscale, history) = match ses.view.as_mut() {
                     Some(view) => {
                         if drawn {
                             let _ = view.draw(
@@ -1236,9 +1262,9 @@ impl Live {
                                 s,
                             );
                         }
-                        (rung.scale(view.scale), view.history_frames(&drawing))
+                        (view.drew.0, view.drew.1, view.history_frames(&drawing))
                     }
-                    None => (1.0, 0),
+                    None => (1.0, "none", 0),
                 };
                 cpu_of[s % 64] = started.elapsed().as_secs_f64() * 1e3;
                 self.views.push(ViewRow {
@@ -1248,6 +1274,7 @@ impl Live {
                     gpu: 0.0,
                     cpu: cpu_of[s % 64],
                     scale,
+                    upscale,
                     history,
                 });
             }
@@ -1547,6 +1574,12 @@ impl Live {
             .plants
             .shares_meter_with_worker
             .then_some((ses.drawn, ses.ops_resolution));
+        // The planted render takes the live session's surface; a canonical render never does.
+        let surface = self
+            .plants
+            .exports_live_surface
+            .then_some(ses.surface)
+            .filter(|s| s.scale < 1.0);
         let mut c = render_canonical(
             &self.device,
             &self.kit,
@@ -1556,6 +1589,7 @@ impl Live {
             self.t(of),
             purpose,
             live,
+            surface,
             &self.args.assets,
             &mut self.labels,
         );
@@ -1585,7 +1619,7 @@ impl Live {
                             "session": ses.id, "writer": ses.writer, "window": self.args.windows[ses.window],
                             "rung": v.rung.unwrap_or(Rung::Base).name(),
                             "drawn": v.drawn, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
-                            "internal_scale": v.scale, "history_frames": v.history,
+                            "internal_scale": v.scale, "upscale": v.upscale, "history_frames": v.history,
                         });
                         if let Some(h) = f.extra.get("hashes") {
                             o["pixel_hash"] = h.get(v.session.to_string()).cloned().unwrap_or(Value::Null);
@@ -1675,7 +1709,7 @@ impl Live {
                     "state": match s.state { State::Live => "live", State::Refused => "refused", State::Closed => "closed" },
                     "class": s.class().map(Class::name), "issues": s.issues,
                     "revisions": s.revisions.iter().map(|(n, o, i)| {
-                        let mut r = json!({"rev": n, "outcome": o, "issues": i});
+                        let mut r = json!({"rev": n, "outcome": o, "issues": i, "check_ms": s.checks.get(n)});
                         if let Some((ms, pipelines)) = s.settled.get(n) {
                             r["settled_ms"] = json!(ms);
                             r["pipelines"] = json!(pipelines);
@@ -1737,6 +1771,7 @@ fn render_canonical(
     t: i64,
     purpose: Purpose,
     live: Option<(Rung, f64)>,
+    surface: Option<Surface>,
     assets: &BTreeMap<String, PathBuf>,
     labels: &mut Labels,
 ) -> Value {
@@ -1751,6 +1786,10 @@ fn render_canonical(
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
     };
+    if let Some(s) = surface {
+        view.surface = s;
+        view.scale = s.scale;
+    }
     #[cfg(feature = "test-meter")]
     let mut results: Cache<crate::testgpu::Made> = Cache::new(cache::Planted::default());
     #[cfg(feature = "test-meter")]
@@ -1773,7 +1812,7 @@ fn render_canonical(
         rung,
         offsets: Offsets::default(),
         effects_resolution: resolution,
-        canonical: live.is_none(),
+        canonical: live.is_none() && surface.is_none(),
     };
     let mut timer = Timer::new(device);
     timer.begin_frame();
@@ -1812,7 +1851,8 @@ fn render_canonical(
         "purpose": purpose.name(),
         "pixel_hash": pixels.map(|p| hex(&p)),
         "rung": rung.name(),
-        "internal_scale": if live.is_some() { rung.scale(1.0) } else { 1.0 },
+        "internal_scale": if live.is_some() { rung.scale(1.0) } else { view.drew.0 },
+        "upscale": view.drew.1,
         "operators": operators,
     })
 }
@@ -1864,6 +1904,7 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
             size,
             t,
             purpose,
+            None,
             None,
             &BTreeMap::new(),
             &mut labels,

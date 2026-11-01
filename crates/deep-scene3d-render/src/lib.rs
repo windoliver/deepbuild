@@ -10,6 +10,7 @@
 mod mesh;
 pub mod shadow;
 pub mod status;
+pub mod surface;
 
 use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
@@ -25,6 +26,7 @@ use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
 
 use crate::mesh::Mesh;
+use crate::surface::{Low, Surface, Upscale, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 /// The 3D writer layers' linear target: what the output pass reads.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -36,6 +38,7 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 
 const SHADER: &str = include_str!("scene3d.wgsl");
 const OUTPUT: &str = include_str!("output.wgsl");
+const OUTLINE: &str = include_str!("outline.wgsl");
 const BUSY: &str = include_str!("busy.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
@@ -58,6 +61,14 @@ pub struct Planted {
     /// #854: the renderer and its pipelines are compiled in the first frame, not when the view
     /// opens.
     pub builds_on_first_frame: bool,
+    /// #386: the upscale's wrong programs.
+    pub upscale: surface::Planted,
+    /// #386: outlines draw at the internal size, before the upscale.
+    pub outlines_before_upscale: bool,
+    /// #386: status outlines draw at the internal size, before the upscale.
+    pub status_before_upscale: bool,
+    /// #386: status outlines draw with no depth test.
+    pub status_without_depth: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -121,7 +132,67 @@ pub fn timed(
 pub struct AfterFrame<'a> {
     pub size: [u32; 2],
     pub finished: &'a wgpu::TextureView,
+    /// What the guard writes: the slot, or below scale 1 the internal frame the upscale reads
+    /// (#386).
+    pub guarded: &'a wgpu::TextureView,
     pub slot: &'a wgpu::TextureView,
+}
+
+/// The outline pass's draws, ready to record into a target: thin lines and strokes, and the
+/// status outlines, which draw as the status colors.
+pub struct OutlineDraw {
+    pipeline: wgpu::RenderPipeline,
+    output: wgpu::BindGroup,
+    frame: wgpu::BindGroup,
+    sets: Vec<(wgpu::Buffer, u32)>,
+    statuses: Vec<(wgpu::Buffer, u32)>,
+}
+
+impl OutlineDraw {
+    /// The strokes' and lines' draw, and the status outlines' apart, when there are any.
+    pub fn split(mut self) -> (OutlineDraw, Option<OutlineDraw>) {
+        let statuses = std::mem::take(&mut self.statuses);
+        let apart = (!statuses.is_empty()).then(|| OutlineDraw {
+            pipeline: self.pipeline.clone(),
+            output: self.output.clone(),
+            frame: self.frame.clone(),
+            sets: statuses,
+            statuses: Vec::new(),
+        });
+        (self, apart)
+    }
+
+    /// Records the draws (the status outlines too, unless split off) over `target`.
+    pub fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        deep_gpu::alloc::outside(|| {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(OUTLINE_PASS),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                timestamp_writes: timestamps,
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.output, &[]);
+            pass.set_bind_group(1, &self.frame, &[]);
+            for (buffer, n) in self.sets.iter().chain(&self.statuses) {
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..6, 0..*n);
+            }
+        });
+    }
 }
 
 /// Passes after the finish: with one attached, the output pass writes the finished frame instead
@@ -159,7 +230,15 @@ struct FrameUniform {
     up: [f32; 4],
     viewport: [f32; 4],
     light: [f32; 4],
+    /// This target's px per device px, which lines it draws, the depth target's px per px of
+    /// this target, and 1 for the planted forward Z (scene3d.wgsl's `px`).
+    px: [f32; 4],
 }
+
+/// A segment record's flags in the outline pass (outline.wgsl).
+const EXACT: u32 = 2;
+const UNTESTED: u32 = 4;
+const OUTLINED: u32 = 8;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -586,6 +665,87 @@ pub struct Renderer {
     /// This frame's camera: world to clip (column-major), the eye and the near plane.
     camera: Camera,
     pub profiler: Option<Profiler>,
+    /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
+    pub surface: Surface,
+    pub upscale: Option<Arc<Upscale>>,
+    /// The frame's full size, and its targets below scale 1.
+    size: [u32; 2],
+    low: Option<Low>,
+    low_bytes: Option<u64>,
+    outlines: Outlines,
+}
+
+/// The pass that draws thin lines and outlines at full size after the upscale (#386).
+struct Outlines {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    /// The camera over the full-size slot, and over the internal size (the planted programs').
+    display: wgpu::Buffer,
+    internal: wgpu::Buffer,
+    /// Each with the core's depth target, made with the targets.
+    binds: Option<[wgpu::BindGroup; 2]>,
+    /// The solids' strokes, and the status outlines.
+    strokes: Set,
+    statuses: Set,
+}
+
+/// A box's silhouette from `cam`: each edge between a face turned toward the camera and one
+/// turned away, in world space. `model` maps the unit box (rows of a 3×4 matrix).
+fn silhouette(
+    model: &[[f64; 4]; 3],
+    cam: &deep_canvas_scene3d::scene::Camera,
+) -> Vec<[[f64; 3]; 2]> {
+    let col = |c: usize| [model[0][c], model[1][c], model[2][c]];
+    let at = |l: [f64; 3]| {
+        let mut p = [0.0; 3];
+        for (r, v) in p.iter_mut().enumerate() {
+            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
+        }
+        p
+    };
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let det = dot(col(0), cross(col(1), col(2)));
+    // Whether face `axis` on side `t` (0: −, 1: +) faces the camera. Its normal is the inverse
+    // transpose's column, from the other two columns' cross product.
+    let facing = |axis: usize, t: usize| {
+        let n = cross(col((axis + 1) % 3), col((axis + 2) % 3));
+        let sign = if t == 1 { 1.0 } else { -1.0 } * det.signum();
+        let mut centre = [0.0; 3];
+        centre[axis] = t as f64 - 0.5;
+        let toward = if cam.perspective {
+            let c = at(centre);
+            [cam.eye[0] - c[0], cam.eye[1] - c[1], cam.eye[2] - c[2]]
+        } else {
+            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
+        };
+        dot(n, toward) * sign > 0.0
+    };
+    let mut out = Vec::new();
+    for axis in 0..3 {
+        let (b, c) = ((axis + 1) % 3, (axis + 2) % 3);
+        for tb in 0..2 {
+            for tc in 0..2 {
+                if facing(b, tb) == facing(c, tc) {
+                    continue;
+                }
+                let mut p = [0.0; 3];
+                p[b] = tb as f64 - 0.5;
+                p[c] = tc as f64 - 0.5;
+                p[axis] = -0.5;
+                let start = at(p);
+                p[axis] = 0.5;
+                out.push([start, at(p)]);
+            }
+        }
+    }
+    out
 }
 
 fn decode(c: u8) -> f64 {
@@ -877,6 +1037,61 @@ impl Renderer {
         };
         let output_pipeline = output_into(FORMAT);
         let output_f32 = output_into(status::FINISHED);
+        // Thin lines and outlines at full size: output.wgsl's `finish` for their color, the
+        // core's depth target to test against (#386).
+        let outline_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(OUTLINE_PASS),
+            source: wgpu::ShaderSource::Wgsl(format!("{OUTPUT}\n{OUTLINE}").into()),
+        });
+        let outline_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some(OUTLINE_PASS),
+            entries: &[
+                uniform(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let outline_pipeline = pipeline(
+            d,
+            OUTLINE_PASS,
+            Some(&layout(&[Some(&output_layout), Some(&outline_layout)])),
+            &outline_module,
+            (
+                "outline_vs",
+                &[Some(instance(
+                    std::mem::size_of::<SegmentRecord>() as u64,
+                    &SEGMENT,
+                ))],
+            ),
+            Some((
+                "outline_fs",
+                &[target(
+                    FORMAT,
+                    Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                )],
+            )),
+            None,
+        );
+        let outlines = Outlines {
+            pipeline: outline_pipeline,
+            layout: outline_layout,
+            display: uniform_buffer("scene3d outlines", std::mem::size_of::<FrameUniform>()),
+            internal: uniform_buffer(
+                "scene3d outlines internal",
+                std::mem::size_of::<FrameUniform>(),
+            ),
+            binds: None,
+            strokes: Set::default(),
+            statuses: Set::default(),
+        };
         let busy = planted.slow_gpu_frame.then(|| {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("scene3d busy"),
@@ -946,12 +1161,13 @@ impl Renderer {
             output_pipeline,
             output_f32,
             finished: None,
-            compiled: 2,
+            compiled: 3,
             names: vec![
                 "scene3d.mesh",
                 "scene3d.shadow",
                 "scene3d.output",
                 "scene3d.output_f32",
+                OUTLINE_PASS,
             ],
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
@@ -972,6 +1188,12 @@ impl Renderer {
             },
             camera: ([0.0; 16], [0.0; 3], 0.1),
             profiler: None,
+            surface: Surface::default(),
+            upscale: None,
+            size: [0, 0],
+            low: None,
+            low_bytes: None,
+            outlines,
         }
     }
 
@@ -1020,10 +1242,23 @@ impl Renderer {
         );
         let linear_view = linear.create_view(&Default::default());
         let output_bind = self.output_bind(d, &linear_view);
+        let depth_view = depth.create_view(&Default::default());
+        let o = &self.outlines;
+        self.outlines.binds = Some([&o.display, &o.internal].map(|buffer| {
+            bind_group(
+                d,
+                OUTLINE_PASS,
+                &o.layout,
+                [
+                    buffer.as_entire_binding(),
+                    wgpu::BindingResource::TextureView(&depth_view),
+                ],
+            )
+        }));
         self.targets = Some(Targets {
             size,
             ids_view: ids.create_view(&Default::default()),
-            depth_view: depth.create_view(&Default::default()),
+            depth_view,
             linear,
             linear_view,
             ids,
@@ -1042,6 +1277,67 @@ impl Renderer {
                 self.tone_buffer.as_entire_binding(),
             ],
         )
+    }
+
+    /// Plants the upscale's wrong programs (#386).
+    pub fn plant_upscale(&mut self, planted: surface::Planted) {
+        self.planted.upscale = planted;
+    }
+
+    /// The frame's internal size: its full size at the surface's scale, once the upscale's
+    /// pipelines are there to return it to full size.
+    fn internal(&self) -> [u32; 2] {
+        self.internal_size(self.size)
+    }
+
+    /// The internal size a frame of `size` draws at.
+    pub fn internal_size(&self, size: [u32; 2]) -> [u32; 2] {
+        if self.surface.scale < 1.0 && self.upscale.is_some() {
+            surface::scaled(size, self.surface.scale)
+        } else {
+            size
+        }
+    }
+
+    /// What the targets below scale 1 hold on the device, as it reported them; 0 at scale 1.
+    pub fn low_bytes(&self) -> u64 {
+        self.low.as_ref().map_or(0, |_| self.low_bytes.unwrap_or(0))
+    }
+
+    /// The outline of each solid with a stroke: its silhouette's edges, as seen from this
+    /// frame's camera, the stroke's ones and the status outlines' apart (#386).
+    fn prepare_outlines(&mut self, device: &Device, scene: &Scene) {
+        let cam = &scene.camera;
+        let o = &mut self.outlines;
+        o.strokes.begin();
+        o.statuses.begin();
+        for s in scene.layers.iter().flat_map(|l| &l.solids) {
+            let Some(stroke) = s.stroke else { continue };
+            let untested = stroke.exact && self.planted.status_without_depth;
+            let flags = OUTLINED
+                | if stroke.exact { EXACT } else { 0 }
+                | if untested { UNTESTED } else { 0 };
+            let set = if stroke.exact {
+                &mut o.statuses
+            } else {
+                &mut o.strokes
+            };
+            for [a, b] in silhouette(&s.model, cam) {
+                let record = SegmentRecord {
+                    a: v4(a, stroke.width),
+                    b: v4(b, stroke.width),
+                    color: pack(stroke.color),
+                    pick: 0,
+                    flags,
+                    pad: 0,
+                };
+                set.push(&s.id, bytemuck::bytes_of(&record));
+            }
+        }
+        let (mut next, mut written) = (self.next_generation, 0);
+        o.strokes.finish(device, &mut next, &mut written);
+        o.statuses.finish(device, &mut next, &mut written);
+        self.next_generation = next;
     }
 
     /// Builds `shape`'s unit mesh the first time a batch draws one.
@@ -1074,7 +1370,12 @@ impl Renderer {
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
-        self.ensure_targets(device, scene.size);
+        // Below internal scale 1 the targets are the internal size; px-sized marks shrink with
+        // them, and the upscale returns the frame to `scene.size` (#386).
+        self.size = scene.size;
+        let internal = self.internal();
+        self.ensure_targets(device, internal);
+        let k = f64::from(internal[0]) / f64::from(scene.size[0].max(1));
         self.upload_pages(device, &scene.pages);
         let cam = &scene.camera;
         let depth = if self.planted.forward_z {
@@ -1108,23 +1409,45 @@ impl Renderer {
                 w as f32,
             ]
         };
+        let below = internal != scene.size;
+        let forward = if self.planted.forward_z { 1.0 } else { 0.0 };
+        let perspective = if cam.perspective { 1.0 } else { 0.0 };
         let frame = FrameUniform {
             clip,
             right: v4(cam.right, 0.0),
             up: v4(cam.up, 0.0),
             viewport: [
+                internal[0] as f32,
+                internal[1] as f32,
+                (cam.scale * k) as f32,
+                perspective,
+            ],
+            light,
+            px: [k as f32, if below { 1.0 } else { 0.0 }, 1.0, forward],
+        };
+        // The outline pass over the full-size slot, and over the internal size for the planted
+        // programs that draw there.
+        let display = FrameUniform {
+            viewport: [
                 scene.size[0] as f32,
                 scene.size[1] as f32,
                 cam.scale as f32,
-                if cam.perspective { 1.0 } else { 0.0 },
+                perspective,
             ],
-            light,
+            px: [1.0, 2.0, k as f32, forward],
+            ..frame
+        };
+        let inside = FrameUniform {
+            px: [1.0, 2.0, 1.0, forward],
+            ..frame
         };
         deep_gpu::alloc::outside(|| {
-            device
-                .queue
-                .write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame))
+            let q = &device.queue;
+            q.write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame));
+            q.write_buffer(&self.outlines.display, 0, bytemuck::bytes_of(&display));
+            q.write_buffer(&self.outlines.internal, 0, bytemuck::bytes_of(&inside));
         });
+        self.prepare_outlines(device, scene);
         self.shadow.clip = scene
             .sun
             .as_ref()
@@ -1509,12 +1832,16 @@ impl Renderer {
             }
         }
         // With passes after the finish, the output writes the finished frame, and they write
-        // the slot from it (#382).
+        // the slot from it (#382). Below scale 1 the output and the guard write the internal
+        // frame, which the upscale and sharpen return to the slot's size (#386).
         let size = t.size;
+        let below = self.ensure_low(device);
+        let low_view = self.low.as_ref().filter(|_| below).map(|l| l.view.clone());
+        let framed = low_view.clone().unwrap_or_else(|| slot.clone());
         let finished = after.is_some().then(|| self.finished(device, size));
         let (target, pipeline) = match &finished {
             Some(f) => (f.clone(), self.output_f32.clone()),
-            None => (slot.clone(), self.output_pipeline.clone()),
+            None => (framed.clone(), self.output_pipeline.clone()),
         };
         let profiler = self.profiler.clone();
         let (busy, busy_slot) = (self.busy.clone(), slot.clone());
@@ -1552,17 +1879,181 @@ impl Renderer {
             })
         });
         jobs.push((OUTPUT_PASS.into(), output));
-        if let (Some(after), Some(finished)) = (after, finished) {
-            jobs.extend(after.jobs(
+        let mut after_jobs = match (after, finished) {
+            (Some(after), Some(finished)) => after.jobs(
                 device,
                 &AfterFrame {
                     size,
                     finished: &finished,
+                    guarded: &framed,
                     slot,
                 },
+            ),
+            _ => Vec::new(),
+        };
+        // The guard first; the status colors after the upscale and the outlines.
+        let colors_at = after_jobs
+            .iter()
+            .position(|(n, _)| n == status::COLORS_PASS)
+            .unwrap_or(after_jobs.len());
+        let colors = after_jobs.split_off(colors_at);
+        jobs.extend(after_jobs);
+        if let Some(low) = low_view {
+            let early = self.outline_draw(true);
+            let [upscale, sharpen] = self.surface_steps(device, slot).expect("below scale 1");
+            let profiler = self.profiler.clone();
+            jobs.push((
+                UPSCALE_PASS.into(),
+                Box::new(move |encoder| {
+                    // The planted programs draw their outlines into the internal frame.
+                    if let Some(early) = &early {
+                        early.record(encoder, &low, None);
+                    }
+                    timed(&profiler, UPSCALE_PASS, encoder, |e, ts| {
+                        upscale.record(e, ts)
+                    })
+                }),
+            ));
+            let profiler = self.profiler.clone();
+            jobs.push((
+                SHARPEN_PASS.into(),
+                Box::new(move |encoder| {
+                    timed(&profiler, SHARPEN_PASS, encoder, |e, ts| {
+                        sharpen.record(e, ts)
+                    })
+                }),
             ));
         }
+        if let Some(draw) = self.outline_draw(false) {
+            // Status outlines draw as the status colors, where the frame has them.
+            let (draw, statuses) = if colors.is_empty() {
+                (draw, None)
+            } else {
+                draw.split()
+            };
+            let (profiler, target) = (self.profiler.clone(), slot.clone());
+            jobs.push((
+                OUTLINE_PASS.into(),
+                Box::new(move |encoder| {
+                    timed(&profiler, OUTLINE_PASS, encoder, |e, ts| {
+                        draw.record(e, &target, ts)
+                    })
+                }),
+            ));
+            if let Some(statuses) = statuses {
+                let (profiler, slot) = (self.profiler.clone(), slot.clone());
+                jobs.push((
+                    status::COLORS_PASS.into(),
+                    Box::new(move |encoder| {
+                        timed(&profiler, status::COLORS_PASS, encoder, |e, ts| {
+                            statuses.record(e, &slot, ts)
+                        })
+                    }),
+                ));
+            }
+        }
+        jobs.extend(colors);
         jobs
+    }
+
+    /// Makes or remakes the targets below scale 1 when the surface needs them: whether the
+    /// frame draws through the upscale.
+    fn ensure_low(&mut self, device: &Device) -> bool {
+        let internal = self.internal();
+        let Some(up) = self.upscale.as_ref().filter(|_| internal != self.size) else {
+            self.low = None;
+            return false;
+        };
+        if self
+            .low
+            .as_ref()
+            .is_none_or(|l| l.internal != internal || l.size != self.size)
+        {
+            let (low, bytes) = deep_gpu::alloc::outside(|| {
+                deep_gpu::memory::across(device, || Low::new(device, up, internal, self.size))
+            });
+            self.low = Some(low);
+            self.low_bytes = bytes;
+        }
+        true
+    }
+
+    /// Below scale 1, the upscale's two passes into `slot`, ready to record; `None` at scale 1.
+    pub fn surface_steps(
+        &mut self,
+        device: &Device,
+        slot: &wgpu::TextureView,
+    ) -> Option<[surface::Step; 2]> {
+        if !self.ensure_low(device) {
+            return None;
+        }
+        let up = self.upscale.clone()?;
+        let low = self.low.as_mut()?;
+        low.hold(device, self.surface.sharpen);
+        let planted = self.planted.upscale;
+        Some(
+            [UPSCALE_PASS, SHARPEN_PASS]
+                .map(|name| low.step(&up, &self.surface, planted, name, slot)),
+        )
+    }
+
+    /// The internal frame the output (and the guard) write below scale 1.
+    pub fn low_view(&mut self, device: &Device) -> Option<wgpu::TextureView> {
+        self.ensure_low(device)
+            .then(|| self.low.as_ref().map(|l| l.view.clone()))
+            .flatten()
+    }
+
+    /// The outline pass: the solids' strokes, the status outlines and, below scale 1, the
+    /// layers' lines 1 device px or thinner, at full size; with `early`, what the planted
+    /// programs draw into the internal frame instead. `None` with nothing to draw.
+    pub fn outline_draw(&self, early: bool) -> Option<OutlineDraw> {
+        let o = &self.outlines;
+        let t = self.targets.as_ref()?;
+        let binds = o.binds.as_ref()?;
+        let below = self.internal() != self.size && self.upscale.is_some();
+        let p = self.planted;
+        let strokes_early = below && p.outlines_before_upscale;
+        let statuses_early = below && p.status_before_upscale;
+        let mut sets = Vec::new();
+        let mut statuses = Vec::new();
+        let take = |set: &Set, into: &mut Vec<(wgpu::Buffer, u32)>| {
+            if let (Some(b), true) = (&set.buffer, set.len() > 0) {
+                into.push((b.clone(), set.len()));
+            }
+        };
+        if early {
+            if strokes_early {
+                take(&o.strokes, &mut sets);
+            }
+            if statuses_early {
+                take(&o.statuses, &mut sets);
+            }
+        } else {
+            if !strokes_early {
+                take(&o.strokes, &mut sets);
+            }
+            if below {
+                for id in &self.order {
+                    if let Some(batch) = self.batches.get(id) {
+                        take(&batch.lines, &mut sets);
+                    }
+                }
+            }
+            if !statuses_early {
+                take(&o.statuses, &mut statuses);
+            }
+        }
+        if sets.is_empty() && statuses.is_empty() {
+            return None;
+        }
+        Some(OutlineDraw {
+            pipeline: self.outlines.pipeline.clone(),
+            output: t.output_bind.clone(),
+            frame: binds[usize::from(early)].clone(),
+            sets,
+            statuses,
+        })
     }
 
     /// The finished frame's view at `size`, made or remade when the size changed.
@@ -1872,6 +2363,42 @@ impl RenderModule for Module3 {
     fn passes(&self) -> Vec<Pass> {
         let s = lock(&self.shared);
         let mut passes = self.own_passes();
+        // Below internal scale 1, the upscale's two passes; then thin lines and outlines at
+        // full size (#386).
+        let pass = |name: &str, order, reads, writes, ns_per_px, determinism| Pass {
+            name: name.into(),
+            place: "upscale",
+            order,
+            reads,
+            writes,
+            resolution: Resolution::Full,
+            ns_per_px,
+            determinism,
+        };
+        passes.push(pass(
+            UPSCALE_PASS,
+            0,
+            vec!["slot"],
+            vec!["upscaled"],
+            0.08,
+            Determinism::LiveOnly,
+        ));
+        passes.push(pass(
+            SHARPEN_PASS,
+            1,
+            vec!["upscaled"],
+            vec!["slot"],
+            0.04,
+            Determinism::LiveOnly,
+        ));
+        passes.push(pass(
+            OUTLINE_PASS,
+            2,
+            vec!["depth"],
+            vec!["slot"],
+            0.01,
+            Determinism::SameMachine,
+        ));
         if let Some(after) = s.after.as_ref() {
             passes.extend(after.passes());
         }

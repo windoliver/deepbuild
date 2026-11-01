@@ -12,6 +12,7 @@ use deep_gpu::encode::Pool;
 use deep_gpu::surface::Path;
 use deep_gpu::view::{Config, Ui, View};
 use deep_scene3d_render::status::{self, SharedStage, Stage};
+use deep_scene3d_render::surface::{Surface, Upscale};
 use deep_scene3d_render::{Counts, Module3, Planted as Planted3, Profiler};
 use serde_json::Value;
 
@@ -29,6 +30,19 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         replays_after_add: p == Some(Planted::ReplaysAfterAdd),
         slow_gpu_frame: p == Some(Planted::SlowGpuFrame),
         builds_on_first_frame: p == Some(Planted::CompilesOnFirstFrame),
+        upscale: upscale_planted(p),
+        outlines_before_upscale: p == Some(Planted::OutlinesBeforeUpscale),
+        status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
+        status_without_depth: p == Some(Planted::StatusWithoutDepth),
+    }
+}
+
+/// The upscale's wrong programs (#386).
+pub fn upscale_planted(p: Option<Planted>) -> deep_scene3d_render::surface::Planted {
+    deep_scene3d_render::surface::Planted {
+        bilinear_only: p == Some(Planted::BilinearOnly),
+        reads_previous_frame: p == Some(Planted::UpscaleReadsPreviousFrame),
+        slow: p == Some(Planted::SlowUpscale),
     }
 }
 
@@ -120,6 +134,27 @@ pub fn open_on(on: &On, size: [u32; 2], timings: bool, with_stage: bool) -> Resu
                 profiler,
                 stage,
             })
+        })
+        .map_err(|e| refused("no_session", e))
+}
+
+/// Sets the GPU surface the session's view draws through, compiling the upscale's pipelines
+/// before its first frame below scale 1 (#386).
+pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
+    app.worker
+        .call(move |state| -> Result<(), String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let mut shared = lock(&s.shared);
+            let planted = shared.planted;
+            let renderer = shared
+                .renderer
+                .get_or_insert_with(|| deep_scene3d_render::Renderer::new(&device, planted));
+            renderer.surface = surface;
+            if surface.scale < 1.0 && renderer.upscale.is_none() {
+                renderer.upscale = Some(Arc::new(Upscale::new(&device)));
+            }
+            Ok(())
         })
         .map_err(|e| refused("no_session", e))
 }
