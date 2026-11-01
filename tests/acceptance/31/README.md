@@ -1,12 +1,12 @@
 # Acceptance tests for #31: base-commit runs in a temporary checkout from DeepBuild's object store
 
-Written first and blind, from issue #31 (its Scope and its 15 checkbox criteria), `docs/technical-design.md` (How runs
+Written first and blind, from issue #31 (its Scope and its 18 checkbox criteria), `docs/technical-design.md` (How runs
 become one of five verdicts, esp. Fail before, pass after, Failing on an assertion, Pinned to a commit and The stack a check
 runs against; Threats; A base with nothing to start; the Snapshots test bullet; Evidence; Dogfooding), `AGENTS.md`, the
 acceptance tests of #29 and #30 for their conventions, and base commit `244a3455`, by a job that never saw an implementation
 of #31. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job.
 
-The issue has 15 checkbox criteria, AC1 to AC15 in the body's order.
+The issue has 18 checkbox criteria, AC1 to AC18 in the body's order; AC16 to AC18 came in a redraft of the issue (REDRAFT.md).
 
 | AC | Tag | Criterion, in short | File |
 | --- | --- | --- | --- |
@@ -25,18 +25,22 @@ The issue has 15 checkbox criteria, AC1 to AC15 in the body's order.
 | AC13 | `#31.2f87995e` | the same edits on the same HEAD are the same commit, and write nothing | `snapshot.test.ts` |
 | AC14 | `#31.ab1f7997` | snapshot retention on a controlled clock | `retention.test.ts` |
 | AC15 | `#31.a271090e` | a temporary checkout's lifetime, and a hub killed mid-run | `lifetime.test.ts` |
+| AC16 | `#31.2ec94f1d` | 300,000 untracked files: INCONCLUSIVE within 11 s, `snapshot over budget` and the count, no git left | `budget-snapshot.test.ts` |
+| AC17 | `#31.73577be6` | a second, small repo's stop while that snapshot runs gets its verdict within its own budget | `budget-snapshot.test.ts` |
+| AC18 | `#31.3c1a9f39` | a hub under `GIT_DIR`, `GIT_WORK_TREE` and `GIT_CONFIG_PARAMETERS` snapshots the claim's repo | `hub-env.test.ts` |
 
 ```sh
 npm ci                                    # once, if node_modules is missing
-npm run build --workspaces                # AC15's hub test
-cargo build -p deep-hook                  # AC15's hub test
+npm run build --workspaces                # AC15's and AC18's hub tests
+cargo build -p deep-hook                  # AC15's and AC18's hub tests
 npx vitest run --root tests/acceptance/31
 node node_modules/typescript/bin/tsc -p tests/acceptance/31/tsconfig.json
 ```
 
 Use the repo's Node (`.node-version`, 24.22.0). With `--root` here Vitest writes its cache to `tests/acceptance/31/.vite/`;
-delete it before committing. AC15's hub test goes through the real hub and deep-hook, with `tests/acceptance/29/h-d.ts`'s
-session and hub; a hub that can't start is BLOCKED (the test throws), never a pass. AC6 runs only on a reference Mac on
+delete it before committing. AC15's and AC18's hub tests go through the real hub and deep-hook, with `tests/acceptance/29/h-d.ts`'s
+session and hub; a hub that can't start is BLOCKED (the test throws), never a pass. AC18's wrong program is a hub plant,
+`DEEP_HUB_PLANT=git-inherits-env`, the same name as the `plant` above, since the hub is what gets the environment. AC6 runs only on a reference Mac on
 mains power, as #29's budgets do, and otherwise skips as INCONCLUSIVE; it never passes by skipping.
 
 ## The surface under test
@@ -71,7 +75,10 @@ export type CheckoutPlant =
   | 'stamps-time'                   // AC13: a snapshot commit carries the current time
   | 'keeps-every-snapshot'          // AC14
   | 'drops-decisions'               // AC14: a snapshot behind a decision is dropped too
-  | 'removes-at-session-end';       // AC15: checkouts are removed only when the session ends
+  | 'removes-at-session-end'        // AC15: checkouts are removed only when the session ends
+  | 'snapshot-unbounded'            // AC16: the snapshot's git is awaited with no bound; nothing is stopped at the budget
+  | 'snapshots-one-at-a-time'       // AC17: every repo's snapshot goes through one queue, the second behind the first
+  | 'git-inherits-env';             // AC18: the gate's git gets the hub's whole environment, GIT_DIR and the rest included
 
 export interface CheckoutsOptions {
   store: string;                    // DeepBuild's object store: a bare git repo, made if missing
@@ -162,7 +169,9 @@ export interface Checkouts {
 <!-- SURFACE:END -->
 
 The hub keeps its own entry: AC15's crash half reads only that the folder a killed run's check ran in is gone after the next
-start, wherever under the hub's home or temp folder it was.
+start, wherever under the hub's home or temp folder it was. AC18 reads the hub's snapshot from the record's `run.started`
+events of the stop's claim (`commit`), and resolves it with git in the claim's repo, every `objects` folder under the world
+(the hub's home and its temp folder) as alternates, wherever the hub keeps its store.
 
 ## Readings
 
@@ -182,6 +191,15 @@ start, wherever under the hub's home or temp folder it was.
 - **Citations (AC14).** The hub knows what cites a snapshot, from its record, so `prune` takes it as an argument.
 - **"Compared with the merge base" (AC6).** The base has no such service, so the absolute limits are held. Disk is the free
   space the file system reports before and after, since `du` counts a clone in full.
+- **"Within 11 s" (AC16, AC17).** The issue's budget, 8 s of git work plus 3 s to stop git and remove what it left, measured by
+  the test from `runClaim`'s call to its resolution. The count reads as the issue writes it, `300,000`. "No git process the
+  snapshot started is still running" is read from `ps`: no live git descended from the test process when the claim resolves.
+- **"While that snapshot runs" (AC17).** The small repo's stop starts 200 ms after the big one's, on the same service, and is
+  judged by its own clock: within 11 s, and resolved while a git of the big snapshot still runs, so a queue behind the first
+  fails whatever the first's cleanup costs. The small repo's claim is PASS: a presence check on its own snapshot.
+- **"Base-checks" (AC18).** The drafted check is `on_base: fails`, so the stop's claim has a base run; it shows as a
+  `run.started` of the claim whose `commit` is the claim repo's merge base. `GIT_CONFIG_PARAMETERS` carries a
+  `core.excludesFile` naming the untracked `src/extra.ts`: applied, it would leave that file out of the snapshot.
 - **The journey and the other kind (AC7, AC11).** Test kinds registered through `kinds`, reading the real folder they're
   given. Base has no journey kind. Neither stubs any part of the service.
 

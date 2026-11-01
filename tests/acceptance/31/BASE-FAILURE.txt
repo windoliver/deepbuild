@@ -24,3 +24,23 @@ Fixtures read on the real command check kind, by a throwaway test not kept here,
   the hang, 5 s deadline overran, 0 tests, no failures
 
 Not verified: no test body has run against an implementation of the surface, so no planted wrong program has been seen to fail its assertion, and the expected values are unchecked against a running service. The AC6 budgets have not been measured.
+
+----------------------------------------------------------------------------------------------------------------------
+2026-11-01: AC16 to AC18, added by the blind redraft (REDRAFT.md). Same base commit 244a3455.
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/31 budget-snapshot.test.ts hub-env.test.ts   (node v24.22.2, vitest 5.0.5, linux-arm64, 20 cores), after npm ci and npm run build --workspaces; the hub test built deep-hook itself (cargo build -p deep-hook, 19.9 s). Home paths redacted to <worktree>/.
+Exit code: 1
+Result: Test Files 2 failed (2); Tests 6 failed (6). None passed, none skipped.
+
+Why they fail:
+- budget-snapshot.test.ts, 4 tests (AC16 x2, AC17 x2): TypeError: openCheckouts is not a function
+  (helpers.ts:169, World.service), as the other 51 service tests: the surface is missing at the base. The 300,000-file fixture was built in beforeAll (2.8 s on this machine; a throwaway measurement staged it into a separate object store with `git add -A` in 6.8 s, so the 8 s of git work is exceeded only with the checkout counted).
+- hub-env.test.ts, AC18 the snapshot's parent is the claim repo's HEAD ...: fails at its assertion on the base's real hub:
+  AssertionError: the snapshot's parent is the HEAD of the repository the claim names, /tmp/dh29-pxpGZj/repo, not of the one GIT_DIR and GIT_WORK_TREE name: expected 'none' to be 'a533e3491abae14b6244adae327a2b406d4173ea'
+  The base hub's git inherited GIT_DIR and GIT_WORK_TREE, so its stop snapshotted the other repository: the run.started commit was that clean repo's root commit (no parent), not a commit on the claim repo's HEAD. The settle before the judgement waited its full 120 s: the base records no base run for the claim.
+- hub-env.test.ts, AC18 (wrong program): BLOCKED, not a pass:
+  Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=git-inherits-env did not start: ... Error: DEEP_HUB_PLANT=git-inherits-env names no planted program
+    at plantOf (file://<worktree>/packages/hub/dist/plant.js:44:15)
+
+Type check (node node_modules/typescript/bin/tsc -p tests/acceptance/31/tsconfig.json): exit 2. The two new files add no error. The same ten TS2305/TS2724 errors as before on the missing exports, plus, in every twins/<name>/packages/gate/src/checkouts.ts overlay (not this job's), TS2307 './glob.js' and TS2339 'unended' on Failure: the overlays are written against the implementation, which the base lacks.
+
+Not verified: no test body has run against an implementation of the surface or of the hub plant, so neither planted wrong program has been seen to fail its assertion; the 11 s readings are unmeasured against a bounded snapshot.
