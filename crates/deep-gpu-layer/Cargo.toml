@@ -21,6 +21,9 @@ path = "src/main.rs"
 [features]
 test-pool = ["deep-gpu/test-pool"]
 test-meter = ["dep:deep-canvas-test-modules"]
+# `test-seam` (#140) adds `--adapters`, `--quirks` and the validation lane's and error channel's
+# test fixtures; no shipped build has them.
+test-seam = []
 
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }
@@ -28,6 +31,10 @@ deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #140: the live-headless calls draw a 2D writer layer through the app's GPUI frame path and
+# headless Vello CPU (deep-marks-render's `layer`), and name the seams' backends that fed a record.
+deep-marks-render = { path = "../deep-marks-render" }
+deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #137: R1's graph, record and sheet modules, in the shipped set a host and the live view
 # check in.
 deep-canvas-graph = { path = "../deep-canvas-graph" }

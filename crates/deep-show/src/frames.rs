@@ -9,12 +9,12 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::shaper::Pending;
 use deep_canvas::document::Issue;
 use deep_canvas::schedule::{
     default_view, HashVersion, OpIssue, Session as DocSession, Target, Val,
 };
 use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
-use deep_text::worker::Pending;
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
@@ -604,7 +604,7 @@ fn shape_ahead(document: &Value) -> Vec<Pending> {
             continue;
         };
         if !deep_text::Shaper::is_cached(&spec) {
-            out.push(deep_text::worker::shape_later(&spec));
+            out.push(crate::shaper::shape_later(&spec));
         }
     }
     out

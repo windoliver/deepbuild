@@ -1,0 +1,314 @@
+# #366 acceptance tests on the base commit 39980abe, 2026-10-31T23:20Z, Node v24.22.0, on a Mac15,7 (macOS), the Bash
+# sandbox off (the runner's jobs and the plug-ins run in the platform sandbox; the replica renders with Metal).
+# Expected: every criterion's test fails for the missing #366 surface; five wrong-program controls pass, saying why.
+# - AC1: no recorded build at docs/evidence/366/stocks/{claude-code,codex}/ (each replay fails naming build.json,
+#   recording.json and package/deepbuild.json). The fixture stocks package with its view fails its conformance at
+#   "deep.registerView isn't wired into this host yet", so the copy whose panel fetches the market host is never
+#   reached. (tsc: no ExtensionHost.testPackage.)
+# - AC2, AC4, AC5: the plug-in's call to deep.runner.run fails with "Cannot read properties of undefined (reading
+#   'run')": the runtime has no deep.runner, so no job reaches the runner, no answer comes back, the refusal names no
+#   grant, and the controls that need an answer (the brief that goes out, the notice at 10:04) can't run. (tsc: no
+#   `runner` in ExtensionHostOptions.)
+# - AC3, AC6: the replica has no ⌘K: cmd-k opens nothing, so no entry is listed for any query and "Stock: NVDA" can't
+#   be clicked ("locate.none"); the view shows its main page ("Watchlist" is drawn: the panel loads). The planted
+#   replicas (page-drops-param, ranks-by-live-recency) don't exist: deep-drive answers {"ready":false,"error":"no
+#   planted replica ..."}.
+# - Passing, as controls of their judges: AC1's blocks judge names each wrong package (pure, no host); AC2's "hub
+#   answers the job itself on a key it holds" and AC5's "answer as of its own job" are modelled outcomes run through
+#   the judge; AC4's two wrong hubs run the base's real runner (#159) directly: a job starts for the session handle, and
+#   the job's own answer carries the notes file's handle. They show each judge fails the wrong program; they prove
+#   nothing about #366 and pass at any commit. AC2's canned-text control needs the brief's deep.runner.run, so it fails
+#   here. Two live tests are skipped (DEEP366_LIVE unset).
+# tsc fails only on the missing names: ExtensionHost.testPackage (and the implicit any it causes) and the `runner`
+# option. Against a stub declaring that surface (README, The surface under test), tsc reports no error in these files.
+
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/366 --no-file-parallelism
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-366-baac50/tests/acceptance/366
+
+ ❯ ac1-replay.test.ts (4 tests | 3 failed) 1007ms
+   ❯ AC1 #366.c492a7c7 The recorded package built from "Add a stocks view: my watchlist with live prices, a chart per stock, and alerts when a price crosses a target" in each agent, replayed, uses only these blocks and passes its own tests; its copy whose panel calls the market host itself is refused, naming the call (4)
+     × AC1 the package built in claude-code, replayed on its recording and clock, uses only these blocks, passes conformance and its own tests, and its copy whose panel fetches the market host is refused, naming the call 5ms
+     × AC1 the package built in codex, replayed on its recording and clock, uses only these blocks, passes conformance and its own tests, and its copy whose panel fetches the market host is refused, naming the call 1ms
+     × AC1 the fixture stocks package loads with its view, and its copy whose panel fetches the market host itself is refused, naming the call 760ms
+ ❯ ac2-runner.test.ts (4 tests | 3 failed) 3323ms
+   ❯ AC2 #366.0ef9a5fd Every model job goes through the runner (your harness) and the hub holds no model key; a failed job returns its failure, never canned text, and nothing it would send goes out (4)
+     × AC2 a plug-in's model job runs once on your agent through the runner, on your sign-in, and its answer is what the agent gave; the hub calls no model host and holds no key 590ms
+     × AC2 a job that fails rate_limited returns that failure to the plug-in, never an answer, and the brief it would send never goes out 429ms
+     × AC2 (wrong program) a hub that hands a failed job's caller canned text, which the brief then sends, fails, naming the canned text and the send 1411ms
+ ❯ ac4-grant.test.ts (4 tests | 2 failed) 3138ms
+   ❯ AC4 #366.69164550 A sandboxed plug-in granted only content-free fields that passes a session handle to `deep.runner.run` is refused before any job starts, naming the grant, and nothing a job it starts finds gives it transcript text or a file the grant doesn't name (4)
+     × AC4 a session handle passed to deep.runner.run is refused before any job starts, naming the handle and the grant 528ms
+     × AC4 a job the plug-in starts on its own reading finds neither your transcript text nor a file the grant doesn't name, and the plug-in gets neither 428ms
+ ❯ ac5-stale.test.ts (2 tests | 1 failed) 1073ms
+   ❯ AC5 #366.30a7de7d A runner answer that cites a price reading fresh for 5 minutes reads stale 5 minutes after that price's as-of time, and a notice that cites it then is refused (2)
+     × AC5 the 10:02 answer citing the 10:00 price is as of 10:00 and stale at 10:05: a notice citing it goes out at 10:04 and is refused at 10:05, naming it 477ms
+ ❯ ac6-rank.test.ts (2 tests | 2 failed) 23256ms
+   ❯ AC6 #366.792d6463 In a replica launched from a fixture, the same ⌘K query twice gives the same order, and each registered command and page is first for its exact name; a planted ranker that reads the live app's recency file gives another order in a second replica and fails, naming the command (2)
+     × AC6 the same query twice gives the same order, a second replica after the live app used three entries gives it again, and each command and page is first for its exact name 23128ms
+     × AC6 (wrong program) a ranker that reads the live app's recency file gives another order in the second replica and fails, naming the command 34ms
+ ❯ ac3-page.test.ts (2 tests | 2 failed) 24258ms
+   ❯ AC3 #366.f41df11e A stock's page opens from ⌘K with the stock as its parameter (2)
+     × AC3 ⌘K for NVDA lists the Stock page for NVDA, and choosing it opens the page with NVDA as its symbol 23826ms
+     × AC3 (wrong program) a replica that opens the page without its parameter fails, naming the page 20ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-replay.test.ts > AC1 #366.c492a7c7 The recorded package built from "Add a stocks view: my watchlist with live prices, a chart per stock, and alerts when a price crosses a target" in each agent, replayed, uses only these blocks and passes its own tests; its copy whose panel calls the market host itself is refused, naming the call > AC1 the package built in claude-code, replayed on its recording and clock, uses only these blocks, passes conformance and its own tests, and its copy whose panel fetches the market host is refused, naming the call
+AssertionError: no recorded build from claude-code: run tests/acceptance/366/ac1-build.live.test.ts by hand (README, The recorded builds): expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "docs/evidence/366/stocks/claude-code/build.json is missing",
++   "docs/evidence/366/stocks/claude-code/recording.json is missing",
++   "docs/evidence/366/stocks/claude-code/package/deepbuild.json is missing",
++ ]
+
+ ❯ ac1-replay.test.ts:51:159
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  ac1-replay.test.ts > AC1 #366.c492a7c7 The recorded package built from "Add a stocks view: my watchlist with live prices, a chart per stock, and alerts when a price crosses a target" in each agent, replayed, uses only these blocks and passes its own tests; its copy whose panel calls the market host itself is refused, naming the call > AC1 the package built in codex, replayed on its recording and clock, uses only these blocks, passes conformance and its own tests, and its copy whose panel fetches the market host is refused, naming the call
+AssertionError: no recorded build from codex: run tests/acceptance/366/ac1-build.live.test.ts by hand (README, The recorded builds): expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "docs/evidence/366/stocks/codex/build.json is missing",
++   "docs/evidence/366/stocks/codex/recording.json is missing",
++   "docs/evidence/366/stocks/codex/package/deepbuild.json is missing",
++ ]
+
+ ❯ ac1-replay.test.ts:51:159
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  ac1-replay.test.ts > AC1 #366.c492a7c7 The recorded package built from "Add a stocks view: my watchlist with live prices, a chart per stock, and alerts when a price crosses a target" in each agent, replayed, uses only these blocks and passes its own tests; its copy whose panel calls the market host itself is refused, naming the call > AC1 the fixture stocks package loads with its view, and its copy whose panel fetches the market host itself is refused, naming the call
+AssertionError: test/stocks@1.0.0's conformance: its code didn't register in the platform sandbox: deep.registerView isn't wired into this host yet: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:308:95
+    306|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    307|   const checked = await h.check(p);
+    308|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    309|   const load = await h.load(p);
+    310|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ ac1-replay.test.ts:95:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  ac2-runner.test.ts > AC2 #366.0ef9a5fd Every model job goes through the runner (your harness) and the hub holds no model key; a failed job returns its failure, never canned text, and nothing it would send goes out > AC2 a plug-in's model job runs once on your agent through the runner, on your sign-in, and its answer is what the agent gave; the hub calls no model host and holds no key
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the plug-in got no answer: Cannot read properties of undefined (reading 'run')",
++   "0 of the runner's 0 jobs carried the plug-in's prompt to your agent; the model job didn't go through the runner once",
++ ]
+
+ ❯ ac2-runner.test.ts:36:60
+     34|     const s = await stocksWorld(at('2026-11-02T10:00'));
+     35|     const got = await asked(s, ANSWER);
+     36|     expect(throughRunnerProblems(await runnerRun(s, got))).toEqual([]);
+       |                                                            ^
+     37|   }, 180_000);
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  ac2-runner.test.ts > AC2 #366.0ef9a5fd Every model job goes through the runner (your harness) and the hub holds no model key; a failed job returns its failure, never canned text, and nothing it would send goes out > AC2 a job that fails rate_limited returns that failure to the plug-in, never an answer, and the brief it would send never goes out
+AssertionError: a brief whose job answered goes out: []: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ ac2-runner.test.ts:56:152
+     54|     // The control: a brief whose job answers goes out.
+     55|     await act(s.h, 'brief', { prompt: ANSWER, inputs: [], key: 'brief-…
+     56|     expect(s.mail.seen.filter((r) => r.body.includes('brief-answered')…
+       |                                                                                                                                                        ^
+     57|     const got = await asked(s, FAIL);
+     58|     await act(s.h, 'brief', { prompt: FAIL, inputs: [], key: 'brief-fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  ac2-runner.test.ts > AC2 #366.0ef9a5fd Every model job goes through the runner (your harness) and the hub holds no model key; a failed job returns its failure, never canned text, and nothing it would send goes out > AC2 (wrong program) a hub that hands a failed job's caller canned text, which the brief then sends, fails, naming the canned text and the send
+AssertionError: ["a job that failed came back as an answer, canned text: \"The summary is not available right now.\""]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-runner.test.ts:78:114
+     76|     });
+     77|     expect(problems.some((p) => p.includes('canned text') && p.include…
+     78|     expect(problems.some((p) => p.includes('brief-failed') && p.includ…
+       |                                                                                                                  ^
+     79|   }, 240_000);
+     80| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  ac3-page.test.ts > AC3 #366.f41df11e A stock's page opens from ⌘K with the stock as its parameter > AC3 ⌘K for NVDA lists the Stock page for NVDA, and choosing it opens the page with NVDA as its symbol
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "⌘K lists no Stock: NVDA for the query: it lists []",
++   "Stock: NVDA couldn't be opened from ⌘K: {\"code\":\"locate.none\",\"message\":\"nothing matches {\\\"role\\\":\\\"list_box_option\\\",\\\"name\\\":\\\"Stock: NVDA\\\"} within 5000 ms\"}",
++   "Stock: NVDA didn't open its page with its parameter: \"Stock page: NVDA\" isn't drawn (the view shows its main page)",
++ ]
+
+ ❯ ac3-page.test.ts:33:53
+     31| describe(`AC3 ${ID.ac3} A stock's page opens from ⌘K with the stock as…
+     32|   it('AC3 ⌘K for NVDA lists the Stock page for NVDA, and choosing it o…
+     33|     expect(pageProblems(await open(), ENTRY, TEXT)).toEqual([]);
+       |                                                     ^
+     34|   }, 300_000);
+     35|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  ac3-page.test.ts > AC3 #366.f41df11e A stock's page opens from ⌘K with the stock as its parameter > AC3 (wrong program) a replica that opens the page without its parameter fails, naming the page
+AssertionError: BLOCKED: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=page-drops-param: {"ready":false,"error":"no planted replica page-drops-param"}
+ ❯ Drive.start drive.ts:62:38
+     60|     running.add(drive);
+     61|     const first = await drive.next(120_000);
+     62|     if (first.ready !== true) expect.fail(`BLOCKED: deep-drive didn't …
+       |                                      ^
+     63|     return drive;
+     64|   }
+ ❯ open ac3-page.test.ts:15:13
+ ❯ ac3-page.test.ts:37:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  ac4-grant.test.ts > AC4 #366.69164550 A sandboxed plug-in granted only content-free fields that passes a session handle to `deep.runner.run` is refused before any job starts, naming the grant, and nothing a job it starts finds gives it transcript text or a file the grant doesn't name > AC4 a session handle passed to deep.runner.run is refused before any job starts, naming the handle and the grant
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the refusal doesn't name session:5e55a0e0-3666-4000-8000-00000000c0de and the grant (content-free fields, no text): Cannot read properties of undefined (reading 'run')",
++ ]
+
+ ❯ ac4-grant.test.ts:27:67
+     25|     await seedSession(s.w, SESSION, TRANSCRIPT);
+     26|     const got = gotOf(await act(s.h, 'ask', { prompt: '@answer {"value…
+     27|     expect(refusalProblems(got, HANDLE, await s.w.runner.list())).toEq…
+       |                                                                   ^
+     28|     expect(JSON.stringify(got), 'the refusal carries no transcript tex…
+     29|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  ac4-grant.test.ts > AC4 #366.69164550 A sandboxed plug-in granted only content-free fields that passes a session handle to `deep.runner.run` is refused before any job starts, naming the grant, and nothing a job it starts finds gives it transcript text or a file the grant doesn't name > AC4 a job the plug-in starts on its own reading finds neither your transcript text nor a file the grant doesn't name, and the plug-in gets neither
+AssertionError: a job ran for the plug-in's own reading: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ ac4-grant.test.ts:59:84
+     57|     const got = gotOf(await act(s.h, 'ask', { prompt, inputs: [price.h…
+     58|     // The job ran (the plug-in's own reading is inside its grant), an…
+     59|     expect((await jobsOf(s.w)).length, 'a job ran for the plug-in\'s o…
+       |                                                                                    ^
+     60|     expect(foundProblems(got, { 'your transcript text': TRANSCRIPT, 't…
+     61|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  ac5-stale.test.ts > AC5 #366.30a7de7d A runner answer that cites a price reading fresh for 5 minutes reads stale 5 minutes after that price's as-of time, and a notice that cites it then is refused > AC5 the 10:02 answer citing the 10:00 price is as of 10:00 and stale at 10:05: a notice citing it goes out at 10:04 and is refused at 10:05, naming it
+AssertionError: the runner answered: {"ok":false,"error":"Cannot read properties of undefined (reading 'run')"}: expected undefined to be defined
+ ❯ ac5-stale.test.ts:21:67
+     19|     const got = gotOf(await act(s.h, 'ask', { prompt: `@answer ${JSON.…
+     20|     const answer: Answer | undefined = got.ok ? got.answer : undefined;
+     21|     expect(answer, `the runner answered: ${JSON.stringify(got)}`).toBe…
+       |                                                                   ^
+     22|     s.c.set(at('2026-11-02T10:04'));
+     23|     const before = await notify(s, 'NVDA-crossed-1004', [answer!.handl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  ac6-rank.test.ts > AC6 #366.792d6463 In a replica launched from a fixture, the same ⌘K query twice gives the same order, and each registered command and page is first for its exact name; a planted ranker that reads the live app's recency file gives another order in a second replica and fails, naming the command > AC6 the same query twice gives the same order, a second replica after the live app used three entries gives it again, and each command and page is first for its exact name
+AssertionError: expected [ …(10) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "⌘K lists nothing for \"Add\" in the first replica",
++   "⌘K lists nothing for \"Stock\" in the first replica",
++   "⌘K lists nothing for \"a\" in the first replica",
++   "Add alert isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++   "Add alert above target isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++   "Add to watchlist isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++   "Read prices isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++   "Stock: NVDA isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++   "Stock: AAPL isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++   "Stock: AMD isn't first for its exact name: ⌘K put (nothing) first ([\"(nothing)\"])",
++ ]
+
+ ❯ ac6-rank.test.ts:49:47
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  ac6-rank.test.ts > AC6 #366.792d6463 In a replica launched from a fixture, the same ⌘K query twice gives the same order, and each registered command and page is first for its exact name; a planted ranker that reads the live app's recency file gives another order in a second replica and fails, naming the command > AC6 (wrong program) a ranker that reads the live app's recency file gives another order in the second replica and fails, naming the command
+AssertionError: BLOCKED: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=ranks-by-live-recency: {"ready":false,"error":"no planted replica ranks-by-live-recency"}
+ ❯ Drive.start drive.ts:62:38
+     60|     running.add(drive);
+     61|     const first = await drive.next(120_000);
+     62|     if (first.ready !== true) expect.fail(`BLOCKED: deep-drive didn't …
+       |                                      ^
+     63|     return drive;
+     64|   }
+ ❯ rank ac6-rank.test.ts:22:13
+ ❯ ac6-rank.test.ts:53:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  6 failed | 1 skipped (7)
+      Tests  13 failed | 5 passed | 2 skipped (20)
+   Start at  16:20:00
+   Duration  59.78s (tests 95%, import 4%, transform 1%)
+
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/366/tsconfig.json
+
+tests/acceptance/366/ac1-build.live.test.ts(90,25): error TS2339: Property 'testPackage' does not exist on type 'ExtensionHost'.
+tests/acceptance/366/ac1-build.live.test.ts(91,117): error TS7006: Parameter 'f' implicitly has an 'any' type.
+tests/acceptance/366/ac1-replay.test.ts(79,29): error TS2339: Property 'testPackage' does not exist on type 'ExtensionHost'.
+tests/acceptance/366/helpers.ts(202,47): error TS2353: Object literal may only specify known properties, and 'runner' does not exist in type 'ExtensionHostOptions'.
