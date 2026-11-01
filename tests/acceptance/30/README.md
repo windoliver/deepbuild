@@ -14,7 +14,10 @@ The implementing agent doesn't edit these files (AGENTS.md, Proof). A dispute go
 A blind redraft of this job (2026-11-01, base `c9225aa3`, REDRAFT.md) wrote the halves that had waited on the gate
 runner (#29), the extension host (#348) and the extension slots (#349), once those landed: the claim halves in
 `claims.test.ts` and AC5's slot half in `replaces.test.ts`, against the surface in The claim's surface below. It read
-the same inputs at that base, plus the public entries those packages publish.
+the same inputs at that base, plus the public entries those packages publish. A second redraft the same day (base
+`2ea4b4a2`) wrote the last half, AC19's timing check in `timing.test.ts`, against the `timing` surface below; it
+reads the repeats' flags from the same report file the contract's counts come from, so it needed nothing of #87's
+beyond the issue's and the design's words.
 
 The issue has 19 checkbox criteria, AC1 to AC19 in the body's order.
 
@@ -72,12 +75,14 @@ export interface CommandCheck {
   secrets?: Record<string, string>;    // credentials env-local loaded for this check; scrubbed from output by value
   hosts?: string[];                    // network hosts the run's grant names ("127.0.0.1:<port>")
   contract?: NumericContract;          // a numeric contract (#28), whose counts come from the tool's report
+  timing?: { repeats: number };        // a timing check (#87): how many timed repeats it runs, numbered 1 to repeats
   stop?: AbortSignal;                  // the hub going down: the run is stopped and ends stopped
   plant?: Plant;
 }
 export interface Attempt { test: string; outcome: 'passed' | 'failed' }
 export interface Seeded { name: string; by: string; standIn: boolean }       // a table the setup writes, and the file that does
 export interface ContractCount { output: string; size: number; compared: number | null; largest_error: number | null }
+export interface TimedRepeat { repeat: number; flushed: boolean }   // flushed only when the report says so for that repeat
 
 /** A closed run outcome, check.kind@1's CheckResult plus the run record's fields. Never a verdict. */
 export interface CommandRun extends CheckResult {
@@ -89,6 +94,7 @@ export interface CommandRun extends CheckResult {
   retries: string | null;              // the flag that turned the tool's own retries off, when its report can't list attempts
   seeded: Seeded[];
   contract: ContractCount[] | null;    // null without a contract
+  timing: TimedRepeat[] | null;        // one per timed repeat, from the tool's report; null without a timing declaration
   clock: number;                       // ms the run's clock was moved ahead (0 for a normal run)
 }
 
@@ -115,6 +121,11 @@ From `CheckResult` (#314), the tests read these fields:
 - **The numeric contract's counts (AC19)** come from Vitest's own report. Each test reports, in its `task.meta`,
   `contract: { <output>: { compared, largest_error } }`, and Vitest's JSON report carries `meta` per test. When an
   output has no entry, its `compared` and `largest_error` are `null`: missing, never complete.
+- **The timing check's flushed repeats (AC19)** come from the same report. Each timed repeat is a test that reports,
+  in its `task.meta`, `timing: { repeat, flushed }`. The run record has one `TimedRepeat` per declared repeat, `1`
+  to `repeats`; its `flushed` is `true` only when a test's report says so for that repeat. A repeat no test reports
+  is `flushed: false`: not flushed, never flushed or cold. The warm-up reports nothing and is no repeat. A line the
+  test prints ("repeat 2: caches flushed") changes nothing.
 - **Scrubbing** follows the design's Privacy rule. Each `secrets` value is removed raw, in base64 at all three
   offsets in both alphabets, and URL-encoded. The mask is matched case-insensitively as `[redacted]`. Short plain
   values passed in `env` (`test`, `3000`) are kept.
@@ -298,6 +309,12 @@ supervisor planted `'sandbox-left-to-caller'` shows: the same kind's check reach
     both as fractions of the limit, as the perf lane's `judgeLimit` takes them. So readings 3.4, 2.6, 3.1, 2.9,
     3.3 have a margin of 80%, and FAIL since all are over 1.8. `helpers.ts`'s `judgeTiming` divides the spread by
     the smallest run instead, which suits a time but not an overhead that can read near zero, so AC12 doesn't use it
+- **The timing check's repeats (AC19).** The issue says the runner reads "for a timing check (#87), whether each
+  timed repeat's caches were flushed" from the same report file as the contract's counts, and that a silent repeat
+  is "not flushed". Read as follows: the check declares how many timed repeats it runs (`timing.repeats`), as a
+  contract declares its outputs, so a repeat the report leaves out still has a record; each repeat is a test whose
+  `task.meta.timing` names the repeat and says `flushed: true`; the warm-up reports nothing. Whether a not-flushed
+  repeat makes the claim INVALID, and the warm-caches declaration that excuses it, are #87's verdict half.
 - **`hosts` (AC18).** The telemetry listener must be reachable, or the silence proves nothing. So the check names
   it in `hosts`, and a control run (with `TELEMETRY_FORCE=1`) must reach it first.
 - **`seeded` (AC8).** `seeded` lists the seeded table whether or not it is a stand-in. The twin's entry for
@@ -335,7 +352,7 @@ expects that twin to fail the criterion's assertion. The twin's scenario must it
 | AC16 `#30.160d61f9` | assertion at line 30, TypeError at 41; pytest likewise | `places.test.ts` AC16 (3): Vitest for real; wrong program; pytest | pytest fails BLOCKED (no pytest) | fails |
 | AC17 `#30.a06dc35a` | retries counted attempt by attempt | `retries.test.ts` AC17 (2): the run; wrong program; `claims.test.ts` AC17 (2): the claim is INCONCLUSIVE naming "settles the order" (FAIL naming it with the tool's retries off); the last-attempt runner's claim passes and fails naming it | none | fails |
 | AC18 `#30.69c42fdf` | DO_NOT_TRACK=1 set, listed; no telemetry post | `hermetic.test.ts` AC18 (3): seen and listed; the tool posts nothing after the control reached the listener; wrong program | none | fails |
-| AC19 `#30.aebc2446` | report counts per output; silent is missing | `contract.test.ts` AC19 (5): sample 40,960; full 4,096,000; silent null; two wrong programs; `claims.test.ts` AC19 (5): the sample claim INVALID naming `output out`, the full one counts, the silent one INVALID naming it; two wrong programs | the unflushed repeat (#87) | fails |
+| AC19 `#30.aebc2446` | report counts per output; silent is missing; a silent repeat is not flushed | `contract.test.ts` AC19 (5): sample 40,960; full 4,096,000; silent null; two wrong programs; `claims.test.ts` AC19 (5): the sample claim INVALID naming `output out`, the full one counts, the silent one INVALID naming it; two wrong programs; `timing.test.ts` AC19 (5): three repeats flushed; repeat 2 silent is not flushed; the silent repeat printing "caches flushed" changes nothing; two wrong programs | none (the claim's INVALID naming the repeat is #87's) | fails (no `timing`) |
 
 ## Wrong programs
 
@@ -358,6 +375,8 @@ expects that twin to fail the criterion's assertion. The twin's scenario must it
 | `plant: 'no-do-not-track'` | AC18 | clears the environment without setting DO_NOT_TRACK | the tool posts; the failure names it |
 | `countsFromPrintedOutput` | AC19 | takes counts from the printed line | records 4,096,000 for the sample; fails naming `out`; the sample's claim counts and fails naming `output out` |
 | `silentReportAsComplete` | AC19 | takes a silent report as complete | fails naming `out`; the silent claim counts and fails naming `output out` |
+| `silentRepeatAsFlushed` | AC19 (timing) | takes a silent repeat as flushed | records repeat 2 flushed; fails naming `repeat 2` |
+| `flushedFromPrintedOutput` | AC19 (timing) | reads whether a repeat flushed from the printed line | records repeat 2 flushed on "repeat 2: caches flushed"; fails naming `repeat 2` |
 
 The functions in `wrong.ts` derive the twin's record from a real run's record, changing only what that wrong
 program would change. The `plant:` twins are selected through the surface above.
@@ -371,7 +390,10 @@ The criteria that name no twin (AC1, AC2, AC3, AC6, AC7, AC9, AC12, AC13, AC15) 
   AC7, AC8, AC9, AC10, AC14, AC17 and AC19 are in `claims.test.ts` and AC5's `replaces` half in `replaces.test.ts`,
   written by a blind redraft against The claim's surface above (REDRAFT.md). They fail at this base on the names
   that surface adds (`claimVerdict`, `ctx.host`), and pass once the hub judges a claim's command runs through it.
-- **#87, the timing check.** AC19's unflushed repeat fails BLOCKED in `blocked.test.ts`, the one half left there.
+- **#87, the timing check.** AC19's unflushed repeat is tested for real in `timing.test.ts`: the runner's record of
+  each repeat's flag, read from the report, which is #30's. What #87 owns and stays out of this suite is the claim's
+  verdict on it: the INVALID naming the repeat when a check that doesn't declare warm caches has one not flushed.
+  Nothing here is BLOCKED on #87 any more; `blocked.test.ts` is gone.
 - **The reference Mac.** AC12's number counts only there, in a fit state. Elsewhere it fails BLOCKED, or
   INCONCLUSIVE when the machine isn't fit.
 - **AC12's dispute redraft (2026-10-24).** On the reference Mac (Mac15,12, fit), the first draft's bench, printing
@@ -407,8 +429,8 @@ The criteria that name no twin (AC1, AC2, AC3, AC6, AC7, AC9, AC12, AC13, AC15) 
     `fixtures/go-counts` modules with a `go.mod` (`go 1.16`): without one, `go test` needs GOPATH mode, off by
     default since Go 1.16, the first darwin/arm64 Go, so the test was BLOCKED even under a working Go 1.27.3 arm64.
 
-So a PR for #30 that passes everything else says `Part of #30`, and lists AC19's timing half as open until #87
-lands and a blind redraft of this job tests it.
+So a PR for #30 that proves every criterion here says `Closes #30`; one that passes everything but a half says
+`Part of #30` and lists that half. The claim's INVALID on an unflushed repeat is #87's, not an open half of #30.
 
 ## Files
 
@@ -431,12 +453,14 @@ lands and a blind redraft of this job tests it.
   - `budgets.test.ts`: AC12
   - `places.test.ts`: AC16
   - `retries.test.ts`: AC17
-  - `contract.test.ts`: AC19
+  - `contract.test.ts`: AC19, the contract's counts
+  - `timing.test.ts`: AC19, the timing check's flushed repeats
   - `claims.test.ts`: the claim halves of AC2, AC7, AC8, AC9, AC10, AC14, AC17 and AC19
   - `replaces.test.ts`: AC5's slot half
-  - `blocked.test.ts`: AC19's timing half (#87)
 - `fixtures/`: one small project per scenario, and `command-kind`, the test check kind package of AC5's slot half.
   Their `.ts`, `.mjs` and `.js` files carry a `.fixture` suffix, so this suite and `tsc` skip them.
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
-- `BASE-FAILURE.txt`: the run on the base commit; `BASE-FAILURE-claims.txt`: the redraft's new files run on its base.
+- `BASE-FAILURE.txt`: the run on the base commit; `BASE-FAILURE-claims.txt`: the redrafts' new files run on their
+  bases (the claim halves at `c9225aa3`, `timing.test.ts` at `2ea4b4a2`).
+- `blocked.test.ts` is gone: no half of a criterion waits on another issue now.
 - `REDRAFT.md`: what the redraft changed and why.

@@ -83,3 +83,58 @@ backend for linux yet (#70)"), `packages/checks-command/dist` isn't built, and p
 run to a verdict: every claim test fails BLOCKED naming the run that never started (or on `claimVerdict` missing),
 `replaces.test.ts` fails BLOCKED on the unbuilt entry, and the pnpm tests fail BLOCKED on pnpm. Nothing passes. The
 run on the reference Mac, with `npm run build --workspaces` done, is the one that counts.
+
+# Blind redraft of the half that waited on #87 (2026-11-01, base `2ea4b4a2`)
+
+The one half left in `blocked.test.ts`, AC19's timing check, waited on #87. A fresh run of this job read the issue
+(its Scope line on the timing check and AC19's last sentence), #87 and the design's "Speed claims name their
+baseline" for scope, AGENTS.md, the suite as it stood and `packages/checks-command/src/index.ts`'s existing fields,
+and found the half needs nothing of #87's own surface: the issue puts the reading of each repeat's flag in #30's
+runner, from the same report file the contract's counts come from. So the half is written now, against the smallest
+addition to the run record (README, The surface under test: `CommandCheck.timing`, `TimedRepeat`,
+`CommandRun.timing`), which no implementation has at this base; an implementing agent builds to it.
+
+## What changed
+
+- `timing.test.ts` (new): AC19's timing half, in the shape of `contract.test.ts`. It runs `fixtures/timing` for real
+  through `runCommandCheck` with `timing: { repeats: 3 }` and `TIMING_MODE` picking what the report gives, and
+  asserts on the record: every repeat flushed when each says so; repeat 2 `flushed: false`, never flushed or cold,
+  when its report says nothing, the other two flushed; and the same when the silent repeat prints "repeat 2: caches
+  flushed", which the output must hold and the record must ignore. Its two `(wrong program)` twins feed the real
+  record through `silentRepeatAsFlushed` and `flushedFromPrintedOutput` and expect the assertion to fail naming
+  `repeat 2`. The claim's INVALID on an unflushed repeat, naming it, is #87's verdict half and is out of scope.
+- `fixtures/timing/`: a Vitest suite with a warm-up and three timed repeats of the same loop; each repeat reports
+  `{ repeat, flushed: true }` in its `task.meta`, except repeat 2 under `silent` and `printed`.
+- `wrong.ts`: the two twins. `silentRepeatAsFlushed` records every repeat flushed when none reports not flushed, as
+  a runner that takes silence for flushed does; `flushedFromPrintedOutput` sets the flag from the printed line.
+- `blocked.test.ts`: deleted; nothing remained in it.
+- `README.md`: the surface block, Report conventions, a Reading, the AC19 row, two wrong-program rows, What depends
+  on other issues, the "So a PR for #30" sentence, Files. The header comments of `contract.test.ts` and
+  `claims.test.ts` that pointed at `blocked.test.ts` now point at `timing.test.ts`.
+
+## Why the surface is where it is
+
+- The repeat count is declared on the check (`timing.repeats`), as a contract declares its outputs, because a repeat
+  the report leaves out must still have a record that says not flushed; a record built from the report alone could
+  only omit it.
+- `flushed` is a boolean that is `true` only when the report says so: AC19's words are "records that repeat as not
+  flushed", so the silent repeat reads `false`, and nothing in the record can read as cold or flushed for it. The
+  record doesn't tell a repeat that reported `flushed: false` from a silent one; no criterion asks it to.
+- The flag comes from `task.meta`, as the contract's counts do, so it is read from the report file the runner
+  requested and never from output.
+
+## Type check
+
+`node node_modules/typescript/bin/tsc -p tests/acceptance/30/tsconfig.json` at this base fails only on the names the
+surface adds: 12 errors, all in `timing.test.ts` and `wrong.ts`: TS2353 (`timing` unknown on `CommandCheck` and on
+`CommandRun` literals), TS2339 (`timing` missing on `CommandRun`) and TS7006 (implicit any on the callbacks whose
+type comes from `CommandRun.timing`). Against a scratch mirror under `/tmp/claude-1000/` (never inside the repo)
+whose `packages/checks-command/src/index.ts` is the real entry plus the `timing` declarations of the surface block,
+and `timing: null` in the record's initializer so the real entry's own literal satisfies the required field (no
+behavior: nothing reads the report), the same command exits 0.
+
+## Run on this machine
+
+See `BASE-FAILURE-claims.txt`'s second section. This box is Linux, where the supervisor refuses every start, so each
+run returns `missing` and the five tests fail on `outcome` (expected `passed`), the two twins included since they
+run the real check first. Nothing passes; the run on the reference Mac is the one that counts.

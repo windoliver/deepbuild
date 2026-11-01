@@ -56,6 +56,22 @@ export function silentReportAsComplete(r: CommandRun): CommandRun {
 }
 
 /**
+ * AC19: a runner that takes a silent repeat as flushed: a repeat whose report says nothing is recorded flushed, as
+ * every repeat whose report says so is, so no repeat of a check that never reports "not flushed" is recorded not
+ * flushed.
+ */
+export function silentRepeatAsFlushed(r: CommandRun): CommandRun {
+  return { ...r, timing: r.timing?.map((t) => ({ ...t, flushed: true })) ?? null };
+}
+
+/** AC19: a runner that reads whether a repeat's caches were flushed from the test's printed output. */
+export function flushedFromPrintedOutput(r: CommandRun): CommandRun {
+  const printed = new Set<number>();
+  for (const m of `${r.output.stdout}\n${r.output.stderr}`.matchAll(/repeat (\d+): caches flushed/g)) printed.add(Number(m[1]));
+  return { ...r, timing: r.timing?.map((t) => (printed.has(t.repeat) ? { ...t, flushed: true } : t)) ?? null };
+}
+
+/**
  * AC4: check.kind@1's four planted runners, each built from the command check kind the way the kit builds them
  * from its reference (packages/conformance/src/slots/check-kind.ts, plantedFills): one that reads "0 failed" from
  * a suite that crashed before running and returns passed with 12 tests, one that reports passed after its
