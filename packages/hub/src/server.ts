@@ -22,6 +22,8 @@ import { shedStartup, YOUNG } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
 
+/** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
+const LOCK_CHECK_MS = 5000;
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
@@ -299,6 +301,8 @@ class Hub {
   private ids = 0;
   private ino = 0;
   private stopping = false;
+  /** The lock file was removed or replaced under this hub (#909): another start can take it, so no hook is acknowledged. */
+  private lost = false;
   /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
   private hooks = new Set<string>();
   /** The sessions with an ask still to deliver, as the core last said: only their stops are held (#18, #19). */
@@ -334,7 +338,8 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
-      ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}) };
+      ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
+      ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}) };
     const frame = (sub: string, event: string) => {
       const s = this.subs.get(sub);
       if (!s || s.conn.done) return;
@@ -362,7 +367,8 @@ class Hub {
     this.server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code !== 'EMFILE' && error.code !== 'ENFILE') process.stderr.write(`deep hub: ${error.message}\n`);
     });
-    // The lock is held, so whatever is at the socket's path is a dead hub's: removed, then made again only you can open.
+    // The lock is held and nothing listens there, so whatever is at the socket's path is a dead hub's: removed, then
+    // made again only you can open.
     rmSync(this.root.socket, { force: true });
     const umask = process.umask(0o177);
     try {
@@ -377,6 +383,15 @@ class Hub {
     this.ino = statSync(this.root.socket).ino;
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
     this.hooks = new Set((await this.core.started).hooks);
+    // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
+    const checking = setInterval(() => {
+      if (this.lost || this.lock.held() || this.plant === 'lock-never-rechecked') return;
+      this.lost = true;
+      clearInterval(checking);
+      process.stderr.write(`deep hub: lock lost: ${this.root.lock} is no longer the file this hub holds locked\n`);
+      void this.core.request({ op: 'lock-lost', path: this.root.lock }).catch(() => undefined);
+    }, LOCK_CHECK_MS);
+    checking.unref();
     mkdirSync(join(this.root.dir, 'tickers'), { recursive: true, mode: 0o700 });
     // The waits start where the last hub left them: how long each command took, and the turns and calls still running.
     await this.core.request({ op: 'waits' }).then((state) => {
@@ -559,6 +574,8 @@ class Hub {
     // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
     if (conn.done || !conn.sock.writable) return;
     conn.done = true;
+    // With its lock lost the hub acknowledges nothing: closed with no ack, deep-hook fails open and spools the hook.
+    if (this.lost) return void conn.sock.end();
     // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); a
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
@@ -947,6 +964,16 @@ class Hub {
   }
 }
 
+/** Whether a process listens at the socket's path: a dead hub's socket refuses, and one that doesn't answer in time counts as live. */
+function listening(path: string): Promise<boolean> {
+  return new Promise((done) => {
+    const sock = net.connect(path);
+    const timer = setTimeout(() => { sock.destroy(); done(true); }, 1000);
+    sock.once('connect', () => { clearTimeout(timer); sock.destroy(); done(true); });
+    sock.once('error', () => { clearTimeout(timer); done(false); });
+  });
+}
+
 /** Values the hub holds by handle from its start, as tests name them in DEEP_HUB_TEST_HELD: scrubbed from all it writes. */
 function testHeld(): string[] {
   const file = process.env.DEEP_HUB_TEST_HELD;
@@ -992,6 +1019,12 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   const lock = takeLock(root.lock);
   if (!lock) {
     process.stderr.write(`deep hub: a hub is already running on ${root.dir}: it holds the lock\n`);
+    return 1;
+  }
+  // A hub whose lock file was removed under it still listens (#909): its socket is never removed, and this start stops.
+  if (await listening(root.socket)) {
+    lock.release();
+    process.stderr.write(`deep hub: a hub is already running on ${root.dir}: it answers on ${root.socket}, though it no longer holds the lock\n`);
     return 1;
   }
   // A restore cut off midway may have put back the record without its evidence and wiki, or the reverse (#572).

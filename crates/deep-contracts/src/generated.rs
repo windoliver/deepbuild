@@ -20444,6 +20444,7 @@ pub enum DoctorItemCode {
     TokenExpiring,
     PromptFailed,
     DeprecatedUsed,
+    JobFailing,
     Unknown,
 }
 
@@ -20471,6 +20472,7 @@ impl Contract for DoctorItemCode {
             "token_expiring" => Ok(Self::TokenExpiring),
             "prompt_failed" => Ok(Self::PromptFailed),
             "deprecated_used" => Ok(Self::DeprecatedUsed),
+            "job_failing" => Ok(Self::JobFailing),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -20498,6 +20500,7 @@ impl Contract for DoctorItemCode {
             Self::TokenExpiring => "token_expiring",
             Self::PromptFailed => "prompt_failed",
             Self::DeprecatedUsed => "deprecated_used",
+            Self::JobFailing => "job_failing",
             Self::Unknown => "unknown",
         }.to_string())
     }
