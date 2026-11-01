@@ -5,7 +5,7 @@
 // adapted from tests/acceptance/120/helpers.ts and tests/acceptance/18/binding (same repo, same license); this suite keeps
 // its own copy so a redraft of theirs never moves these tests. Nothing here stands in for DeepBuild.
 import { expect } from 'vitest';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
@@ -16,6 +16,11 @@ export const REPO = fileURLToPath(new URL('../../../', import.meta.url)).replace
 export const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
 export const HOOK = join(REPO, 'target/debug/deep-hook');
+// A fresh checkout has no target/: built at load, so HOOK stays a plain path. Cargo's lock serializes files loading this together.
+if (!existsSync(HOOK)) {
+  const built = spawnSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, encoding: 'utf8', timeout: 900_000 });
+  if (built.status !== 0 || !existsSync(HOOK)) throw Error(`BLOCKED: cargo build --locked -q -p deep-hook failed: ${built.error?.message ?? built.stderr.slice(-3000)}`);
+}
 export const NODE = process.execPath;
 export const MINUTE = 60_000;
 export const STOP_TIMEOUT_S = 45 * 60;
