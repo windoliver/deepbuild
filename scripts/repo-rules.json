@@ -948,6 +948,10 @@
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #140: the network seam's suite and the backends every reply names."
         },
+        "deep-codecs": {
+          "spec": "* path=../deep-codecs",
+          "why": "Issue #498: the decode worker and the encode tool, which this binary's copies run as, and their jobs."
+        },
         "deep-relay": {
           "spec": "* path=../deep-relay",
           "why": "Issue #309: the network seam's macOS backend, which the seam_suite and relay_client calls run, and relay@1's wire."
@@ -1427,6 +1431,28 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
+        }
+      }
+    },
+    "crates/deep-codecs/Cargo.toml": {
+      "dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #498: the worker's jobs and replies, one JSON line each; already in the tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #498: every job names the file it read or wrote by its SHA-256; already in the tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #498: sysctlbyname for the platform codecs' version and the sandbox's C strings; already in the tree."
         }
       }
     },

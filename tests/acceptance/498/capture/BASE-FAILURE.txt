@@ -1,0 +1,192 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-498-62f1c5/agent-a0277282184978894/tests/acceptance/498/capture
+
+ ❯ hold.test.ts (3 tests | 3 failed) 129062ms
+   ❯ criterion 4: a panel's camera and microphone capture keeps only what a hold of the trusted control covers (3)
+     × criterion 4 the panel's camera and microphone requests keep nothing through synthetic presses; a 2 s hold keeps every frame and sample of it and none from one frame after the release; a later request keeps nothing until the next hold, which keeps only its own 2888ms
+     × criterion 4 a planted capture that keeps its session open between holds keeps samples after the release and fails, naming the first 32ms
+     × criterion 4 a planted gate that takes synthetic presses as the hold fails before the hold; a planted label of redaction complete fails naming the label 43ms
+ ❯ live.test.ts (1 test | 1 failed) 6ms
+   ❯ criterion 4 (live): the camera and microphone through AVFoundation, kept only while ⌥Space is held (1)
+     × criterion 4 live a person holds ⌥Space twice: each hold keeps the camera's frames and the microphone's samples from its down to within one frame of its up, and the later request keeps nothing before the second hold 5ms
+ ❯ fields.test.ts (2 tests | 2 failed) 71453ms
+   ❯ max: s = 120 for the camera and microphone (1)
+     × max a 125 s hold keeps the camera's and the microphone's first 120 s and nothing after, turning the indicator off and saving both assets at 120 s while the chord is still held 1458ms
+   ❯ via: os_permission + trusted control (1)
+     × via with the camera and microphone permissions denied, the panel's requests are refused and a hold keeps nothing 84ms
+ ❯ agent.test.ts (2 tests | 2 failed) 76602ms
+   ❯ criterion 4: a capture an agent's tool call requests is refused, naming the caller (2)
+     × criterion 4 alpha's agent asking for the camera and microphone by a tool call is refused, the refusal naming sess-alpha; a hold after it keeps nothing, while the panel's own request then keeps its hold 1532ms
+     × criterion 4 a planted capture service that takes an agent's tool call as a panel's request fails, naming the caller 86ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  agent.test.ts > criterion 4: a capture an agent's tool call requests is refused, naming the caller > criterion 4 alpha's agent asking for the camera and microphone by a tool call is refused, the refusal naming sess-alpha; a hold after it keeps nothing, while the panel's own request then keeps its hold
+AssertionError: the agent's tool calls, then a hold: deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run agent.test.ts:25:18
+ ❯ agent.test.ts:60:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  agent.test.ts > criterion 4: a capture an agent's tool call requests is refused, naming the caller > criterion 4 a planted capture service that takes an agent's tool call as a panel's request fails, naming the caller
+AssertionError: the agent's tool calls, then a hold (planted records_for_agent): deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test, planted records_for_agent); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run agent.test.ts:25:18
+ ❯ agent.test.ts:64:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  fields.test.ts > max: s = 120 for the camera and microphone > max a 125 s hold keeps the camera's and the microphone's first 120 s and nothing after, turning the indicator off and saving both assets at 120 s while the chord is still held
+AssertionError: a 125 s hold: deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run fields.test.ts:24:17
+ ❯ fields.test.ts:58:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  fields.test.ts > via: os_permission + trusted control > via with the camera and microphone permissions denied, the panel's requests are refused and a hold keeps nothing
+AssertionError: requests with the OS permissions denied, then a hold: deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run fields.test.ts:69:17
+ ❯ fields.test.ts:90:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  hold.test.ts > criterion 4: a panel's camera and microphone capture keeps only what a hold of the trusted control covers > criterion 4 the panel's camera and microphone requests keep nothing through synthetic presses; a 2 s hold keeps every frame and sample of it and none from one frame after the release; a later request keeps nothing until the next hold, which keeps only its own
+AssertionError: the panel's requests, then synthetic presses: deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run hold.test.ts:49:18
+ ❯ hold.test.ts:141:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  hold.test.ts > criterion 4: a panel's camera and microphone capture keeps only what a hold of the trusted control covers > criterion 4 a planted capture that keeps its session open between holds keeps samples after the release and fails, naming the first
+AssertionError: the panel's requests, then synthetic presses (planted keeps_session_open): deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test, planted keeps_session_open); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run hold.test.ts:49:18
+ ❯ hold.test.ts:145:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  hold.test.ts > criterion 4: a panel's camera and microphone capture keeps only what a hold of the trusted control covers > criterion 4 a planted gate that takes synthetic presses as the hold fails before the hold; a planted label of redaction complete fails naming the label
+AssertionError: the panel's requests, then synthetic presses (planted records_without_hold): deep-show run answers the scenario ok (the scenario's `devices` and `permissions` fields and the `capture` call with `source: camera | microphone`, `panel` and `tool`, beside #105's `shortcut`, `indicator` and `captures` calls, README: The surface under test, planted records_without_hold); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:118:190
+    116|   expect(out.length, `${what}: one output line for the one scenario li…
+    117|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    118|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    119|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    120|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:210:25
+ ❯ run hold.test.ts:49:18
+ ❯ hold.test.ts:151:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  live.test.ts > criterion 4 (live): the camera and microphone through AVFoundation, kept only while ⌥Space is held > criterion 4 live a person holds ⌥Space twice: each hold keeps the camera's frames and the microphone's samples from its down to within one frame of its up, and the later request keeps nothing before the second hold
+AssertionError: INCONCLUSIVE: the live capture needs a person at a Mac with a camera and a microphone, DeepBuild's Camera and Microphone permissions already granted; run with DEEP_498_LIVE=1 (README: The live run)
+ ❯ live.test.ts:38:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  8 failed (8)
+   Start at  10:26:15
+   Duration  278.52s (tests 100%)
+
+
+[exited with code 1]
