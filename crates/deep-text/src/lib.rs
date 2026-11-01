@@ -11,7 +11,7 @@ pub mod fonts;
 pub mod shape;
 pub mod unicode;
 
-pub use atlas::{raster_size, Atlas, Page, Placed, PAGE, PAGES};
+pub use atlas::{raster_size, Atlas, Page, Placed, PAGE, PAGES, PHASES};
 pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
 pub use shape::{Align, Fit, Glyph, Shaped, Shaper, Spec};

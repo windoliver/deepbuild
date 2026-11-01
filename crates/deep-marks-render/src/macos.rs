@@ -32,6 +32,7 @@ use deep_canvas_marks::path::{self, Mesh};
 use deep_canvas_marks::scene::{self, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
+use deep_marks_gpui::Strip;
 use deep_text_gpui::Label;
 use gpui_apple::metal_renderer::gpu_ledger::{self, Ledger};
 use gpui_kit::test::TestWindowExt;
@@ -62,6 +63,12 @@ enum Draw {
     Quad(PaintQuad),
     Path {
         mesh: Arc<Mesh>,
+        offset: [f32; 2],
+        color: Hsla,
+    },
+    /// A stroke, its edges antialiased by GPUI's path shader (#140).
+    Strip {
+        strip: Arc<Strip>,
         offset: [f32; 2],
         color: Hsla,
     },
@@ -111,6 +118,11 @@ fn paint(draw: &Draw, view: Bounds<Pixels>, window: &mut Window) {
             offset,
             color,
         } => deep_marks_gpui::paint(mesh, *offset, *color, window),
+        Draw::Strip {
+            strip,
+            offset,
+            color,
+        } => deep_marks_gpui::paint_strip(strip, *offset, *color, window),
         Draw::Text {
             label,
             origin,
@@ -128,11 +140,13 @@ impl Render for Canvas {
         let draws = self.draws.clone();
         div().size_full().child(
             canvas(
-                // Every label's glyphs placed before the first paint: a page goes up once.
-                move |_, window, _| {
+                // Every label's glyphs placed before the first paint, at the sub-pixel phases
+                // its paint draws them at (#140): a page goes up once.
+                move |bounds, window, _| {
                     for (draw, _) in prepared.borrow().iter() {
-                        if let Draw::Text { label, .. } = draw {
-                            deep_text_gpui::prepare(label, window.scale_factor());
+                        if let Draw::Text { label, origin, .. } = draw {
+                            let at = bounds.origin + *origin;
+                            deep_text_gpui::prepare_at(at, label, window.scale_factor());
                         }
                     }
                 },
@@ -179,9 +193,16 @@ impl Entry {
     }
 }
 
+/// A path's fill triangles and its stroke's strip (#140).
 struct Tessellation {
     mesh: Arc<Mesh>,
+    strip: Option<Arc<Strip>>,
     entry: Entry,
+}
+
+/// A stroke's strip at a bucket: its fringe sized for the bucket's smallest zoom.
+fn strip_at(lines: &[path::Polyline], width: f64, bucket: i32) -> Strip {
+    deep_marks_gpui::strip(lines, width, 2f64.powi(-bucket))
 }
 
 struct LayerCache {
@@ -420,11 +441,19 @@ fn tessellation<'a>(
         .tessellations
         .entry((key, bucket))
         .or_insert_with(|| {
-            let mesh = geometry.tessellate(bucket);
-            let entry = Entry::of(key, &mesh.bytes());
+            // The fill's triangles as marks2d tessellates them; the stroke as a strip (#140).
+            let lines = path::flatten(&geometry.verbs, path::tolerance(bucket));
+            let mut mesh = Mesh::default();
+            if geometry.fill {
+                path::fill(&lines, &mut mesh);
+            }
+            let strip = geometry.stroke.map(|w| strip_at(&lines, w, bucket));
+            let mut bytes = mesh.bytes();
+            bytes.extend(strip.as_ref().map(Strip::bytes).unwrap_or_default());
             Tessellation {
                 mesh: Arc::new(mesh),
-                entry,
+                strip: strip.map(Arc::new),
+                entry: Entry::of(key, &bytes),
             }
         })
 }
@@ -718,11 +747,21 @@ impl Renderer {
                     ..
                 } => {
                     let t = tessellation(session, geometry, d, bucket, used);
-                    push(Draw::Path {
-                        mesh: t.mesh.clone(),
-                        offset: [offset[0] as f32, offset[1] as f32],
-                        color: hsla(*color),
-                    });
+                    let (offset, color) = ([offset[0] as f32, offset[1] as f32], hsla(*color));
+                    if !t.mesh.indices.is_empty() {
+                        push(Draw::Path {
+                            mesh: t.mesh.clone(),
+                            offset,
+                            color,
+                        });
+                    }
+                    if let Some(strip) = &t.strip {
+                        push(Draw::Strip {
+                            strip: strip.clone(),
+                            offset,
+                            color,
+                        });
+                    }
                 }
                 Mark::Text {
                     item,
@@ -763,29 +802,30 @@ impl Renderer {
                     fill,
                     stroke,
                 } => {
-                    // #140: a path's solid fill and solid stroke as GPUI paths, tessellated as
-                    // #380's lines are; anything else waits for Vello GPU (#385).
+                    // #140: a path's solid fill and solid stroke as GPUI paths, the fill
+                    // tessellated as #380's lines are and the stroke as a strip; anything else
+                    // waits for Vello GPU (#385).
                     let lines = path::flatten(verbs, path::tolerance(bucket));
-                    let mut paint = |paint: &Fill, opacity: f64, tessellate: &dyn Fn(&mut Mesh)| {
-                        let Fill::Solid(c) = paint else {
-                            return Err(gpui_lacks(item));
-                        };
+                    let solid = |paint: &Fill, opacity: f64| match paint {
+                        Fill::Solid(c) => Ok(hsla(*c).opacity(opacity as f32)),
+                        _ => Err(gpui_lacks(item)),
+                    };
+                    if let Some((f, opacity)) = fill {
+                        let color = solid(f, *opacity)?;
                         let mut mesh = Mesh::default();
-                        tessellate(&mut mesh);
+                        path::fill(&lines, &mut mesh);
                         push(Draw::Path {
                             mesh: Arc::new(mesh),
                             offset: [0., 0.],
-                            color: hsla(*c).opacity(opacity as f32),
+                            color,
                         });
-                        Ok(())
-                    };
-                    if let Some((f, opacity)) = fill {
-                        paint(f, *opacity, &|mesh| path::fill(&lines, mesh))?;
                     }
                     if let Some(line) = stroke.as_ref().filter(|l| l.dashes.is_none()) {
-                        paint(&line.paint, line.opacity, &|mesh| {
-                            path::stroke(&lines, line.width, mesh)
-                        })?;
+                        push(Draw::Strip {
+                            strip: Arc::new(strip_at(&lines, line.width, bucket)),
+                            offset: [0., 0.],
+                            color: solid(&line.paint, line.opacity)?,
+                        });
                     } else if stroke.is_some() {
                         return Err(gpui_lacks(item));
                     }
