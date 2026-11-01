@@ -11,7 +11,8 @@
     "tests/acceptance/879/checkout.test.mjs › AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged": "fails on main 772f5482: crates/deep-panel-host has no README.md card",
     "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or \"#rrggbb\" line": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals",
     "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the guard passes the app, and fails each planted literal naming its file and line (the views.rs one with the role to use); an exception at its place with a reason and a review date passes": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals",
-    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the lint lane runs the guard: a planted rgb(0x2563eb) in views.rs fails the lane, naming views.rs and the line": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals"
+    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the lint lane runs the guard: a planted rgb(0x2563eb) in views.rs fails the lane, naming views.rs and the line": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals",
+    "tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block": "fails on main 772f5482: it reads tests/acceptance/plans.ts as a folder (ENOTDIR)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs": 1,
