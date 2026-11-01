@@ -31,6 +31,7 @@ pub fn module() -> Module {
             feature: "motion".into(),
             license: "Apache-2.0".into(),
             implements: "motion@1".into(),
+            implementation: deep_canvas::registry::Implementation::reference("motion", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
         },
         register,
     }
