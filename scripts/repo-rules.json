@@ -911,6 +911,10 @@
         "deep-canvas-effects": {
           "spec": "* path=../deep-canvas-effects",
           "why": "Issue #380: the effects module joins R2's build set beside scene3d."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #411: the test-machines feature's GPU operators compile and dispatch through it; in no shipped build. Already in the workspace tree."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
