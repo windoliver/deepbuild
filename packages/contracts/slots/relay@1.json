@@ -1,0 +1,103 @@
+{
+  "title": "relay@1",
+  "description": "The relay protocol (#309; canvas primitives: Net: relay protocol relay@1): a copy's connection to the relay it was given, a WebSocket over https. Each control message is one JSON text message holding exactly one of these members; each frame is one binary message laid out as x-frame says, forwarded to the other copies of the sender's match only. The relay's first message is its hello; a copy refuses a relay whose hello names another protocol or digest before it sends any frame. A new shape is relay@2, never a change here.",
+  "x-since": "R6",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "hello": {
+      "description": "The relay's first message: the protocol, its digest and the limits per connection.",
+      "type": "object",
+      "properties": {
+        "protocol": { "const": "relay@1" },
+        "digest": { "type": "string", "pattern": "^d1:[0-9a-f]{64}$" },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "frames_per_s": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "frame_bytes": { "type": "integer", "minimum": 27, "maximum": 4294967295 }
+          },
+          "required": ["frames_per_s", "frame_bytes"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["protocol", "digest", "limits"],
+      "additionalProperties": false
+    },
+    "join": {
+      "description": "A copy joins a match by its ID; open is true only from the copy that drew the ID, and a second opening join of a held match joins it.",
+      "type": "object",
+      "properties": {
+        "match": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "players": { "type": "integer", "minimum": 2, "maximum": 8 },
+        "open": { "type": "boolean" }
+      },
+      "required": ["match", "players", "open"],
+      "additionalProperties": false
+    },
+    "joined": {
+      "description": "The relay's answer to a join it seated.",
+      "type": "object",
+      "properties": { "player": { "type": "integer", "minimum": 0, "maximum": 7 } },
+      "required": ["player"],
+      "additionalProperties": false
+    },
+    "refused": {
+      "description": "The relay's answer to a join it refused: no open match by that ID, every seat taken before the match's first frame, or after it.",
+      "type": "string",
+      "enum": ["unknown", "full", "started"]
+    },
+    "start": {
+      "description": "To every copy of a match once its last seat is taken; no copy sends a frame before it.",
+      "type": "object",
+      "properties": { "players": { "type": "integer", "minimum": 2, "maximum": 8 } },
+      "required": ["players"],
+      "additionalProperties": false
+    },
+    "closed": {
+      "description": "To a match's other copies when a copy's connection ends: it left, or the relay closed it for passing frames_per_s in each of 3 seconds running or for one frame past frame_bytes.",
+      "type": "object",
+      "properties": {
+        "match": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "player": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "reason": { "type": "string", "enum": ["left", "rate", "size"] }
+      },
+      "required": ["match", "player", "reason"],
+      "additionalProperties": false
+    },
+    "signal": {
+      "description": "Only to set up a direct path: a copy names the player it is for (to) and the relay hands it on naming the sender (from).",
+      "type": "object",
+      "properties": {
+        "match": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "to": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "from": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "offer": { "type": "string" },
+        "answer": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["match"],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "x-frame": {
+    "endian": "little",
+    "header": [
+      { "field": "match", "bytes": 16 },
+      { "field": "player", "type": "u8" },
+      { "field": "confirmed", "type": "u32" },
+      { "field": "first", "type": "u32" },
+      { "field": "count", "type": "u16" }
+    ],
+    "steps": {
+      "repeat": "count",
+      "fields": [
+        { "field": "bytes", "type": "u16" },
+        { "field": "entries", "bytes": "bytes" }
+      ]
+    },
+    "confirmed": "the lowest step this copy holds every player's entries for",
+    "first": "the frame's first step; each frame repeats its copy's steps after the lowest step every peer confirmed"
+  }
+}

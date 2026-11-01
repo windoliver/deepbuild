@@ -9,11 +9,11 @@ export interface Grant {
   read?: string[];
   /** Absolute paths it may read and write. */
   write?: string[];
-  /** "<host>:<port>" the egress filter lets it connect to; on Seatbelt, a port on this machine. */
+  /** "<host>:<port>" the egress filter lets it connect to; on Seatbelt and bubblewrap, a port on this machine. */
   hosts?: string[];
   /** Absolute paths of the local sockets it may connect to. */
   sockets?: string[];
-  /** "<host>:<port>" it may listen on; on Seatbelt, the port on every address of this machine, the LAN's too: Seatbelt can't tell loopback from the wildcard. A run's leased ports are added to it. */
+  /** "<host>:<port>" it may listen on; on Seatbelt and bubblewrap, the port on every address of this machine, the LAN's too: neither tells loopback from the wildcard. A run's leased ports are added to it. */
   listen?: string[];
   /** Run-as-you (Access): your files and programs, as you. Still no device, and no socket or host it doesn't name. */
   run_as_you?: boolean;

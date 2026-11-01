@@ -47,8 +47,8 @@ try {
   conformance.headless = { suite: 'headless.golden', status: sha === fixture.golden.png_sha256 ? 'PASS' : 'FAIL', backend: headless?.backends?.headless ?? null };
   conformance.cpu = blocked('cpu.exact-records', 'the exact-class records of a second architecture are needed to compare with this one', headless?.backends?.cpu ?? null);
 
-  // network: 10,000 messages through the test relay's delays, drops, duplicates and reorders.
-  const [net] = run('deep-show', ['run'], { evidence: out, calls: [{ call: 'seam_suite', seam: 'network', messages: 10000, seed: 1 }] });
+  // network: 10,000 messages through the test relay's delays, drops, duplicates and reorders, on the macOS backend (#309).
+  const [net] = run('deep-show', ['run'], { evidence: out, calls: [{ call: 'seam_suite', seam: 'network', backend: 'network.macos', messages: 10000, seed: 1 }] });
   const n = net?.replies?.[0];
   conformance.network = { suite: n?.suite ?? 'network.conformance@1', status: n?.status ?? 'FAIL', backend: n?.backend ?? null };
 
