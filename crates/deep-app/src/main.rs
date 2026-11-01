@@ -33,6 +33,12 @@
 //! "status","read":[r,g,b]}]}`. The planted twins leave the window's layer, or the wgpu surface's,
 //! untagged.
 //!
+//! Issue #140 adds `--capture-seam`: the capture seam's macOS backend asked for the main display
+//! with no picker (refused), then the system picker; once a person has picked, 3 s of it
+//! recorded and kept nowhere, with the system's recording indicator read from the window server
+//! while frames arrive. One line: `{"capture":140,"backend","permission","direct":{"outcome",
+//! "frames","indicator":{"system"}},"picker","picked","recorded","frames","indicator":{"system"}}`.
+//!
 //! Each probe prints what the gate saw as JSON on stdout, then its report as the last line:
 //! `{"spike":339,"mode":"synthetic"|"held","presses":n,"frames":n,"held":bool,"permission":
 //! "granted"|"denied"|"undetermined"}`.
@@ -65,6 +71,7 @@ enum Mode {
     ColorCheck {
         planted: Option<String>,
     },
+    CaptureSeam,
 }
 
 fn main() {
@@ -123,6 +130,8 @@ fn main() {
                 match mode {
                     Mode::Window => {}
                     Mode::CaptureBug { store } => capture_bug::start(store, cx),
+                    #[cfg(target_os = "macos")]
+                    Mode::CaptureSeam => capture_seam::start(cx),
                     mode => trusted::start(mode, cx),
                 }
             });
@@ -168,6 +177,7 @@ fn args() -> (Option<PathBuf>, Mode) {
                 }
             }
             "--color-check" => mode = Mode::ColorCheck { planted: None },
+            "--capture-seam" => mode = Mode::CaptureSeam,
             "--planted" => {
                 let twin = args.next().expect("--planted takes a name");
                 assert!(
@@ -391,6 +401,7 @@ mod trusted {
                     }
                     Mode::CaptureBug { .. } => unreachable!("the bug capture runs on its own"),
                     Mode::ColorCheck { .. } => unreachable!("the color check runs on its own"),
+                    Mode::CaptureSeam => unreachable!("the capture seam's check runs on its own"),
                     Mode::ProbeHeld { seconds, frame } => {
                         let captured = gate.borrow().counts.frames > 0;
                         if captured {
@@ -547,7 +558,7 @@ mod color_check {
     use gpui_apple::metal_renderer::layer_colorspace;
     use gpui_kit::*;
     use objc2::rc::Retained;
-    use objc2_app_kit::NSView;
+    use objc2_app_kit::{NSView, NSWindowOcclusionState};
     use objc2_core_foundation::{CGPoint, CGRect, CGSize};
     use objc2_quartz_core::CAMetalLayer;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -642,13 +653,15 @@ mod color_check {
         let slots = slots(&statuses);
         let shown = slots.iter().map(|(_, s)| s.clone()).collect();
         let placed = Rc::new(RefCell::new(Vec::new()));
+        // Above every other window, so the platform reports it visible and hands out drawables.
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(560.), px(160.)), cx)),
+            kind: WindowKind::PopUp,
             ..Default::default()
         };
         open_window(options, cx, move |window, cx| {
             let painted = placed.clone();
-            window.on_next_frame(move |window, cx| {
+            visible(window, 0, move |window, cx| {
                 let _slots = slots;
                 check(window, cx, statuses, painted, wgpu_untagged)
             });
@@ -658,15 +671,38 @@ mod color_check {
         cx.activate(true);
     }
 
-    /// The window's own CAMetalLayer: the layer GPUI's view hosts.
-    fn window_layer(window: &Window) -> Retained<CAMetalLayer> {
+    /// Runs `then` on the first frame after AppKit reports the window visible, or after 2 s of
+    /// frames when it never does.
+    fn visible(
+        window: &mut Window,
+        frames: u32,
+        then: impl FnOnce(&mut Window, &mut App) + 'static,
+    ) {
+        window.on_next_frame(move |window, cx| {
+            let shown = window_view(window)
+                .window()
+                .is_some_and(|w| w.occlusionState().contains(NSWindowOcclusionState::Visible));
+            if shown || frames > 240 {
+                then(window, cx);
+            } else {
+                window.refresh();
+                visible(window, frames + 1, then);
+            }
+        });
+    }
+
+    fn window_view(window: &Window) -> &NSView {
         let handle = HasWindowHandle::window_handle(window).expect("the window's handle");
         let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
             panic!("an AppKit window");
         };
         // SAFETY: gpui's AppKit handle wraps its NSView, alive while the gpui window is.
-        let view: &NSView = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
-        let layer = view.layer().expect("the view's layer");
+        unsafe { handle.ns_view.cast::<NSView>().as_ref() }
+    }
+
+    /// The window's own CAMetalLayer: the layer GPUI's view hosts.
+    fn window_layer(window: &Window) -> Retained<CAMetalLayer> {
+        let layer = window_view(window).layer().expect("the view's layer");
         layer.downcast::<CAMetalLayer>().expect("a CAMetalLayer")
     }
 
@@ -756,17 +792,19 @@ mod color_check {
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             None,
         );
-        let frame = match surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            other => {
-                // A window the platform reports occluded (a closed lid, another Space) gets no
-                // drawable: nothing can be read back, so the check says why and fails.
-                println!(
-                    "{}",
-                    json!({"color": 140, "error": format!("no drawable: {other:?}")})
-                );
-                std::process::exit(1);
+        // A window that stays occluded (a closed lid, another Space) gets no drawable, so
+        // nothing can be read back and the check says why and fails.
+        let frame = loop {
+            match surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(frame)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => break frame,
+                other => {
+                    println!(
+                        "{}",
+                        json!({"color": 140, "error": format!("no drawable: {other:?}")})
+                    );
+                    std::process::exit(1);
+                }
             }
         };
         let extent = wgpu::Extent3d {
@@ -1009,6 +1047,141 @@ mod capture_bug {
             "first_frame_ms": first.map(|f| ms(f.duration_since(down))),
             "held_ms": ms(held),
             "asset": {"sha256": sha, "redaction": "unknown"},
+        }))
+    }
+}
+
+/// `--capture-seam` (#140): a capture starts only through the system picker, and the system's
+/// own indicator shows while it records.
+#[cfg(target_os = "macos")]
+mod capture_seam {
+    use std::{
+        sync::{Arc, Mutex},
+        time::{Duration, Instant},
+    };
+
+    use deep_app::capture::{
+        admit, close_picker, picked, prepare, present_picker, spool, start as record, stop,
+        system_indicator, Observer, Reported, Shared, Source, BACKEND,
+    };
+    use deep_app::trusted_input::{capture_access, request_capture_access};
+    use gpui_kit::*;
+    use serde_json::{json, Value};
+
+    const TICK: Duration = Duration::from_millis(50);
+    /// How long a person has to answer the picker, how long the pick records, and how long the
+    /// recording has to finish.
+    const WAIT: Duration = Duration::from_secs(540);
+    const RECORD: Duration = Duration::from_secs(3);
+    const FINISH: Duration = Duration::from_secs(10);
+
+    pub fn start(cx: &mut App) {
+        let granted = capture_access() || request_capture_access();
+        let main = objc2_core_graphics::CGMainDisplayID();
+        let outcome = match admit(Source::Display(main)) {
+            Ok(_) => "started",
+            Err(_) => "refused",
+        };
+        // Nothing was started, so no frame came; the indicator is read from the window server.
+        let mut line = json!({
+            "capture": 140,
+            "backend": {"name": BACKEND.0, "version": BACKEND.1},
+            "permission": if granted { "granted" } else { "denied" },
+            "direct": {"outcome": outcome, "frames": 0, "indicator": {"system": system_indicator()}},
+            "picker": false,
+        });
+        if !granted {
+            println!("{line}");
+            cx.quit();
+            return;
+        }
+        let shared: Shared = Arc::new(Mutex::new(Reported::default()));
+        let observer = Observer::new(shared.clone());
+        present_picker(&observer);
+        cx.activate(true);
+        cx.spawn(async move |cx| {
+            match run(&shared, &observer, cx).await {
+                Ok(seen) => {
+                    for (k, v) in seen.as_object().into_iter().flatten() {
+                        line[k] = v.clone();
+                    }
+                    println!("{line}");
+                }
+                Err(blocked) => {
+                    line["blocked"] = json!(blocked);
+                    println!("{line}");
+                    std::process::exit(1);
+                }
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+
+    async fn tick(cx: &mut AsyncApp, shared: &Shared) -> Result<Reported, String> {
+        cx.background_executor().timer(TICK).await;
+        let r = shared
+            .lock()
+            .map_err(|_| "a callback panicked".to_string())?;
+        match &r.failed {
+            Some(failed) => Err(failed.clone()),
+            None => Ok(Reported {
+                picked: r.picked.clone(),
+                cancelled: r.cancelled,
+                failed: None,
+                frames: r.frames,
+                first_frame: r.first_frame,
+                finished: r.finished,
+            }),
+        }
+    }
+
+    async fn run(shared: &Shared, observer: &Observer, cx: &mut AsyncApp) -> Result<Value, String> {
+        let begun = Instant::now();
+        let choice = loop {
+            let r = tick(cx, shared).await?;
+            if r.cancelled {
+                return Err("the picker was cancelled: nothing recorded".into());
+            }
+            if let Some(p) = r.picked {
+                break p;
+            }
+            if begun.elapsed() > WAIT {
+                return Err("no pick".into());
+            }
+        };
+        close_picker(observer);
+        let as_json = |(kind, display): (&str, Option<(u32, bool)>)| json!({"kind": kind, "id": display.map(|(id, _)| id)});
+        let chosen = as_json(picked(&choice.0));
+        let filter = admit(Source::Picked(choice)).map_err(str::to_string)?.0;
+        let spool = spool();
+        let _ = std::fs::remove_file(&spool);
+        let (stream, _recording) = prepare(&filter, observer, &spool)?;
+        record(&stream, shared);
+        let started = Instant::now();
+        let mut indicator = false;
+        while started.elapsed() < RECORD {
+            let r = tick(cx, shared).await?;
+            // Read while frames arrive, so it is the recording the indicator shows.
+            if r.frames > 0 {
+                indicator |= system_indicator();
+            }
+        }
+        stop(&stream, shared);
+        let stopped = Instant::now();
+        let frames = loop {
+            let r = tick(cx, shared).await?;
+            if r.finished || stopped.elapsed() > FINISH {
+                break r.frames;
+            }
+        };
+        let _ = std::fs::remove_file(&spool);
+        Ok(json!({
+            "picker": true,
+            "picked": chosen,
+            "recorded": as_json(picked(&filter)),
+            "frames": frames,
+            "indicator": {"system": indicator},
         }))
     }
 }
