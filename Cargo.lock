@@ -1851,6 +1851,7 @@ dependencies = [
 name = "deep-canvas-seams"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "serde_json",
 ]
 

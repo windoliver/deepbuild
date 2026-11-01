@@ -18,7 +18,7 @@ use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::hub::{Call, Eval, Frames, Hub, Show, SEAL_RUNS};
+use crate::hub::{Call, Eval, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// An operator's error as a revision's issue.
@@ -106,6 +106,7 @@ impl<'a> Hub<'a> {
                     json!({
                         "owner": a.owner, "type": a.ty, "domain": a.domain,
                         "class": a.class, "phase": a.phase, "contributes_to": a.contributes_to,
+                        "visibility": if a.private { "private" } else { "public" },
                     }),
                 )
             })
@@ -164,7 +165,8 @@ impl<'a> Hub<'a> {
             "costs": costs,
             "plan": sealed.plan,
             "schedule": {"uri": sealed.schedule_uri(), "sha256": deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(&sealed.schedule()))},
-            "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed)},
+            "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed),
+                     "interfaces": {"ms": sealed.interface_ns as f64 / 1e6, "runs": INTERFACE_RUNS.load(Ordering::Relaxed)}},
         })
     }
 
