@@ -669,6 +669,7 @@ class Hub {
     const late = new Promise<{ decision: 'none' }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none' }>;
     const { decision } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (!conn.sock.writable) return;
     if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
     if (decision === 'deny') this.waits.drop(meta.session, meta.toolUse);
@@ -689,6 +690,7 @@ class Hub {
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
     const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
     const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (!conn.sock.writable) return;
     const why = 'late' in gate ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
       : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
@@ -751,6 +753,15 @@ class Hub {
     }
     return this.settingsSeen.relation;
   }
+  /**
+   * The planted delay (#906), which only tests set: while DEEP_HUB_TEST_LATE_REPLY's file exists, a held hook's reply,
+   * once in hand, is written no sooner than 1 s past its hold, when deep-hook has given up on it.
+   */
+  private async lateReply(hold: number): Promise<void> {
+    const file = process.env.DEEP_HUB_TEST_LATE_REPLY;
+    if (!file || !existsSync(file)) return;
+    await new Promise((done) => setTimeout(done, Math.max(0, hold + 1000 - Date.now())));
+  }
   /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
   private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     // A deep-hook that gave up on the hub before reading its reply has let the hook through: nothing is held for it (#27).
@@ -760,8 +771,11 @@ class Hub {
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string; message?: string } | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (!conn.sock.writable) return;
     replied = true;
+    // A core reply past the hold isn't written: an answer it handed the agent reads stalled and goes by the next route (#906).
+    if (!reply) this.core.post({ op: 'hook-gone', id: meta.id, session: meta.session });
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
@@ -777,6 +791,7 @@ class Hub {
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
   }
 
