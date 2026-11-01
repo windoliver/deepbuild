@@ -1,0 +1,237 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-105-0bcf9d/agent-a5dc6b996872af5f4/tests/acceptance/105
+
+ ❯ privacy.test.ts (4 tests | 4 failed) 203729ms
+   ❯ AC4 no record row, event or log line holds a frame; one asset arrives by hash, redaction unknown (2)
+     × AC4 after a 3 s capture of B and its release, no line of the record, no other file in the state folder and no log line holds a frame of either display 5354ms
+     × AC4 1 s after the release one asset is in the evidence store by its hash, labelled redaction unknown and origin deepbuild, named by the record, holding every frame of the hold from B 600ms
+   ❯ AC4 a crash mid-hold leaves no asset (1)
+     × AC4 a hold of B killed 1.5 s in leaves no asset and no frame in the record or the evidence store, and after a restart the capture has no asset 116ms
+   ❯ AC4 a Send that attaches the capture waits for your approval (1)
+     × AC4 alpha's send of the capture to a tracker waits, delivering nothing, until your approval, and then delivers the capture's bytes once 692ms
+ ❯ hold.test.ts (2 tests | 2 failed) 64641ms
+   ❯ AC1 no frame is captured without the shortcut held, over 200 synthetic presses (1)
+     × AC1 after you pick the second display, 200 synthetic presses of the chord in four forms capture no frame, light no indicator and leave no asset; holding it on the keyboard for 4 s then records every frame of the hold, the first within 100 ms, with the indicator on 1572ms
+   ❯ AC1 scope: a hold records at most 120 s (1)
+     × AC1 a 125 s hold of the chord keeps every frame of its first 120 s and none after, turns the indicator off and saves the asset at 120 s while the chord is still held 182ms
+ ❯ budgets.test.ts (2 tests | 2 failed) 27633ms
+   ❯ AC3 budgets in the local preflight, compared with the merge base (1)
+     × AC3 the perf lane has a task for saving a capture, a #105 first measurement, valid against the merge base's budgets 451ms
+   ❯ AC3 the issue's number on the reference Mac (1)
+     × AC3 a capture is saved within 1 s: a 119.5 s hold of B, recorded, released and saved, against the same run with the picker cancelled 1779ms
+ ❯ live.test.ts (1 test | 1 failed) 5ms
+   ❯ Proof (live): a capture of a second display through the system picker on the reference Mac (1)
+     × Proof a person picks the second display in the system picker and holds ⌥Space: one MP4 by hash, redaction unknown, its first frame within 100 ms 4ms
+ ❯ report.test.ts (1 test | 1 failed) 21188ms
+   ❯ AC2 a captured bug becomes a drafted check on its ask (1)
+     × AC2 a 2 s capture of the second display, started for alpha with your words, is saved as evidence labelled unknown, attached to the ask it opens in alpha, and that ask's definition holds one drafted, required check that reproduces it 1392ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC3 budgets in the local preflight, compared with the merge base > AC3 the perf lane has a task for saving a capture, a #105 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task capture-save: expected undefined to be defined
+ ❯ budgets.test.ts:37:53
+     35|     validateBudgets(current, JSON.parse(execFileSync('git', ['show', `…
+     36|     const task = current.tasks.find((t) => t.id === TASK);
+     37|     expect(task, `budgets.json has a task ${TASK}`).toBeDefined();
+       |                                                     ^
+     38|     expect(task!.command.length, `${TASK} names its command`).toBeGrea…
+     39|     expect(String(task!.initialReason), `${TASK} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  budgets.test.ts > AC3 the issue's number on the reference Mac > AC3 a capture is saved within 1 s: a 119.5 s hold of B, recorded, released and saved, against the same run with the picker cancelled
+AssertionError: a saved capture: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ timed budgets.test.ts:71:27
+ ❯ perSave budgets.test.ts:77:35
+ ❯ budgets.test.ts:78:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  hold.test.ts > AC1 no frame is captured without the shortcut held, over 200 synthetic presses > AC1 after you pick the second display, 200 synthetic presses of the chord in four forms capture no frame, light no indicator and leave no asset; holding it on the keyboard for 4 s then records every frame of the hold, the first within 100 ms, with the indicator on
+AssertionError: 200 synthetic presses: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:193:33
+ ❯ run hold.test.ts:46:18
+ ❯ hold.test.ts:81:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  hold.test.ts > AC1 scope: a hold records at most 120 s > AC1 a 125 s hold of the chord keeps every frame of its first 120 s and none after, turns the indicator off and saves the asset at 120 s while the chord is still held
+AssertionError: a 125 s hold: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:193:33
+ ❯ run hold.test.ts:96:17
+ ❯ hold.test.ts:124:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  live.test.ts > Proof (live): a capture of a second display through the system picker on the reference Mac > Proof a person picks the second display in the system picker and holds ⌥Space: one MP4 by hash, redaction unknown, its first frame within 100 ms
+AssertionError: INCONCLUSIVE: the live capture needs a person at the reference Mac with a second display; run with DEEP_105_LIVE=1 (README: The live run)
+ ❯ live.test.ts:31:54
+     29| describe('Proof (live): a capture of a second display through the syst…
+     30|   it('Proof a person picks the second display in the system picker and…
+     31|     if (process.env['DEEP_105_LIVE'] !== '1') expect.fail('INCONCLUSIV…
+       |                                                      ^
+     32|     const problem = environmentProblem();
+     33|     if (problem) expect.fail(`INCONCLUSIVE: ${problem}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  privacy.test.ts > AC4 no record row, event or log line holds a frame; one asset arrives by hash, redaction unknown > AC4 after a 3 s capture of B and its release, no line of the record, no other file in the state folder and no log line holds a frame of either display
+AssertionError: a 3 s capture of B: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:193:33
+ ❯ full privacy.test.ts:30:20
+ ❯ privacy.test.ts:50:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  privacy.test.ts > AC4 no record row, event or log line holds a frame; one asset arrives by hash, redaction unknown > AC4 1 s after the release one asset is in the evidence store by its hash, labelled redaction unknown and origin deepbuild, named by the record, holding every frame of the hold from B
+AssertionError: a 3 s capture of B: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:193:33
+ ❯ full privacy.test.ts:30:20
+ ❯ privacy.test.ts:57:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  privacy.test.ts > AC4 a crash mid-hold leaves no asset > AC4 a hold of B killed 1.5 s in leaves no asset and no frame in the record or the evidence store, and after a restart the capture has no asset
+AssertionError: the restart: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ crash privacy.test.ts:78:33
+ ❯ privacy.test.ts:93:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  privacy.test.ts > AC4 a Send that attaches the capture waits for your approval > AC4 alpha's send of the capture to a tracker waits, delivering nothing, until your approval, and then delivers the capture's bytes once
+AssertionError: a send of the capture: the capture: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:193:33
+ ❯ send privacy.test.ts:117:22
+ ❯ privacy.test.ts:142:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  report.test.ts > AC2 a captured bug becomes a drafted check on its ask > AC2 a 2 s capture of the second display, started for alpha with your words, is saved as evidence labelled unknown, attached to the ask it opens in alpha, and that ask's definition holds one drafted, required check that reproduces it
+AssertionError: a bug captured from B: deep-show run answers the scenario ok (the scenario's `feed`, `state` and `fault` fields and the `capture`, `pick`, `shortcut`, `indicator`, `captures`, `task`, `send` and `approve` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:112:190
+    110|   expect(out.length, `${what}: one output line for the one scenario li…
+    111|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    112|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    113|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    114|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:193:33
+ ❯ run report.test.ts:24:28
+ ❯ report.test.ts:53:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  10 failed (10)
+   Start at  23:19:40
+   Duration  319.08s (tests 100%)
+
+
+[exited with code 1]

@@ -116,7 +116,8 @@ impl<'a> Hub<'a> {
             .map(|o| {
                 (
                     o.key.clone(),
-                    json!({"module": o.module, "phase": o.op.phase, "reads": o.op.reads, "writes": o.op.writes}),
+                    json!({"module": o.module, "phase": o.op.phase, "reads": o.op.reads, "writes": o.op.writes,
+                           "thread_safe": !o.op.serial}),
                 )
             })
             .collect();
@@ -227,6 +228,7 @@ impl<'a> Hub<'a> {
         }
         let targets = session.targets(&self.sched);
         let scratch;
+        let started = Instant::now();
         let evaluated: &DocSession = if e.clean {
             scratch = session.clean(&mut self.sched, t, &view, perturb.flatten());
             &scratch
@@ -234,12 +236,13 @@ impl<'a> Hub<'a> {
             session.frame(&mut self.sched, t, &view);
             session
         };
+        let frame_ms = started.elapsed().as_secs_f64() * 1000.0;
         let nodes: Vec<Value> = evaluated
             .nodes(&self.sched)
             .into_iter()
             .map(|n| {
                 let mut node = json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
-                       "key": n.key, "result": n.result, "run": n.run.name()});
+                       "key": n.key, "result": n.result, "run": n.run.name(), "thread": n.thread});
                 if e.debug_text {
                     node["debug"] = debug_digest(&n.values);
                 }
@@ -253,6 +256,8 @@ impl<'a> Hub<'a> {
             "rev": rev,
             "t": t,
             "epoch": evaluated.epoch(),
+            "threads": evaluated.threads(),
+            "frame_ms": frame_ms,
             "nodes": nodes,
             "targets": targets.iter().map(|t| json!({"target": t.name(), "term": t.term()})).collect::<Vec<_>>(),
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
@@ -377,7 +382,8 @@ impl<'a> Hub<'a> {
                 .map(|v| crate::count_allocations(|| (**v).clone()).1 + 1)
                 .sum();
             let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
-                                   "settling": pending.is_some(), "json_values": json_values});
+                                   "frame_ms": ms, "settling": pending.is_some(),
+                                   "json_values": json_values});
             let mut capture = 0;
             if f.pixels {
                 let before = thread_cpu_ns();
@@ -405,11 +411,35 @@ impl<'a> Hub<'a> {
             frame["ui_ms"] = json!(ui as f64 / 1e6);
             out.push(frame);
         }
-        let mut reply = json!({ "frames": out });
+        // #857: each background job's frames from its start to this reply.
+        let background: Vec<Value> = self
+            .background
+            .iter()
+            .map(|(job, replica, frames)| {
+                let mut v = json!({"job": job, "frames": frames.load(Ordering::Relaxed)});
+                if let Some(r) = replica {
+                    v["replica"] = json!(r);
+                }
+                v
+            })
+            .collect();
+        let threads = self.sessions.get(&f.doc).map(|s| s.threads());
+        let mut reply = json!({"threads": threads, "frames": out, "background": background});
         if !revised.is_null() {
             reply["revised"] = revised;
         }
         reply
+    }
+
+    /// One frame of a background job's session at `t` (#857); false when it has no revision,
+    /// as when the check refused its document.
+    pub fn job_frame(&mut self, doc: &str, t: i64, over: &Map<String, Value>) -> bool {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return false;
+        };
+        let view = session_view(session, over);
+        session.frame(&mut self.sched, t, &view);
+        true
     }
 
     /// A whole revision of `doc` from whoever sent its last one, admitted as a deep_show call is.
@@ -573,7 +603,7 @@ fn shape_ahead(document: &Value) -> Vec<Pending> {
 
 /// The view a frame reads: the session's current revision's defaults, with the call's locale
 /// and reduced motion over them.
-fn session_view(session: &DocSession, over: &Map<String, Value>) -> [Value; 6] {
+pub(crate) fn session_view(session: &DocSession, over: &Map<String, Value>) -> [Value; 6] {
     let mut view = default_view(session.document().unwrap_or(&Value::Null));
     if let Some(l) = over.get("locale") {
         view[deep_canvas::schedule::LOCALE] = l.clone();
@@ -662,11 +692,18 @@ fn cell_grids(
     use deep_canvas_cells::module::Grid;
     use deep_canvas_marks::scene::{self, Fill, Mark};
     let mut out = Vec::new();
+    // Each grid by its item, read once from the grid operator's own nodes (#854: a lookup per
+    // item scanned every node, which a 10,000-item board paid on every frame).
+    let grids: BTreeMap<&str, Val> = session
+        .values(sched, "cells.grid")
+        .into_iter()
+        .filter_map(|(id, v)| Some((id?, v)))
+        .collect();
+    if grids.is_empty() {
+        return out;
+    }
     for (id, _) in doc["items"].as_object().into_iter().flatten() {
-        let Some(g) = session
-            .value(sched, "cells.grid", Some(id))
-            .and_then(|v| v.as_typed::<Grid>())
-        else {
+        let Some(g) = grids.get(id.as_str()).and_then(|v| v.as_typed::<Grid>()) else {
             continue;
         };
         let mark = |m: Mark| scene::Drawn {
@@ -744,7 +781,7 @@ pub(crate) fn drawing_of(
         let mut frame = d.frame.clone();
         frame.layers.push(deep_canvas_marks::scene::Layer {
             id: "cells".into(),
-            marks: grids,
+            marks: grids.into_iter().map(Arc::new).collect(),
             key: deep_canvas_marks::key::ContentKey([0; 16]),
         });
         *d = Arc::new(Drawing {

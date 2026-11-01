@@ -36,7 +36,9 @@ use sha2::{Digest, Sha256};
 
 use crate::evidence;
 use crate::frames::unfit_issue;
-use crate::hub::{diff_reply, Body, Call, Hub, Include, PatchCall, Planted, Show, Via};
+use crate::hub::{
+    diff_reply, refused_reply, Body, Call, Hub, Include, PatchCall, Planted, Show, Via,
+};
 use crate::snapshot::Unfit;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
@@ -1372,17 +1374,7 @@ impl Hub<'_> {
             reply.insert("blocked".into(), Value::Array(blocked));
         }
         if self.issue_reply(&issues, &mut reply) {
-            reply.insert("outcome".into(), json!("refused"));
-            if show.check {
-                // A check that needs a module or a pack version the build lacks, or that an
-                // unknown item kind blocks, is BLOCKED, never a FAIL.
-                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
-                reply.insert(
-                    "result".into(),
-                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
-                );
-            }
-            return Value::Object(reply);
+            return refused_reply(reply, &issues, show.check);
         }
 
         // Committed: the document becomes this revision, with its expansions (#306).
@@ -1587,10 +1579,11 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
-                    // A plug-in's panel scripts run up to the call (#401), and terminals take
-                    // the output that arrived by then (#402).
+                    // A plug-in's panel scripts run up to the call (#401), terminals take the
+                    // output that arrived by then (#402), and captures the frames (#105).
                     self.advance_ring(at);
                     self.advance_terms(at);
+                    self.advance_capture(at);
                     self.now = at;
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);

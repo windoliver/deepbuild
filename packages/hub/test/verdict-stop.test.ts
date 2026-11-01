@@ -7,17 +7,10 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
-import { hookLine, reply, send, withHub } from './hub.js';
+import { hookLine, recorded, reply, send, withHub } from './hub.js';
 
 const procs: ChildProcess[] = [];
 afterAll(() => { for (const p of procs) p.kill('SIGTERM'); });
-
-/** Polls the record until `kind` has `n` events of the session, up to 10 s; the count then. */
-function recorded(root: string, session: string, kind: string, n: number): Promise<number> {
-  const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
-  const count = () => (db.prepare('SELECT count(*) AS n FROM events WHERE kind = ? AND session_id = ?').get(kind, session) as { n: number }).n;
-  return (async () => { try { for (const until = Date.now() + 10_000; Date.now() < until && count() < n; await new Promise((r) => setTimeout(r, 50))); return count(); } finally { db.close(); } })();
-}
 
 describe('a Codex session that opens a pull request', () => {
   it('records the PR from the gh pr create call\'s PostToolUse, so its receipt can name it', async () => {

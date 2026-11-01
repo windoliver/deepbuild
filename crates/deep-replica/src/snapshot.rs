@@ -3,6 +3,8 @@
 //! observe; the live capture builds the same shape from the real window's accessibility tree, so
 //! the two compare node for node.
 
+use std::collections::HashMap;
+
 use gpui_kit::{base::test_support::snapshots, ElementId, Pixels, Role, Window};
 use serde_json::{json, Value};
 
@@ -262,18 +264,25 @@ pub fn from_observed(window: &Window) -> Snapshot {
             ))
         })
         .collect();
-    // Each node's parent is the longest other path that is a strict prefix of its own.
-    let parents: Vec<Option<usize>> = (0..observed.len())
-        .map(|index| {
-            let path = &observed[index].0;
-            (0..observed.len())
-                .filter(|&other| {
-                    let candidate = &observed[other].0;
-                    other != index && candidate.len() < path.len() && path.starts_with(candidate)
-                })
-                .max_by_key(|&other| observed[other].0.len())
+    // Each node's parent is the longest other path that is a strict prefix of its own (the last
+    // such node, when two share a path), looked up by prefix so a large frame stays linear.
+    let by_path: HashMap<&[ElementId], usize> = observed
+        .iter()
+        .enumerate()
+        .map(|(index, (path, _))| (path.as_slice(), index))
+        .collect();
+    let parents: Vec<Option<usize>> = observed
+        .iter()
+        .map(|(path, _)| {
+            (0..path.len())
+                .rev()
+                .find_map(|len| by_path.get(&path[..len]).copied())
         })
         .collect();
+    let mut children: HashMap<Option<usize>, Vec<usize>> = HashMap::new();
+    for (index, parent) in parents.iter().enumerate() {
+        children.entry(*parent).or_default().push(index);
+    }
     let mut root = Node {
         role: role_name(Role::Window),
         name: None,
@@ -281,7 +290,7 @@ pub fn from_observed(window: &Window) -> Snapshot {
         bounds: [0, 0, device(viewport.width), device(viewport.height)],
         children: Vec::new(),
     };
-    root.children = children_of(None, &observed, &parents);
+    root.children = children_of(None, &observed, &children);
     Snapshot {
         size: [
             f32::from(viewport.width).round() as u32,
@@ -305,29 +314,26 @@ pub fn from_observed(window: &Window) -> Snapshot {
 fn children_of(
     parent: Option<usize>,
     observed: &[(Vec<ElementId>, Node)],
-    parents: &[Option<usize>],
+    children: &HashMap<Option<usize>, Vec<usize>>,
 ) -> Vec<Node> {
-    let indices: Vec<usize> = (0..observed.len())
-        .filter(|&index| parents[index] == parent)
-        .collect();
+    let Some(indices) = children.get(&parent) else {
+        return Vec::new();
+    };
     let group = |index: usize| {
         let path = &observed[index].0;
         &path[..path.len().saturating_sub(1)]
     };
     let corner = |index: usize| (observed[index].1.bounds[1], observed[index].1.bounds[0]);
-    let group_corner = |index: usize| {
-        indices
-            .iter()
-            .filter(|&&other| group(other) == group(index))
-            .map(|&other| corner(other))
-            .min()
-            .expect("the group holds its own member")
-    };
+    let mut group_corners: HashMap<&[ElementId], (i64, i64)> = HashMap::new();
+    for &index in indices {
+        let at = group_corners.entry(group(index)).or_insert(corner(index));
+        *at = (*at).min(corner(index));
+    }
     let keys = indices
         .iter()
         .map(|&index| {
             (
-                group_corner(index),
+                group_corners[group(index)],
                 corner(index),
                 format!("{:?}", observed[index].0),
             )
@@ -340,7 +346,7 @@ fn children_of(
         .map(|at| indices[at])
         .map(|index| {
             let mut node = observed[index].1.clone();
-            node.children = children_of(Some(index), observed, parents);
+            node.children = children_of(Some(index), observed, children);
             node
         })
         .collect()

@@ -838,6 +838,34 @@ mod tests {
         }
     }
 
+    /// A press the OS can't vouch for, from pid 4242.
+    fn synthetic(t: u64, target: Target, phase: Phase) -> Input {
+        Input {
+            t,
+            source: Source::Synthetic { pid: Some(4242) },
+            target,
+            phase,
+        }
+    }
+
+    /// An authority ask to push origin/x, declined by default.
+    fn approval(id: &str) -> Value {
+        ask(
+            id,
+            "authority",
+            json!([{"id": "approve", "label": "Allow", "decision": "allow"}, {"id": "decline", "label": "Decline", "decision": "deny"}]),
+            json!({"default": "decline", "subject": {"effect": "push", "target": {"ref": "origin/x"}}}),
+        )
+    }
+
+    /// The usage rows the card wrote since they were last taken, by name.
+    fn usage_rows(card: &mut Controller) -> Vec<String> {
+        card.take_usage()
+            .iter()
+            .map(|row| row["row"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
     fn click(controller: &mut Controller, events: &[Value], t: u64, target: Target) -> Did {
         match controller.press(hardware(t, target, Phase::Down), events, t) {
             Did::Nothing => controller.press(hardware(t + 30, target, Phase::Up), events, t + 30),
@@ -873,11 +901,7 @@ mod tests {
             answers[0].get("token").is_none(),
             "a taste answer carries no click token"
         );
-        let rows: Vec<String> = card
-            .take_usage()
-            .iter()
-            .map(|row| row["row"].as_str().unwrap().to_owned())
-            .collect();
+        let rows = usage_rows(&mut card);
         assert_eq!(rows, ["presented", "refused", "answered"]);
         assert_eq!(card.state_name(), "answered");
         assert!(card.lines().contains(&"Undo".to_owned()));
@@ -891,12 +915,7 @@ mod tests {
 
     #[test]
     fn an_approval_whose_own_step_cant_be_undone_waits_for_its_switch() {
-        let delete = ask(
-            "D",
-            "authority",
-            json!([{"id": "approve", "label": "Allow", "decision": "allow"}, {"id": "decline", "label": "Decline", "decision": "deny"}]),
-            json!({"default": "decline", "subject": {"effect": "push", "target": {"ref": "origin/x"}}}),
-        );
+        let delete = approval("D");
         let events = vec![
             delete,
             json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:D", "steps": [{"does": "delete the branch", "undo": "none", "public": true}], "diff": "d", "hash": "h"}}),
@@ -927,27 +946,15 @@ mod tests {
 
     #[test]
     fn switching_the_asks_own_steps_off_while_the_os_asks_sends_nothing() {
-        let push = ask(
-            "P",
-            "authority",
-            json!([{"id": "approve", "label": "Allow", "decision": "allow"}, {"id": "decline", "label": "Decline", "decision": "deny"}]),
-            json!({"default": "decline", "subject": {"effect": "push", "target": {"ref": "origin/x"}}}),
-        );
+        let push = approval("P");
         let events = vec![
             push,
             json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:P", "steps": [{"does": "push the branch", "undo": "force back", "public": true}], "diff": "d", "hash": "h"}}),
         ];
         let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
         let t = NOW + ARM_AFTER;
-        let source = Source::Synthetic { pid: Some(4242) };
         for (dt, phase) in [(0, Phase::Down), (30, Phase::Up)] {
-            let input = Input {
-                t: t + dt,
-                source,
-                target: Target::Option(0),
-                phase,
-            };
-            card.press(input, &events, t + dt);
+            card.press(synthetic(t + dt, Target::Option(0), phase), &events, t + dt);
         }
         assert!(
             card.machine.confirming().is_some(),
@@ -967,12 +974,7 @@ mod tests {
 
     #[test]
     fn words_alone_answer_this_ask_only_and_a_typed_yes_never_runs_the_plan() {
-        let push = ask(
-            "P",
-            "authority",
-            json!([{"id": "approve", "label": "Allow", "decision": "allow"}, {"id": "decline", "label": "Decline", "decision": "deny"}]),
-            json!({"default": "decline", "subject": {"effect": "push", "target": {"ref": "origin/x"}}}),
-        );
+        let push = approval("P");
         let events = vec![
             push,
             taste("B"),
@@ -1021,24 +1023,9 @@ mod tests {
         let events = vec![taste("A")];
         let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
         let t = NOW + ARM_AFTER;
-        let source = Source::Synthetic { pid: Some(4242) };
-        card.press(
-            Input {
-                t,
-                source,
-                target: Target::Option(1),
-                phase: Phase::Down,
-            },
-            &events,
-            t,
-        );
+        card.press(synthetic(t, Target::Option(1), Phase::Down), &events, t);
         let did = card.press(
-            Input {
-                t: t + 30,
-                source,
-                target: Target::Option(1),
-                phase: Phase::Up,
-            },
+            synthetic(t + 30, Target::Option(1), Phase::Up),
             &events,
             t + 30,
         );
@@ -1053,22 +1040,12 @@ mod tests {
         assert_eq!(card.state_name(), "armed");
         assert!(card.take_answers().is_empty());
         card.press(
-            Input {
-                t: t + 50,
-                source,
-                target: Target::Option(1),
-                phase: Phase::Down,
-            },
+            synthetic(t + 50, Target::Option(1), Phase::Down),
             &events,
             t + 50,
         );
         card.press(
-            Input {
-                t: t + 80,
-                source,
-                target: Target::Option(1),
-                phase: Phase::Up,
-            },
+            synthetic(t + 80, Target::Option(1), Phase::Up),
             &events,
             t + 80,
         );
@@ -1136,11 +1113,7 @@ mod tests {
             Did::Refused,
             "a press on what it said before is refused"
         );
-        let rows: Vec<String> = card
-            .take_usage()
-            .iter()
-            .map(|row| row["row"].as_str().unwrap().to_owned())
-            .collect();
+        let rows = usage_rows(&mut card);
         assert_eq!(rows, ["presented", "presented", "refused"]);
 
         // Send held down on what it said before answers nothing on release, even once armed again.

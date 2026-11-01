@@ -14,7 +14,7 @@ import { shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
-import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, contextBoundFor, fixtures, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
@@ -28,7 +28,7 @@ import { after, openSupervisor, type Grant, type Host, type Started, type Superv
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
-import { confirmYou } from './confirm.js';
+import { Confirmer } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
@@ -51,6 +51,7 @@ import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromi
 import { downLeaving } from './leftover.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
@@ -236,9 +237,13 @@ export class Core {
   private readonly now: () => number;
   private readonly durable: Durable;
   private record!: RecordStore;
+  /** The record's raw reads, as the helpers that take them call them: parameters bound. */
+  private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   private asks!: Asks;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
+  /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
+  private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
   /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
@@ -252,6 +257,7 @@ export class Core {
   /** Staging for destructive commands (#347): a delete whose reach can't be worked out, staged copy-on-write or asked about. */
   private readonly staging: Staging;
   private readonly devices: Devices;
+  private readonly confirmer: Confirmer;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
   private checkouts!: Checkouts;
@@ -393,6 +399,7 @@ export class Core {
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
+    this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.plant ? { plant: options.plant } : {}) });
     this.holds = new Holds({
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -472,6 +479,10 @@ export class Core {
     // cpu.slot, and the supervisor takes every run's keys through it.
     const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
+    // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
+    // so a replica lease an earlier hub left is released.
+    await leases.declare('core', REPLICA_LEASE);
+    for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.every('leases', 1000, () => leases.tick());
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
@@ -608,7 +619,7 @@ export class Core {
       await this.asks.judged(this.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: judge(e.rule, e.yours, margin) });
     }
     await this.syncStanding();
-    await syncRejected((q) => this.record.raw(q), this.root.dir);
+    await syncRejected(this.raw, this.root.dir);
   }
 
   private writeState(state: 'running' | 'stopped'): void {
@@ -773,6 +784,8 @@ export class Core {
       if (meta.event === 'SessionEnd') {
         session.ended = true;
         this.endStacks(session.id);
+        // Its replicas end with it, and their leases with them (#124).
+        for (const held of this.replicas.values()) if (held.session === session.id) void held.replica.end();
         this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
       }
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
@@ -1999,7 +2012,7 @@ export class Core {
     if (typeof handle !== 'string' || !/^offer:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/offer', 'Name the offer by its handle, offer:<id>, as deep inbox lists it.', handle));
     const offer = this.offers.get(handle);
     if (!offer) throw new Refused(refusal('not_found', '/params/offer', `No offer ${handle}; save one deep inbox lists.`, handle));
-    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle);
+    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
     return this.saveOffer(handle, this.connection(context.role === 'app' ? 'app' : 'cli'));
   }
   /** The offer saved: its permission raised as an authority ask and answered yes on the trusted path, which saves it for the repo. */
@@ -2019,13 +2032,13 @@ export class Core {
   private async tasteAt(session: string, cwd: string, said: string, starting: boolean): Promise<string | undefined> {
     const given = starting ? new Set<string>() : this.tasted.get(session) ?? new Set<string>();
     this.tasted.set(session, given);
-    const fresh = (await tastesFor((q) => this.record.raw(q), repoOf(cwd), said)).filter((t) => !given.has(t.ask));
+    const fresh = (await tastesFor(this.raw, repoOf(cwd), said)).filter((t) => !given.has(t.ask));
     for (const t of fresh) given.add(t.ask);
     return tasteBlock(fresh);
   }
   /** `deep memory`'s list (#111). */
   private async lessons() {
-    return lessonsOf((q) => this.record.raw(q), await repoFolders(this.record, this.store));
+    return lessonsOf(this.raw, await repoFolders(this.record, this.store));
   }
   /**
    * `deep memory keep` and `remove` (#111): yours alone, from your own terminal, once the OS confirms you. Keeping a
@@ -2038,7 +2051,7 @@ export class Core {
     if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
     // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
     const agent = await this.agentAbove(context.peer);
-    const why = await confirmYou(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, this.options.confirm);
+    const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
     if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
     const guard = guardOf(lesson);
@@ -2132,7 +2145,7 @@ export class Core {
         if (prompt.includes('rejected:')) {
           const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
           await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }], true);
-          await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+          await syncRejected(this.raw, this.root.dir).catch(() => undefined);
         }
         // A branch's name may not say which screen a session works on, so its first prompt is read too.
         const first = !this.firstPrompted.has(meta.session);
@@ -2395,7 +2408,7 @@ export class Core {
   }
   /** A claim's state from the record (verdict-chat), with the runs' expected times. */
   private stateOf(claim: string): Promise<ClaimState | undefined> {
-    return claimState((q) => this.record.raw(q), claim.replace(/^claim:/, ''), this.expected);
+    return claimState(this.raw, claim.replace(/^claim:/, ''), this.expected);
   }
   /**
    * A stop that is judged (design: Every stop is judged): one the stop rule (#303) reads as a claim, and a later
@@ -2456,7 +2469,7 @@ export class Core {
     const live = this.live.get(session);
     if (!live) return undefined;
     // After a restart the newest claim is the record's; its line may show once more, never go unseen.
-    live.claim ??= await newestClaim((q) => this.record.raw(q), session).then((id) => (id ? `claim:${id}` : undefined));
+    live.claim ??= await newestClaim(this.raw, session).then((id) => (id ? `claim:${id}` : undefined));
     if (!live.claim) return undefined;
     const state = await this.stateOf(live.claim);
     if (!state) return undefined;
@@ -2504,7 +2517,7 @@ export class Core {
     // the session's own state, whatever the earlier claim says; one that finished unjudged has no claim of its own.
     // With no claim at all the session's own state answers too.
     const unjudged = live?.state !== undefined && live.claimTurn !== live.turn && live.state !== 'finished';
-    const claim = unjudged ? undefined : live?.claim ?? (await newestClaim((q) => this.record.raw(q), meta.session).then((id) => (id ? `claim:${id}` : undefined)));
+    const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop'`, [meta.session])) as { at: number | null }[];
     const needsYou = (await this.asks.inbox()).length;
@@ -2901,6 +2914,7 @@ export class Core {
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
       case 'device.pair': return this.pair(params);
+      case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
       case 'status.read': return this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) }));
@@ -2913,10 +2927,10 @@ export class Core {
       case 'env.down': return this.envDown(params, context);
       case 'wiki.build': {
         const built = await this.wikiBuild.build();
-        await syncRejected((q) => this.record.raw(q), this.root.dir);
+        await syncRejected(this.raw, this.root.dir);
         return built;
       }
-      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections((q) => this.record.raw(q)) };
+      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections(this.raw) };
       case 'memory.act': return this.memoryAct(params, context);
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
@@ -3092,7 +3106,7 @@ export class Core {
    * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
    * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
    */
-  private async trusted(params: Obj, context: CallContext, what: string, handle: string): Promise<void> {
+  private async trusted(params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
     if (params.signature !== undefined || params.device !== undefined) {
       if (this.devices.signed(params)) return;
       throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
@@ -3104,10 +3118,19 @@ export class Core {
     }
     const plant = this.options.plant;
     if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
-    const why = await confirmYou(what, this.options.confirm);
+    const why = await this.confirmer.you(what, { handle, revision });
     if (why) {
       throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
     }
+  }
+
+  /**
+   * The revision an answer to an ask is given on, which deep-confirm's signature covers (#880): the commit its session's
+   * worktree moved on to, or else what it was pinned to.
+   */
+  private async revisionOf(handle: string, ask: { pinned_to?: { ref?: string } | undefined }): Promise<string> {
+    const changed = await this.asks.card(handle).then((card) => card.changed?.to, () => undefined);
+    return changed ?? ask.pinned_to?.ref ?? 'unpinned';
   }
 
   /** Every ask, as the inbox projection holds it, with each one's question and options; `deep inbox` lists the open ones. */
@@ -3152,12 +3175,12 @@ export class Core {
       await answered();
       throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
     }
-    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[] };
+    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[]; pinned_to?: { ref?: string } };
     const chosen = ask.options.find((o) => o.id === input.option);
     if (input.option !== undefined && !chosen) {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
-    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
+    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
@@ -3168,20 +3191,20 @@ export class Core {
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [handle])) as { data: string }[];
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
-    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+    await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
   private async undo(params: Obj, context: CallContext): Promise<Obj> {
     const handle = params.ask;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
-    const [row] = (await this.record.raw(`SELECT question, status FROM asks WHERE id = ?`, [handle.slice(4)])) as { question: string; status: string }[];
+    const [row] = (await this.record.raw(`SELECT question, status, pinned_to FROM asks WHERE id = ?`, [handle.slice(4)])) as { question: string; status: string; pinned_to: string | null }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
     if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.tasks.lockedOn(handle);
     if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
-    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle);
+    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = ?`, [handle.slice(4)])) as { deadline: number }[];
     return { ask: handle, deadline: open?.deadline ?? null };
@@ -3193,23 +3216,36 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
-    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
+    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.
     dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
     await this.syncStanding().catch(() => undefined);
-    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+    await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { overruled: id };
   }
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
   private async pair(params: Obj): Promise<Obj> {
     if (typeof params.name !== 'string' || !params.name) throw new Refused(refusal('required', '/params/name', 'Name the device you pair.', params.name));
     const key = checkKey(params.public_key);
-    const why = await confirmYou(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, this.options.confirm);
+    const why = await this.confirmer.you(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, { handle: `device:${params.name.slice(0, 80)}`, revision: key });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was paired: the OS didn't confirm you (${why}).`, params.name, true));
     const device = `device:${ulid(this.now())}`;
     this.devices.pair(device, params.name, key, this.now());
     return { device };
+  }
+
+  /**
+   * deep-confirm's key set up again, lost or replaced (#880): from the app alone, signed by a device you paired, and
+   * counted once you confirm with the new key, when the old one stops counting. The helper's code signature is
+   * recorded again with it, so a rebuilt helper counts only from here.
+   */
+  private async enrollAgain(params: Obj, context: CallContext): Promise<Obj> {
+    if (context.role !== 'app') throw new Refused(refusal('role', '/method', "deep-confirm's key is set up again from the app, on the trusted path.", 'confirm.enroll'));
+    await this.trusted(params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
+    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String(params.device) } });
+    if (why) throw new Refused(refusal('unconfirmed', '', `deep-confirm's key stays as it was: ${why}.`, 'confirm.enroll', true));
+    return { device: this.devices.enclave()!.device };
   }
 
   /**
@@ -3229,7 +3265,7 @@ export class Core {
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined }));
     const key = params.trust_key === true ? m.publisher_key : undefined;
     if (params.trust_key === true && (typeof key !== 'string' || typeof m.id !== 'string')) throw new Refused(refusal('required', '/params/trust_key', 'Only a signed package names a publisher key to trust.', from));
-    const why = await confirmYou(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, this.options.confirm);
+    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version) });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was installed: the OS didn't confirm you (${why}).`, from, true));
     if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', from, true));
     try {
@@ -3266,7 +3302,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/params/command', `${what} changed nothing: it runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent changes what watches it. Run it from your own terminal.`, command));
     if (this.options.plant === 'acts-on-peer-check') return { confirmed: command };
-    const why = await confirmYou(what, this.options.confirm);
+    const why = await this.confirmer.you(what, { handle: `command:${command}`, revision: what });
     if (why) throw new Refused(refusal('unconfirmed', '/params/command', `${what} changed nothing: the OS didn't confirm you (${why}). It takes effect only once the OS confirms you; run it again and confirm.`, command, true));
     return { confirmed: command };
   }
@@ -3281,7 +3317,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your rules. Add it from your own terminal.`, 'guard.add'));
     const names = isObj(params.guards) && isObj(params.guards.entries) ? Object.keys(params.guards.entries) : [];
-    const why = await confirmYou(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, this.options.confirm);
+    const why = await this.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(',') });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was added: the OS didn't confirm you (${why}).`, names.join(', '), true));
     return addGuards(this.root.dir, params.guards, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant });
   }
@@ -3363,8 +3399,10 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show'));
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'find_actions'));
       switch (tool) {
+        case 'find_actions': return await this.findActions(args.query as string | null);
+        case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context);
@@ -3375,6 +3413,7 @@ export class Core {
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
         case 'deep_env': return await this.deepEnv(session!, String(args.action));
+        case 'deep_drive': return await this.drive(session!, args);
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -3416,6 +3455,71 @@ export class Core {
     this.stamps.splice(this.stamps.indexOf(bound), 1);
     return bound.session;
   }
+  // ---- deep_drive (#124): a session's replicas, each its own deep-drive process under the replica lease.
+
+  /** Each replica process a launch started, by the handle the hub gave it: the binary's own handle, its session, and its end. */
+  private readonly replicas = new Map<string, { replica: Replica; own: string; session: string; gone: Promise<void> }>();
+
+  /**
+   * One deep_drive call. A launch takes the replica lease, refused naming it when the machine runs its two, then
+   * starts a deep-drive process for the session; every other call goes to the process the session's launch started,
+   * and close ends it. Its lease is released once the process has exited, however it ends.
+   */
+  private async drive(session: string, args: Obj): Promise<Obj> {
+    const call = driveCall(args) as Obj;
+    if (call.call === 'launch') return this.launchReplica(session, call);
+    const handle = String(args.replica);
+    const held = this.replicas.get(handle);
+    if (!held?.own || held.session !== session) throw refuse('not_found', '/params/arguments/replica', 'Name a replica your session launched and hasn\'t closed; deep_drive\'s launch starts one.', args.replica);
+    const reply = await held.replica.call({ ...call, replica: held.own });
+    if (call.call === 'close') {
+      await held.replica.end();
+      await held.gone;
+    }
+    return reply.replica === undefined ? reply : { ...reply, replica: handle };
+  }
+  private async launchReplica(session: string, call: Obj): Promise<Obj> {
+    const id = ulid(this.now());
+    const handle = `replica:${id}`;
+    let lease: string | undefined;
+    // The planted hub launches without the lease (#124's wrong program).
+    if (this.options.plant !== 'deep-drive-no-lease') {
+      const got = await this.leases.lease({ holder: `mcp:${session}` }, { host: 'local', kind: REPLICA_LEASE.name, key: handle }, 'exclusive');
+      if (got.status !== 'granted') {
+        return { ok: false, error: { code: 'blocked', lease: REPLICA_LEASE.name, message: `No replica was launched: the ${REPLICA_LEASE.name} lease allows ${REPLICA_LEASE.cap} per machine, and ${got.message}.` } };
+      }
+      lease = got.lease.id;
+    }
+    const out = join(this.root.dir, 'replicas', id);
+    let replica: Replica;
+    try {
+      mkdirSync(out, { recursive: true });
+      replica = new Replica(out);
+    } catch (error) {
+      if (lease) await this.leases.release(lease, []);
+      throw error;
+    }
+    const gone = replica.exited.then(async () => {
+      this.replicas.delete(handle);
+      if (lease) await this.leases.release(lease, []);
+    }).catch(() => undefined);
+    const entry = { replica, own: '', session, gone };
+    this.replicas.set(handle, entry);
+    let reply: Obj;
+    try {
+      reply = await replica.call(call);
+    } catch (error) {
+      await replica.end();
+      throw error;
+    }
+    if (reply.ok !== true || typeof reply.replica !== 'string') {
+      await replica.end();
+      return reply;
+    }
+    entry.own = reply.replica;
+    return { ...reply, replica: handle };
+  }
+
   // ---- The canvas side (#806): deep_show, `deep show`, render-back, and what the app draws.
 
   /** The canvas core, started at the first canvas call; the world file a test gives it; the app's presentations. */
@@ -3528,6 +3632,67 @@ export class Core {
   private agentConnection(session: string): Connection {
     const agent = this.sessions.get(session)?.agent;
     return this.connection(`mcp:${session}`, { session, ...(agent ? { agent } : {}) });
+  }
+
+  /** find_actions (deep-actions, #363): the actions the loaded plug-ins offer agents, each typed from its input schema. */
+  private async findActions(query: string | null): Promise<Obj> {
+    const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const offered = (await this.extensions?.actions() ?? []).filter((a) => a.exposed && words.every((w) => `${a.action} ${a.extension}`.toLowerCase().includes(w)));
+    return { actions: offered.map(({ action, extension, declares, input }) => ({ action, extension, declares, input })) };
+  }
+  /**
+   * call_action (deep-actions, #363): a plug-in action for the session, its input held to the action's schema before
+   * anything else. A read runs. A change runs on your standing rule or your yes to its ask, and a send on your yes
+   * alone: until you answer, the call returns held with the ask, and the same request ID called again runs it once you
+   * said yes. The target is the plug-in that registered the action, at its loaded version, and the authority the
+   * session's own connection, never a window, a folder or another session.
+   */
+  private async callPluginAction(session: string, args: Obj): Promise<Obj> {
+    const name = String(args.action);
+    const request = String(args.request);
+    const listed = (await this.extensions?.actions() ?? []).find((a) => a.action === name);
+    if (!listed) throw refuse('not_found', '/params/arguments/action', 'Call an action find_actions lists, by its name.', name);
+    if (!listed.exposed) throw refuse('not_found', '/params/arguments/action', `${name} isn't offered to agents: ${listed.reason}.`, name);
+    let input: unknown;
+    try {
+      input = JSON.parse(String(args.input));
+    } catch {
+      throw refuse('type', '/params/arguments/input', 'Give the input as one string holding its JSON text.', args.input);
+    }
+    const held = schemas([{ name, schema: listed.input as Schema }]).validate(name, input);
+    if (!held.ok) throw refuse('type', `/params/arguments/input${held.issues[0]!.path}`, `Give input that ${name}'s input schema takes: ${held.issues[0]!.remediation}`, input);
+    if (listed.declares !== 'read') {
+      const s = this.sessions.get(session)!;
+      const key = `${session}|${request}`;
+      let ask = this.actionAsks.get(key);
+      if (!ask) {
+        // A send's ask names its request, so no saved decision ever answers it; a change's is answered by a standing rule.
+        const about: About = {
+          source: `action.${listed.declares}`,
+          subject: { effect: `action.${listed.declares}`, target: { kind: 'action', ref: listed.declares === 'send' ? `${name}#${request}` : name, owner: listed.extension }, change: null },
+          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}'s ${name}, given ${JSON.stringify(input).slice(0, 500)}?`,
+          options: [listed.declares === 'send' ? 'Send it' : 'Change it', 'Don\'t'],
+        };
+        ask = (await this.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)).ask;
+        this.actionAsks.set(key, ask);
+      }
+      const [row] = (await this.record.raw('SELECT decision FROM asks WHERE id = ?', [ask.slice(4)])) as { decision: string | null }[];
+      if (row?.decision === 'deny') return { status: 'declined', ask };
+      if (row?.decision !== 'allow') return { status: 'held', ask, reason: `DeepBuild is holding ${name}: it waits for your answer to ${ask}; once you say yes, call it again with the same request ID.` };
+    }
+    const result = await this.extensions!.callAction({
+      action: name, target: { handle: `ext:${listed.extension}`, version: listed.version }, input, caller: this.agentConnection(session), request,
+    });
+    // Refused before its handler started, it did not run; one that started and failed reaches the agent as an error,
+    // with what the hub wrote for it on record as unverified.
+    if (result.status === 'refused' && !result.started) throw refuse('unavailable', '/params/arguments/action', `${result.reason}; nothing ran.`, name);
+    if (listed.declares === 'read') return result.status === 'refused' ? { status: 'failed', reason: result.reason } : result;
+    // A change or send's report, and what the hub wrote for it, as its action.reported holds them.
+    const [reported] = (await this.record.raw(`SELECT r.data AS data FROM events e JOIN events r ON r.kind = 'action.reported' AND json_extract(r.data, '$.call') = json_extract(e.data, '$.call')
+      WHERE e.kind = 'action.entered' AND e.session_id = ? AND json_extract(e.data, '$.request') = ? ORDER BY r.log_pos DESC LIMIT 1`, [session, request])) as { data: string }[];
+    const { error: _error, ...report } = reported ? JSON.parse(reported.data) as Obj : {};
+    if (result.status === 'refused') return { status: 'failed', reason: result.reason, call: result.call, report: reported ? report : null };
+    return { ...result, report: reported ? report : null };
   }
 
   /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
@@ -3731,7 +3896,7 @@ export class Core {
     const target = scrubText(String(args.target), { held: this.options.held }).slice(0, 1000);
     const change = scrubText(String(args.change), { held: this.options.held }).slice(0, 4000);
     // A direction you rejected isn't asked about again: the agent hears your decision, and you hear nothing (#111).
-    const revived = await revives((q) => this.record.raw(q), change, repoOf(this.sessions.get(session)!.cwd), session);
+    const revived = await revives(this.raw, change, repoOf(this.sessions.get(session)!.cwd), session);
     if (revived) throw refuse('rejected', '/params/arguments/change', `You can't propose \`${revived.direction}\`: the person rejected it (${revived.decision}). Take another direction; only they can overrule that decision.`, revived.decision);
     const question = `Apply this change an agent proposed to ${target}? ${change}`;
     const pinned = await this.pinOf(this.sessions.get(session)!.cwd, question);
@@ -4603,6 +4768,7 @@ export class Core {
     await this.chain;
     this.writeCursors();
     this.canvasCore?.close();
+    await Promise.allSettled([...this.replicas.values()].map(async (r) => { await r.replica.end(); await r.gone; }));
     for (const { stop } of this.runs.values()) stop();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);

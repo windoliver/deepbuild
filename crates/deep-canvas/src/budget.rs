@@ -54,6 +54,17 @@ impl Class {
         CLASSES.into_iter().find(|c| c.name() == name)
     }
 
+    /// The threads a frame's independent nodes run on (#857); `None` for export, which takes the
+    /// machine's performance cores. A live view's count never comes from the machine.
+    pub fn threads(self) -> Option<usize> {
+        match self {
+            Class::CoreView => Some(1),
+            Class::DataView | Class::Figure => Some(2),
+            Class::WorkProduct | Class::Showpiece => Some(4),
+            Class::Export => None,
+        }
+    }
+
     /// The budget class table's row.
     pub fn limits(self) -> Limits {
         let (gpu_ms, cpu_ms, mb, scale_moving) = match self {
