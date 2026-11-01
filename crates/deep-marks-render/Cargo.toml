@@ -42,6 +42,9 @@ serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # Issue #373: goldens and snapshots render with Vello CPU, its f32 pipeline at the scalar SIMD
 # level (the scalar level on every platform comes from deep-text's fearless_simd feature).
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# Issue #140: a glyph's outline, for the edges a layer draws (`layer::edges`); the outline reader
+# Vello CPU's glyphs already use, at its version and features.
+skrifa = { version = "0.44", default-features = false, features = ["autohint_shaping"] }
 
 # The GPU ledger the GPUI patch adds to the Metal renderer: frame command buffers and their time.
 [target.'cfg(target_os = "macos")'.dependencies]

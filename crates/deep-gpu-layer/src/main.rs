@@ -1,10 +1,13 @@
-//! `deep-gpu run [--backend noop] [--withhold <feature>]… [--validation] [--planted <name>]`
-//! (issue #377; tests/acceptance/377/README.md, The surface under test; #379 adds the meter's
-//! calls, tests/acceptance/379/README.md; #140 the GPU seam's, with `--adapters <file>` and
-//! `--quirks <file>` in test-seam builds, tests/acceptance/140/gpu/README.md): one JSON scenario
-//! per stdin line, `{"out": dir, "calls":
+//! `deep-gpu run [--headless] [--backend noop] [--withhold <feature>]… [--validation]
+//! [--planted <name>]` (issue #377; tests/acceptance/377/README.md, The surface under test; #379
+//! adds the meter's calls, tests/acceptance/379/README.md; #140 the GPU seam's, with `--adapters
+//! <file>` and `--quirks <file>` in test-seam builds, tests/acceptance/140/gpu/README.md): one JSON
+//! scenario per stdin line, `{"out": dir, "calls":
 //! [Call]}`, answered with one line `{"ok": true, "replies": [Reply]}`. Every call of a run uses one
 //! app: one GPU (one wgpu device), one headless window, and each scene's session from call to call.
+//! With `--headless` (#140, tests/acceptance/140/view/README.md, "deep-gpu: the live-headless
+//! calls") the run is the headless canvas worker instead: it answers `snapshot` alone, with one GPU
+//! and no app, so no window.
 
 #[cfg(feature = "test-meter")]
 mod allocations;
@@ -20,6 +23,7 @@ mod host;
 mod levels;
 mod live;
 mod liveview;
+mod parity;
 mod plugin;
 mod reference;
 mod scene;
@@ -111,6 +115,9 @@ pub enum Planted {
     ReadsPastBuffer,
     WritesNan,
     ReadsPixelsOnly,
+    /// #140's (tests/acceptance/140/view/README.md: Planted programs): the live GPU layer's
+    /// read-back has one pixel one code value off in one channel.
+    ShiftsGpuPixel,
 }
 
 impl Planted {
@@ -167,6 +174,7 @@ impl Planted {
             "reads_past_buffer" => Planted::ReadsPastBuffer,
             "writes_nan" => Planted::WritesNan,
             "reads_pixels_only" => Planted::ReadsPixelsOnly,
+            "shifts_gpu_pixel" => Planted::ShiftsGpuPixel,
             _ => return None,
         })
     }
@@ -373,6 +381,7 @@ impl App {
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
+            Some("live_frame") => parity::live_frame(self, out, call),
             Some("canonical") => live::canonical(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
@@ -429,8 +438,10 @@ fn main() {
     }
     let (mut backend, mut planted) = (Backend::Gpu, None);
     let (mut startup, mut validation) = (Startup::default(), false);
+    let mut headless = false;
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--headless" => headless = true,
             "--backend" => match args.next().as_deref() {
                 Some("noop") => backend = Backend::Noop,
                 _ => bad_input(),
@@ -500,6 +511,15 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if headless {
+        // The headless canvas worker opens no window and holds no app: no GPUI context, the GPU
+        // layer drawn into its offscreen slots (#140).
+        serve(|out, call| match call["call"].as_str() {
+            Some("snapshot") => parity::snapshot(&worker, backend, out, call),
+            _ => refused("bad_input", "the headless worker answers snapshot alone"),
+        });
+        return;
+    }
     // The platform's handoff as this task ships it: macOS passed the conformance fixture, so it
     // hands off zero copy until a conformance run on this machine says otherwise; the noop backend
     // has no surface to share, so it copies.
@@ -528,6 +548,11 @@ fn main() {
         jobs: 0,
         validation,
     };
+    serve(|out, call| app.call(out, call));
+}
+
+/// Answers each scenario line on stdin with one line, each call through `call`.
+fn serve(mut call: impl FnMut(&str, &Value) -> Value) {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -539,7 +564,7 @@ fn main() {
                     .as_array()
                     .expect("checked above")
                     .iter()
-                    .map(|c| app.call(&out, c))
+                    .map(|c| call(&out, c))
                     .collect();
                 json!({"ok": true, "replies": replies})
             }
