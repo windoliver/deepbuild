@@ -130,9 +130,11 @@ impl<'a> Hub<'a> {
     /// `{"call": "verdict", "claim"}`: judges the claim on its deliverables' current revisions
     /// and records the verdict, keyed by those revisions' hashes.
     pub fn verdict_call(&mut self, claim: &str) -> Value {
-        let Some(c) = self.scenario.claims.get(claim) else {
+        let scenario = self.scenario;
+        let Some(c) = scenario.claims.get(claim) else {
             return json!({"result": "INVALID", "key": {"revisions": []}, "stale": false, "requirements": []});
         };
+        let read = self.evaluated_reads(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
         for d in &c.deliverables {
@@ -158,7 +160,7 @@ impl<'a> Hub<'a> {
         let rows: Vec<Value> = c
             .requirements
             .iter()
-            .map(|r| self.judge(r, &docs, missing))
+            .map(|r| self.judge(r, &docs, missing, &read))
             .collect();
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
@@ -217,14 +219,70 @@ impl<'a> Hub<'a> {
         verdict
     }
 
-    /// One requirement's row: its check input's kind run on every deliverable.
-    fn judge(&self, r: &Requirement, docs: &[(String, Current)], missing: bool) -> Value {
+    /// Every array a claim's check kinds read beside the lowered document (#411), evaluated on
+    /// each deliverable's current revision: doc → array → item → its value's canonical bytes, hex.
+    fn evaluated_reads(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, Value> {
+        let sealed = &self.startup.sealed;
+        let arrays: Vec<String> = c
+            .requirements
+            .iter()
+            .filter_map(|r| sealed.check_kind(r.check["kind"].as_str()?))
+            .flat_map(|(_, check)| check.reads.clone())
+            .collect();
+        let mut out = BTreeMap::new();
+        if arrays.is_empty() {
+            return out;
+        }
+        for doc in &c.deliverables {
+            let Some(revision) = self.query_revision(doc, None) else {
+                continue;
+            };
+            let session = self.evaluated(&revision.drawn, 0);
+            let ids: Vec<String> = revision
+                .drawn
+                .get("items")
+                .and_then(Value::as_object)
+                .map(|i| i.keys().cloned().collect())
+                .unwrap_or_default();
+            let mut by_array = Map::new();
+            for array in &arrays {
+                let values: Map<String, Value> = ids
+                    .iter()
+                    .filter_map(|id| {
+                        let (v, _) = session.read(&self.sched, array, Some(id))?;
+                        let hex: String = v.bytes().iter().map(|b| format!("{b:02x}")).collect();
+                        Some((id.clone(), json!(hex)))
+                    })
+                    .collect();
+                by_array.insert(array.clone(), Value::Object(values));
+            }
+            out.insert(doc.clone(), Value::Object(by_array));
+        }
+        out
+    }
+
+    /// One requirement's row: its check input's kind run on every deliverable, with the machines
+    /// its result holds on and the determinism class of what it read (#411).
+    fn judge(
+        &self,
+        r: &Requirement,
+        docs: &[(String, Current)],
+        missing: bool,
+        read: &BTreeMap<String, Value>,
+    ) -> Value {
         let kind = r.check["kind"].as_str().unwrap_or_default().to_string();
         let sealed = &self.startup.sealed;
         let mut row = Map::new();
         row.insert("id".into(), json!(r.id));
         row.insert("kind".into(), json!(kind));
         row.insert("issues".into(), json!([]));
+        // The core's own document checks read the lowered document on the CPU: exact, any machine.
+        let (machines, determinism) = match sealed.check_kind(&kind) {
+            Some((_, check)) => (check.machines.as_str(), sealed.check_determinism(check)),
+            None => ("any", "exact"),
+        };
+        row.insert("machines".into(), json!(machines));
+        row.insert("determinism".into(), json!(determinism));
         if missing {
             return done(row, "INVALID", Vec::new());
         }
@@ -271,13 +329,17 @@ impl<'a> Hub<'a> {
             // since item IDs are one document's.
             let mut raised: Vec<Value> = checked.issues.iter().map(Issue::to_json).collect();
             if let Some((m, check)) = registered {
+                let mut input = r.check.clone();
+                if let (Some(map), Some(values)) = (input.as_object_mut(), read.get(doc)) {
+                    map.insert("read".into(), values.clone());
+                }
                 raised.extend(run_check(
                     self,
                     check,
                     &kind,
                     &m.name,
                     &checked.lowered,
-                    &r.check,
+                    &input,
                 ));
             }
             for i in &mut raised {
