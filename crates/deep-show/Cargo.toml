@@ -49,6 +49,9 @@ test-leave-out-logic = []
 test-accent = []
 # Issue #857: `test.serial` (not thread-safe) and the planted `test.racy`, which touches a static.
 test-threads = []
+# Issue #411: `test.machines`, whose GPU operators write a float array and an exact one, read back
+# by its check kinds.
+test-machines = ["dep:deep-effects-render"]
 # Issue #855: a test canvas module whose frame-phase operator writes JSON, which the seal refuses;
 # a build whose Debug text for every typed value differs; and a result digesting its Debug text.
 test-json = []
@@ -124,6 +127,7 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-gpu = { path = "../deep-gpu" }
+deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
 deep-text = { path = "../deep-text" }

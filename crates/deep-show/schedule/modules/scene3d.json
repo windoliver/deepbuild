@@ -1,5 +1,20 @@
 {
   "module": "scene3d",
-  "phases": {},
+  "phases": {
+    "items": [
+      {
+        "operator": "scene3d.stack",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "scene3d.stack"
+        ],
+        "per": "item"
+      }
+    ]
+  },
   "contributions": {}
 }

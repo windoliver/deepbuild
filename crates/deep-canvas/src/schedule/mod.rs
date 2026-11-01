@@ -2355,6 +2355,55 @@ impl Session {
         let node = l.nodes.iter().find(|n| n.op == op && n.item == item)?;
         node.out.get(k).cloned()
     }
+
+    /// The value of `array` on `item` (or the document) with every contribution for it folded
+    /// in, in the seal's order, as a reader of the array gets it; with the keys of the nodes that
+    /// made it, its writer's first (#411: deep_query's values and their content keys).
+    pub fn read(
+        &self,
+        s: &Scheduler<'_>,
+        array: &str,
+        item: Option<&str>,
+    ) -> Option<(Val, Vec<Key>)> {
+        let l = self.loaded.as_ref()?;
+        let item = match item {
+            Some(id) => Some(*l.index.get(id)?),
+            None => None,
+        };
+        let output = |name: &str| -> Option<Vec<(Val, Key)>> {
+            let op = *s.writer.get(name)?;
+            let k = s.sealed.ops[op].op.writes.iter().position(|w| w == name)?;
+            Some(
+                l.nodes
+                    .iter()
+                    .filter(|n| n.op == op && n.item == item)
+                    .filter_map(|n| Some((n.out.get(k)?.clone(), n.key)))
+                    .collect(),
+            )
+        };
+        let (val, key) = output(array)?.into_iter().next()?;
+        let mut keys = vec![key];
+        let mut edits = Vec::new();
+        for c in s.sealed.contributions.get(array).into_iter().flatten() {
+            for (v, key) in output(c).unwrap_or_default() {
+                keys.push(key);
+                if let Some(e) = v.as_typed::<core_ops::Edits>() {
+                    edits.push(e);
+                }
+            }
+        }
+        let val = if edits.is_empty() {
+            val
+        } else {
+            core_ops::fold_edits(&val, &edits)
+        };
+        Some((val, keys))
+    }
+
+    /// The hash this session's keys are made with.
+    pub fn hash(&self) -> HashVersion {
+        self.hash
+    }
 }
 
 /// The threads a document's independent nodes run on: the options' count in place of its budget

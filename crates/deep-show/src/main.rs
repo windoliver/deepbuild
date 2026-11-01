@@ -18,16 +18,20 @@ mod hub;
 mod input;
 mod jobs;
 mod kit;
+mod modes;
 mod packs;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
+mod query;
 mod ring;
 mod scene3d;
 mod serve;
 mod shared;
 mod snapshot;
 mod terminal;
+#[cfg(feature = "test-machines")]
+mod test_machines;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
@@ -265,6 +269,70 @@ fn via(name: &str, c: &Map<String, Value>) -> Option<Via> {
     }
 }
 
+/// A `deep_query` call (#411 acceptance README: deep_query): the agent's, bound to its session,
+/// or a check plug-in's, with its package ID and the documents its grant covers.
+fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
+    let plugin = match c.get("plugin") {
+        None => None,
+        Some(p) => Some(query::Plugin {
+            id: p.get("id")?.as_str()?.to_string(),
+            docs: strings(p.get("docs"))?,
+        }),
+    };
+    let via = match (&plugin, c.get("session")) {
+        (Some(_), None) => hub::Via::Mcp(None),
+        _ => via("deep_show", c)?,
+    };
+    let what = match c.get("what").map(Value::as_str) {
+        None | Some(Some("rows")) => query::What::Rows,
+        Some(Some("summary")) => query::What::Summary,
+        Some(Some("why")) => query::What::Why,
+        _ => return None,
+    };
+    let items = match c.get("items") {
+        None => None,
+        v => Some(strings(v)?),
+    };
+    let at = match c.get("at") {
+        None => Vec::new(),
+        Some(v) => v
+            .as_array()?
+            .iter()
+            .map(|t| flicks(t.as_str()?))
+            .collect::<Option<_>>()?,
+    };
+    let none_of_kind = match c.get("expect") {
+        None => None,
+        Some(e) => Some(e.get("none")?.get("kind")?.as_str()?.to_string()),
+    };
+    Some(query::Query {
+        via,
+        plugin,
+        doc: c.get("doc")?.as_str()?.to_string(),
+        rev: match c.get("rev") {
+            None => None,
+            Some(r) => Some(r.as_u64()?),
+        },
+        what,
+        items,
+        paths: strings(c.get("paths"))?,
+        at,
+        cap: match c.get("cap") {
+            None => query::DEFAULT_CAP,
+            Some(n) => usize::try_from(n.as_u64()?).ok()?,
+        },
+        none_of_kind,
+        path: match c.get("path") {
+            None => None,
+            Some(p) => Some(p.as_str()?.to_string()),
+        },
+        t: match c.get("t") {
+            None => 0,
+            Some(t) => flicks(t.as_str()?)?,
+        },
+    })
+}
+
 /// A call's backend: one of the kit's.
 fn backend(c: &Map<String, Value>) -> Option<String> {
     let b = c.get("backend")?.as_str()?;
@@ -412,6 +480,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "deep_query" => return query_call(c).map(|q| Call::Query(Box::new(q))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -625,7 +694,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             .collect::<Option<_>>()?,
     };
     let size = px_size(c.get("size"), |n| (1..=8192).contains(n))?;
-    Some(Call::Show(Box::new(Show {
+    let show = Box::new(Show {
         via,
         doc: c.get("doc")?.as_str()?.to_string(),
         document: c.get("document")?.clone(),
@@ -644,7 +713,15 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             None => None,
             Some(h) => Some(h.as_str()?.to_string()),
         },
-    })))
+    });
+    // #411: a diagnostic mode, one of the closed list.
+    match c.get("mode") {
+        None => Some(Call::Show(show)),
+        Some(m) => {
+            let mode = m.as_str().filter(|m| modes::owner(m).is_some())?;
+            Some(Call::Mode(show, mode.to_string()))
+        }
+    }
 }
 
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
@@ -1002,6 +1079,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "merges_in_finish_order" => Planted::MergesInFinishOrder,
             "background_at_live_priority" => Planted::BackgroundAtLivePriority,
             "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
+            "prefix_reads_final" => Planted::PrefixReadsFinal,
+            "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
+            "why_names_key_only" => Planted::WhyNamesKeyOnly,
+            "cuts_by_row_order" => Planted::CutsByRowOrder,
             "frame_index_i64_product" => Planted::FrameIndexI64Product,
             "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
             "panel_policy_open" => Planted::PanelPolicyOpen,
@@ -1093,7 +1174,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     // On the clock every call says when it arrives.
     let at = list
         .iter()
-        .map(|c| match (c.get("at"), &clock) {
+        .map(|c| {
+            // deep_query's `at` is the times it reads (#411): on the clock it arrives at `arrives`.
+            let arrives = if c.get("call") == Some(&json!("deep_query")) {
+                "arrives"
+            } else {
+                "at"
+            };
+            (c.get(arrives), &clock)
+        })
+        .map(|(at, clock)| match (at, clock) {
             (Some(t), Some(_)) => t.as_i64().filter(|t| *t >= 0),
             (None, None) => Some(0),
             _ => None,
@@ -1234,7 +1324,12 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                c["at"] = json!((i as i64 + 1) * CANVAS_SPACING);
+                let arrives = if c["call"] == "deep_query" {
+                    "arrives"
+                } else {
+                    "at"
+                };
+                c[arrives] = json!((i as i64 + 1) * CANVAS_SPACING);
                 c
             })
             .collect();
@@ -1417,6 +1512,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(planted::accent());
     #[cfg(feature = "test-threads")]
     out.extend(test_threads::modules());
+    #[cfg(feature = "test-machines")]
+    out.push(test_machines::module());
     #[cfg(feature = "test-json")]
     out.push(twins::json_writer());
     #[cfg(feature = "test-debug-digest")]
