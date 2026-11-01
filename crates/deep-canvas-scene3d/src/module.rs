@@ -155,6 +155,11 @@ fn register(r: &mut Registrar) {
         &[],
         "",
     );
+    // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
+    r.array("scene3d.stack", "stack", "item", "geometry", "items");
+    r.operator("stack", "items", &["self"], &["scene3d.stack"])
+        .applies(crate::modifiers::has_modifiers)
+        .run(crate::modifiers::stack);
     r.pass(GEOMETRY_PASS, "geometry");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
@@ -170,6 +175,31 @@ fn register(r: &mut Registrar) {
             ],
         },
     }));
+    // A solid under a modifier stack, so the stack's operator has a node the kit evaluates (#411).
+    r.fixture("stack", stack(), None).sidecar(json!({
+        "codes": [],
+        "covers": {"kinds": ["mark.box@1"], "fields": ["mark.box@1/params/size"]},
+    }));
+}
+
+/// A box under a subdivide, an array of three and a mirror: 26 × 3 × 2 vertices after the stack.
+fn stack() -> Value {
+    json!({
+        "format": 1, "profile": "figure", "title": "A stacked hull",
+        "description": "A box subdivided once, arrayed three times along x and mirrored across x.",
+        "size": [480, 360], "camera": "cam", "requires": {"modules": {"scene3d": "^1"}},
+        "items": {
+            "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+                    "params": {"projection": "isometric", "target": [0, 0, 0], "view_width": 12}},
+            "hull": {"id": "hull", "kind": "mark.box@1", "name": "Hull", "order": "a1",
+                     "params": {"size": [1, 1, 1], "paint": {"fill": {"role": "accent"}}},
+                     "modifiers": [
+                         {"kind": "mod.subdivide@1", "params": {"levels": 1}},
+                         {"kind": "mod.array@1", "params": {"count": 3, "offset": [1.5, 0, 0]}},
+                         {"kind": "mod.mirror@1", "params": {"axes": ["x"]}}
+                     ]}
+        }
+    })
 }
 
 /// The module's fixture: a small isometric figure, a box and a cylinder joined by a wire, with a
