@@ -25,7 +25,7 @@ async function scenario(n: number, plant?: string): Promise<number[]> {
   const env = plant ? { DEEP_HUB_PLANT: plant } : {};
   const { home } = makeHome();
   editConfig(home, (config) => { config.asks = { ...(config.asks ?? {}), deadline: deadlines('30m') }; });
-  let hub = await startHub(home, { plant });
+  let hub = await startHub(home, { plant, noAskWait: true, shortHold: true });
   await setup(home, env);
   const entry = waiterEntry(readSettings(home)).hook;
   expect(entry.timeout, `AC6 the waiter entry setup wrote carries a timeout at least as long as your longest ask deadline, 30 minutes: ${JSON.stringify(entry)}`).toBeGreaterThanOrEqual(30 * 60);
@@ -39,7 +39,7 @@ async function scenario(n: number, plant?: string): Promise<number[]> {
   // 20 minutes pass.
   for (const a of sessions) await a.claude.expire(20 * 60);
   await stopHub(hub);
-  hub = await startHub(home, { plant, clock: Date.now() + 20 * MINUTE });
+  hub = await startHub(home, { plant, clock: Date.now() + 20 * MINUTE, noAskWait: true, shortHold: true });
   const ms = await answerEach('AC6', home, sessions, plant);
 
   // A longer deadline in your settings: setup again gives the waiter at least as long.
