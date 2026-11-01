@@ -530,8 +530,8 @@ class AsksCore implements Asks {
   private readonly attempts = new Map<string, Map<string, number>>();
   /** Sessions a shared task's resume skips (#85): those you stopped (their SessionEnd), by its stamp; those whose attempt a newer one replaced; those whose task closed. */
   private readonly ended = new Map<string, number>();
-  private readonly replaced = new Set<string>();
-  private readonly done = new Set<string>();
+  private readonly replaced = new Map<string, number>();
+  private readonly done = new Map<string, number>();
   private queue: Promise<unknown> = Promise.resolve();
   /** Sessions with a message you typed that the agent hasn't read yet. */
   private readonly unread = new Set<string>();
@@ -1537,7 +1537,9 @@ class AsksCore implements Asks {
     switch (e.kind) {
       case 'session.start':
         // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
-        if (typeof d.parent === 'string') for (const session of [d.parent, ...this.stops.keys()]) if (session === d.parent || letters(session) === letters(d.parent)) this.replaced.add(session);
+        if (typeof d.parent === 'string') for (const session of [d.parent, ...this.stops.keys()]) if (session === d.parent || letters(session) === letters(d.parent)) this.replaced.set(session, e.ts);
+        // A session started again is back: its earlier end no longer says you stopped it.
+        if (e.session) this.ended.delete(e.session);
         if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null, agent: String(d.agent ?? e.agent ?? '') });
         return;
       case 'agent.stop': {
@@ -1569,8 +1571,8 @@ class AsksCore implements Asks {
         // sessions whose attempts were at it, have nothing left to resume into.
         const subject = typeof e.subject === 'string' ? e.subject : '';
         const own = /^session:([0-9A-Za-z]+)#/.exec(subject)?.[1];
-        if (own) for (const session of this.stops.keys()) if (letters(session) === own) this.done.add(session);
-        if (subject.startsWith('task:')) for (const [session, tasks] of this.attempts) if (tasks.has(subject)) this.done.add(session);
+        if (own) for (const session of this.stops.keys()) if (letters(session) === own) this.done.set(session, e.ts);
+        if (subject.startsWith('task:')) for (const [session, tasks] of this.attempts) if (tasks.has(subject)) this.done.set(session, e.ts);
         return;
       }
       case 'ask.created': {
@@ -1765,7 +1767,7 @@ class AsksCore implements Asks {
           if (older === undefined || older >= d.attempt || this.threadOf(session) === thread) continue;
           const by = { because: 'attempt_replaced', session: `session:${e.session}` };
           for (const a of this.openIn(this.threadOf(session))) a.pending.moot ??= by;
-          this.replaced.add(session);
+          this.replaced.set(session, e.ts);
         }
         const tasks = this.attempts.get(e.session) ?? this.attempts.set(e.session, new Map()).get(e.session)!;
         tasks.set(d.task_ref, Math.max(tasks.get(d.task_ref) ?? 0, d.attempt));
@@ -1920,7 +1922,7 @@ class AsksCore implements Asks {
       for (const [session, id] of task.block!.stops) {
         const stop = this.newest(session);
         const why = !stop || stop.id !== id ? 'a newer stop of it decides for itself' : this.wasContinued(stop) ? 'it already continued from that stop' : this.typedAfter(stop) ? 'a message you typed reached it since'
-          : (this.ended.get(session) ?? -Infinity) > stop.ts ? 'you stopped it after the stop' : this.replaced.has(session) ? 'a newer attempt replaced its attempt' : this.done.has(session) ? 'its task closed' : undefined;
+          : (this.ended.get(session) ?? -Infinity) > stop.ts ? 'you stopped it after the stop' : (this.replaced.get(session) ?? -Infinity) > stop.ts ? 'a newer attempt replaced its attempt after the stop' : (this.done.get(session) ?? -Infinity) > stop.ts ? 'its task closed after the stop' : undefined;
         if (why) {
           if (stop) await this.skipped(stop, task.handle, why, now);
           continue;

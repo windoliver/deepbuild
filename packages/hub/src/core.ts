@@ -235,6 +235,8 @@ function effectEntries(dir: string): Map<string, string[]> {
   }
   return classes;
 }
+/** How long the gate waits on the forge for a cut-off send's result (#85): well inside the gate's 10 s hold. */
+const PULL_LOOKUP_MS = 4000;
 const holdsTurns = (data: Obj): boolean => data.owner === 'you' || ['sign_in_required', 'token_refresh_failed', 'plan_window_spent', 'refusal'].includes(String(data.cause));
 /** An answered ask, as a route delivers it. */
 interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
@@ -390,7 +392,7 @@ export class Core {
   /** The log position of the last session.continued the hub routed (#85). */
   private continuedPos = 0;
   /** The sends each session's cut-off turn started with no recorded end (#85), by the key an identical call matches: denied at PreToolUse with the earlier result. */
-  private readonly unknownSends = new Map<string, Map<string, { label: string; pr: boolean }>>();
+  private readonly unknownSends = new Map<string, Map<string, { label: string; pr: boolean; denied?: boolean }>>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
   private continuing: Promise<void> = Promise.resolve();
   /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
@@ -908,6 +910,12 @@ export class Core {
     // would start there until the task closes (#85); any other stop ends an earlier hold.
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
     if (stopped) this.routesOf(meta.session, meta.cwd).blocked = holdsTurns(stopped.data) ? String(stopped.data.cause) : undefined;
+    // The cut-off turn's unknown sends are the continue's business: a turn that ended normally, or a prompt you typed,
+    // ends their denial, so a later identical send of yours runs.
+    if (meta.session && this.unknownSends.has(meta.session) && ((stopped && stopped.data.outcome !== 'failed') || drafts.some((d) => d.kind === 'user.ask' && d.data.from === 'person' && !d.queued))) {
+      this.unknownSends.delete(meta.session);
+      this.askingSoon();
+    }
     // After a restart the core knows a session's state from its next hook on; a person's status question, which
     // changes none, takes the row's before the prompt's event reads as work (#83). Read before the queue's splice,
     // which may take the prompt's own draft.
@@ -1995,7 +2003,8 @@ export class Core {
     const calls = stop ? await this.cutOff(session, stop) : [];
     if (!calls.length) return text;
     const sends = this.unknownSends.get(session) ?? this.unknownSends.set(session, new Map()).get(session)!;
-    for (const call of calls) if (call.send) sends.set(call.key, { label: call.label, pr: call.pr });
+    // Only a shell send has its input recorded (its command), so only one can be matched as identical; an MCP send is named, never denied.
+    for (const call of calls) if (call.send && call.key.startsWith('shell:')) sends.set(call.key, { label: call.label, pr: call.pr });
     const block = `DeepBuild: the turn that was cut off started ${calls.length === 1 ? 'this call' : 'these calls'} with no recorded end, so ${calls.length === 1 ? 'its' : 'each one\'s'} outcome is unknown; check before acting on it: ${calls.map((c) => `${c.label} (outcome unknown)`).join('; ')}.`;
     const agent = this.live.get(session)?.agent ?? this.sessions.get(session)?.agent ?? 'claude-code';
     const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') = ? LIMIT 1`, [session, block]);
@@ -2045,15 +2054,22 @@ export class Core {
     const sends = this.unknownSends.get(meta.session);
     const call = meta.call;
     if (!sends?.size || !call) return undefined;
-    const command = typeof call.input.command === 'string' ? scrubText(call.input.command, { held: this.options.held }) : undefined;
-    const mcp = /^mcp__([^_].*?)__(.+)$/.exec(call.tool);
-    const key = command !== undefined ? `shell:${command}` : mcp ? `mcp:${mcp[1]}/${mcp[2]}` : undefined;
+    const command = typeof call.input.command === 'string' ? call.input.command : undefined;
+    // The recorded command was scrubbed by the parser with the values it held then; either spelling matches.
+    const keys = command === undefined ? [] : [...new Set([`shell:${scrubText(command, { held: this.options.held })}`, `shell:${command}`])];
+    const key = keys.find((k) => sends.has(k));
     const found = key ? sends.get(key) : undefined;
-    if (!key || !found) return undefined;
-    const result = found.pr ? await this.prOf(meta.session).then((url) => url ?? this.pullFor(meta)) : undefined;
+    if (!key || !found) {
+      // A different call ran: the agent went on, or checked, as the denial asked. A send denied once is free to run again.
+      for (const [k, v] of sends) if (v.denied) sends.delete(k);
+      if (!sends.size) { this.unknownSends.delete(meta.session); this.askingSoon(); }
+      return undefined;
+    }
+    const result = found.pr ? await this.pullFor(meta) : undefined;
     if (result === null) {
       // The forge holds no pull request for the branch: the send never went out, so this one runs.
       sends.delete(key);
+      if (!sends.size) { this.unknownSends.delete(meta.session); this.askingSoon(); }
       return undefined;
     }
     if (result) {
@@ -2061,18 +2077,23 @@ export class Core {
       await this.openedPr(meta.session, agent, result).catch(() => undefined);
       return `DeepBuild denied this: ${found.label} is the send the turn that was cut off already made. Its result: pull request ${result}. Go on from there; don't open it again.`;
     }
-    // Its outcome can't be read from here: denied once, with that, so the next identical call is the agent's informed choice.
-    sends.delete(key);
+    // Its outcome can't be read from here: denied with that, until a different call shows the agent went on or checked;
+    // a retry right after a late reply is denied again, so a hold that ran out never lets the send through.
+    found.denied = true;
     return `DeepBuild denied this: ${found.label} is the send the turn that was cut off started with no recorded end, so its outcome is unknown. Check whether it went through before sending again; only a call you've checked, or a different one, runs.`;
   }
   /** The pull request the forge holds for the session's branch, or null when it holds none, or undefined when it can't be read. */
   private async pullFor(meta: HookMeta): Promise<string | null | undefined> {
-    const repo = repoOf(meta.cwd);
-    const [row] = (await this.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
-    const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 3000 }, (error, out) => done(error ? undefined : out.trim())));
-    if (!repo || !branch) return undefined;
-    const forge = new Forge(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
-    return forge.pullFor(repo, branch);
+    const lookup = async (): Promise<string | null | undefined> => {
+      const repo = repoOf(meta.cwd);
+      const [row] = (await this.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
+      const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 2000 }, (error, out) => done(error ? undefined : out.trim())));
+      if (!repo || !branch) return undefined;
+      const forge = new Forge(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+      return forge.pullFor(repo, branch);
+    };
+    // Well inside the gate's hold, so the reply is never late for this: past it the result is unknown.
+    return Promise.race([lookup().catch(() => undefined), new Promise<undefined>((done) => setTimeout(() => done(undefined), PULL_LOOKUP_MS).unref())]);
   }
   /**
    * One automatic continue of a stopped session (#85), by #25's routes: a stop of the session held now is sent back

@@ -124,7 +124,7 @@ export class Forge {
     let pulls: unknown;
     try { pulls = await this.get(`/repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=10`); } catch { return undefined; }
     if (!Array.isArray(pulls)) return undefined;
-    const match = pulls.find((p) => isObj(p) && isObj(p.head) && p.head.ref === branch) ?? pulls[0];
+    const match = pulls.find((p) => isObj(p) && isObj(p.head) && p.head.ref === branch);
     return isObj(match) && typeof match.html_url === 'string' ? match.html_url : null;
   }
   /** The PR's state as the forge shows it now, with its body and the issue it closes; undefined when the forge doesn't answer. */
