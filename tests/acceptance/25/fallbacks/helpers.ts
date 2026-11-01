@@ -179,7 +179,8 @@ export function deepEntries(settings: Line): Entry[] {
 
 /**
  * `deep setup` with HOME the test's home, a hub already answering and launchctl and systemctl stubbed. Fails with the
- * command's output unless it exits 0 with one asyncRewake waiter entry of DeepBuild's; builds the deep-hook its
+ * command's output unless it exits 0 with DeepBuild's asyncRewake waiter entry once under Stop and once under
+ * StopFailure, with the same command and timeout (issue #25 and design, amended Oct 29); builds the deep-hook its
  * entries name.
  */
 export async function setup(home: string): Promise<void> {
@@ -187,7 +188,11 @@ export async function setup(home: string): Promise<void> {
   if (r.code !== 0) throw Error(`BLOCKED: deep setup must exit 0 and install DeepBuild into Claude Code's user settings: ${shown(r)}`);
   const settings = readSettings(home);
   const waiters = deepEntries(settings).filter((e) => e.hook.asyncRewake === true);
-  if (waiters.length !== 1) throw Error(`BLOCKED: setup must write one asyncRewake waiter entry of DeepBuild's; found ${waiters.length}: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
+  const stop = waiters.filter((e) => e.event === 'Stop');
+  const failure = waiters.filter((e) => e.event === 'StopFailure');
+  const paired = stop.length === 1 && failure.length === 1 && waiters.length === 2
+    && stop[0]!.hook.command === failure[0]!.hook.command && stop[0]!.hook.timeout === failure[0]!.hook.timeout;
+  if (!paired) throw Error(`BLOCKED: setup must write DeepBuild's asyncRewake waiter entry once under Stop and once under StopFailure, with the same command and timeout, and nowhere else${stop.length === 1 && waiters.length === 1 ? ' (it wrote it under Stop only)' : ''}; found ${stop.length} under Stop, ${failure.length} under StopFailure, ${waiters.length} in all: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
   for (const { hook } of deepEntries(settings)) {
     for (const path of String(hook.command).match(/\/[^\s'"]*deep-hook\b/g) ?? []) {
       if (existsSync(path)) continue;

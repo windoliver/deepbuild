@@ -11,6 +11,7 @@ files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job. A sibli
 ## Sources
 
 - **The issue**, windoliver/deepbuild#340, as of `updatedAt` 2026-10-29T04:23:42Z: Scope, AC6, Proof and Depends on.
+- **#25**, as amended on Oct 29 for #85: setup writes the waiter's entry under Stop and under StopFailure.
 - **The design**, `docs/technical-design.md`:
   - "Your words, from one box" (Extension API): every message the app sends into a session carries its origin, `from:
     app` with its delivery's request ID, matched by that ID whichever route carried it, the waiter included; it opens a
@@ -79,8 +80,11 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/340/app/tsconfig.json
   Stop "proceed"; only `authority.test.ts` sets it. `inbox.read` lists the open asks by handle (`ask`).
 - **The control token**: `<home>/.deepbuild/control.token`; a connection says `{"v":1,"hello":"app","token":…}` and
   is the app's (the `cli` hello reads the record).
-- **`deep setup`** (#18): DeepBuild's entries in `~/.claude/settings.json`, among them the waiter, the one entry with
-  `asyncRewake: true`.
+- **`deep setup`** (#18): DeepBuild's entries in `~/.claude/settings.json`, among them the waiter, the entry with
+  `asyncRewake: true`, written under Stop and under StopFailure with the same command and timeout (#25's Scope and
+  the design's Waiter limit, amended Oct 29 for #85); any other count is BLOCKED. A base whose setup writes the waiter
+  under Stop alone is BLOCKED there, before `sendNote`, so `BASE-FAILURE.txt` (run before the amendment) shows the
+  failures past that step.
 - **The Claude Code stand-in** (`fixtures/claude.mjs`, copied unchanged from `../../25/fallbacks/fixtures/`): one
   process per session, running the settings' entries as Claude Code does. An `asyncRewake` entry that exits 2 wakes
   the idle session with a UserPromptSubmit whose prompt is a task-notification carrying the entry's stderr (#80's

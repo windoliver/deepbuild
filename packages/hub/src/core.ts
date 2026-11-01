@@ -206,9 +206,10 @@ const AUTOMATIC_QUEUED = /<task-notification>|^\s*<(?:cross-session-message|agen
 interface Routes {
   /**
    * `ended`: when a StopFailure last ended the newest turn (wall ms); the session is idle from then until a hook
-   * shows work. `prompt`: the newest prompt's id, the turn a StopFailure must name to end it.
+   * shows work. `prompt`: the newest prompt's id, the turn a StopFailure must name to end it. `handed`: continues a
+   * waiter took that no turn has shown yet; the next prompt carries them unless it is the wake that shows them.
    */
-  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined;
+  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined; handed?: string[];
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
   /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
@@ -484,6 +485,12 @@ export class Core {
     // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
     // continue that records is routed right after, never skipped as already carried (#85).
     this.continuedPos = Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind = 'session.continued'`)) as { pos: number }[])[0]?.pos ?? 0);
+    // A continue parked for a session's next prompt outlives the hub: each that no later turn of its session carried
+    // goes with that session's next prompt again (#85).
+    for (const row of (await this.record.raw(`SELECT c.session_id, c.data FROM events c WHERE c.kind = 'session.continued' AND c.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = c.session_id AND e.log_pos > c.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'permission.request')) ORDER BY c.log_pos`)) as { session_id: string; data: string | Obj }[]) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      this.routesOf(row.session_id).later.push(continueText(String(d.because), typeof d.task === 'string' ? d.task : null));
+    }
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir });
     await this.continues();
@@ -1441,7 +1448,8 @@ export class Core {
     const cause = String(data.cause);
     if (cause === 'unknown') return;
     data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
-    data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' ? 'service' : 'agent';
+    // Who clears it. A spend limit reads as a rate limit, but only you can raise it (#85).
+    data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' || meta.fields?.error === 'billing_error' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' || cause === 'timed_out' ? 'service' : 'agent';
   }
 
   /**
@@ -1685,7 +1693,7 @@ export class Core {
       if (old?.waiter) fresh.waiter = old.waiter;
       // A continue parked for the next prompt goes with the first prompt after a resume (#85); a clear or a
       // compaction starts a new session ID, and the cleared one's continues end with it.
-      if (old) fresh.later = old.later;
+      if (old) fresh.later = [...(old.handed ?? []), ...old.later];
       if (old?.places) fresh.places = true;
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
@@ -1703,7 +1711,7 @@ export class Core {
       this.routes.delete(meta.session);
       // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
       // it as the folder's last session.
-      if (r.later.length) this.routesOf(meta.session).later = r.later;
+      if (r.later.length || r.handed?.length) this.routesOf(meta.session).later = [...(r.handed ?? []), ...r.later];
       // A call running as its session quit returns to nobody: its answer waits for the session's resume.
       for (const [ask, waiting] of this.askWaits) if (waiting === meta.session) this.stopAskWait(ask);
       const promise = this.promises.get(meta.session);
@@ -1711,8 +1719,8 @@ export class Core {
       this.promises.delete(meta.session);
       for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted, this.onScreen]) map.delete(meta.session);
     } else if (meta.event === 'StopFailure') {
-      // A turn that ends on an API error ends like a Stop, and starts no waiter of its own: the one its session's
-      // earlier stop started still waits, and may wake the idle session (#85). Only the newest turn's: a prompt you
+      // A turn that ends on an API error ends like a Stop, and Claude Code starts its waiter as at a Stop; one an
+      // earlier stop started may still wait, and either may wake the idle session (#85). Only the newest turn's: a prompt you
       // queued may start before the failed turn's hook is stamped, and one that names no turn ends none.
       if (!meta.fields?.agent_id && meta.fields?.prompt_id !== undefined && meta.fields.prompt_id === r.prompt) r.ended = Math.max(r.ended, ulidTime(meta.id));
     } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart') r.busy = Math.max(r.busy, ulidTime(meta.id));
@@ -1875,7 +1883,7 @@ export class Core {
       }
       const rows = await this.waitingFor(session);
       const notes = this.notes.get(session) ?? [];
-      if (!rows.length && !notes.length) return;
+      if (!rows.length && !notes.length && !r.later.length) return;
       if (this.options.plant === 'waiter-checks-every-5s') {
         // The planted waiter asks every 5 s instead of being told.
         const due = 5000 - ((Date.now() - waiter.at) % 5000);
@@ -1884,7 +1892,10 @@ export class Core {
       }
       r.waiter = undefined;
       if (this.options.plant === 'waiter-never-wakes') return waiter.give({ exit: 'planted: never wakes' });
-      waiter.give({ session, text: [rows.length ? this.answerText(rows) : '', notes.length ? this.noteText(notes) : ''].filter(Boolean).join('\n\n') });
+      // A continue parked before this waiter connected goes with it too (#85): a first turn that failed had none open.
+      const later = r.later.splice(0);
+      if (later.length) r.handed = [...(r.handed ?? []), ...later];
+      waiter.give({ session, text: [rows.length ? this.answerText(rows) : '', notes.length ? this.noteText(notes) : '', ...later].filter(Boolean).join('\n\n') });
       // A note is your words once a turn shows them: the wake's prompt names its request ID, else it goes by the next prompt.
       for (const note of this.notes.get(session)?.splice(0) ?? []) {
         this.handedNotes.set(note.request, { ...note, timer: setTimeout(() => void this.queue(async () => this.notWoken(note.request)).catch(() => undefined), WAKE_GRACE) });
@@ -1917,9 +1928,7 @@ export class Core {
    * record says so. The core decided it from the stop's structure; the hub only carries it.
    */
   private async continueSession(session: string, because: string, task: string | null): Promise<void> {
-    const text = because === 'task_closed' ? `DeepBuild: the task that blocked this session, ${task ?? ''}, closed. Continue where you left off.`
-      : because === 'context_overflow' ? 'DeepBuild: this turn overflowed the context. Compact, then continue where you left off; this is its one automatic re-send.'
-        : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
+    const text = continueText(because, task);
     const r = this.routesOf(session);
     if (r.holding) {
       r.sendBacks.push(text);
@@ -1929,6 +1938,7 @@ export class Core {
     const waiter = r.waiter;
     if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < Math.max(waiter.since, r.ended)) {
       r.waiter = undefined;
+      r.handed = [...(r.handed ?? []), text];
       waiter.give({ session, text });
       return;
     }
@@ -2262,6 +2272,9 @@ export class Core {
         // Behind this prompt's own hook, so its origin is recorded (its event, or the queue's) when read.
         const status = await this.statusReply(meta);
         for (const [ask, handed] of [...this.handed]) if (handed.session === meta.session) await this.unwoken(meta.session, ask, prompt);
+        // A continue a waiter took is shown by the wake that carries it; any other prompt carries it instead (#85).
+        r.later.unshift(...(r.handed ?? []).filter((text) => !prompt.includes(text)));
+        delete r.handed;
         // An answer whose delivery timed out is read for first: one a turn already showed isn't sent again.
         for (const [ask, session] of [...this.unread]) {
           if (session !== meta.session) continue;
@@ -2299,7 +2312,7 @@ export class Core {
         const first = !this.firstPrompted.has(meta.session);
         this.firstPrompted.add(meta.session);
         const taste = first ? await this.tasteAt(meta.session, meta.cwd, prompt, false) : undefined;
-        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context, taste].filter(Boolean).join('\n\n');
+        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0).filter((text) => !prompt.includes(text)), landed && `DeepBuild: ${landed}`, ack.context, taste].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -4924,6 +4937,12 @@ export class Core {
  * prompt is written. Only tests set it.
  */
 /** The record, with its append replaced. */
+/** The words an automatic continue of a stopped session goes into it with (#85). */
+function continueText(because: string, task: string | null): string {
+  return because === 'task_closed' ? `DeepBuild: the task that blocked this session, ${task ?? ''}, closed. Continue where you left off.`
+    : because === 'context_overflow' ? 'DeepBuild: this turn overflowed the context. Compact, then continue where you left off; this is its one automatic re-send.'
+      : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
+}
 function withAppend(record: RecordStore, append: RecordStore['append']): RecordStore {
   return new Proxy(record, {
     get: (target, key) => {
