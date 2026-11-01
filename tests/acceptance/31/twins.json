@@ -67,5 +67,17 @@
     "late-removal",
     "plants-ignored",
     "no-sweep"
+  ],
+  "#31.2ec94f1d": [
+    "unbounded",
+    "plants-ignored"
+  ],
+  "#31.73577be6": [
+    "one-queue",
+    "plants-ignored"
+  ],
+  "#31.3c1a9f39": [
+    "inherits-env",
+    "plants-ignored"
   ]
 }

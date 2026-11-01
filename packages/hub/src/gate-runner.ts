@@ -6,7 +6,7 @@
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
 // check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
 // with its split. Pure rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
-import type { Checkouts, TempCheckout } from '@deepbuild/gate';
+import { OverBudget, type Checkouts, type TempCheckout } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 
 /** A base run's check, apart from the check's own runs: its failure is the proof and its time isn't the check's. */
@@ -29,8 +29,8 @@ export interface GateOptions {
   hold_ms: number;
   /** The base-commit service (#31): every checkout a claim's checks run in comes from it. */
   checkouts(): Checkouts;
-  /** Records the INVALID verdict of a claim whose fix check holds on its base. */
-  invalid(claim: string, commit: string, reason: string): Promise<void>;
+  /** Records the INVALID verdict of a claim whose fix check holds on its base, or the INCONCLUSIVE one of a snapshot over budget. */
+  invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   /** Whether the hub is stopping: what that cuts short says nothing about the claim. */
   stopping(): boolean;
 }
@@ -65,9 +65,20 @@ export class GateRunner {
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
   async stop(r: { session: string; claim: string; cwd: string; base: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
-    const { commit: snapshot } = await this.o.checkouts().snapshot(r.cwd);
-    const claim: Claim = { claim: r.claim, session: r.session, worktree: r.cwd, base: r.base, snapshot, checkout: null, entries: new Map() };
-    const { dir: checkout } = await this.checkoutOf(claim);
+    // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
+    // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
+    const budget = this.o.checkouts().budget();
+    let snapshot = r.base;
+    let checkout: string;
+    try {
+      snapshot = (await this.o.checkouts().snapshot(r.cwd, budget)).commit;
+      checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
+    } catch (error) {
+      if (!(error instanceof OverBudget)) throw error;
+      await this.o.invalid(r.claim, snapshot, error.message, 'INCONCLUSIVE');
+      return { fast: [], slow: [], snapshot, fastEndedAt: this.o.now(), readyAt: this.o.now() };
+    }
+    const claim: Claim = { claim: r.claim, session: r.session, worktree: r.cwd, base: r.base, snapshot, checkout: Promise.resolve({ dir: checkout, commit: snapshot }), entries: new Map() };
     const readyAt = this.o.now();
     const older = this.claims.get(r.session) ?? [];
     this.claims.set(r.session, [...older, claim]);
