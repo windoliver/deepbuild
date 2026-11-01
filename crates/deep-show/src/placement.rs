@@ -696,6 +696,13 @@ impl Placement {
             .map(|(s, _)| *s)
     }
 
+    /// The panel a gesture serial was delivered to and when (#498).
+    pub fn gesture_of(&self, serial: u64) -> Option<(&str, i64)> {
+        self.serials
+            .get(&serial)
+            .map(|(p, when)| (p.as_str(), *when))
+    }
+
     /// Whether `serial` is a gesture of yours in `panel` fresh at `now`.
     pub fn serial_fresh_in(&self, serial: u64, panel: &str, now: i64) -> bool {
         self.serials

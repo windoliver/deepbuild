@@ -291,6 +291,12 @@ impl Hub<'_> {
 
     /// `input`: one hardware input to a panel's canvas.
     pub fn input(&mut self, panel: &str, event: &Event) -> Value {
+        // #498: a panel that shows no canvas document still takes your input, so a press there
+        // is a gesture (Play on its transport).
+        if self.panel_document(panel).is_none() && self.slot(panel).is_some() {
+            let (serial, _) = self.route(panel, event);
+            return json!({"serial": serial});
+        }
         if let Err(e) = self.panel_scope(panel) {
             return e;
         }
