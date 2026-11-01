@@ -32,7 +32,7 @@ export const alone = ['tests/acceptance/20/', 'tests/acceptance/363/', 'tests/ac
   'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts', 'tests/acceptance/29/budgets.test.ts',
   'tests/acceptance/23/permissions/', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/83/', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
-  'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', ...['cycles', 'planted', 'leftovers'].map((f) => `tests/acceptance/824/${f}.test.ts`)];
+  'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', ...['cycles', 'planted', 'leftovers'].map((f) => `tests/acceptance/824/${f}.test.ts`)];
 /**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
  * minutes; #666's and #668's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
@@ -83,6 +83,8 @@ export const checks = [
   { name: 'noop', commands: [['cargo', 'test', '--locked', '-p', 'deep-gpu']], fix: 'Repair the render logic the failing noop test names.' },
   // #140: every platform seam's conformance suite on this build's backends; a suite this run can't give what it needs reads BLOCKED.
   { name: 'seams', commands: [[process.execPath, 'scripts/seams.mjs']], fix: 'Repair the backend each FAIL line names against its seam\'s suite.' },
+  // #309: the relay suite on the shipped relay, and relay@1's interop run against every relay implementation.
+  { name: 'relay', commands: [[process.execPath, 'scripts/relay-kit.mjs']], fix: 'Repair the relay or the backend each FAIL line names, or run the interop against the relay a protocol change left out.' },
   // #140: the canvas core's crates build for the web's platform, wasm32 with threads off, so nothing native-only creeps in.
   { name: 'wasm32', commands: [[process.execPath, 'scripts/wasm32.mjs']], fix: 'Remove the threads or the native-only API from the crate each FAIL line names, or install the target (rustup target add wasm32-unknown-unknown).' },
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the

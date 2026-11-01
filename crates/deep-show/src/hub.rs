@@ -424,9 +424,12 @@ pub enum Call {
     Costs,
     /// #140: the network seam's conformance suite.
     NetworkSuite {
+        macos: bool,
         messages: u64,
         seed: u64,
     },
+    /// #309: a test client on the network seam's macOS backend.
+    RelayClient(Box<crate::seams::RelayClient>),
     /// #855: rekeys the process's content keys under a hash, once.
     Migrate(deep_canvas::schedule::HashVersion),
     /// #855: computes every content key of a session's revision afresh, `runs` times, timed.
@@ -1276,9 +1279,12 @@ impl<'a> Hub<'a> {
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
-            Call::NetworkSuite { messages, seed } => {
-                crate::seams::network(*messages, *seed, self.startup.network)
-            }
+            Call::NetworkSuite {
+                macos,
+                messages,
+                seed,
+            } => crate::seams::network(*messages, *seed, *macos, self.startup.network),
+            Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fixtures => self.fixtures_reply(),
