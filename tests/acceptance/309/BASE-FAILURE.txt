@@ -1,0 +1,83 @@
+Base commit: c9225aa3 ("Merge pull request #976 from windoliver/worktree-github-issue-140-0cfedc")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/309 --no-file-parallelism
+Run in the blind job's worktree at the base commit, with only these test files added (untracked), node_modules from npm ci.
+Trimmed to the summary and each failure's first lines; home paths redacted.
+Date: 2026-11-01T18:26Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (the checkout's toolchain)
+Machine: Mac15,7 (M3 Pro, 36 GiB); 1-minute load about 60-90 on 12 cores (no test here is timed).
+
+All 16 tests fail for the expected reason, at a named assertion:
+- relay-suite.test.ts (#309.1): packages/contracts/digests.json has no entry relay@1; `cargo build --locked --bin
+  deep-relay --bin deep-relay-suite` fails ("no bin target named `deep-relay` in default-run packages"), so the suite
+  on the shipped relay and on the planted relay never start; scripts/lanes.mjs has no lane relay.
+- hello.test.ts (#309.2), frames.test.ts (#309.3): deep-relay doesn't build, so no relay starts. Checked by hand at
+  the base apart from the run: deep-show run answers a relay_client scenario {"ok":false,"code":"bad_input"} (no such
+  call), and refuses the startup --planted net_skips_hello_check and --planted net_writes_step_big_endian with
+  {"ok":false,"code":"bad_input"} and exit 2.
+- network-suite.test.ts (#309.4): deep-show run ignores the call's `backend` and runs #140's test backend, so each
+  seed fails at "the suite ran the network seam's macOS backend: expected 'network.test' to be 'network.macos'";
+  --planted net_macos_delivers_twice is refused (exit 2, bad_input).
+- chosen-relay.test.ts (#309.5): deep-relay doesn't build; no lane relay; no scripts/relay-kit.mjs ("Cannot find
+  module").
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/309
+ ❯ relay-suite.test.ts (4 tests | 4 failed) 74136ms
+   ❯ #309.1 the shipped relay answers relay@1 with the digest committed in the repo and passes the relay suite (4)
+     × #309.1 relay@1's digest is committed in the repo: packages/contracts/digests.json holds relay@1, frozen from its contract file by the d1 digest 25ms
+     × #309.1 the relay suite on the shipped relay (deep-relay on 127.0.0.1): its hello names relay@1 and the committed digest; joining, forwarding only within a match and keeping nothing once a match ends pass; and every frame the suite's connections received, read field by field, came from another copy of the same match 4ms
+     × #309.1 the local preflight runs the relay suite on the shipped relay: a lane relay runs node scripts/relay-kit.mjs, which exits 0 with the suite PASS on deep-relay 156ms
+     × #309.1 a planted relay that forwards one frame to another match's copies (deep-relay --planted forwards_to_other_match) fails the relay suite, naming both match IDs 1ms
+ ❯ chosen-relay.test.ts (3 tests | 3 failed) 119354ms
+   ❯ #309.5 the relay is the one you chose (3)
+     × #309.5 with a second relay deployed, Join keeps using the chosen relay until you switch; stopping the chosen relay fails the Join with its reason and never moves to the other 12ms
+     × #309.5 the kit (the lane relay, node scripts/relay-kit.mjs) passes when the interop run covers every relay implementation 29ms
+     × #309.5 a protocol change whose interop run covers only the shipped relay (node scripts/relay-kit.mjs --planted interop_shipped_only) fails the kit, naming the relay left out 146ms
+ ❯ frames.test.ts (2 tests | 2 failed) 129619ms
+   ❯ #309.3 two test clients on the macOS backend exchange 1,200 frames through the shipped relay, read back field by field in relay@1's little-endian layout (2)
+     × #309.3 two test clients on the macOS backend join one match ID through the shipped relay and exchange 1,200 frames; this file reads every frame each sent and received field by field, little-endian, and each received the other's 1,200 frames as sent 8ms
+     × #309.3 a planted client that writes a frame's step big-endian (deep-show run --planted net_writes_step_big_endian) fails the relay suite's reader, naming the field first and the client 11ms
+ ❯ network-suite.test.ts (4 tests | 4 failed) 19041ms
+   ❯ #309.4 the macOS backend passes the network seam's suite through its local test relay, which delays, drops, duplicates and reorders 10,000 messages (4)
+     × #309.4 seed 1: the macOS backend passes the network seam's suite; every one of 10,000 messages arrives once and in order through the test relay's delays, drops, duplicates and reorders 1728ms
+     × #309.4 seed 2: the macOS backend passes the network seam's suite; every one of 10,000 messages arrives once and in order through the test relay's delays, drops, duplicates and reorders 96ms
+     × #309.4 seed 3: the macOS backend passes the network seam's suite; every one of 10,000 messages arrives once and in order through the test relay's delays, drops, duplicates and reorders 99ms
+     × #309.4 a planted macOS backend that delivers a message twice (deep-show run --planted net_macos_delivers_twice) fails the network seam's suite, naming the fault delivered_twice 22ms
+ ❯ hello.test.ts (3 tests | 3 failed) 13234ms
+   ❯ #309.2 through the macOS backend, a test client refuses a relay that answers another hello before it sends any frame, naming the host and what it answered (3)
+     × #309.2 a relay that answers another protocol's hello (deep-relay --planted hello_other_protocol): two test clients on the macOS backend each refuse it before sending any frame, naming its host and relay@2; the relay received no frame 7ms
+     × #309.2 a relay that answers relay@1 with another digest (deep-relay --planted hello_other_digest): two test clients on the macOS backend each refuse it before sending any frame, naming its host and d1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef; the relay received no frame 2ms
+     × #309.2 a planted backend that skips the hello check (deep-show run --planted net_skips_hello_check) sends a frame to the relay that answers relay@1 with another digest, and fails, naming the host 2ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  chosen-relay.test.ts > #309.5 the relay is the one you chose > #309.5 with a second relay deployed, Join keeps using the chosen relay until you switch; stopping the chosen relay fails the Join with its reason and never moves to the other
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ FAIL  chosen-relay.test.ts > #309.5 the relay is the one you chose > #309.5 the kit (the lane relay, node scripts/relay-kit.mjs) passes when the interop run covers every relay implementation
+AssertionError: scripts/lanes.mjs has a lane named relay in checks (the local preflight): expected undefined to be defined
+ FAIL  chosen-relay.test.ts > #309.5 the relay is the one you chose > #309.5 a protocol change whose interop run covers only the shipped relay (node scripts/relay-kit.mjs --planted interop_shipped_only) fails the kit, naming the relay left out
+AssertionError: node scripts/relay-kit.mjs --planted interop_shipped_only's last stdout line (exit 1;  node:internal/modules/cjs/loader:1408
+Error: Cannot find module '<checkout>/scripts/relay-kit.mjs'
+ FAIL  frames.test.ts > #309.3 two test clients on the macOS backend exchange 1,200 frames through the shipped relay, read back field by field in relay@1's little-endian layout > #309.3 two test clients on the macOS backend join one match ID through the shipped relay and exchange 1,200 frames; this file reads every frame each sent and received field by field, little-endian, and each received the other's 1,200 frames as sent
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ FAIL  frames.test.ts > #309.3 two test clients on the macOS backend exchange 1,200 frames through the shipped relay, read back field by field in relay@1's little-endian layout > #309.3 a planted client that writes a frame's step big-endian (deep-show run --planted net_writes_step_big_endian) fails the relay suite's reader, naming the field first and the client
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ FAIL  hello.test.ts > #309.2 through the macOS backend, a test client refuses a relay that answers another hello before it sends any frame, naming the host and what it answered > #309.2 a relay that answers another protocol's hello (deep-relay --planted hello_other_protocol): two test clients on the macOS backend each refuse it before sending any frame, naming its host and relay@2; the relay received no frame
+ FAIL  hello.test.ts > #309.2 through the macOS backend, a test client refuses a relay that answers another hello before it sends any frame, naming the host and what it answered > #309.2 a relay that answers relay@1 with another digest (deep-relay --planted hello_other_digest): two test clients on the macOS backend each refuse it before sending any frame, naming its host and d1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef; the relay received no frame
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ FAIL  hello.test.ts > #309.2 through the macOS backend, a test client refuses a relay that answers another hello before it sends any frame, naming the host and what it answered > #309.2 a planted backend that skips the hello check (deep-show run --planted net_skips_hello_check) sends a frame to the relay that answers relay@1 with another digest, and fails, naming the host
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ FAIL  network-suite.test.ts > #309.4 the macOS backend passes the network seam's suite through its local test relay, which delays, drops, duplicates and reorders 10,000 messages > #309.4 seed 1: the macOS backend passes the network seam's suite; every one of 10,000 messages arrives once and in order through the test relay's delays, drops, duplicates and reorders
+ FAIL  network-suite.test.ts > #309.4 the macOS backend passes the network seam's suite through its local test relay, which delays, drops, duplicates and reorders 10,000 messages > #309.4 seed 2: the macOS backend passes the network seam's suite; every one of 10,000 messages arrives once and in order through the test relay's delays, drops, duplicates and reorders
+ FAIL  network-suite.test.ts > #309.4 the macOS backend passes the network seam's suite through its local test relay, which delays, drops, duplicates and reorders 10,000 messages > #309.4 seed 3: the macOS backend passes the network seam's suite; every one of 10,000 messages arrives once and in order through the test relay's delays, drops, duplicates and reorders
+AssertionError: the suite ran the network seam's macOS backend: expected 'network.test' to be 'network.macos' // Object.is equality
+ FAIL  network-suite.test.ts > #309.4 the macOS backend passes the network seam's suite through its local test relay, which delays, drops, duplicates and reorders 10,000 messages > #309.4 a planted macOS backend that delivers a message twice (deep-show run --planted net_macos_delivers_twice) fails the network seam's suite, naming the fault delivered_twice
+AssertionError: the network seam's suite on the macOS backend, seed 1, --planted net_macos_delivers_twice: deep-show run --planted net_macos_delivers_twice exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ FAIL  relay-suite.test.ts > #309.1 the shipped relay answers relay@1 with the digest committed in the repo and passes the relay suite > #309.1 relay@1's digest is committed in the repo: packages/contracts/digests.json holds relay@1, frozen from its contract file by the d1 digest
+AssertionError: packages/contracts/digests.json has an entry relay@1: expected undefined to be type of 'string'
+ FAIL  relay-suite.test.ts > #309.1 the shipped relay answers relay@1 with the digest committed in the repo and passes the relay suite > #309.1 the relay suite on the shipped relay (deep-relay on 127.0.0.1): its hello names relay@1 and the committed digest; joining, forwarding only within a match and keeping nothing once a match ends pass; and every frame the suite's connections received, read field by field, came from another copy of the same match
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ FAIL  relay-suite.test.ts > #309.1 the shipped relay answers relay@1 with the digest committed in the repo and passes the relay suite > #309.1 the local preflight runs the relay suite on the shipped relay: a lane relay runs node scripts/relay-kit.mjs, which exits 0 with the suite PASS on deep-relay
+AssertionError: scripts/lanes.mjs has a lane named relay in checks (the local preflight): expected undefined to be defined
+ FAIL  relay-suite.test.ts > #309.1 the shipped relay answers relay@1 with the digest committed in the repo and passes the relay suite > #309.1 a planted relay that forwards one frame to another match's copies (deep-relay --planted forwards_to_other_match) fails the relay suite, naming both match IDs
+AssertionError: the binary deep-relay builds (README: The surface under test): expected 'cargo build --locked --bin deep-relay…' to be '' // Object.is equality
+ Test Files  5 failed (5)
+      Tests  16 failed (16)
+   Duration  362.20s (tests 98%, import 1%)

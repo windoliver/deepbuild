@@ -1,6 +1,6 @@
 //! The network seam (canvas primitives: Seam and backend), which only the net module uses: a
-//! match's messages over https to the relay a piece declares. Its real backends come with the
-//! relay (#309) and the net module (#179); this is the seam, its conformance suite and the correct
+//! match's messages over https to the relay a piece declares. Its macOS backend is in deep-relay
+//! (#309), the web player's comes with the net module (#179); this is the seam, its conformance suite and the correct
 //! test backend the suite passes. The suite plays one match between two copies through a local
 //! test relay that delays, drops, duplicates and reorders frames by a seed, and needs every message
 //! delivered once and in order, nothing sent before the join call and no connection to a host the

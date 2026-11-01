@@ -1,0 +1,19 @@
+{
+  "commit": "24e860f6d3c4f2ebae65ed7649e2a8860d512879",
+  "suite": "https://fate-suite.ffmpeg.org/",
+  "samples": [
+    { "ref": "mov-3elist", "mak_line": 71, "sample": "mov/mov-3elist.mov", "sha256": "5c344e590a90ac126e490b298e1ee3ff12d82ef74933f3208aa08f0d5b72ee61", "bytes": 30081, "check": "first_frame" },
+    { "ref": "mov-3elist-1ctts", "mak_line": 72, "sample": "mov/mov-3elist-1ctts.mov", "sha256": "2c2bdafe292c95b82d34583b6d775fcf25ea575e3550e72c0e030cdc1a1e092c", "bytes": 32498, "check": "first_frame" },
+    { "ref": "mov-1elist-1ctts", "mak_line": 70, "sample": "mov/mov-1elist-1ctts.mov", "sha256": "6380ab6f91080f2b27d07b4234b9a85bcb8c007354712957be197ac4ec9fa7c2", "bytes": 32474, "check": "first_frame" },
+    { "ref": "mov-1elist-noctts", "mak_line": 69, "sample": "mov/mov-1elist-noctts.mov", "sha256": "2d6fc6fe424774c9b0fd8fe64d32488014965038d9b9b45a299fa12a00a31182", "bytes": 32450, "check": "first_frame" },
+    { "ref": "mov-elist-starts-ctts-2ndsample", "mak_line": 93, "sample": "mov/mov-elist-starts-ctts-2ndsample.mov", "sha256": "6700ffc9ec871550d79ff1f9e1aacbdebbd4100e3adf0e110770fa4d0b8b1685", "bytes": 31237, "check": "first_frame" },
+    { "ref": "mov-1elist-ends-last-bframe", "mak_line": 98, "sample": "mov/mov-1elist-ends-last-bframe.mov", "sha256": "d60e3cf163efbf3cde1d7a1083bc599eb542a060b3eec3944a9cd98faa969e12", "bytes": 30798, "check": "first_frame" },
+    { "ref": "mov-2elist-elist1-ends-bframe", "mak_line": 101, "sample": "mov/mov-2elist-elist1-ends-bframe.mov", "sha256": "ad72cca4c202df4e496903b6f43c18770431860d65b7cce9b8e53f6bbe188821", "bytes": 30810, "check": "first_frame" },
+    { "ref": "mov-elst-ends-betn-b-and-i", "mak_line": 104, "sample": "mov/elst_ends_betn_b_and_i.mp4", "sha256": "cc9bbd4ea05e2cd432088e482c94742108422789b4b838acf329c7876f47a215", "bytes": 87059, "check": "first_frame" },
+    { "ref": "mov-ibi-elst-starts-b", "mak_line": 119, "sample": "mov/mov_ibi_elst_starts_b.mov", "sha256": "f54be3d1e4208cf6cf2e1dd3322474e2702104a2bcc1d1f172f36ebc3365c456", "bytes": 87059, "check": "first_frame" },
+    { "ref": "mov-invalid-elst-entry-count", "mak_line": 112, "sample": "mov/invalid_elst_entry_count.mov", "sha256": "9caa4861a0c8cf32657c1e7a7938dc01a9c85d0699d90ede07decfc446955fd7", "bytes": 215461, "check": "first_time" },
+    { "ref": "mov-bbi-elst-starts-b", "mak_line": 137, "sample": "h264/twofields_packet.mp4", "sha256": "96033a51958f07033a3742ba63b05931ac61f125433d863df8431a846a764843", "bytes": 6612462, "check": "first_video_and_audio_times" },
+    { "ref": "mov-neg-firstpts-discard", "mak_line": 140, "sample": "mov/mov_neg_first_pts_discard.mov", "sha256": "166b9808452fe5068265cb428005c5adcb0590363b82ccf67f3e09f6308a77d8", "bytes": 38679, "check": "start_time" },
+    { "ref": "mov-aac-2048-priming", "mak_line": 152, "sample": "mov/aac-2048-priming.mov", "sha256": "b163ddd5ea05b0986fe01723308bd296077f0548ad6b29db676d23ea8f4e4b35", "bytes": 45226, "check": "priming" }
+  ]
+}

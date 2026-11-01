@@ -1,0 +1,27 @@
+[package]
+name = "deep-relay"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #309: relay@1, the relay DeepBuild ships (`deep-relay`), the relay suite it passes
+# (`deep-relay-suite`) and the network seam's macOS backend, which the net module (#179) and
+# game.online (#218) both speak. It carries frames: nothing here reads a piece, a match's state or
+# an engine. Not named deep-canvas*: it holds threads, sockets and clocks.
+
+[[bin]]
+name = "deep-relay"
+path = "src/bin/deep-relay.rs"
+
+[[bin]]
+name = "deep-relay-suite"
+path = "src/bin/deep-relay-suite.rs"
+
+[dependencies]
+deep-canvas-seams = { path = "../deep-canvas-seams" }
+# TLS and the WebSocket relay@1 rides on; all already in the lockfile, ring as the one provider.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+serde_json = { version = "1", features = ["preserve_order"] }
