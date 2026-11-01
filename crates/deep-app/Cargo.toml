@@ -40,7 +40,7 @@ objc2 = "0.6"
 # menu-bar template from the kit's bytes.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFCGTypes", "CFData"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
 block2 = "0.6"
 raw-window-handle = "0.6"

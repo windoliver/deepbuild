@@ -3,8 +3,8 @@ use anyhow::{Context as _, Result};
 use block2::RcBlock;
 use core_graphics::geometry::CGSize;
 use gpui::{
-    AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path, Point,
-    PrimitiveBatch, ScaledPixels, Scene, Size, point, size,
+    point, size, AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path,
+    Point, PrimitiveBatch, ScaledPixels, Scene, Size,
 };
 use image::RgbaImage;
 use objc2::runtime::AnyObject;
@@ -16,10 +16,10 @@ use metal::{
 };
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::{
+    kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_32BGRA,
-    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
+    CVPixelBufferGetWidthOfPlane,
 };
 use parking_lot::Mutex;
 
@@ -77,7 +77,7 @@ pub mod gpu_ledger {
 }
 
 /// DeepBuild patch (windoliver/deepbuild#140): the color seam's checks on a window's layer. The
-/// planted twin leaves every window layer's colorspace nil, as GPUI alone does; and the next frame
+/// planted twin sets every window layer's colorspace nil (untagged); and the next frame
 /// a window draws can be read back from its layer's drawable, as the compositor receives it.
 pub mod layer_colorspace {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -126,7 +126,7 @@ pub mod layer_colorspace {
 /// done reading it. The planted twins exist for the GPU layer's acceptance tests: one divides
 /// alpha out of the surface, the other draws surfaces after the rest of the scene.
 pub mod gpu_surfaces {
-    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
     use std::sync::{Arc, RwLock};
 
     /// A frame's report: the identity of each BGRA pixel buffer its command buffer samples (the
@@ -367,13 +367,13 @@ impl MetalRenderer {
         objc2_layer.setAllowsNextDrawableTimeout(false);
         objc2_layer.setNeedsDisplayOnBoundsChange(true);
         // DeepBuild patch (windoliver/deepbuild#140): the layer holds sRGB-encoded BGRA8, so it is
-        // tagged sRGB and the compositor never reinterprets it; GPUI alone leaves it nil.
-        if !layer_colorspace::untagged() {
-            let srgb = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
-                objc2_core_graphics::kCGColorSpaceSRGB
-            }));
-            objc2_layer.setColorspace(srgb.as_deref());
-        }
+        // tagged sRGB and the compositor never reinterprets it. GPUI alone sets no colorspace and
+        // leaves it to whatever AppKit gives a view's backing layer (sRGB on macOS 26); the
+        // planted twin sets it nil.
+        let srgb = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
+            objc2_core_graphics::kCGColorSpaceSRGB
+        }));
+        objc2_layer.setColorspace(srgb.as_deref().filter(|_| !layer_colorspace::untagged()));
         // UIKit sizes a view's backing layer itself; only AppKit-hosted
         // layers need to track their superlayer's bounds.
         #[cfg(target_os = "macos")]
@@ -2021,9 +2021,9 @@ mod tests {
     use super::*;
     use objc2_core_foundation::{CFDictionary, CFType};
     use objc2_core_video::{
-        CVPixelBufferCreate, CVPixelBufferGetBaseAddressOfPlane,
-        CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
-        CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
+        kCVPixelBufferIOSurfacePropertiesKey, CVPixelBufferCreate,
+        CVPixelBufferGetBaseAddressOfPlane, CVPixelBufferGetBytesPerRowOfPlane,
+        CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
     };
     use std::time::Duration;
 
