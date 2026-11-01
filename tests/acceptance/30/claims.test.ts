@@ -225,7 +225,7 @@ describe('AC17 #30.a06dc35a a test that fails and then passes on its retry is a 
   }, 180_000);
 });
 
-describe('AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim\'s half; the counts are in contract.test.ts; the timing check\'s half is in blocked.test.ts)', () => {
+describe('AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim\'s half; the counts are in contract.test.ts; the timing check\'s half is in timing.test.ts)', () => {
   const SIZE = 4_096_000;
   const CONTRACT: NumericContract = {
     reference: { precision: 'fp64' },

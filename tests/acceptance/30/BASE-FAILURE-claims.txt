@@ -479,3 +479,134 @@ Error: BLOCKED: <repo>/packages/checks-command/dist/index.js isn't built (npm ru
    Duration  70.31s (tests 99%)
 
 exit 1
+
+
+================================================================================
+2026-11-01: timing.test.ts, the second redraft, run on its base commit 2ea4b4a2 (no implementation of
+the timing half: CommandCheck.timing and CommandRun.timing are not in packages/checks-command/src/index.ts).
+
+Command:  env -u CLAUDECODE -u AI_AGENT node node_modules/vitest/vitest.mjs run --root tests/acceptance/30 --no-file-parallelism timing.test.ts
+          (PATH with the repo's Node first)
+Node:     v24.22.0
+Machine:  Linux (not a reference Mac); the supervisor refuses every start here (the first section above names the
+          reason), so every run returns `missing` with empty output, which is why each failure's message is bare.
+
+Result: 1 of 1 files fail, 5 of 5 tests fail on outcome `missing` (expected `passed`), the two wrong-program
+twins included since they run the real check first; nothing passes.
+
+
+ RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/issue-30-e7e603/tests/acceptance/30
+
+ ❯ timing.test.ts (5 tests | 5 failed) 2833ms
+   ❯ AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) (5)
+     × AC19 a timing check whose report says each of its three repeats flushed its caches records all three as flushed 339ms
+     × AC19 a timing check whose report leaves out whether repeat 2's caches were flushed records that repeat as not flushed, never cold or flushed, and the others as flushed 322ms
+     × AC19 the record comes from the report file, never from printed output: the silent repeat printing "repeat 2: caches flushed" changes nothing 333ms
+     × AC19 (wrong program) a runner that takes a silent repeat as flushed fails this test, naming repeat 2 312ms
+     × AC19 (wrong program) a runner that reads whether a repeat flushed from the test's printed output fails this test, naming repeat 2 360ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 a timing check whose report says each of its three repeats flushed its caches records all three as flushed
+AssertionError: 
+: expected 'missing' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "missing"
+
+ ❯ readFromReport timing.test.ts:23:48
+     21| /** The criterion's assertion on one run: each repeat recorded flushed…
+     22| function readFromReport(r: CommandRun, mode: Mode): void {
+     23|   expect(r.outcome, outputOf(r).slice(0, 800)).toBe('passed');
+       |                                                ^
+     24|   expect(r.timing, `the record has one entry per timed repeat (timing:…
+     25|   expect(r.timing!.map((t) => t.repeat)).toEqual([1, 2, 3]);
+ ❯ timing.test.ts:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 a timing check whose report leaves out whether repeat 2's caches were flushed records that repeat as not flushed, never cold or flushed, and the others as flushed
+AssertionError: 
+: expected 'missing' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "missing"
+
+ ❯ readFromReport timing.test.ts:23:48
+     21| /** The criterion's assertion on one run: each repeat recorded flushed…
+     22| function readFromReport(r: CommandRun, mode: Mode): void {
+     23|   expect(r.outcome, outputOf(r).slice(0, 800)).toBe('passed');
+       |                                                ^
+     24|   expect(r.timing, `the record has one entry per timed repeat (timing:…
+     25|   expect(r.timing!.map((t) => t.repeat)).toEqual([1, 2, 3]);
+ ❯ timing.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 the record comes from the report file, never from printed output: the silent repeat printing "repeat 2: caches flushed" changes nothing
+AssertionError: expected '\n' to match /repeat 2: caches flushed/
+
+- Expected:
+/repeat 2: caches flushed/
+
++ Received:
+"
+"
+
+ ❯ timing.test.ts:43:25
+     41|   it('AC19 the record comes from the report file, never from printed o…
+     42|     const r = await timingRun('printed');
+     43|     expect(outputOf(r)).toMatch(/repeat 2: caches flushed/);
+       |                         ^
+     44|     readFromReport(r, 'printed');
+     45|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 (wrong program) a runner that takes a silent repeat as flushed fails this test, naming repeat 2
+AssertionError: expected [Function] to throw error matching /repeat 2/ but got '\n: expected \'missing\' to be \'pass…'
+
+- Expected:
+/repeat 2/
+
++ Received:
+"
+: expected 'missing' to be 'passed' // Object.is equality"
+
+ ❯ timing.test.ts:49:51
+     47|   it('AC19 (wrong program) a runner that takes a silent repeat as flus…
+     48|     const wrong = silentRepeatAsFlushed(await timingRun('silent'));
+     49|     expect(() => readFromReport(wrong, 'silent')).toThrow(/repeat 2/);
+       |                                                   ^
+     50|   }, 180_000);
+     51|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 (wrong program) a runner that reads whether a repeat flushed from the test's printed output fails this test, naming repeat 2
+AssertionError: expected [Function] to throw error matching /repeat 2/ but got '\n: expected \'missing\' to be \'pass…'
+
+- Expected:
+/repeat 2/
+
++ Received:
+"
+: expected 'missing' to be 'passed' // Object.is equality"
+
+ ❯ timing.test.ts:54:52
+     52|   it('AC19 (wrong program) a runner that reads whether a repeat flushe…
+     53|     const wrong = flushedFromPrintedOutput(await timingRun('printed'));
+     54|     expect(() => readFromReport(wrong, 'printed')).toThrow(/repeat 2/);
+       |                                                    ^
+     55|   }, 180_000);
+     56| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  12:50:43
+   Duration  3.67s (tests 78%, transform 18%, import 4%)
+
+exit 1
