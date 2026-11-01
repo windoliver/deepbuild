@@ -1489,6 +1489,45 @@ fn number(n: f64) -> Value {
     }
 }
 
+/// One step of an expression in postfix order: the form a caller that evaluates it frame after
+/// frame without allocating compiles it to, such as a driver's `expr` (Driver).
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprStep {
+    Num(f64),
+    Name(String),
+    Neg,
+    /// One of `+ - * / %`.
+    Bin(char),
+    /// A function of the closed list, with its argument count.
+    Call(String, usize),
+}
+
+/// `text` parsed as a recipe expression, in postfix order.
+pub fn postfix(text: &str) -> Result<Vec<ExprStep>, String> {
+    fn walk(e: &Expr, out: &mut Vec<ExprStep>) {
+        match e {
+            Expr::Num(n) => out.push(ExprStep::Num(*n)),
+            Expr::Name(n) => out.push(ExprStep::Name(n.clone())),
+            Expr::Neg(a) => {
+                walk(a, out);
+                out.push(ExprStep::Neg);
+            }
+            Expr::Bin(op, a, b) => {
+                walk(a, out);
+                walk(b, out);
+                out.push(ExprStep::Bin(*op));
+            }
+            Expr::Call(name, args) => {
+                args.iter().for_each(|a| walk(a, out));
+                out.push(ExprStep::Call(name.clone(), args.len()));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&Expr::parse(text)?, &mut out);
+    Ok(out)
+}
+
 /// An expression: numbers, names, `+ - * / %`, unary minus, parentheses and the functions
 /// `min`, `max`, `floor`, `ceil`, `round` and `abs`.
 #[derive(Clone, Debug, PartialEq)]

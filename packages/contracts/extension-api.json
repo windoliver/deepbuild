@@ -945,5 +945,49 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "method": "deep.canvas.read",
+    "variants": null,
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#411",
+    "digest": "d1:834d701457943f9662ca00afc85ceb81e0f0df9495d10295b5251e066d459995",
+    "params": {
+      "type": "object",
+      "properties": {
+        "doc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "<doc>@<rev>: the document and the revision read."
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "at": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "doc",
+        "query"
+      ],
+      "additionalProperties": false
+    }
   }
 ]
