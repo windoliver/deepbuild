@@ -29,6 +29,14 @@ export interface Deep {
             kinds?: Array<string>;
         };
     }): Promise<unknown>;
+    "runner.run"(params: {
+        prompt: string;
+        inputs: Array<string>;
+        budget: {
+            usd: number;
+        };
+        deadline: number;
+    }): Promise<unknown>;
     "store.get"(params: {
         kind: string;
         key: string;
@@ -131,6 +139,17 @@ export interface Deep {
         name: string;
         panel: string;
         area: "sidebar" | "home" | "tab" | "line";
+        view?: {
+            pages?: Array<{
+                name: string;
+                param: string;
+                values?: Array<string>;
+            }>;
+            commands?: Array<{
+                name: string;
+                action: string;
+            }>;
+        };
     }): Promise<unknown>;
     schedule(params: {
         name: string;
