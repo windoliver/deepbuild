@@ -34,8 +34,8 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::{Call, Hub, Scenario, Startup};
 use crate::live::{nodes, AxNode, Node, STRIP};
-use crate::window::bounds;
 use crate::shared::FLICKS;
+use crate::window::bounds;
 use crate::window::refused;
 
 /// How long a window may take to show and present its first frame before the run answers
