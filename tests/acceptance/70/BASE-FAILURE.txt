@@ -1,0 +1,91 @@
+Base commit: 6119bfa5 (Merge pull request #973 from windoliver/worktree-github-issue-366-baac50), equal to origin/main
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/70   (node first on PATH = ~/.local/node/bin/node), after npm ci and npm run build --workspaces
+Date: 2026-11-01  Node v24.22.2  vitest 5.0.5  Ubuntu 24.04.5 LTS, linux-arm64, bubblewrap 0.9.0 at /usr/bin/bwrap, Landlock ABI 8, gcc  1-minute load 0.9 at the start
+Exit code: 1
+Result: Test Files 1 failed (1); Tests 3 failed (3). None passed, none skipped. The Linux gate passed (the run named
+"#70 AC4 on Ubuntu 24.04.5 LTS (arm64), bubblewrap 0.9.0 at /usr/bin/bwrap"), so nothing was BLOCKED.
+
+Why they fail:
+- AC4 the suite passes on bubblewrap, every case run, and nothing reached the hub's or the inbox socket
+  TypeError: Cannot read properties of undefined (reading 'platform')   (suite.test.ts:52)
+  @deepbuild/supervisor at the base has no `bubblewrap` export, the surface the README defines. This is no failure at
+  an assertion: on the before lane this test needs a planted wrong program (README, Proof on a wrong program), and
+  past the base the mutation lane is its wrong program.
+- AC4 (wrong program) the planted backend that allows egress is a bubblewrap one here, and still fails the suite, naming the egress case
+  AssertionError: on Linux the egress plant is the Linux backend one rule wider, not another platform's: expected 'darwin' to be 'linux'   (suite.test.ts:67)
+  Fails at its first assertion, on the base's real plantedBackends: its egress plant is Seatbelt's, so on Linux it is
+  the wrong platform's and the suite can't be run on it.
+- AC4 (wrong program) a profile without its network filter fails the suite's egress case, naming it, and no other case
+  AssertionError: plantedBackends(fixtures)['no-network-filter']: bubblewrap's confinement with its network filter left out: expected undefined to be defined   (suite.test.ts:88)
+  Fails at its first assertion: the base's plantedBackends has no 'no-network-filter' key.
+
+Type check (node node_modules/typescript/bin/tsc -p tests/acceptance/70/tsconfig.json): exit 2, two errors, both on
+the not-yet-existing surface: TS2305 no exported member 'bubblewrap' (suite.test.ts:11), and TS7053 'no-network-filter'
+can't index Record<'camera' | 'egress' | 'write-outside' | 'hub-socket', SandboxBackend> (suite.test.ts:87).
+
+Not verified: no test body has run against an implementation of the surface, so the suite has not been seen to pass
+on bubblewrap, no plant has been seen to fail its assertion for the expected reason, and the run on Fedora, the
+criterion's second distribution, has not happened on this machine (Ubuntu).
+
+Output:
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/70
+
+stdout | suite.test.ts
+#70 AC4 on Ubuntu 24.04.5 LTS (arm64), bubblewrap 0.9.0 at /usr/bin/bwrap
+
+ ❯ suite.test.ts (3 tests | 3 failed) 20ms
+   ❯ AC4 #70.ef8d1e25 the bubblewrap backend passes the sandbox's suite on this Linux; the egress plant and a profile without its network filter fail its egress case (3)
+     × AC4 the suite passes on bubblewrap, every case run, and nothing reached the hub's or the inbox socket 7ms
+     × AC4 (wrong program) the planted backend that allows egress is a bubblewrap one here, and still fails the suite, naming the egress case 5ms
+     × AC4 (wrong program) a profile without its network filter fails the suite's egress case, naming it, and no other case 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  suite.test.ts > AC4 #70.ef8d1e25 the bubblewrap backend passes the sandbox's suite on this Linux; the egress plant and a profile without its network filter fail its egress case > AC4 the suite passes on bubblewrap, every case run, and nothing reached the hub's or the inbox socket
+TypeError: Cannot read properties of undefined (reading 'platform')
+ ❯ suite.test.ts:52:23
+     50|     const where = linux().pretty;
+     51|     const { hub, inbox } = await sockets();
+     52|     expect(bubblewrap.platform, 'the backend under test is the Linux o…
+       |                       ^
+     53|     expect(bubblewrap.name).toBe('bubblewrap');
+     54|     const result = await sandboxSuite(bubblewrap, { hubSocket: hub.pat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  suite.test.ts > AC4 #70.ef8d1e25 the bubblewrap backend passes the sandbox's suite on this Linux; the egress plant and a profile without its network filter fail its egress case > AC4 (wrong program) the planted backend that allows egress is a bubblewrap one here, and still fails the suite, naming the egress case
+AssertionError: on Linux the egress plant is the Linux backend one rule wider, not another platform's: expected 'darwin' to be 'linux' // Object.is equality
+
+Expected: "linux"
+Received: "darwin"
+
+ ❯ suite.test.ts:67:118
+     65|     const fixtures = { hubSocket: hub.path, inboxSocket: inbox.path };
+     66|     const plant = plantedBackends(fixtures).egress;
+     67|     expect(plant.platform, 'on Linux the egress plant is the Linux bac…
+       |                                                                                                                      ^
+     68|     const result = await sandboxSuite(plant, fixtures);
+     69|     expect(result.passed, `the egress plant passed the suite on ${wher…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  suite.test.ts > AC4 #70.ef8d1e25 the bubblewrap backend passes the sandbox's suite on this Linux; the egress plant and a profile without its network filter fail its egress case > AC4 (wrong program) a profile without its network filter fails the suite's egress case, naming it, and no other case
+AssertionError: plantedBackends(fixtures)['no-network-filter']: bubblewrap's confinement with its network filter left out: expected undefined to be defined
+ ❯ suite.test.ts:88:133
+     86|     const fixtures = { hubSocket: hub.path, inboxSocket: inbox.path };
+     87|     const profile = plantedBackends(fixtures)['no-network-filter'];
+     88|     expect(profile, 'plantedBackends(fixtures)[\'no-network-filter\']:…
+       |                                                                                                                                     ^
+     89|     expect(profile.platform).toBe('linux');
+     90|     expect(profile.name, 'the profile is named apart from the real bac…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:21:30
+   Duration  538ms (transform 77%, import 19%, tests 4%)
+
