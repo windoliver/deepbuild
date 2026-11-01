@@ -139,3 +139,11 @@ AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_inpu
    Start at  13:17:50
    Duration  3.09s (tests 98%, import 1%, transform 1%)
 ```
+
+## Decision
+
+The first draft's `rows.test.ts` fails on its own fixture, not on deep_query. Its plain board's caption "Three
+boxes" is refused `number_unsourced`, and the `full` build skips its `rect@1` and `text@1` items as `unknown_kind`,
+so neither test reaches a row. This redraft passes against the implementation, and both drafts can't pass on one
+program. On Oct 31, 2026 the maintainer asked for a PR that closes #411, and the only way to prove AC1 is the
+redraft. `rows-redraft.test.ts` replaces `rows.test.ts`, which is removed.
