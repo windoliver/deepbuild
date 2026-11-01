@@ -21,7 +21,7 @@ const PLANT = 'both-routes';
 async function scenario(plant?: string): Promise<void> {
   const env = plant ? { DEEP_HUB_PLANT: plant } : {};
   const { home } = makeHome();
-  const hub = await startHub(home, { plant });
+  const hub = await startHub(home, { plant, noAskWait: true });
   await setup(home, env);
   const a = await askingSession(hub, home, env);
 

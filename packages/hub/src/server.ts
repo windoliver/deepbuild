@@ -22,6 +22,8 @@ import { shedStartup, YOUNG } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
 
+/** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
+const LOCK_CHECK_MS = 5000;
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
@@ -68,6 +70,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
 const HOLD_MARGIN = 100;
 /** How long a session's start or a prompt is held for the core's context: the briefing, or answers waiting for it. */
 const CONTEXT_HOLD_MS = 2000;
+/** A Claude Code stop's hold; DEEP_HUB_TEST_STOP_HOLD_MS, which only tests set, shortens it so an unanswered hold ends in seconds. */
+const STOP_HOLD = Math.min(STOP_HOLD_MS, Number(process.env.DEEP_HUB_TEST_STOP_HOLD_MS) || STOP_HOLD_MS);
 /** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
 const GATE_HOLD_MS = 10_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
@@ -299,6 +303,8 @@ class Hub {
   private ids = 0;
   private ino = 0;
   private stopping = false;
+  /** The lock file was removed or replaced under this hub (#909): another start can take it, so no hook is acknowledged. */
+  private lost = false;
   /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
   private hooks = new Set<string>();
   /** The sessions with an ask still to deliver, as the core last said: only their stops are held (#18, #19). */
@@ -334,7 +340,8 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
-      ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}) };
+      ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
+      ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}) };
     const frame = (sub: string, event: string) => {
       const s = this.subs.get(sub);
       if (!s || s.conn.done) return;
@@ -362,7 +369,8 @@ class Hub {
     this.server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code !== 'EMFILE' && error.code !== 'ENFILE') process.stderr.write(`deep hub: ${error.message}\n`);
     });
-    // The lock is held, so whatever is at the socket's path is a dead hub's: removed, then made again only you can open.
+    // The lock is held and nothing listens there, so whatever is at the socket's path is a dead hub's: removed, then
+    // made again only you can open.
     rmSync(this.root.socket, { force: true });
     const umask = process.umask(0o177);
     try {
@@ -377,6 +385,15 @@ class Hub {
     this.ino = statSync(this.root.socket).ino;
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
     this.hooks = new Set((await this.core.started).hooks);
+    // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
+    const checking = setInterval(() => {
+      if (this.lost || this.lock.held() || this.plant === 'lock-never-rechecked') return;
+      this.lost = true;
+      clearInterval(checking);
+      process.stderr.write(`deep hub: lock lost: ${this.root.lock} is no longer the file this hub holds locked\n`);
+      void this.core.request({ op: 'lock-lost', path: this.root.lock }).catch(() => undefined);
+    }, LOCK_CHECK_MS);
+    checking.unref();
     mkdirSync(join(this.root.dir, 'tickers'), { recursive: true, mode: 0o700 });
     // The waits start where the last hub left them: how long each command took, and the turns and calls still running.
     await this.core.request({ op: 'waits' }).then((state) => {
@@ -559,6 +576,8 @@ class Hub {
     // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
     if (conn.done || !conn.sock.writable) return;
     conn.done = true;
+    // With its lock lost the hub acknowledges nothing: closed with no ack, deep-hook fails open and spools the hook.
+    if (this.lost) return void conn.sock.end();
     // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); a
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
@@ -652,6 +671,7 @@ class Hub {
     const late = new Promise<{ decision: 'none' }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none' }>;
     const { decision } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (!conn.sock.writable) return;
     if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
     if (decision === 'deny') this.waits.drop(meta.session, meta.toolUse);
@@ -672,6 +692,7 @@ class Hub {
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
     const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
     const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (!conn.sock.writable) return;
     const why = 'late' in gate ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
       : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
@@ -717,7 +738,7 @@ class Hub {
     // reads from the record at once. The planted wrong program holds every stop, as gates on unapproved checks would.
     // A test's planted sorter (#321) may answer any stop "proceed".
     if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !this.sawWork.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
-    return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
+    return now + Math.min(STOP_HOLD, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
   /** The sessions whose next stop the stop rule would read as a claim, as the core tells it beside `asking`: it is held for its line (#83). */
   private worked = new Set<string>();
@@ -734,6 +755,15 @@ class Hub {
     }
     return this.settingsSeen.relation;
   }
+  /**
+   * The planted delay (#906), which only tests set: while DEEP_HUB_TEST_LATE_REPLY's file exists, a held hook's reply,
+   * once in hand, is written no sooner than 1 s past its hold, when deep-hook has given up on it.
+   */
+  private async lateReply(hold: number): Promise<void> {
+    const file = process.env.DEEP_HUB_TEST_LATE_REPLY;
+    if (!file || !existsSync(file)) return;
+    await new Promise((done) => setTimeout(done, Math.max(0, hold + 1000 - Date.now())));
+  }
   /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
   private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     // A deep-hook that gave up on the hub before reading its reply has let the hook through: nothing is held for it (#27).
@@ -743,8 +773,11 @@ class Hub {
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string; message?: string } | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (!conn.sock.writable) return;
     replied = true;
+    // A core reply past the hold isn't written: an answer it handed the agent reads stalled and goes by the next route (#906).
+    if (!reply) this.core.post({ op: 'hook-gone', id: meta.id, session: meta.session });
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
@@ -760,6 +793,7 @@ class Hub {
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    await this.lateReply(hold);
     if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
   }
 
@@ -947,6 +981,16 @@ class Hub {
   }
 }
 
+/** Whether a process listens at the socket's path: a dead hub's socket refuses, and one that doesn't answer in time counts as live. */
+function listening(path: string): Promise<boolean> {
+  return new Promise((done) => {
+    const sock = net.connect(path);
+    const timer = setTimeout(() => { sock.destroy(); done(true); }, 1000);
+    sock.once('connect', () => { clearTimeout(timer); sock.destroy(); done(true); });
+    sock.once('error', () => { clearTimeout(timer); done(false); });
+  });
+}
+
 /** Values the hub holds by handle from its start, as tests name them in DEEP_HUB_TEST_HELD: scrubbed from all it writes. */
 function testHeld(): string[] {
   const file = process.env.DEEP_HUB_TEST_HELD;
@@ -992,6 +1036,12 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   const lock = takeLock(root.lock);
   if (!lock) {
     process.stderr.write(`deep hub: a hub is already running on ${root.dir}: it holds the lock\n`);
+    return 1;
+  }
+  // A hub whose lock file was removed under it still listens (#909): its socket is never removed, and this start stops.
+  if (await listening(root.socket)) {
+    lock.release();
+    process.stderr.write(`deep hub: a hub is already running on ${root.dir}: it answers on ${root.socket}, though it no longer holds the lock\n`);
     return 1;
   }
   // A restore cut off midway may have put back the record without its evidence and wiki, or the reverse (#572).

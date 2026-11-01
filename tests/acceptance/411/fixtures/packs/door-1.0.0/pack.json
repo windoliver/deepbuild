@@ -1,0 +1,15 @@
+{
+  "name": "door",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A 2D test pack for the #411 suite: one door leaf whose opening and swing are inputs. Needs no 3D canvas module.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "door.leaf@1": "door.leaf@1.json"
+  }
+}

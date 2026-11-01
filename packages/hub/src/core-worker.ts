@@ -15,6 +15,7 @@ export type CoreRequest =
   | { op: 'permission'; meta: HookMeta }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'waits' }
+  | { op: 'lock-lost'; path: string }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
@@ -41,6 +42,7 @@ export async function answer(core: Core, request: CoreRequest): Promise<unknown>
     case 'permission': return core.permission(request.meta);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'waits': return core.waitsState();
+    case 'lock-lost': return core.lockLost(request.path);
     case 'stop': return core.stop(request.reason);
   }
 }
