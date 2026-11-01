@@ -2539,8 +2539,9 @@ class Host implements ExtensionHost {
       ext.deadlines.set(scope, running.until);
       returned = await running.done;
     } catch (e) {
-      // An error's text is the package's own words: only a release package's reaches its caller.
-      failure = `${id}'s ${action} failed${ext.released ? `: ${message(e)}` : ''}`;
+      // An error's text is the package's own words: only a release package's reaches its caller, and the package's own
+      // tests, which hand it back to the package (#366).
+      failure = `${id}'s ${action} failed${ext.released || caller === TESTER ? `: ${message(e)}` : ''}`;
     } finally {
       ext.scopes.delete(scope);
       ext.callOf.delete(scope);
