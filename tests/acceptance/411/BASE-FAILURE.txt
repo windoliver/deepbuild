@@ -1,0 +1,426 @@
+# #411 acceptance suite at the base (f41a5b3e), run with:
+#   node node_modules/vitest/vitest.mjs run --root tests/acceptance/411 --no-file-parallelism
+# All 18 tests in 10 files fail; none passes. Why each fails there:
+# - rows, summary, handles, modifiers, why-paths, why-writes, cut (14 tests): `deep-show run` answers the scenario
+#   `bad_input`, because it holds a `deep_query` call (and, for the planted twins, an unknown `planted` value).
+# - plugin (1): the canvas core answers the `deep_query` call `bad_input`, so there are no values to compare; the
+#   extension host has no `canvas` option and no `deep.canvas.read` either.
+# - modes (3): deep_show ignores `mode` and returns its plain snapshot with no `mode`, `drawn` or `display_only`, and
+#   in the r1 build no `module_missing`. (The base notices `unknown_kind` on rect@1 and still draws it.)
+# - machines (1): Cargo has no `test-machines` feature, so the build fails.
+#
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-411-25d63a/agent-a27a0a8e42d975cc5/tests/acceptance/411
+
+ ❯ modes.test.ts (3 tests | 3 failed) 425838ms
+   ❯ AC2 deep_show's modes return snapshots by hash with readings as numbers, and none of its results counts as evidence for a claim about code (3)
+     × AC2 the bounds mode at 1 s returns a display-only snapshot by hash and each item's bounds at 1 s as numbers 7230ms
+     × AC2 a deep show --check in a mode for a claim about code is never PASS, and what it returns is display only 106ms
+     × AC2 a mode whose canvas module the build lacks answers module_missing, naming it, never an empty snapshot 1746ms
+ ❯ plugin.test.ts (1 test | 1 failed) 24115ms
+   ❯ AC6 a test check plug-in reads through deep.canvas.read what deep_query returns, only under its grant, and its PASS needs the read's content keys (1)
+     × AC6 the plug-in's read equals deep_query's for the same revision; outside its grant every path is ref_unresolved; a PASS without the keys is refused naming the plug-in 1466ms
+ ❯ rows.test.ts (2 tests | 2 failed) 22215ms
+   ❯ AC1 deep_query returns rows by stable ID with a coverage block, and a conclusion of absence drawn from a partial result is refused (2)
+     × AC1 rows asked for by ID come back keyed by those IDs, each with its kind and content key, under a complete coverage block 1439ms
+     × AC1 absence is concluded on a complete result, and refused with partial_result on a result cut by its cap 118ms
+ ❯ modifiers.test.ts (2 tests | 2 failed) 15622ms
+   ❯ AC7 deep_query reads every prefix of a modifier stack, each equal to a clean evaluation of the stack cut there (2)
+     × AC7 each prefix read has counts, bounds and a content key, equal to the clean evaluation of the stack cut after it 1471ms
+     × AC7 a planted prefix read that returns the final result fails, naming the prefix 25ms
+ ❯ why-paths.test.ts (3 tests | 3 failed) 24723ms
+   ❯ AC8 the why for the door's drawn angle names the document paths it traces to, nearest first, with their values (3)
+     × AC8 the why for 45° names open (0.5) and swing (90), and changing either path changes the value it names 1538ms
+     × AC8 a value from the recipe's default names that recipe and default, and no document field 29ms
+     × AC8 a planted why that names only the operator fails, naming the value 50ms
+ ❯ machines.test.ts (1 test | 1 failed) 211ms
+   ❯ AC4 a check result that read float GPU work says machines: same, and one marked any reads only CPU data or exact GPU work (1)
+     × AC4 every check result says the machines and determinism class of what it read 14ms
+ ❯ handles.test.ts (1 test | 1 failed) 28179ms
+   ❯ AC5 deep_query returns no value read through a handle the calling session can't read (1)
+     × AC5 a document that binds another session's open ask answers ref_unresolved for that item, never its value 1677ms
+ ❯ summary.test.ts (1 test | 1 failed) 19113ms
+   ❯ AC3 deep_query's summary matches the document's own counts by kind, writer layer and canvas module (parity/agent/query-summary.scene) (1)
+     × AC3 the summary's counts by kind, writer layer and canvas module are the document's own 1583ms
+ ❯ cut.test.ts (2 tests | 2 failed) 31326ms
+   ❯ AC10 a deep_query answer cut to fit its budget is cut depth first, so every row it keeps has its parent (2)
+     × AC10 the 5,000-item city under a 400-row cap keeps every row's parent, counts each row's children and names the cut 1597ms
+     × AC10 a planted cut by row order keeps lamp posts whose block was cut and fails, naming the first row without its parent 82ms
+ ❯ why-writes.test.ts (2 tests | 2 failed) 33260ms
+   ❯ AC9 the why lists every write to the value in evaluation order, marked stands, overwritten_by or clamped_by (2)
+     × AC9 at 1 s the key's write of 80° is clamped_by the limit constraint, whose write of 45° stands 3379ms
+     × AC9 a planted why that names only the key fails, naming the value 20ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  cut.test.ts > AC10 a deep_query answer cut to fit its budget is cut depth first, so every row it keeps has its parent > AC10 the 5,000-item city under a 400-row cap keeps every row's parent, counts each row's children and names the cut
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ cut cut.test.ts:17:26
+ ❯ cut.test.ts:28:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  cut.test.ts > AC10 a deep_query answer cut to fit its budget is cut depth first, so every row it keeps has its parent > AC10 a planted cut by row order keeps lamp posts whose block was cut and fails, naming the first row without its parent
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ cut cut.test.ts:17:26
+ ❯ cut.test.ts:36:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  handles.test.ts > AC5 deep_query returns no value read through a handle the calling session can't read > AC5 a document that binds another session's open ask answers ref_unresolved for that item, never its value
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ handles.test.ts:19:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  machines.test.ts > AC4 a check result that read float GPU work says machines: same, and one marked any reads only CPU data or exact GPU work > AC4 every check result says the machines and determinism class of what it read
+AssertionError: the binary builds: deep-show with features full,test-machines: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-machines failed:
++ error: none of the selected packages contains this feature: test-machines
++ selected packages: deep-contracts, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:133:103
+    131|       const entry = made.get(nameOf(b));
+    132|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    133|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                       ^
+    134|       return entry.bin;
+    135|     },
+ ❯ machines.test.ts:33:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  modes.test.ts > AC2 deep_show's modes return snapshots by hash with readings as numbers, and none of its results counts as evidence for a claim about code > AC2 the bounds mode at 1 s returns a display-only snapshot by hash and each item's bounds at 1 s as numbers
+AssertionError: the reply names its mode: expected undefined to be 'bounds' // Object.is equality
+
+- Expected:
+"bounds"
+
++ Received:
+undefined
+
+ ❯ modes.test.ts:45:54
+     43|     presented(plain!, 'the board without a mode');
+     44|     presented(at1!, 'the board in the bounds mode at 1 s');
+     45|     expect(at1!['mode'], 'the reply names its mode').toBe('bounds');
+       |                                                      ^
+     46|     expect(at1!['display_only'], 'a mode\'s reply is display only').to…
+     47|     const snaps = arr(at1!['snapshots'], 'the mode\'s snapshots').map(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  modes.test.ts > AC2 deep_show's modes return snapshots by hash with readings as numbers, and none of its results counts as evidence for a claim about code > AC2 a deep show --check in a mode for a claim about code is never PASS, and what it returns is display only
+AssertionError: the check ran in the bounds mode: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["a"],"path":"items/a/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["b"],"path":"items/b/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"5fd402db484bc097eba4d3482eed56bb3ca85a7277d92ce6f95d455280a11809","w":320,"h":200,"marks":[],"legend":[]}],"changed":[],"unchanged":[],"created":["a","b","slide"],"removed":[],"visible":[{"id":"a","box":[100,30,40,20]},{"id":"b","box":[200,120,60,30]}],"batches":[],"outcome":"presented","result":"INCONCLUSIVE","core":"core@0.0.0","set_digest":"31b37d0ecfd14e46b494bc5481218d579d90bb124d5e944508a02a0373378e40"}: expected undefined to be 'bounds' // Object.is equality
+
+- Expected:
+"bounds"
+
++ Received:
+undefined
+
+ ❯ modes.test.ts:73:87
+     71|       { call: 'deep show', peer: IN_ALPHA, doc: DOC.a, document: SLIDI…
+     72|     ], { claims: { [codeClaim]: { session: ALPHA.id, deliverables: ['c…
+     73|     expect(reply!['mode'], `the check ran in the bounds mode: ${brief(…
+       |                                                                                       ^
+     74|     expect(arr(reply!['drawn'], 'its readings').length, 'it drew what …
+     75|     expect(reply!['display_only'], 'its reply is display only').toBe(t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  modes.test.ts > AC2 deep_show's modes return snapshots by hash with readings as numbers, and none of its results counts as evidence for a claim about code > AC2 a mode whose canvas module the build lacks answers module_missing, naming it, never an empty snapshot
+AssertionError: the r1 build has no scene3d: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["a"],"path":"items/a/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["b"],"path":"items/b/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"5fd402db484bc097eba4d3482eed56bb3ca85a7277d92ce6f95d455280a11809","w":320,"h":200,"marks":[],"legend":[]}],"changed":[],"unchanged":[],"created":["a","b","slide"],"removed":[],"visible":[{"id":"a","box":[100,30,40,20]},{"id":"b","box":[200,120,60,30]}],"batches":[],"outcome":"presented","core":"core@0.0.0","set_digest":"b33a8c72009cf4f2d9bebd587fafca13721246d5c57987a93de9db629ad506cf"}: expected undefined to be 'module_missing' // Object.is equality
+
+- Expected:
+"module_missing"
+
++ Received:
+undefined
+
+ ❯ modes.test.ts:84:82
+     82|       { call: 'deep_show', session: ALPHA.id, doc: DOC.a, document: SL…
+     83|     ]));
+     84|     expect(reply!['code'], `the r1 build has no scene3d: ${brief(reply…
+       |                                                                                  ^
+     85|     expect(JSON.stringify(reply), 'the answer names the missing canvas…
+     86|     expect(reply!['snapshots'] ?? [], 'no snapshot, empty or not').toE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  modifiers.test.ts > AC7 deep_query reads every prefix of a modifier stack, each equal to a clean evaluation of the stack cut there > AC7 each prefix read has counts, bounds and a content key, equal to the clean evaluation of the stack cut after it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ fullReads modifiers.test.ts:20:26
+ ❯ modifiers.test.ts:43:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  modifiers.test.ts > AC7 deep_query reads every prefix of a modifier stack, each equal to a clean evaluation of the stack cut there > AC7 a planted prefix read that returns the final result fails, naming the prefix
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ cleanRead modifiers.test.ts:29:26
+ ❯ modifiers.test.ts:59:56
+ ❯ modifiers.test.ts:59:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  plugin.test.ts > AC6 a test check plug-in reads through deep.canvas.read what deep_query returns, only under its grant, and its PASS needs the read's content keys > AC6 the plug-in's read equals deep_query's for the same revision; outside its grant every path is ref_unresolved; a PASS without the keys is refused naming the plug-in
+AssertionError: the reply's values ({"ok":false,"code":"bad_input"}) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:47:72
+     45| }
+     46| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     47|   expect(isObject(value), `${what} is an object, got ${brief(value)}`)…
+       |                                                                        ^
+     48|   return value as JsonObject;
+     49| }
+ ❯ values helpers.ts:351:14
+ ❯ plugin.test.ts:34:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  rows.test.ts > AC1 deep_query returns rows by stable ID with a coverage block, and a conclusion of absence drawn from a partial result is refused > AC1 rows asked for by ID come back keyed by those IDs, each with its kind and content key, under a complete coverage block
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ rows.test.ts:29:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  rows.test.ts > AC1 deep_query returns rows by stable ID with a coverage block, and a conclusion of absence drawn from a partial result is refused > AC1 absence is concluded on a complete result, and refused with partial_result on a result cut by its cap
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ rows.test.ts:50:53
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  summary.test.ts > AC3 deep_query's summary matches the document's own counts by kind, writer layer and canvas module (parity/agent/query-summary.scene) > AC3 the summary's counts by kind, writer layer and canvas module are the document's own
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ summary.test.ts:23:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  why-paths.test.ts > AC8 the why for the door's drawn angle names the document paths it traces to, nearest first, with their values > AC8 the why for 45° names open (0.5) and swing (90), and changing either path changes the value it names
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ why-paths.test.ts:20:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  why-paths.test.ts > AC8 the why for the door's drawn angle names the document paths it traces to, nearest first, with their values > AC8 a value from the recipe's default names that recipe and default, and no document field
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ why-paths.test.ts:39:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+ FAIL  why-paths.test.ts > AC8 the why for the door's drawn angle names the document paths it traces to, nearest first, with their values > AC8 a planted why that names only the operator fails, naming the value
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ why-paths.test.ts:55:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/18]⎯
+
+ FAIL  why-writes.test.ts > AC9 the why lists every write to the value in evaluation order, marked stands, overwritten_by or clamped_by > AC9 at 1 s the key's write of 80° is clamped_by the limit constraint, whose write of 45° stands
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ why-writes.test.ts:18:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/18]⎯
+
+ FAIL  why-writes.test.ts > AC9 the why lists every write to the value in evaluation order, marked stands, overwritten_by or clamped_by > AC9 a planted why that names only the key fails, naming the value
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:149:83
+    147|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    148|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    149|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    150|   const replies = arr(out['replies'], 'run: replies').map((x, i) => ob…
+    151|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ why-writes.test.ts:29:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/18]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  18 failed (18)
+   Start at  12:44:04
+   Duration  627.63s (tests 100%)
+
