@@ -1625,6 +1625,7 @@ fn seam_backends() -> Vec<Module> {
         ),
         module("headless", "seam.headless", deep_canvas_seams::HEADLESS),
         module("gpu", "seam.gpu", deep_gpu::seam::BACKEND),
+        module("network", "seam.network", deep_relay::macos::BACKEND),
     ];
     #[cfg(feature = "test-gpu-second-backend")]
     out.push(module(
