@@ -1985,6 +1985,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-relay"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-seams",
+ "rustls",
+ "rustls-pki-types",
+ "serde_json",
+ "tungstenite",
+]
+
+[[package]]
 name = "deep-replica"
 version = "0.0.0"
 dependencies = [
@@ -2029,6 +2040,7 @@ dependencies = [
  "deep-effects-render",
  "deep-gpu",
  "deep-marks-vello",
+ "deep-relay",
  "deep-replica",
  "deep-scene3d-render",
  "deep-text",
