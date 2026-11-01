@@ -70,6 +70,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
 const HOLD_MARGIN = 100;
 /** How long a session's start or a prompt is held for the core's context: the briefing, or answers waiting for it. */
 const CONTEXT_HOLD_MS = 2000;
+/** A Claude Code stop's hold; DEEP_HUB_TEST_STOP_HOLD_MS, which only tests set, shortens it so an unanswered hold ends in seconds. */
+const STOP_HOLD = Math.min(STOP_HOLD_MS, Number(process.env.DEEP_HUB_TEST_STOP_HOLD_MS) || STOP_HOLD_MS);
 /** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
 const GATE_HOLD_MS = 10_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
@@ -734,7 +736,7 @@ class Hub {
     // reads from the record at once. The planted wrong program holds every stop, as gates on unapproved checks would.
     // A test's planted sorter (#321) may answer any stop "proceed".
     if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !this.worked.has(meta.session) && !this.sawWork.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
-    return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
+    return now + Math.min(STOP_HOLD, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
   /** The sessions whose next stop the stop rule would read as a claim, as the core tells it beside `asking`: it is held for its line (#83). */
   private worked = new Set<string>();
