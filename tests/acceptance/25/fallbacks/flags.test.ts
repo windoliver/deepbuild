@@ -14,7 +14,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import {
-  Claude, answer, ask, assistantSays, carries, cleanup, firedShown, makeHome, newSession, outcomes, pastHold, payload, said, setup, sleep, startHub,
+  Claude, answer, ask, assistantSays, carries, cleanup, firedShown, makeHome, newSession, outcomes, NO_ASK_WAIT, pastHold, payload, said, setup, SHORT_HOLD, SHORT_HOLD_MS, sleep, startHub,
   typedPrompt, waitFor,
 } from './helpers.ts';
 
@@ -23,7 +23,7 @@ afterAll(cleanup, 60_000);
 describe('AC5 #25.c5d6abef With the waiter\'s hook disabled for one session, its answers arrive through the next route, and a new session starts again from its declared flags', () => {
   it('AC5 #25.c5d6abef session A without its waiter gets your answer at its next prompt, once; session B in the same worktree, its waiter on, is woken by it', async () => {
     const { home, tmp } = makeHome();
-    const hub = await startHub(home);
+    const hub = await startHub(home, { ...NO_ASK_WAIT, ...SHORT_HOLD });
     await setup(home);
     const worktree = join(tmp, 'wt');
 
@@ -42,7 +42,7 @@ describe('AC5 #25.c5d6abef With the waiter\'s hook disabled for one session, its
     expect((await ca.background()).filter((r) => r.asyncRewake), 'A\'s Claude Code ran no waiter: its hook is disabled for this session (the control)').toEqual([]);
 
     // You answer while A is idle; a route that worked would take it at once. A's has none but its next prompt.
-    await pastHold(stopA);
+    await pastHold(stopA, SHORT_HOLD_MS);
     await answer(home, asked.handle, asked.pick.id);
     await sleep(5000);
     const nextPrompt = 'Anything from me?';
@@ -69,7 +69,7 @@ describe('AC5 #25.c5d6abef With the waiter\'s hook disabled for one session, its
     const waiter = await waitFor(async () => (await cb.background()).find((r) => r.asyncRewake && r.ended === null), 20_000, 'B\'s waiter, started by Claude Code at B\'s stop');
     expect(waiter.asyncRewake, 'B\'s Claude Code runs DeepBuild\'s waiter (the control)').toBe(true);
 
-    await pastHold(stopB);
+    await pastHold(stopB, SHORT_HOLD_MS);
     await answer(home, askedB.handle, askedB.pick.id);
     const woke = await waitFor(async () => (await cb.wakes()).find((w) => w.woke && w.prompt !== null && carries(w.prompt, askedB)), 15_000, `B to be woken with ${askedB.handle}`).catch(() => undefined);
     expect(woke, `AC5 session ${b.id} is a new session: it starts again from its declared flags, not from what session ${a.id} showed, so its waiter must wake it with your answer to ${askedB.handle} (${askedB.pick.label}) within 15 s; wakes seen: ${JSON.stringify(await cb.wakes())}`).toBeDefined();
