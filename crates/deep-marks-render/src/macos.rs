@@ -413,6 +413,10 @@ fn rect(b: [f64; 4]) -> Bounds<Pixels> {
 
 pub struct Renderer {
     cx: HeadlessAppContext,
+    /// Whether Vello GPU draws, by its spike record, and Vello GPU on its own device once a
+    /// layer needs it (#385).
+    gate: crate::gpu::Gate,
+    vello: Option<(Arc<deep_gpu::device::Gpu>, crate::gpu::Vello2d)>,
 }
 
 /// What this process has spent so far, as the kernel counts it.
@@ -521,10 +525,11 @@ pub(crate) fn picture(
     cx: &mut HeadlessAppContext,
     marks: &[&Drawn],
     size: [u32; 2],
+    planted: crate::layer::Planted,
 ) -> Result<image::RgbaImage, Value> {
     gpui_draws(marks.iter().copied())?;
     let mut session = Renderer::new_session();
-    let list = Renderer::draws(
+    let mut list = Renderer::draws(
         &mut session,
         marks,
         path::bucket(1.0),
@@ -532,6 +537,61 @@ pub(crate) fn picture(
         false,
         &mut BTreeSet::new(),
     )?;
+    if planted.shifts_glyphs {
+        // #385 AC1's wrong program: every glyph quad half a device px to the right.
+        for (draw, _) in &mut list {
+            if let Draw::Text { origin, .. } = draw {
+                origin.x += px(0.5);
+            }
+        }
+    }
+    if planted.paths_apart {
+        // #385 AC8's wrong program: each path drawn alone, its own antialiased coverage laid
+        // over what's under it, so a shared edge shows the ground between two paths.
+        for placed in &mut list {
+            if let Draw::Path { .. } = placed.0 {
+                let mut alone = picture_of(cx, std::slice::from_ref(placed), size)?;
+                for p in alone.pixels_mut() {
+                    p.0.swap(0, 2);
+                }
+                placed.0 = Draw::Picture {
+                    image: Arc::new(RenderImage::new([image::Frame::new(alone)])),
+                    bounds: None,
+                    image_bounds: None,
+                };
+            }
+        }
+    }
+    picture_of(cx, &list, size)
+}
+
+/// The document's status marks and their legend alone over transparent black, as GPUI draws them
+/// after every writer layer (#385's window).
+pub(crate) fn status_picture(
+    cx: &mut HeadlessAppContext,
+    status: &[StatusMark],
+    frame: &scene::Frame,
+    palette: &scene::Palette,
+) -> Result<image::RgbaImage, Value> {
+    let mut list = Vec::new();
+    status_draws(
+        status,
+        &status::occupied(frame),
+        palette,
+        frame.size,
+        1.0,
+        &mut list,
+    );
+    let size = [frame.size[0].round() as u32, frame.size[1].round() as u32];
+    picture_of(cx, &list, size)
+}
+
+/// `list` over transparent black at `size` px, from GPUI's frames of it over black and over white.
+fn picture_of(
+    cx: &mut HeadlessAppContext,
+    list: &[Placed],
+    size: [u32; 2],
+) -> Result<image::RgbaImage, Value> {
     let whole = rect([0.0, 0.0, f64::from(size[0]), f64::from(size[1])]);
     let over = |ground: u8| {
         let mut over = vec![(Draw::Quad(fill_quad(whole, hsla([ground; 3]))), None)];
@@ -597,6 +657,8 @@ impl Renderer {
     pub fn new() -> Self {
         Renderer {
             cx: deep_replica::headless_context(),
+            gate: crate::gpu::Gate::shipped(),
+            vello: None,
         }
     }
 
@@ -715,6 +777,71 @@ impl Renderer {
         }
     }
 
+    /// Each writer layer's draws in order: its Vello GPU picture where it has one, else its marks.
+    #[allow(clippy::too_many_arguments)]
+    fn layer_draws(
+        session: &mut Session,
+        layers: &[scene::Layer],
+        pictures: &[Option<Arc<RenderImage>>],
+        bucket: i32,
+        zoom: f64,
+        gpui_oklab: bool,
+        used: &mut BTreeSet<(ContentKey, i32)>,
+    ) -> Result<Vec<Placed>, Value> {
+        let mut out = Vec::new();
+        for (layer, picture) in layers.iter().zip(pictures) {
+            match picture {
+                Some(image) => out.push((
+                    Draw::Picture {
+                        image: image.clone(),
+                        bounds: None,
+                        image_bounds: None,
+                    },
+                    None,
+                )),
+                None => {
+                    let marks: Vec<&Drawn> = layer.marks.iter().map(|m| &**m).collect();
+                    out.extend(Self::draws(
+                        session, &marks, bucket, zoom, gpui_oklab, used,
+                    )?);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// A writer layer's marks drawn by Vello GPU at `zoom` over transparent black, as the BGRA
+    /// picture GPUI paints, on a device opened the first time a layer needs it.
+    fn vello_picture(
+        &mut self,
+        marks: &[&Drawn],
+        size: [f64; 2],
+        zoom: f64,
+    ) -> Result<Arc<RenderImage>, Value> {
+        if self.vello.is_none() {
+            let gpu = deep_gpu::device::Gpu::open(deep_gpu::device::Backend::Gpu)
+                .map_err(|e| refused("no_device", &e))?;
+            let vello =
+                crate::gpu::Vello2d::new(&gpu.device().device, wgpu::TextureFormat::Rgba8Unorm);
+            self.vello = Some((gpu, vello));
+        }
+        let (gpu, vello) = self.vello.as_mut().expect("opened above");
+        let device = gpu.device();
+        let px = [
+            (size[0] * zoom).round() as u32,
+            (size[1] * zoom).round() as u32,
+        ];
+        let options = crate::gpu::Options {
+            zoom,
+            ..Default::default()
+        };
+        let mut picture = vello.picture(&device.device, &device.queue, marks, px, options)?;
+        for p in picture.pixels_mut() {
+            p.0.swap(0, 2);
+        }
+        Ok(Arc::new(RenderImage::new([image::Frame::new(picture)])))
+    }
+
     /// The draws for marks, with each path's tessellation from the cache.
     fn draws(
         session: &mut Session,
@@ -725,6 +852,8 @@ impl Renderer {
         used: &mut BTreeSet<(ContentKey, i32)>,
     ) -> Result<Vec<Placed>, Value> {
         let mut out: Vec<Placed> = Vec::with_capacity(marks.len());
+        // The coverage target the last path drew in, and its draw.
+        let mut cover_at: Option<(String, usize)> = None;
         for drawn in marks {
             let clip = drawn.clip.map(rect);
             let mut push = |d: Draw| out.push((d, clip));
@@ -787,19 +916,53 @@ impl Renderer {
                 } => {
                     let t = tessellation(session, geometry, d, bucket, used);
                     let (offset, color) = ([offset[0] as f32, offset[1] as f32], hsla(*color));
-                    if !t.mesh.indices.is_empty() {
-                        push(Draw::Path {
-                            mesh: t.mesh.clone(),
-                            offset,
-                            color,
-                        });
+                    let cover = drawn.scopes.iter().find_map(|s| match s {
+                        scene::Scope::Cover { item, .. } => Some(item.clone()),
+                        _ => None,
+                    });
+                    // The fills of one coverage target draw as one path (#385), so GPUI's
+                    // antialiasing sees their union and no seam shows along a shared edge.
+                    let last = out.len().checked_sub(1);
+                    let joins = cover.is_some()
+                        && cover_at.as_ref().map(|(c, k)| (c, Some(*k)))
+                            == cover.as_ref().map(|c| (c, last));
+                    let joined = match out.last_mut() {
+                        Some((
+                            Draw::Path {
+                                mesh,
+                                offset: o,
+                                color: was,
+                            },
+                            _,
+                        )) if joins && *was == color && !t.mesh.indices.is_empty() => {
+                            let mut both = baked(mesh, *o);
+                            both.append(baked(&t.mesh, offset));
+                            *mesh = Arc::new(both);
+                            *o = [0.0, 0.0];
+                            true
+                        }
+                        _ => false,
+                    };
+                    if !joined && !t.mesh.indices.is_empty() {
+                        out.push((
+                            Draw::Path {
+                                mesh: t.mesh.clone(),
+                                offset,
+                                color,
+                            },
+                            clip,
+                        ));
                     }
+                    cover_at = cover.zip(out.len().checked_sub(1));
                     if let Some(strip) = &t.strip {
-                        push(Draw::Strip {
-                            strip: strip.clone(),
-                            offset,
-                            color,
-                        });
+                        out.push((
+                            Draw::Strip {
+                                strip: strip.clone(),
+                                offset,
+                                color,
+                            },
+                            clip,
+                        ));
                     }
                 }
                 Mark::Text {
@@ -941,12 +1104,24 @@ impl Renderer {
         let palette = palette_of(look, view.theme);
         let frame = scene::frame(doc, &items, palette, record, view.zoom)
             .map_err(|r| refused(r.code, &r.path))?;
-        gpui_draws(
-            frame
-                .layers
-                .iter()
-                .flat_map(|l| l.marks.iter().map(|m| &**m)),
-        )?;
+        // A writer layer GPUI's paths can't draw exactly draws on Vello GPU once its spike passed,
+        // as a picture GPUI composites in the layer's place (#385); one Vello GPU can't draw yet is
+        // the live view's refusal, naming the item.
+        let mut pictures: Vec<Option<Arc<RenderImage>>> = Vec::with_capacity(frame.layers.len());
+        for layer in &frame.layers {
+            let marks: Vec<&Drawn> = layer.marks.iter().map(|m| &**m).collect();
+            let Some(item) = crate::layer::gpui_lacks(marks.iter().copied()) else {
+                pictures.push(None);
+                continue;
+            };
+            if !self.gate.enabled {
+                return Err(gpui_lacks(&item));
+            }
+            if let Some(r) = crate::gpu::refusal(marks.iter().copied()) {
+                return Err(r);
+            }
+            pictures.push(Some(self.vello_picture(&marks, frame.size, view.zoom)?));
+        }
         let shown =
             scene::bound_texts(doc, &items, record).map_err(|r| refused(r.code, &r.path))?;
         let status = scene::status_marks(doc, &items, record, look.status.as_ref(), palette)
@@ -1052,13 +1227,15 @@ impl Renderer {
         if let Some(top) = cached {
             let key = prefixes[top];
             if !session.layers.contains_key(&key) {
-                let marks: Vec<&Drawn> = frame.layers[..=top]
-                    .iter()
-                    .flat_map(|l| l.marks.iter().map(|m| &**m))
-                    .collect();
                 let mut list: Vec<Placed> = vec![(Draw::Quad(ground.clone()), None)];
-                list.extend(Self::draws(
-                    session, &marks, bucket, view.zoom, gpui_oklab, &mut used,
+                list.extend(Self::layer_draws(
+                    session,
+                    &frame.layers[..=top],
+                    &pictures[..=top],
+                    bucket,
+                    view.zoom,
+                    gpui_oklab,
+                    &mut used,
                 )?);
                 let (handle, draws) = {
                     let cache = session
@@ -1109,12 +1286,14 @@ impl Renderer {
                 0
             }
         };
-        let live: Vec<&Drawn> = frame.layers[first_live..]
-            .iter()
-            .flat_map(|l| l.marks.iter().map(|m| &**m))
-            .collect();
-        list.extend(Self::draws(
-            session, &live, bucket, view.zoom, gpui_oklab, &mut used,
+        list.extend(Self::layer_draws(
+            session,
+            &frame.layers[first_live..],
+            &pictures[first_live..],
+            bucket,
+            view.zoom,
+            gpui_oklab,
+            &mut used,
         )?);
         // Status colors last, over every writer layer, with their legend.
         let snapshot = status_draws(
@@ -1509,39 +1688,30 @@ fn status_draws(
 }
 
 /// R2's marks GPUI's paths can't draw: gradients past R1's two stops, gradient fills and strokes
-/// of paths, dashed strokes, soft masks, group opacity and adjusted images, which Vello GPU takes
-/// on (#385). Until then the live view refuses them, naming the item (technical design: Platform
-/// seams).
+/// of paths, dashed strokes, masks, group opacity and blends, and adjusted images, which Vello GPU
+/// draws once its spike passed (#385). Where it can't, the live view refuses them, naming the item
+/// (technical design: Platform seams).
 fn gpui_lacks(item: &str) -> Value {
     refused("module_missing", &format!("items/{item}"))
 }
 
 fn gpui_draws<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Result<(), Value> {
-    for drawn in marks {
-        let solid = |f: &Fill| matches!(f, Fill::Solid(_));
-        let lacks = match &drawn.mark {
-            Mark::Shape { fill, stroke, .. } => {
-                fill.as_ref().is_some_and(|(f, _)| !solid(f))
-                    || stroke
-                        .as_ref()
-                        .is_some_and(|l| !solid(&l.paint) || l.dashes.is_some())
-            }
-            Mark::Rect {
-                fill: Fill::Ramp(_),
-                ..
-            } => true,
-            Mark::Image { adjust, .. } => !adjust.is_identity(),
-            _ => false,
-        };
-        let scoped = drawn
-            .scopes
-            .iter()
-            .any(|s| !matches!(s, scene::Scope::Clip { .. }));
-        if lacks || scoped {
-            return Err(gpui_lacks(drawn.mark.item()));
-        }
+    match crate::layer::gpui_lacks(marks) {
+        Some(item) => Err(gpui_lacks(&item)),
+        None => Ok(()),
     }
-    Ok(())
+}
+
+/// `mesh` moved by `offset`, so meshes drawn at different offsets join into one.
+fn baked(mesh: &Mesh, offset: [f32; 2]) -> Mesh {
+    Mesh {
+        vertices: mesh
+            .vertices
+            .iter()
+            .map(|v| [v[0] + offset[0], v[1] + offset[1]])
+            .collect(),
+        indices: mesh.indices.clone(),
+    }
 }
 
 /// A ring `width` px wide inside `b`, in `color`, with outer corner radius `r`.
