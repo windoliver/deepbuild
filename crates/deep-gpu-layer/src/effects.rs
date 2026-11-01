@@ -21,6 +21,7 @@ use deep_scene3d_render::{draw_offscreen, Planted as Planted3, Post, PostFrame, 
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
+use crate::view3d::write_named;
 use crate::{refused, App, Planted};
 
 /// An item's seed: a hash of the document's seed and its ID (Effect: `seed: item`).
@@ -289,16 +290,6 @@ fn f32_file(img: &Image) -> Vec<u8> {
         .iter()
         .flat_map(|p| p.iter().flat_map(|v| (*v as f32).to_le_bytes()))
         .collect()
-}
-
-fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
-    let name = hex(bytes);
-    std::fs::write(
-        std::path::Path::new(out).join(format!("{name}.{ext}")),
-        bytes,
-    )
-    .map_err(|e| refused("not_written", e.to_string()))?;
-    Ok(name)
 }
 
 /// A frame's inputs at the effects' place: the linear target, depth, object IDs and the shadow
@@ -618,20 +609,7 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
     match c.kind() {
         Kind::Compute => runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None),
         _ => {
-            let out = d.create_texture(&wgpu::TextureDescriptor {
-                label: Some("check_operator output"),
-                size: wgpu::Extent3d {
-                    width: size[0],
-                    height: size[1],
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: LINEAR,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+            let out = output(d, "check_operator output", size);
             runner.encode(
                 &mut enc,
                 &out.create_view(&Default::default()),
@@ -644,6 +622,24 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
     let _ = d.poll(wgpu::PollType::wait_indefinitely());
     reached.gpu = true;
     Ok(())
+}
+
+/// A linear render target of `size` that nothing reads back.
+fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
+    d.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: LINEAR,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    })
 }
 
 fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
@@ -703,20 +699,7 @@ fn unchecked(device: &Device, op: &Value, reached: &mut Reached) -> Option<Strin
         cache: None,
     });
     reached.pipeline = true;
-    let out = d.create_texture(&wgpu::TextureDescriptor {
-        label: Some("unchecked output"),
-        size: wgpu::Extent3d {
-            width: 64,
-            height: 64,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: LINEAR,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
+    let out = output(d, "unchecked output", [64, 64]);
     let mut enc = d.create_command_encoder(&Default::default());
     {
         let view = out.create_view(&Default::default());

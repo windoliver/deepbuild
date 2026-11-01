@@ -94,6 +94,8 @@ pub enum Planted {
     /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
     LoadsEverything,
     SlowGpuFrame,
+    /// #854's wrong program: the renderer compiles its pipelines in the first frame.
+    CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
     BudgetsEachWindow,
     StepsMainWindow,
@@ -145,6 +147,7 @@ impl Planted {
             "guard_to_grey" => Planted::GuardToGrey,
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
+            "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
             "tells_first_step_only" => Planted::TellsFirstStepOnly,

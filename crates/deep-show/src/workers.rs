@@ -44,7 +44,7 @@ pub fn set_priority(priority: Priority) {
 
 /// The machine's performance cores: on Apple silicon the first performance level's physical
 /// cores, elsewhere every core the process may use.
-pub fn performance_cores() -> usize {
+fn performance_cores() -> usize {
     #[cfg(target_os = "macos")]
     {
         let mut n: libc::c_int = 0;
@@ -70,8 +70,18 @@ pub fn performance_cores() -> usize {
 /// one from a shared counter, and the caller works as thread 0.
 #[derive(Debug)]
 pub struct Workers {
-    pub priority: Priority,
-    pub performance_cores: usize,
+    priority: Priority,
+    performance_cores: usize,
+}
+
+impl Workers {
+    /// A pool whose threads run at `priority`.
+    pub fn at(priority: Priority) -> Workers {
+        Workers {
+            priority,
+            performance_cores: performance_cores(),
+        }
+    }
 }
 
 impl Pool for Workers {
@@ -90,10 +100,8 @@ impl Pool for Workers {
         };
         std::thread::scope(|scope| {
             for thread in 1..threads.min(count) {
-                let work = &work;
-                let priority = self.priority;
                 scope.spawn(move || {
-                    set_priority(priority);
+                    set_priority(self.priority);
                     work(thread);
                 });
             }

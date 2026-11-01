@@ -1,0 +1,70 @@
+// The test tally plug-in (#365 AC10, the budgets):
+// - its store ext.tally.item, declared with probe.json's quota in bytes
+// - ext.tally.put_batch (change): puts `count` items from key `from` on, each `size` characters, and answers how many
+//   the store took and the first refusal's words
+// - ext.tally.lookup (read): looks each key up with deep.store.get, timing each call in the plug-in, in ms
+// - ext.tally.tick: a schedule on probe.json's cadence, its job keeping how late it started past its slot (ms)
+// - ext.tally.report: the probe check, reporting those lateness readings
+import { readFileSync } from 'node:fs';
+
+interface Probe { quotaBytes: number; cadence?: { every: number } }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const ITEM = 'ext.tally.item';
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  await deep.store(ITEM, { generation: 1, schema: strict({ n: { type: 'integer' }, pad: { type: 'string' } }), quota: { bytes: probe.quotaBytes } });
+
+  deep.registerAction('ext.tally.put_batch', {
+    declares: 'change',
+    changes: [ITEM],
+    input: strict({ from: { type: 'integer' }, count: { type: 'integer' }, size: { type: 'integer' } }),
+    output: strict({ taken: { type: 'integer' }, refusal: { type: 'string' } }),
+  }, async (input: { from: number; count: number; size: number }) => {
+    let taken = 0;
+    let refusal = '';
+    for (let n = input.from; n < input.from + input.count; n++) {
+      try {
+        await deep.store.put(ITEM, `k${n}`, { n, pad: 'x'.repeat(input.size) });
+        taken++;
+      } catch (e: any) {
+        refusal ||= String(e?.message ?? e);
+      }
+    }
+    return { output: { taken, refusal }, report: { verified: true, checked: `${taken} puts answered` } };
+  });
+
+  deep.registerAction('ext.tally.lookup', {
+    declares: 'read',
+    reads: [ITEM],
+    input: strict({ keys: { type: 'array', items: { type: 'string' } } }),
+    output: strict({ ms: { type: 'array', items: { type: 'number' } }, found: { type: 'integer' } }),
+  }, async (input: { keys: string[] }) => {
+    const ms: number[] = [];
+    let found = 0;
+    for (const key of input.keys) {
+      const t0 = performance.now();
+      const item = await deep.store.get(ITEM, key);
+      ms.push(performance.now() - t0);
+      if (item) found++;
+    }
+    return { ms, found };
+  });
+
+  const late: number[] = [];
+  if (probe.cadence) {
+    await deep.schedule('ext.tally.tick', {
+      ...probe.cadence,
+      deadline: 60_000,
+      declares: { readings: [], notices: [], stores: [], sends: [], noop: true },
+    }, async (ctx: { run: string; at: number }) => {
+      late.push(Date.now() - ctx.at);
+      return { noop: 'nothing to tally' };
+    });
+  }
+
+  deep.registerCheck('ext.tally.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ late }) }],
+  }));
+}

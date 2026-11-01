@@ -11,6 +11,7 @@ mod access;
 mod ask;
 mod capture;
 mod costs;
+mod efficiency;
 mod evidence;
 mod frames;
 mod host;
@@ -35,7 +36,12 @@ mod test_machines;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
-#[cfg(any(feature = "test-json", feature = "test-debug-digest"))]
+#[cfg(any(
+    feature = "test-json",
+    feature = "test-debug-digest",
+    feature = "test-accent",
+    feature = "test-threads"
+))]
 mod twins;
 mod verdict;
 mod workers;
@@ -198,6 +204,11 @@ fn tame_overflow(line: &str) -> Option<String> {
         i += 1;
     }
     changed.then_some(out)
+}
+
+/// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
+fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
+    value.map_or(Some(None), |v| read(v).map(Some))
 }
 
 fn rect(value: Option<&Value>) -> Option<[f64; 4]> {
@@ -376,14 +387,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::PopOut {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 display: c.get("display")?.as_str()?.to_string(),
-                serial: match c.get("serial") {
-                    None => None,
-                    Some(s) => Some(s.as_u64()?),
-                },
-                full_screen: match c.get("full_screen") {
-                    None => false,
-                    Some(f) => f.as_bool()?,
-                },
+                serial: optional(c.get("serial"), Value::as_u64)?,
+                full_screen: optional(c.get("full_screen"), Value::as_bool)?.unwrap_or(false),
                 agent: acting(c)?.is_some(),
             })
         }
@@ -457,10 +462,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
-            let pointer = match c.get("pointer") {
-                None => None,
-                Some(p) => Some(input::point(p)?),
-            };
+            let pointer = optional(c.get("pointer"), input::point)?;
             return Some(Call::Ask {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 session: c.get("session")?.as_str()?.to_string(),
@@ -480,7 +482,6 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
-        "deep_query" => return query_call(c).map(|q| Call::Query(Box::new(q))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -515,10 +516,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 t: crate::time::eval_time(c.get("t"))?,
                 view,
                 clean: flag("clean")?,
-                perturb: match c.get("perturb") {
-                    None => None,
-                    Some(p) => Some(p.as_str()?.to_string()),
-                },
+                perturb: optional(c.get("perturb"), |p| Some(p.as_str()?.to_string()))?,
                 pixels: flag("pixels")?,
                 size: px_size(c.get("size"), |_| true)?,
             })));
@@ -541,6 +539,35 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 revise,
                 pixels: flag("pixels")?,
             })));
+        }
+        "settle" => {
+            let via = match c.get("session")? {
+                Value::String(s) => Via::Mcp(Some(s.clone())),
+                _ => return None,
+            };
+            return Some(Call::Settle(Box::new(efficiency::Settle {
+                via,
+                doc: doc()?,
+                patches: c.get("patches")?.as_array()?.clone(),
+            })));
+        }
+        // #854's perf lane reads the core directly, bound to no session or plug-in: the summary or a
+        // paged read. Every other deep_query is #411's, the agent's or a check plug-in's.
+        "deep_query" if c.get("session").is_some() || c.get("plugin").is_some() => {
+            return query_call(c).map(|q| Call::SceneQuery(Box::new(q)));
+        }
+        "deep_query" => {
+            let page = match c.get("page") {
+                None => None,
+                Some(p) => Some((
+                    p.get("limit")?.as_u64()? as usize,
+                    match p.get("after") {
+                        None | Some(Value::Null) => None,
+                        Some(a) => Some(a.as_str()?.to_string()),
+                    },
+                )),
+            };
+            return Some(Call::Query(efficiency::Query { doc: doc()?, page }));
         }
         "shaped_runs" => {
             return Some(Call::ShapedRuns(c.get("text")?.as_str()?.to_string()));
@@ -699,20 +726,11 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         doc: c.get("doc")?.as_str()?.to_string(),
         document: c.get("document")?.clone(),
         removes: strings(c.get("removes"))?,
-        t: match c.get("t") {
-            None => 0,
-            Some(t) => flicks(t.as_str()?)?,
-        },
+        t: optional(c.get("t"), |t| flicks(t.as_str()?))?.unwrap_or(0),
         size,
         include,
-        check: match c.get("check") {
-            None => false,
-            Some(b) => b.as_bool()?,
-        },
-        claim: match c.get("claim") {
-            None => None,
-            Some(h) => Some(h.as_str()?.to_string()),
-        },
+        check: optional(c.get("check"), Value::as_bool)?.unwrap_or(false),
+        claim: optional(c.get("claim"), |h| Some(h.as_str()?.to_string()))?,
     });
     // #411: a diagnostic mode, one of the closed list.
     match c.get("mode") {
@@ -733,10 +751,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             Some(t) if t.get("hosted")?.as_bool()? => (None, None),
             Some(t) => (
                 Some(t.get("runs_in")?.as_str()?.to_string()),
-                match t.get("capture") {
-                    None => None,
-                    Some(c) => Some(strings(c.get("lines"))?),
-                },
+                optional(t.get("capture"), |c| strings(c.get("lines")))?,
             ),
         };
         Some(Session {
@@ -764,14 +779,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let panels = entries(input, "panels", |p| {
         Some(Panel {
             rect: rect(p.get("rect"))?,
-            visible: match p.get("visible") {
-                None => true,
-                Some(v) => v.as_bool()?,
-            },
-            html: match p.get("html") {
-                None => None,
-                Some(h) => Some(PathBuf::from(h.as_str()?)),
-            },
+            visible: optional(p.get("visible"), Value::as_bool)?.unwrap_or(true),
+            html: optional(p.get("html"), |h| Some(PathBuf::from(h.as_str()?)))?,
         })
     })?;
     let docs = entries(input, "docs", |d| {
@@ -817,10 +826,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                             .as_i64()
                             .filter(|n| (1..=shared::FLICKS).contains(n))?,
                         next_vsync: d.get("next_vsync")?.as_i64().filter(|n| *n >= 0)?,
-                        feed: match d.get("feed") {
-                            None => None,
-                            Some(f) => Some(f.as_str()?.to_string()),
-                        },
+                        feed: optional(d.get("feed"), |f| Some(f.as_str()?.to_string()))?,
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -861,18 +867,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 Value::Null => None,
                 v => Some(v.as_str()?.to_string()),
             },
-            state: match o.get("state") {
-                None => None,
-                Some(s) => Some(s.as_str()?.to_string()),
-            },
-            value: match o.get("value") {
-                None => None,
-                Some(n) => Some(n.as_f64()?),
-            },
-            as_of: match o.get("as_of") {
-                None => None,
-                Some(n) => Some(n.as_i64()?),
-            },
+            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+            value: optional(o.get("value"), Value::as_f64)?,
+            as_of: optional(o.get("as_of"), Value::as_i64)?,
         })
     })?;
     let claims = entries(input, "claims", |c| {
@@ -897,20 +894,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             requirements,
         })
     })?;
-    let window = match input.get("window") {
-        None => None,
+    let size_field = |k: &str| match input.get(k) {
+        None => Some(None),
         Some(w) => {
             let r = rect(Some(&json!([0, 0, w.get(0)?, w.get(1)?])))?;
-            Some([r[2], r[3]])
+            Some(Some([r[2], r[3]]))
         }
     };
-    let display = match input.get("display") {
-        None => None,
-        Some(d) => {
-            let r = rect(Some(&json!([0, 0, d.get(0)?, d.get(1)?])))?;
-            Some([r[2], r[3]])
-        }
-    };
+    let window = size_field("window")?;
+    let display = size_field("display")?;
     let card = match input.get("card") {
         None => None,
         Some(c) => {
@@ -950,10 +942,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         _ => None,
     };
     // #105: the hub ends at this time as SIGKILL would.
-    let kill_at = match input.get("fault").and_then(|f| f.get("kill_at")) {
-        None => None,
-        Some(t) => Some(t.as_i64().filter(|t| *t >= 0)?),
-    };
+    let kill_at = optional(input.get("fault").and_then(|f| f.get("kill_at")), |t| {
+        t.as_i64().filter(|t| *t >= 0)
+    })?;
     let fault = match input.get("fault") {
         None => None,
         Some(_) if commit_fault.is_some() || kill_at.is_some() => None,
@@ -971,147 +962,111 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(None) => return None,
-        // #400's wrong programs live in the placement.
-        Some(Some("restores_to_main")) => {
-            placement_planted.restores_to_main = true;
-            None
-        }
-        Some(Some("card_on_main_display")) => {
-            placement_planted.card_on_main_display = true;
-            None
-        }
-        Some(Some("one_clock_for_all")) => {
-            placement_planted.one_clock_for_all = true;
-            None
-        }
-        Some(Some("arms_under_own_window")) => {
-            placement_planted.arms_under_own_window = true;
-            None
-        }
-        Some(Some("ignores_inactive_cap")) => {
-            placement_planted.ignores_inactive_cap = true;
-            None
-        }
-        Some(Some("ignores_thermal_cap")) => {
-            placement_planted.ignores_thermal_cap = true;
-            None
-        }
-        Some(Some("presents_hidden")) => {
-            placement_planted.presents_hidden = true;
-            None
-        }
-        Some(Some("evaluates_hidden")) => {
-            placement_planted.evaluates_hidden = true;
-            None
-        }
-        Some(Some("arms_from_delivery")) => {
-            placement_planted.arms_from_delivery = true;
-            None
-        }
-        Some(Some("never_rearms")) => {
-            placement_planted.never_rearms = true;
-            None
-        }
-        Some(Some("accepts_any_ring_serial")) => {
-            placement_planted.accepts_any_ring_serial = true;
-            None
-        }
-        Some(Some(p)) => Some(match p {
-            "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
-            "diffs_items_only" => Planted::DiffsItemsOnly,
-            "inlines_every_issue" => Planted::InlinesEveryIssue,
-            "cuts_without_truncated" => Planted::CutsWithoutTruncated,
-            "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
-            "reply_without_digest" => Planted::ReplyWithoutDigest,
-            "reads_wasm_bytes" => Planted::ReadsWasmBytes,
-            "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
-            "diffs_whole_document" => Planted::DiffsWholeDocument,
-            "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
-            "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
-            "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
-            "key_without_locale" => Planted::KeyWithoutLocale,
-            "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
-            "key_hashes_positions" => Planted::KeyHashesPositions,
-            "key_without_params" => Planted::KeyWithoutParams,
-            "refusal_without_code" => Planted::RefusalWithoutCode,
-            "refused_patch_writes" => Planted::RefusedPatchWrites,
-            "dry_run_skips_recheck" => Planted::DryRunSkipsRecheck,
-            "undo_reorder_mints_key" => Planted::UndoReorderMintsKey,
-            "apply_time_order_keys" => Planted::ApplyTimeOrderKeys,
-            "incremental_check_skips_referrers" => Planted::IncrementalCheckSkipsReferrers,
-            "rebase_by_path" => Planted::RebaseByPath,
-            "fuzzer_runs_none" => Planted::FuzzerRunsNone,
-            "part_runs_half" => Planted::PartRunsHalf,
-            "exit_zero_with_failed_case" => Planted::ExitZeroWithFailedCase,
-            "counts_declared_as_reached" => Planted::CountsDeclaredAsReached,
-            "skips_snapshot_comparison" => Planted::SkipsSnapshotComparison,
-            "checks_expected_code_only" => Planted::ChecksExpectedCodeOnly,
-            "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
-            "every_digest_positive" => Planted::EveryDigestPositive,
-            "checks_share_only" => Planted::ChecksShareOnly,
-            "estimates_on_this_machine" => Planted::EstimatesOnThisMachine,
-            "line_scroll_pans" => Planted::LineScrollPans,
-            "commit_every_move" => Planted::CommitEveryMove,
-            "pick_mid_gesture" => Planted::PickMidGesture,
-            "drag_shows_on_release" => Planted::DragShowsOnRelease,
-            "patch_shows_a_frame_late" => Planted::PatchShowsAFrameLate,
-            "full_screen_only_3d" => Planted::FullScreenOnly3d,
-            "esc_to_root" => Planted::EscToRoot,
-            "counts_every_issue" => Planted::CountsEveryIssue,
-            "matches_carried_by_code" => Planted::MatchesCarriedByCode,
-            "issues_without_actual" => Planted::IssuesWithoutActual,
-            "loads_deprecated_silently" => Planted::LoadsDeprecatedSilently,
-            "announces_every_frame" => Planted::AnnouncesEveryFrame,
-            "box_folds_quote" => Planted::BoxFoldsQuote,
-            "box_drops_t" => Planted::BoxDropsT,
-            "box_drops_doc_rev" => Planted::BoxDropsDocRev,
-            "box_sends_every_id" => Planted::BoxSendsEveryId,
-            "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
-            "resolver_closes_task" => Planted::ResolverClosesTask,
-            "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
-            "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
-            "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
-            "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
-            "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
-            "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
-            "packs_keyed_by_name" => Planted::PacksKeyedByName,
-            "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
-            "merges_in_finish_order" => Planted::MergesInFinishOrder,
-            "background_at_live_priority" => Planted::BackgroundAtLivePriority,
-            "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
-            "prefix_reads_final" => Planted::PrefixReadsFinal,
-            "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
-            "why_names_key_only" => Planted::WhyNamesKeyOnly,
-            "cuts_by_row_order" => Planted::CutsByRowOrder,
-            "frame_index_i64_product" => Planted::FrameIndexI64Product,
-            "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
-            "panel_policy_open" => Planted::PanelPolicyOpen,
-            "toasts_ignore_card" => Planted::ToastsIgnoreCard,
-            "script_ops_need_no_serial" => Planted::ScriptOpsNeedNoSerial,
-            "placement_moves_yours" => Planted::PlacementMovesYours,
-            "refresh_restamps_cached" => Planted::RefreshRestampsCached,
-            "sends_without_serial" => Planted::SendsWithoutSerial,
-            "serial_carries_many_sends" => Planted::SerialCarriesManySends,
-            "bound_value_a_frame_late" => Planted::BoundValueAFrameLate,
-            "keymap_unchecked" => Planted::KeymapUnchecked,
-            "conflicts_unreported" => Planted::ConflictsUnreported,
-            "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
-            "terminal_30_per_second" => Planted::Terminal30PerSecond,
-            "cells_a_frame_late" => Planted::CellsAFrameLate,
-            "video_shows_late" => Planted::VideoShowsLate,
-            "video_drops_uncounted" => Planted::VideoDropsUncounted,
-            "tab_draws_text" => Planted::TabDrawsText,
-            "tab_redraws_at_30hz" => Planted::TabRedrawsAt30hz,
-            "tab_draws_capture" => Planted::TabDrawsCapture,
-            "records_without_hold" => Planted::RecordsWithoutHold,
-            "records_past_max" => Planted::RecordsPastMax,
-            "drafts_no_check" => Planted::DraftsNoCheck,
-            "frames_to_record" => Planted::FramesToRecord,
-            "keeps_asset_after_crash" => Planted::KeepsAssetAfterCrash,
-            "labels_redaction_complete" => Planted::LabelsRedactionComplete,
-            "sends_without_approval" => Planted::SendsWithoutApproval,
-            _ => return None,
-        }),
+        Some(Some(p)) => match placement_planted.flag(p) {
+            // #400's wrong programs live in the placement.
+            Some(flag) => {
+                *flag = true;
+                None
+            }
+            None => Some(match p {
+                "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
+                "diffs_items_only" => Planted::DiffsItemsOnly,
+                "inlines_every_issue" => Planted::InlinesEveryIssue,
+                "cuts_without_truncated" => Planted::CutsWithoutTruncated,
+                "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
+                "reply_without_digest" => Planted::ReplyWithoutDigest,
+                "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+                "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
+                "diffs_whole_document" => Planted::DiffsWholeDocument,
+                "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
+                "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
+                "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
+                "key_without_locale" => Planted::KeyWithoutLocale,
+                "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
+                "key_hashes_positions" => Planted::KeyHashesPositions,
+                "key_without_params" => Planted::KeyWithoutParams,
+                "refusal_without_code" => Planted::RefusalWithoutCode,
+                "refused_patch_writes" => Planted::RefusedPatchWrites,
+                "dry_run_skips_recheck" => Planted::DryRunSkipsRecheck,
+                "undo_reorder_mints_key" => Planted::UndoReorderMintsKey,
+                "apply_time_order_keys" => Planted::ApplyTimeOrderKeys,
+                "incremental_check_skips_referrers" => Planted::IncrementalCheckSkipsReferrers,
+                "rebase_by_path" => Planted::RebaseByPath,
+                "fuzzer_runs_none" => Planted::FuzzerRunsNone,
+                "part_runs_half" => Planted::PartRunsHalf,
+                "exit_zero_with_failed_case" => Planted::ExitZeroWithFailedCase,
+                "counts_declared_as_reached" => Planted::CountsDeclaredAsReached,
+                "skips_snapshot_comparison" => Planted::SkipsSnapshotComparison,
+                "checks_expected_code_only" => Planted::ChecksExpectedCodeOnly,
+                "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
+                "every_digest_positive" => Planted::EveryDigestPositive,
+                "checks_share_only" => Planted::ChecksShareOnly,
+                "estimates_on_this_machine" => Planted::EstimatesOnThisMachine,
+                "line_scroll_pans" => Planted::LineScrollPans,
+                "commit_every_move" => Planted::CommitEveryMove,
+                "pick_mid_gesture" => Planted::PickMidGesture,
+                "drag_shows_on_release" => Planted::DragShowsOnRelease,
+                "patch_shows_a_frame_late" => Planted::PatchShowsAFrameLate,
+                "full_screen_only_3d" => Planted::FullScreenOnly3d,
+                "esc_to_root" => Planted::EscToRoot,
+                "counts_every_issue" => Planted::CountsEveryIssue,
+                "matches_carried_by_code" => Planted::MatchesCarriedByCode,
+                "issues_without_actual" => Planted::IssuesWithoutActual,
+                "loads_deprecated_silently" => Planted::LoadsDeprecatedSilently,
+                "announces_every_frame" => Planted::AnnouncesEveryFrame,
+                "box_folds_quote" => Planted::BoxFoldsQuote,
+                "box_drops_t" => Planted::BoxDropsT,
+                "box_drops_doc_rev" => Planted::BoxDropsDocRev,
+                "box_sends_every_id" => Planted::BoxSendsEveryId,
+                "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
+                "resolver_closes_task" => Planted::ResolverClosesTask,
+                "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
+                "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
+                "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
+                "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+                "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
+                "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
+                "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
+                "merges_in_finish_order" => Planted::MergesInFinishOrder,
+                "runs_every_node" => Planted::RunsEveryNode,
+                "unpaged" => Planted::Unpaged,
+                "background_at_live_priority" => Planted::BackgroundAtLivePriority,
+                "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
+                "prefix_reads_final" => Planted::PrefixReadsFinal,
+                "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
+                "why_names_key_only" => Planted::WhyNamesKeyOnly,
+                "cuts_by_row_order" => Planted::CutsByRowOrder,
+                "frame_index_i64_product" => Planted::FrameIndexI64Product,
+                "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
+                "panel_policy_open" => Planted::PanelPolicyOpen,
+                "toasts_ignore_card" => Planted::ToastsIgnoreCard,
+                "script_ops_need_no_serial" => Planted::ScriptOpsNeedNoSerial,
+                "placement_moves_yours" => Planted::PlacementMovesYours,
+                "refresh_restamps_cached" => Planted::RefreshRestampsCached,
+                "sends_without_serial" => Planted::SendsWithoutSerial,
+                "serial_carries_many_sends" => Planted::SerialCarriesManySends,
+                "bound_value_a_frame_late" => Planted::BoundValueAFrameLate,
+                "keymap_unchecked" => Planted::KeymapUnchecked,
+                "conflicts_unreported" => Planted::ConflictsUnreported,
+                "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
+                "terminal_30_per_second" => Planted::Terminal30PerSecond,
+                "cells_a_frame_late" => Planted::CellsAFrameLate,
+                "video_shows_late" => Planted::VideoShowsLate,
+                "video_drops_uncounted" => Planted::VideoDropsUncounted,
+                "tab_draws_text" => Planted::TabDrawsText,
+                "tab_redraws_at_30hz" => Planted::TabRedrawsAt30hz,
+                "tab_draws_capture" => Planted::TabDrawsCapture,
+                "records_without_hold" => Planted::RecordsWithoutHold,
+                "records_past_max" => Planted::RecordsPastMax,
+                "drafts_no_check" => Planted::DraftsNoCheck,
+                "frames_to_record" => Planted::FramesToRecord,
+                "keeps_asset_after_crash" => Planted::KeepsAssetAfterCrash,
+                "labels_redaction_complete" => Planted::LabelsRedactionComplete,
+                "sends_without_approval" => Planted::SendsWithoutApproval,
+                _ => return None,
+            }),
+        },
     };
     let u32_field = |k: &str| match input.get(k) {
         None => Some(None),
@@ -1150,10 +1105,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             .collect::<Option<_>>()?,
     };
     // #855: a process keys with `hash@2` unless the scenario keys as before its migration.
-    let hash = match input.get("hash") {
-        None => HashVersion::V2,
-        Some(h) => hash_named(h.as_str()?)?,
-    };
+    let hash = optional(input.get("hash"), |h| hash_named(h.as_str()?))?.unwrap_or(HashVersion::V2);
     let environment = match input.get("environment") {
         None => Map::new(),
         Some(e) => {
@@ -1227,10 +1179,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         calls,
         at,
         seeds,
-        state: match input.get("state") {
-            None => None,
-            Some(s) => Some(PathBuf::from(s.as_str()?)),
-        },
+        state: optional(input.get("state"), |s| Some(PathBuf::from(s.as_str()?)))?,
         quotas,
         clock,
         commit_fault,
@@ -1240,19 +1189,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         threads,
         background,
         hash,
-        goldens: match input.get("goldens") {
-            None => None,
-            Some(g) => Some(PathBuf::from(g.as_str()?)),
-        },
+        goldens: optional(input.get("goldens"), |g| Some(PathBuf::from(g.as_str()?)))?,
         environment,
-        commit: match input.get("commit") {
-            None => None,
-            Some(c) => Some(c.as_str()?.to_string()),
-        },
-        machine: match input.get("machine") {
-            None => None,
-            Some(m) => Some(m.as_object()?.clone()),
-        },
+        commit: optional(input.get("commit"), |c| Some(c.as_str()?.to_string()))?,
+        machine: optional(input.get("machine"), |m| Some(m.as_object()?.clone()))?,
     })
 }
 
@@ -1630,28 +1570,9 @@ enum StartPlanted {
 mod tests {
     use super::*;
 
-    #[test]
-    fn every_seal_in_the_process_counts() {
-        use std::sync::atomic::Ordering;
-        let before = hub::SEAL_RUNS.load(Ordering::Relaxed);
-        seal(
-            None,
-            Coefficients::read(cost::REFERENCE).expect("the build's own"),
-        )
-        .expect("the shipped set seals");
-        seal(
-            None,
-            Coefficients::read(cost::REFERENCE).expect("the build's own"),
-        )
-        .expect("the shipped set seals");
-        assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
-    }
-
-    #[test]
-    fn every_shared_document_reply_is_stamped_on_the_clock_too() {
-        // The clocked check queue builds a patch's reply itself, not through `Hub::call`.
-        // `seal()` is not called here: the seal-count test counts its runs.
-        let startup = Startup {
+    /// The core alone, sealed with no faults. `seal()` is not called: the seal-count test counts its runs.
+    fn startup() -> Startup {
+        Startup {
             sealed: deep_canvas::registry::core(),
             seal_ms: 0.0,
             steps_by_name: false,
@@ -1659,7 +1580,28 @@ mod tests {
             test_build: false,
             shapes_on_ui_thread: false,
             run_per_document: false,
-        };
+        }
+    }
+
+    #[test]
+    fn every_seal_in_the_process_counts() {
+        use std::sync::atomic::Ordering;
+        let before = hub::SEAL_RUNS.load(Ordering::Relaxed);
+        for _ in 0..2 {
+            seal(
+                None,
+                Coefficients::read(cost::REFERENCE).expect("the build's own"),
+            )
+            .expect("the shipped set seals");
+        }
+        assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
+    }
+
+    #[test]
+    fn every_shared_document_reply_is_stamped_on_the_clock_too() {
+        // The clocked check queue builds a patch's reply itself, not through `Hub::call`.
+        // `seal()` is not called here: the seal-count test counts its runs.
+        let startup = startup();
         let evidence = std::env::temp_dir().join(format!("deep-305-stamp-{}", std::process::id()));
         let doc = "01JB7D00000000000000000001";
         let seed = json!({
@@ -1808,15 +1750,7 @@ mod tests {
     /// names what changed, the changed lens colors by it, and no control writes a revision.
     #[test]
     fn a_scrubbed_view_shows_the_revision_current_then_and_compare_names_what_changed() {
-        let startup = Startup {
-            sealed: deep_canvas::registry::core(),
-            seal_ms: 0.0,
-            steps_by_name: false,
-            admits_frame_json: false,
-            test_build: false,
-            shapes_on_ui_thread: false,
-            run_per_document: false,
-        };
+        let startup = startup();
         let evidence = std::env::temp_dir().join(format!("deep-383-view-{}", std::process::id()));
         let doc = "01JB383V00000000000000000A";
         let rect = |id: &str, x: u32| {
