@@ -38,7 +38,7 @@ import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, reg
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
-import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/supervisor';
+import { after, badDeadline, type Cleanup, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
@@ -326,6 +326,8 @@ const ENDS_SESSION = 'SessionEnd';
 /** How long a kit's case may run past the deadline it gave the runner before the install counts it stuck. */
 const KIT_GRACE_MS = 5_000;
 const CHECK_KIND = 'check.kind@1';
+/** The context a check kind in the hub gets with each run: the run's, and host@1 (the supervisor's) to start its process through (#30 AC5). */
+export interface HubCheckContext { checkout: string; deadline: number; host: RunHost }
 /** The trusted ring's pieces beyond the kernel, which no package replaces. */
 const RING = ['app-shell', 'canvas-core', 'supervisor', 'installer'];
 /** The done gate's interface, which no package provides until a second gate exists and it has a slot and a kit. */
@@ -1025,7 +1027,7 @@ class Host implements ExtensionHost {
         const run = async (spec: CheckSpec, ctx: { deadline: number }): Promise<CheckResult> => {
           if (stuck) throw Error(stuck);
           try {
-            return await within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx }) as Promise<CheckResult>);
+            return await within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx: this.checkContext(ext, ctx) }) as Promise<CheckResult>);
           } catch (e) {
             if (e instanceof Overran) stuck = message(e);
             throw e;
@@ -2631,6 +2633,20 @@ class Host implements ExtensionHost {
   hooks(): string[] {
     return [...new Set([...this.exts.values()].flatMap((ext) => [...ext.subscribed]))].sort();
   }
+  /**
+   * What a check kind gets with each run (#30 AC5): the run's checkout and deadline, and for a kind in the hub, host@1,
+   * the supervisor's, so its process starts only through it and the supervisor sandboxes it. A kind the sandbox runs
+   * gets no host: its context crosses a wire, and it never starts a process of its own.
+   */
+  private checkContext<C extends { deadline: number }>(ext: Ext, ctx: C): C | (C & { host: RunHost }) {
+    return ext.place === 'hub' ? { ...ctx, host: this.runHost() } : ctx;
+  }
+  /** host@1 and nothing more of the supervisor: its name, start, signal, wait and facts, bound to it. */
+  private runHost(): RunHost {
+    const s = this.options.supervisor;
+    return (this.hostOne ??= { name: s.name, start: (spec) => s.start(spec), signal: (run, signal) => s.signal(run, signal), wait: (run) => s.wait(run), facts: () => s.facts() });
+  }
+  private hostOne: RunHost | undefined;
   async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult> {
     // Refused before any package is asked.
     const bad = badDeadline('deadline', ctx.deadline);
@@ -2639,7 +2655,7 @@ class Host implements ExtensionHost {
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
     try {
       this.canvasKeys.set(ext, []);
-      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx });
+      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
       const read = this.canvasKeys.get(ext) ?? [];
       if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.

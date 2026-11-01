@@ -562,3 +562,61 @@ describe('`**/` matches zero folders', () => {
     }
   });
 });
+
+// ---- #30: command runs' attempts, stand-ins and the flaky row's named tests.
+
+describe('a test that failed and passed on its attempts within one run (#30)', () => {
+  it('makes its check INCONCLUSIVE, naming the test, though the run passed', () => {
+    const c = check('retry');
+    const r = run(c, 'passed', { attempts: [{ test: 'settles the order', outcome: 'failed' }, { test: 'settles the order', outcome: 'passed' }, { test: 'adds up', outcome: 'passed' }] });
+    const v = verdict(claim({ checks: [c], runs: [r] }));
+    expect(v.outcome).toBe('INCONCLUSIVE');
+    expect(v.reasons.join('\n')).toMatch(/settles the order failed and passed on its attempts within run:R/);
+    expect(v.reasons.join('\n')).not.toMatch(/adds up/);
+    const item = v.open_items.find((i) => i.check === 'retry')!;
+    expect(item.text, 'the item names the test, never the run').toMatch(/settles the order failed and passed on its attempts within one run/);
+    expect(item.text).not.toMatch(/run:R/);
+  });
+  it('a run whose attempts list one outcome per test changes nothing', () => {
+    const c = check('retry');
+    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed', { attempts: [{ test: 'settles the order', outcome: 'passed' }] })] }));
+    expect(v.outcome).toBe('PASS');
+  });
+});
+
+describe('a stand-in against a requirement about what real users get (#30)', () => {
+  const real = { req: REQ, depth: 'unit' as const, oracle: 'code' as const, on_base: 'passes' as const, real_users: true };
+  it('leaves the requirement INCONCLUSIVE, naming the table and the file that seeded it', () => {
+    const c = check('policies');
+    const v = verdict(claim({ requirements: [real], checks: [c], runs: [run(c, 'passed', { stand_ins: [{ table: 'policies', by: 'scripts/seed.ts' }] })] }));
+    expect(v.outcome).toBe('INCONCLUSIVE');
+    expect(v.requirements[0]!.outcome).toBe('INCONCLUSIVE');
+    expect(v.checks[0]!.outcome, 'the check itself passed; the requirement is what the stand-in can\'t meet').toBe('PASS');
+    expect(v.reasons.join('\n')).toMatch(/req:DEF#R1 is about what real users get, and policies's run seeded `policies` from `scripts\/seed\.ts` as a stand-in/);
+    expect(v.open_items.find((i) => i.scope.req === REQ)?.text).toMatch(/stand-in/);
+  });
+  it('two stand-ins are both named, in one order whatever the runs\' order, so the item is one item', () => {
+    const c = check('policies');
+    const seeded = [{ table: 'users', by: 'test/db.ts' }, { table: 'policies', by: 'scripts/seed.ts' }];
+    const a = verdict(claim({ requirements: [real], checks: [c], runs: [run(c, 'passed', { stand_ins: seeded })] }));
+    const b = verdict(claim({ requirements: [real], checks: [c], runs: [run(c, 'passed', { stand_ins: [...seeded].reverse() })] }));
+    expect(a.reasons.join('\n')).toMatch(/`policies` from `scripts\/seed\.ts` as a stand-in, policies's run seeded `users` from `test\/db\.ts` as a stand-in/);
+    expect(b.open_items.find((i) => i.scope.req === REQ)?.id).toBe(a.open_items.find((i) => i.scope.req === REQ)?.id);
+  });
+  it('the same run passes a requirement that isn\'t about real users, and a run with no stand-in passes the one that is', () => {
+    const c = check('policies');
+    const seeded = run(c, 'passed', { stand_ins: [{ table: 'policies', by: 'scripts/seed.ts' }] });
+    expect(verdict(claim({ checks: [c], runs: [seeded] })).outcome).toBe('PASS');
+    expect(verdict(claim({ requirements: [real], checks: [c], runs: [run(c, 'passed')] })).outcome).toBe('PASS');
+  });
+});
+
+describe('the flaky row names the tests that failed (#30)', () => {
+  it('a check that passed and failed on one commit names its failing tests in the reason, and the item\'s words stay the same', () => {
+    const c = check('trial');
+    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed'), run(c, 'failed', { failures: [failure('the trial is still open')] })] }));
+    expect(v.outcome).toBe('INCONCLUSIVE');
+    expect(v.reasons.join('\n')).toMatch(/passed and failed on real runs of one commit; failing runs run:R\d+ \(failing tests: the trial is still open\)/);
+    expect(v.open_items.find((i) => i.check === 'trial')?.text).toBe('trial INCONCLUSIVE: passed and failed on real runs of one commit');
+  });
+});
