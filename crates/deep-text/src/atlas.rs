@@ -24,6 +24,10 @@ pub const PAGES: usize = 8;
 const MAX_DEVICE_SIZE: f32 = 256.;
 /// The smallest raster size text in depth takes.
 const MIN_RASTER: f64 = 4.;
+/// Sub-pixel steps a device pixel splits into, on each axis: a glyph rasterizes at its pen
+/// position's phase within its pixel, rounded to 1/8 px, so a run drawn from the atlas lands within
+/// 1/16 px of where Vello CPU draws it (issue #140, criterion 6: coverage centroids within 0.1 px).
+pub const PHASES: u8 = 8;
 /// One raster step: 2^(1/6), about 12% (canvas primitives: Marks in 3D).
 const RASTER_STEP: f64 = 1.122_462_048_309_373;
 
@@ -114,6 +118,8 @@ struct Key {
     glyph: u32,
     /// The device-pixel size in 1/64 px, so a size is one raster.
     size64: u32,
+    /// The pen position's phase within its pixel, in 1/[`PHASES`] px on x and y.
+    phase: [u8; 2],
 }
 
 /// The atlas: its pages, the glyphs placed on them, and the rasterizer they come from.
@@ -192,11 +198,25 @@ impl Atlas {
     /// space), one above [`MAX_DEVICE_SIZE`], or, until [`Atlas::make_room`], one with no room
     /// left on [`PAGES`] pages; only the first two are remembered.
     pub fn glyph(&mut self, font: &FontData, glyph: u32, device_size: f32) -> Option<Placed> {
+        self.glyph_at(font, glyph, device_size, [0, 0])
+    }
+
+    /// [`Atlas::glyph`] with its pen position `phase` of a pixel along, in 1/[`PHASES`] px on x
+    /// and y (#140); `left` and `top` still hang off the pen position's whole pixel.
+    pub fn glyph_at(
+        &mut self,
+        font: &FontData,
+        glyph: u32,
+        device_size: f32,
+        phase: [u8; 2],
+    ) -> Option<Placed> {
+        let phase = phase.map(|p| p.min(PHASES - 1));
         let key = Key {
             blob: font.data.id(),
             index: font.index,
             glyph,
             size64: (device_size * 64.).round() as u32,
+            phase,
         };
         if let Some(placed) = self.placed.get(&key) {
             if let Some(p) = placed {
@@ -208,7 +228,7 @@ impl Atlas {
             self.placed.insert(key, None);
             return None;
         }
-        let placed = self.rasterize(font, glyph, device_size);
+        let placed = self.rasterize(font, glyph, device_size, phase);
         if self.full {
             return None;
         }
@@ -216,12 +236,19 @@ impl Atlas {
         placed
     }
 
-    fn rasterize(&mut self, font: &FontData, glyph: u32, device_size: f32) -> Option<Placed> {
+    fn rasterize(
+        &mut self,
+        font: &FontData,
+        glyph: u32,
+        device_size: f32,
+        phase: [u8; 2],
+    ) -> Option<Placed> {
         // Room for an em of ascent and bearings on every side; the glyph's box is found after.
         let margin = (0.5 * device_size).ceil() + 2.;
         let width = (device_size * 2.5 + 2. * margin).ceil() as u16;
         let height = (device_size * 2. + 2. * margin).ceil() as u16;
-        // Whole device pixels, so the raster and its placement agree on the baseline.
+        // Whole device pixels, so the raster and its placement agree on the baseline; the glyph's
+        // pen sits `phase` along from there.
         let origin = (margin, margin + (device_size * 1.25).ceil());
         let mut ctx = RenderContext::new_with(width, height, self.settings);
         ctx.set_paint(WHITE);
@@ -231,8 +258,8 @@ impl Atlas {
             .hint(false)
             .fill_glyphs(std::iter::once(VelloGlyph {
                 id: glyph,
-                x: origin.0,
-                y: origin.1,
+                x: origin.0 + f32::from(phase[0]) / f32::from(PHASES),
+                y: origin.1 + f32::from(phase[1]) / f32::from(PHASES),
             }))
             .ok()?;
         ctx.flush();
