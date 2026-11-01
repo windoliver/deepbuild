@@ -480,25 +480,26 @@ function once(bin, args, line) {
   return JSON.parse(out.stdout.trim().split('\n').at(-1));
 }
 
-// The board the patch and read tasks share: 10,000 rects of one agent's layer, 100 to a row.
+// The board the patch and read tasks share: 10,000 rects of one agent's layer, 100 to a row; #896 also patches it
+// at 1,000.
 const BOARD_ITEMS = 10_000;
 const boardItem = (i) => `r${String(i).padStart(5, '0')}`;
-function board() {
+function board(items = BOARD_ITEMS) {
   const document = { format: 1, profile: 'board', title: 'Bench board', description: 'The #854 board: 10,000 rects of one agent.', size: [1280, 800],
     layers: { 'alpha-main': { writer: 'agent:thread-alpha', title: 'Alpha', order: 'a1' } }, items: {} };
-  for (let i = 0; i < BOARD_ITEMS; i++) {
+  for (let i = 0; i < items; i++) {
     const id = boardItem(i);
     document.items[id] = { id, kind: 'rect@1', layer: 'alpha-main', name: id, order: `b${String(i).padStart(5, '0')}`,
       params: { box: [0, 0, 8, 6], paint: { fill: { role: 'muted' } } }, at: { pos: [(i % 100) * 12, Math.floor(i / 100) * 8, 0] } };
   }
   return document;
 }
-/** `deep-show run` on the board as a shared document, with `calls`: the replies. */
-function onBoard(calls) {
+/** `deep-show run` on the board of `items` as a shared document, with `calls`: the replies. */
+function onBoard(calls, items = BOARD_ITEMS) {
   const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
   try {
     const sessions = { 'sess-alpha': { thread: 'thread-alpha', name: 'Alpha', process: { pid: 4100, start: 1000 } } };
-    const scenario = { evidence, sessions, panels: { main: { rect: [0, 0, 1280, 800] } }, docs: { [DOC]: { panel: 'main', document: board() } }, calls,
+    const scenario = { evidence, sessions, panels: { main: { rect: [0, 0, 1280, 800] } }, docs: { [DOC]: { panel: 'main', document: board(items) } }, calls,
       ...(planted() ? { planted: planted() } : {}) };
     const answer = once('deep-show', ['run'], scenario);
     if (answer.ok !== true) throw Error(`deep-show answered ${JSON.stringify(answer).slice(0, 1500)}`);
@@ -509,19 +510,34 @@ function onBoard(calls) {
 }
 
 // Patch to settled frame: 200 patches a run, each moving one item of the board, each timed from its arrival to the
-// settled frame it causes, the process's CPU plus the frame's GPU time, with the nodes that frame ran by operator.
+// settled frame it causes, the process's CPU plus the frame's GPU time, with the nodes that frame ran by operator and
+// (#896) the time of each stage, the bytes the view uploaded and the marks each operator built.
+const PATCHES = 200;
+const benchPatches = (items) => Array.from({ length: PATCHES }, (_, k) => {
+  const id = boardItem((k * 53) % items);
+  return { patch: ulid(k + 1), doc: DOC, base: k, reason: 'bench', ops: [{ op: 'set', id, path: `items/${id}/at/pos`, value: [k * 6, 790, 0] }] };
+});
+function settle(items) {
+  const [settled] = onBoard([{ call: 'settle', session: 'sess-alpha', doc: DOC, patches: benchPatches(items) }], items);
+  if (settled.outcome !== 'settled') throw Error(`the patches didn't settle: ${JSON.stringify(settled).slice(0, 1500)}`);
+  return settled.samples;
+}
 workloads['patch-settled'] = () => {
   const fingerprint = release('deep-show', 'deep-show');
-  const patches = Array.from({ length: 200 }, (_, k) => {
-    const id = boardItem((k * 53) % BOARD_ITEMS);
-    return { patch: ulid(k + 1), doc: DOC, base: k, reason: 'bench', ops: [{ op: 'set', id, path: `items/${id}/at/pos`, value: [k * 6, 790, 0] }] };
-  });
   const measured = runs(() => {
-    const [settled] = onBoard([{ call: 'settle', session: 'sess-alpha', doc: DOC, patches }]);
-    if (settled.outcome !== 'settled') throw Error(`the patches didn't settle: ${JSON.stringify(settled).slice(0, 1500)}`);
-    return { p95_ms: p95(settled.samples.map((s) => s.ms)), samples: settled.samples };
+    const samples = settle(BOARD_ITEMS);
+    return { p95_ms: p95(samples.map((s) => s.ms)), samples };
   });
-  console.log(JSON.stringify({ task: 'canvas-patch-settled', fingerprint, items: BOARD_ITEMS, patches: patches.length, runs: measured }));
+  console.log(JSON.stringify({ task: 'canvas-patch-settled', fingerprint, items: BOARD_ITEMS, patches: PATCHES, runs: measured }));
+};
+
+// #896, patch to settled frame in O(dirty): the same 200 patches on a 1,000-item board, then on the 10,000-item one,
+// each board in a fresh process, so a run's two boards see the same load.
+const DIRTY_BOARDS = [1_000, BOARD_ITEMS];
+workloads['patch-dirty'] = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  const measured = runs(() => ({ boards: DIRTY_BOARDS.map((items) => ({ items, samples: settle(items) })) }));
+  console.log(JSON.stringify({ task: 'canvas-patch-dirty', fingerprint, patches: PATCHES, runs: measured }));
 };
 
 // A scene read: deep_query's summary of the board and one paged read of 1,000 rows, each timed in the binary, each
@@ -582,22 +598,60 @@ workloads['replica-cold-start'] = () => {
   }
 };
 
+// #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
+const pair = (r) => {
+  const [small, large] = r.boards ?? [];
+  return r.boards?.length === 2 && small?.items === DIRTY_BOARDS[0] && large?.items === DIRTY_BOARDS[1] ? [small, large] : null;
+};
+const p50 = (xs) => [...xs].sort((a, b) => a - b)[Math.max(0, Math.ceil(0.5 * xs.length) - 1)];
+/** The CPU per patch at the last board against the first: the difference of their p50s, over the first's. */
+const cpuGrowth = (r) => {
+  const [a, b] = [r.boards?.[0], r.boards?.at(-1)].map((board) => p50(board?.samples.map((s) => s.cpu_ms) ?? [0]));
+  return a > 0 ? Math.abs(b - a) / a : 0;
+};
+/** The most bytes the view uploaded for one patch of a run, each patch changing one item. */
+const uploadPerItem = (r) => Math.max(0, ...(r.boards ?? []).flatMap((b) => b.samples.map((s) => s.uploaded_bytes)).filter(Number.isInteger));
+/** Why a target can't be judged on a run, if it can't. */
+const unjudged = {
+  cpu_growth: (r) => (pair(r) ? null : `a run patches ${JSON.stringify((r.boards ?? []).map((b) => b.items))} items, not ${DIRTY_BOARDS.join(' then ')}`),
+  upload_bytes_per_item: (r) => ((r.boards ?? []).every((b) => b.samples.every((s) => Number.isInteger(s.uploaded_bytes)))
+    ? null : 'a patch doesn\'t report the bytes it uploaded'),
+};
+
 // Each task's targets: where `judge` reads each from a run, and whether it is a count, judged on any machine.
 const EFFICIENCY = {
   'canvas-patch-settled': { settled_p95_ms: (r) => r.p95_ms },
+  'canvas-patch-dirty': { cpu_growth: cpuGrowth, upload_bytes_per_item: uploadPerItem },
   'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
   'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item']);
+
+/** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
+const costliest = (s) => {
+  const [name, ms] = Object.entries(s.stages ?? {}).reduce((a, e) => (e[1] > a[1] ? e : a), ['', -1]);
+  return name ? `, most of it stage ${name} ${ms.toFixed(3)} ms` : '';
+};
+const grouped = (n) => n.toLocaleString('en-US');
 
 /** What a failed target names, run by run: the frame and the nodes it ran, a reply's size, the frames drawn, the pipelines. */
 const named = {
   settled_p95_ms: (runs) => runs.map((r, i) => {
     const worst = r.samples.reduce((a, s) => (s.ms > a.ms ? s : a));
     const ran = Object.entries(worst.ran).map(([op, n]) => `${op} ${n}`).join(', ');
-    return `run ${i + 1}: patch ${worst.patch} settled in frame ${worst.frame} after ${worst.ms.toFixed(3)} ms, a frame that ran ${ran}`;
+    return `run ${i + 1}: patch ${worst.patch} settled in frame ${worst.frame} after ${worst.ms.toFixed(3)} ms${costliest(worst)}, a frame that ran ${ran}`;
   }),
+  // The operator that built the most marks for one patch on the larger board.
+  cpu_growth: (runs) => runs.map((r, i) => {
+    const large = pair(r)?.[1].samples ?? [];
+    const [op, n] = large.flatMap((s) => Object.entries(s.marks ?? {})).reduce((a, e) => (e[1] > a[1] ? e : a), ['no operator', 0]);
+    return `run ${i + 1}: ${op} built ${grouped(n)} marks for one patch at ${grouped(DIRTY_BOARDS[1])} items`;
+  }),
+  upload_bytes_per_item: (runs, limit) => runs.map((r, i) => {
+    const worst = r.boards.flatMap((b) => b.samples).reduce((a, s) => (s.uploaded_bytes > a.uploaded_bytes ? s : a));
+    return worst.uploaded_bytes > limit ? `run ${i + 1}: patch ${worst.patch} uploaded ${grouped(worst.uploaded_bytes)} B` : null;
+  }).filter(Boolean),
   summary_tokens: (runs, limit) => runs.filter((r) => r.summary.tokens > limit).map((r) => `summary: ${r.summary.tokens} tokens, ${r.summary.bytes} bytes, ${r.summary.rows} rows`),
   page_rows: (runs, limit) => runs.filter((r) => r.page.rows > limit).map((r) => `page: ${r.page.rows} rows, ${r.page.tokens} tokens, ${r.page.bytes} bytes${r.page.next === null ? ', unpaged' : ''}`),
   frames: (runs, limit) => runs.map((r, i) => [r, i]).filter(([r]) => r.frames > limit)
@@ -621,10 +675,13 @@ function judgeEfficiency(current) {
   const reasons = [];
   for (const [name, limit] of Object.entries(targets)) {
     const values = (current.runs ?? []).map(EFFICIENCY[task][name]);
+    const why = (current.runs ?? []).map((r) => unjudged[name]?.(r)).find(Boolean);
     let verdict;
     // A pipeline compiled on the first frame stalls it, whatever the time (Meter and degrade ladder: pipelines
     // compile off-screen), so it fails a cold start on any machine.
-    if (name === 'first_settled_ms' && current.runs.some((r) => r.pipelines.some((p) => p.on_first_frame))) {
+    if (why) {
+      verdict = { status: 'BLOCKED', limit, runs: values, reason: why };
+    } else if (name === 'first_settled_ms' && current.runs.some((r) => r.pipelines.some((p) => p.on_first_frame))) {
       verdict = { status: 'FAIL', limit, runs: values };
     } else if (COUNTS.has(name)) {
       verdict = values.length === RUNS && values.every(Number.isFinite)

@@ -278,6 +278,20 @@ impl Replica {
                 ))
             }
         };
+        // The view the panel registers, as `deep.registerView` gives it: its pages and ⌘K commands (#366).
+        let view = match (&args["view"], &panel) {
+            (Value::Null, _) => None,
+            (view, Some(dir)) => Some(
+                deep_app::commands::View::from_json(dir.clone(), view)
+                    .map_err(|e| fail("refused", format!("launch.view: {e}")))?,
+            ),
+            (_, None) => {
+                return Err(fail(
+                    "refused",
+                    "launch.view registers the panel in launch.panel, so it needs one",
+                ))
+            }
+        };
         std::fs::create_dir_all(&out)
             .map_err(|e| fail("refused", format!("{}: {e}", out.display())))?;
 
@@ -380,7 +394,7 @@ impl Replica {
                 ..Layout::shipped("needs-you")
             };
             let into = mounted.clone();
-            let (window, _) =
+            let (window, shell) =
                 open_shell_with(options, &layout, cx, move |window, cx| match panel {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
@@ -397,6 +411,20 @@ impl Replica {
                         cx,
                     )),
                 });
+            if let Some(view) = view {
+                let _ = window.update(cx, |_, window, cx| {
+                    let palette = cx.new(|cx| {
+                        deep_app::commands::Palette::new(
+                            &[view],
+                            recency(plant),
+                            opener(plant),
+                            window,
+                            cx,
+                        )
+                    });
+                    shell.update(cx, |shell, cx| shell.set_commands(palette, window, cx));
+                });
+            }
             window
         });
         let runtime = mounted
@@ -1214,6 +1242,43 @@ impl Replica {
             "trace": {"sha256": hash, "path": path},
         })
     }
+}
+
+/// ⌘K's recency list in a replica (#366): it starts empty, and never reads the live app's; only the planted ranker does.
+fn recency(plant: Option<Plant>) -> Vec<String> {
+    if plant == Some(Plant::RanksByLiveRecency) {
+        deep_app::commands::read_recency(&deep_app::commands::recency_file())
+    } else {
+        Vec::new()
+    }
+}
+
+/// What opening a ⌘K entry does in a replica (#366): a page mounts its view's panel in the extension slot, given the
+/// page as `props.page`; a command's action has no hub to run on here, so ⌘K just closes.
+fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
+    // Each page's runtime lives as long as ⌘K does, as the panel's does.
+    let runtimes = RefCell::new(Vec::new());
+    Rc::new(move |entry, window, cx| {
+        let (Some(mut page), deep_app::commands::Entry::Page { panel, .. }) =
+            (entry.page_props(), entry)
+        else {
+            return;
+        };
+        if plant == Some(Plant::PageDropsParam) {
+            page["params"] = json!({});
+        }
+        let mounted = deep_app::new_runtime().and_then(|runtime| {
+            let view = deep_app::mount_page(&runtime, panel, &page, window, cx)?;
+            runtimes.borrow_mut().push(runtime);
+            Ok(view)
+        });
+        match mounted {
+            Ok(view) => {
+                deep_app::views::fill_slot(view.into(), cx);
+            }
+            Err(e) => eprintln!("deep-drive: {} didn't open: {e:#}", entry.name()),
+        }
+    })
 }
 
 /// The panel's bounds in the window, in device pixels at `scale`.

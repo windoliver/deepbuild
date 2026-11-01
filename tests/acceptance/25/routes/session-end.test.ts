@@ -24,7 +24,7 @@ async function idleWithWaiter(a: Asking): Promise<number> {
 async function scenario(plant?: string): Promise<void> {
   const env = plant ? { DEEP_HUB_PLANT: plant } : {};
   const { home } = makeHome();
-  const hub = await startHub(home, { plant });
+  const hub = await startHub(home, { plant, noAskWait: true, shortHold: true });
   await setup(home, env);
   const [a, b] = await Promise.all([askingSession(hub, home, env), askingSession(hub, home, env)]);
   const [pa, pb] = await Promise.all([idleWithWaiter(a!), idleWithWaiter(b!)]);

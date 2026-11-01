@@ -1,0 +1,13 @@
+{
+  "id": "test/stocks",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts", "agent"] },
+  "actions": ["ext.stocks.ask", "ext.stocks.brief", "ext.stocks.notify", "ext.stocks.add_alert", "ext.stocks.add_alert_above", "ext.stocks.add_to_watchlist", "ext.stocks.read_prices"],
+  "notices": ["ext.stocks.crossed"],
+  "secrets": [{ "name": "market_key", "for": "the market data API's key" }],
+  "sources": [{ "name": "ext.stocks.price", "variant": "polled" }],
+  "requires": {
+    "preview": ["deep.registerSource", "deep.secret", "deep.registerView", "deep.registerAction", "deep.runner.run", "deep.notices.send", "deep.send"]
+  }
+}
