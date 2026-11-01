@@ -303,7 +303,7 @@ describe('the design says', () => {
       return { root, shared: { ...shared, v: version }, required: required.filter((key) => key !== 'subject') };
     };
     const kinds = catalogue().map((e) => e.schema);
-    expect(kinds).toHaveLength(141);
+    expect(kinds).toHaveLength(144);
     for (const name of kinds) expect(envelope(name), name).toEqual(envelope(kinds[0]!));
   });
 

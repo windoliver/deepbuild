@@ -152,9 +152,7 @@ mod macos {
     use std::{cell::RefCell, ptr::NonNull, rc::Rc, sync::Arc};
 
     use block2::RcBlock;
-    use gpui_kit::{
-        div, img, prelude::*, px, rgb, Context, Pixels, Render, RenderImage, Size, Window,
-    };
+    use gpui_kit::{div, img, prelude::*, px, Context, Pixels, Render, RenderImage, Size, Window};
     use objc2::{rc::Retained, runtime::AnyObject, MainThreadMarker};
     use objc2_app_kit::{
         NSApplication, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSView,
@@ -497,7 +495,8 @@ mod macos {
     }
 
     impl Render for CursorWindow {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let chrome = crate::chrome::of(window);
             let counts = self.gate.borrow().counts.clone();
             let held = self.gate.borrow().held();
             let status = if held {
@@ -512,11 +511,11 @@ mod macos {
                 .size_full()
                 .flex()
                 .flex_col()
-                .bg(rgb(0x111111))
-                .text_color(rgb(0xf5f5f5))
+                .bg(chrome.raised)
+                .text_color(chrome.ink_primary)
                 .text_xs()
                 .border_1()
-                .border_color(if held { rgb(0xfacc15) } else { rgb(0x444444) })
+                .border_color(if held { chrome.accent } else { chrome.divider })
                 .child(div().flex_1().flex().items_center().justify_center().child(
                     match &self.frame {
                         Some((_, image)) => img(image.clone()).size_full().into_any_element(),
@@ -681,12 +680,16 @@ mod macos {
 mod tests {
     use super::*;
 
-    fn hardware() -> Provenance {
+    fn provenance(source_state: i64, source_pid: i64, hid_chord_down: bool) -> Provenance {
         Provenance {
-            source_state: Some(HID_SYSTEM_STATE),
-            source_pid: Some(NO_POSTING_PROCESS),
-            hid_chord_down: true,
+            source_state: Some(source_state),
+            source_pid: Some(source_pid),
+            hid_chord_down,
         }
+    }
+
+    fn hardware() -> Provenance {
+        provenance(HID_SYSTEM_STATE, NO_POSTING_PROCESS, true)
     }
 
     fn down(repeat: bool) -> Key {
@@ -717,11 +720,7 @@ mod tests {
         // which the next tick would reopen as a second hold.
         let mut gate = Gate::default();
         assert!(gate.may_capture(true));
-        let synthetic = Provenance {
-            source_state: Some(0),
-            source_pid: Some(1),
-            hid_chord_down: true,
-        };
+        let synthetic = provenance(0, 1, true);
         assert_eq!(
             gate.on_key(
                 Key::Up {
@@ -753,29 +752,13 @@ mod tests {
         let own_pid = 4242;
         let synthetic = [
             // Built in the process: the combined session state, this pid.
-            Provenance {
-                source_state: Some(0),
-                source_pid: Some(own_pid),
-                hid_chord_down: false,
-            },
+            provenance(0, own_pid, false),
             // A HID-state source, but posted by a process.
-            Provenance {
-                source_state: Some(HID_SYSTEM_STATE),
-                source_pid: Some(own_pid),
-                hid_chord_down: false,
-            },
+            provenance(HID_SYSTEM_STATE, own_pid, false),
             // Forged fields, but the HID table says the key is up.
-            Provenance {
-                source_state: Some(HID_SYSTEM_STATE),
-                source_pid: Some(NO_POSTING_PROCESS),
-                hid_chord_down: false,
-            },
+            provenance(HID_SYSTEM_STATE, NO_POSTING_PROCESS, false),
             // A private source state.
-            Provenance {
-                source_state: Some(-1),
-                source_pid: Some(NO_POSTING_PROCESS),
-                hid_chord_down: true,
-            },
+            provenance(-1, NO_POSTING_PROCESS, true),
             // No CGEvent at all.
             Provenance::default(),
         ];
@@ -802,11 +785,7 @@ mod tests {
     #[test]
     fn two_hundred_synthetic_presses_never_hold() {
         let mut gate = Gate::default();
-        let synthetic = Provenance {
-            source_state: Some(0),
-            source_pid: Some(1),
-            hid_chord_down: false,
-        };
+        let synthetic = provenance(0, 1, false);
         for _ in 0..200 {
             gate.on_key(down(false), synthetic);
             assert!(!gate.may_capture(false));

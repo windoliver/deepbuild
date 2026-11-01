@@ -28,7 +28,7 @@ import { after, openSupervisor, type Grant, type Host, type Started, type Superv
 import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
-import { confirmYou } from './confirm.js';
+import { Confirmer } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
@@ -85,8 +85,12 @@ const QUIET_MS = 30_000;
 const CALL_GRACE = 2_000;
 /** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
 const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
-/** How long a waiter's answer has to show in a turn before its delivery reads stalled and goes by the next prompt. */
+/** How long a handed answer has to show in a turn before its delivery reads stalled and goes by the next route. */
 const WAKE_GRACE = 10_000;
+/** How soon after a hook's reply the transcript is read for the answers it carried (#906). */
+const SHOWN_SOON = 2_000;
+/** What only an answer's own text says, as the transcript shows it in a turn (#906). */
+const said = (ask: string) => `Your answer to ask:${ask}`;
 /** The most transcript entries of one turn the core keeps for its stop's records. */
 const TURN_ENTRIES = 5_000;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
@@ -237,6 +241,8 @@ export class Core {
   private readonly now: () => number;
   private readonly durable: Durable;
   private record!: RecordStore;
+  /** The record's raw reads, as the helpers that take them call them: parameters bound. */
+  private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   private asks!: Asks;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
@@ -255,6 +261,7 @@ export class Core {
   /** Staging for destructive commands (#347): a delete whose reach can't be worked out, staged copy-on-write or asked about. */
   private readonly staging: Staging;
   private readonly devices: Devices;
+  private readonly confirmer: Confirmer;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
   /** The kernel's lease table (#237), read by deep env down for who holds a port now, and the gate runner's cpu.slot. */
@@ -300,6 +307,8 @@ export class Core {
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   private blocked: string | undefined;
+  /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
+  private lost = false;
   /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
   private extensions: ExtensionHost | undefined;
   private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
@@ -326,8 +335,11 @@ export class Core {
   private ahead: { after: number; limit: number; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
-  /** Each background job's last failure, cleared by its next clean run: a job that keeps failing shows in hub.health. */
-  private readonly jobs = new Map<string, { at: number; error: string } | null>();
+  /**
+   * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
+   * next clean run (#909): one blip reads apart from a job that has failed for an hour.
+   */
+  private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
@@ -351,8 +363,11 @@ export class Core {
   private readonly settling = new Map<string, Set<() => void>>();
   /** Each session's routes back into it, by session ID. */
   private readonly routes = new Map<string, Routes>();
-  /** Answers handed to a waiter that no turn has shown yet, by ask ID. */
-  private readonly handed = new Map<string, { session: string; at: number; timer: NodeJS.Timeout }>();
+  /**
+   * Answers handed to a route that no turn has shown yet, by ask ID (#906): to a waiter, or in a hook's reply (`hook`,
+   * the event's ID), whose session's transcript says whether deep-hook got it in time.
+   */
+  private readonly handed = new Map<string, { session: string; at: number; timer: NodeJS.Timeout; via: 'wake' | 'next_prompt' | 'stop_hold'; hook?: string }>();
   /** Answers whose delivery timed out because their session couldn't be read, by ask ID, with the session. */
   private readonly unread = new Map<string, string>();
   /**
@@ -395,6 +410,7 @@ export class Core {
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
+    this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.plant ? { plant: options.plant } : {}) });
     this.holds = new Holds({
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -523,7 +539,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = await openTrust({ record: this.record, now: this.now });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
@@ -552,6 +568,7 @@ export class Core {
     // Each staged copy is let go at its set time (#347): at start, then once an hour.
     await this.staging.prune().catch(() => undefined);
     this.every('staging', HOUR, () => this.staging.prune());
+    if (this.options.failJob) this.testJob(this.options.failJob);
     // The transcript archive (#20) copies what the agents' cleanups would delete, and the CI runs of the GitHub repos
     // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
     const env: Record<string, string | undefined> = { ...process.env };
@@ -580,7 +597,7 @@ export class Core {
     });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
-    this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
+    this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
     if (this.options.plant !== 'restores-at-session-start-only') this.watchSettings();
     // The promised checks the record still holds wait on, armed again (#120).
@@ -610,7 +627,7 @@ export class Core {
       await this.asks.judged(this.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: judge(e.rule, e.yours, margin) });
     }
     await this.syncStanding();
-    await syncRejected((q) => this.record.raw(q), this.root.dir);
+    await syncRejected(this.raw, this.root.dir);
   }
 
   private writeState(state: 'running' | 'stopped'): void {
@@ -626,6 +643,7 @@ export class Core {
   }
   /** Appends one event; a storage failure turns every gate watch-only, BLOCKED, until a write succeeds again. */
   private async append(connection: Connection, input: EventInput, backfill = false): Promise<void> {
+    if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
     if (!backfill) this.inflight.add(appended);
@@ -655,8 +673,25 @@ export class Core {
       await job();
       this.jobs.set(name, null);
     } catch (error) {
-      this.jobs.set(name, { at: this.now(), error: error instanceof Error ? error.message : String(error) });
+      const at = this.now();
+      const last = this.jobs.get(name);
+      this.jobs.set(name, { failures: (last?.failures ?? 0) + 1, since: last?.since ?? at, at, error: error instanceof Error ? error.message : String(error) });
     }
+  }
+  /** The test job (#909): one run per line a test appends to `file`, `fail` a failed run and `ok` a clean one. */
+  private testJob(file: string): void {
+    this.jobs.set('test', null);
+    let taken = 0;
+    this.timers.push(setInterval(() => {
+      const lines = readFileSync(file, 'utf8').split('\n').slice(0, -1);
+      for (const run of lines.slice(taken)) void this.run('test', async () => { if (run === 'fail') throw Error('the test job failed'); });
+      taken = lines.length;
+    }, 200));
+  }
+  /** The hub's lock file is no longer the one it holds (#909): another hub may start on it, so this one appends nothing more. */
+  lockLost(path: string): void {
+    this.lost = true;
+    this.blocked = `BLOCKED: lock lost: ${path} is no longer the file this hub holds locked; stop this hub and start it again`;
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {
@@ -1696,11 +1731,44 @@ export class Core {
   private outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced'): Promise<void> {
     return this.appendCore('delivery.outcome', { delivery: `ask:${ask}`, via, outcome }, { subject: `ask:${ask}` }).catch(() => undefined);
   }
-  /** Each answer delivered once: recorded delivered `via` before the agent reads it. */
-  private async deliver(rows: Answer[], via: 'next_prompt' | 'stop_hold'): Promise<string | undefined> {
+  /**
+   * Each answer handed to a hook's reply once (#906). The session is read first: an answer a turn already shows is
+   * recorded delivered and not sent again. The rest are in flight until a turn shows them, read at the session's next
+   * prompt or stop, once deep-hook is found gone, or when the grace runs out. A tool's reply (no hook) is delivered now.
+   */
+  private async deliver(rows: Answer[], via: 'next_prompt' | 'stop_hold', hook?: { session: string; id: string }): Promise<string | undefined> {
     if (!rows.length) return undefined;
-    for (const row of rows) await this.outcome(row.id, via, 'delivered');
-    return this.answerText(rows);
+    // The planted wrong program records the answer delivered as the hub writes its reply.
+    if (!hook || this.options.plant === 'delivered-when-written') {
+      for (const row of rows) await this.outcome(row.id, via, 'delivered');
+      return this.answerText(rows);
+    }
+    // The planted wrong program keeps no answer in flight, so each later route sends it again without reading the session.
+    if (this.options.plant === 'sends-shown-again') return this.answerText(rows);
+    const shown = await this.shown(hook.session, rows.map((row) => said(row.id)));
+    const fresh: Answer[] = [];
+    for (const row of rows) {
+      if (shown?.has(said(row.id))) await this.outcome(row.id, via, 'delivered');
+      else fresh.push(row);
+    }
+    if (!fresh.length) return undefined;
+    const at = Date.now();
+    for (const row of fresh) this.handed.set(row.id, { session: hook.session, at, via, hook: hook.id, timer: setTimeout(() => void this.queue(() => this.unwoken(hook.session, row.id)).catch(() => undefined), WAKE_GRACE) });
+    // A deep-hook already gone takes no reply: what it would carry goes by the next route.
+    if (this.abandoned.has(hook.id)) for (const row of fresh) void this.queue(() => this.unwoken(hook.session, row.id)).catch(() => undefined);
+    // Claude Code writes a hook's reply into the transcript as the hook ends, so it is read for again soon after.
+    else setTimeout(() => void this.queue(() => this.seen(fresh.map((row) => row.id))).catch(() => undefined), SHOWN_SOON).unref();
+    return this.answerText(fresh);
+  }
+  /** Answers still in flight that a turn now shows: delivered; the rest stay in flight (#906). */
+  private async seen(asks: string[]): Promise<void> {
+    for (const ask of asks) {
+      const handed = this.handed.get(ask);
+      if (!handed || !await this.woken(handed.session, said(ask))) continue;
+      clearTimeout(handed.timer);
+      this.handed.delete(ask);
+      await this.outcome(ask, handed.via === 'wake' ? 'next_prompt' : handed.via, 'delivered');
+    }
   }
 
   /** An answer the asks core recorded: a stop of its session held now takes it, else its waiter if the session is idle. */
@@ -1794,30 +1862,37 @@ export class Core {
       }
       // Delivered only once a turn shows it: the wake's prompt carries it, or the transcript does.
       const at = Date.now();
-      for (const row of rows) this.handed.set(row.id, { session, at, timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
+      for (const row of rows) this.handed.set(row.id, { session, at, via: 'wake', timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
     }).catch(() => undefined);
   }
   /**
-   * A waiter's answer no turn has shown: the transcript is read for the wake, and with none it reads stalled, the
-   * view says the app didn't wake the session, and the answer goes by its next prompt.
+   * An answer handed to a route that no turn has shown: the transcript is read for it, and with none it reads stalled
+   * and goes by the next route. A waiter's also says the app didn't wake the session, and its answer goes by the next
+   * prompt.
    */
   private async unwoken(session: string, ask: string, prompt?: string): Promise<void> {
     const handed = this.handed.get(ask);
     if (!handed) return;
     clearTimeout(handed.timer);
     this.handed.delete(ask);
-    const woken = (prompt ?? '').includes(`ask:${ask}`) || await this.woken(session, `ask:${ask}`);
+    const wake = handed.via === 'wake';
+    const via = wake ? 'next_prompt' : handed.via;
+    const woken = (wake && (prompt ?? '').includes(`ask:${ask}`)) || await this.woken(session, said(ask));
     if (woken) {
       const r = this.routes.get(session);
-      if (r) r.wakes = true;
-      return this.outcome(ask, 'next_prompt', 'delivered');
+      if (r && wake) r.wakes = true;
+      return this.outcome(ask, via, 'delivered');
     }
     // A session that can't be read proves nothing either way (#27): timed out, and the next prompt reads it first.
     if (woken === undefined) {
       this.unread.set(ask, session);
-      return this.outcome(ask, 'next_prompt', 'timed_out');
+      return this.outcome(ask, via, 'timed_out');
     }
-    await this.outcome(ask, 'next_prompt', 'stalled');
+    await this.outcome(ask, via, 'stalled');
+    if (!wake) {
+      await this.appendReading(session, this.sessions.get(session)?.agent ?? 'claude-code', `DeepBuild's ${via === 'stop_hold' ? 'stop' : 'prompt'} reply carrying your answer to ask:${ask} didn't reach the agent: deep-hook had given up on it. The answer goes by the session's next route.`).catch(() => undefined);
+      return;
+    }
     const r = this.routes.get(session);
     // A route never seen working counts as absent: this session's answers wait for its next prompt.
     if (r && r.wakes !== true) r.wakes = false;
@@ -1832,7 +1907,7 @@ export class Core {
       if (handed.session !== session) continue;
       clearTimeout(handed.timer);
       this.handed.delete(ask);
-      await this.outcome(ask, 'next_prompt', 'replaced');
+      await this.outcome(ask, handed.via === 'stop_hold' ? 'stop_hold' : 'next_prompt', 'replaced');
     }
   }
   /** A note its waiter handed over that no turn showed: it waits for the session's next prompt. */
@@ -1842,21 +1917,30 @@ export class Core {
     this.handedNotes.delete(request);
     this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), { session: note.session, text: note.text, request }]);
   }
-  /**
-   * Whether the transcript shows a turn carrying a waiter's text (an ask's answer, a promise's wake-up): a queued wake
-   * or a prompt naming its token; undefined when the transcript can't be read.
-   */
+  /** Whether the transcript shows a turn carrying `token`; undefined when the transcript can't be read. */
   private async woken(session: string, token: string): Promise<boolean | undefined> {
+    return (await this.shown(session, [token]))?.has(token);
+  }
+  /**
+   * The tokens the transcript shows a turn carrying (an ask's answer, a promise's wake-up): a queued wake, a prompt or
+   * a stop hook's feedback naming one, or a hook's context or blocking error carrying it (#906); undefined when the
+   * transcript can't be read.
+   */
+  private async shown(session: string, tokens: string[]): Promise<Set<string> | undefined> {
+    const seen = new Set<string>();
     const transcript = this.sessions.get(session)?.transcript;
-    if (!transcript) return false;
+    if (!transcript) return seen;
     try { await access(transcript, constants.R_OK); } catch { return undefined; }
-    return (await this.tail(transcript, 1 << 20)).split('\n').some((l) => {
-      if (!l.includes(token)) return false;
+    for (const l of (await this.tail(transcript, 1 << 20)).split('\n')) {
+      const hit = tokens.filter((t) => l.includes(t));
+      if (!hit.length) continue;
       try {
         const e = JSON.parse(l) as Obj;
-        return e.type === 'queue-operation' || (e.type === 'user' && isObj(e.message) && typeof e.message.content === 'string');
-      } catch { return false; }
-    });
+        const hook = e.type === 'attachment' && isObj(e.attachment) && (e.attachment.type === 'hook_additional_context' || e.attachment.type === 'hook_blocking_error');
+        if (hook || e.type === 'queue-operation' || (e.type === 'user' && isObj(e.message) && typeof e.message.content === 'string')) for (const t of hit) seen.add(t);
+      } catch { /* a cut line shows nothing */ }
+    }
+    return seen;
   }
   private async tail(file: string, bytes: number): Promise<string> {
     try {
@@ -2003,7 +2087,7 @@ export class Core {
     if (typeof handle !== 'string' || !/^offer:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/offer', 'Name the offer by its handle, offer:<id>, as deep inbox lists it.', handle));
     const offer = this.offers.get(handle);
     if (!offer) throw new Refused(refusal('not_found', '/params/offer', `No offer ${handle}; save one deep inbox lists.`, handle));
-    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle);
+    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
     return this.saveOffer(handle, this.connection(context.role === 'app' ? 'app' : 'cli'));
   }
   /** The offer saved: its permission raised as an authority ask and answered yes on the trusted path, which saves it for the repo. */
@@ -2023,13 +2107,13 @@ export class Core {
   private async tasteAt(session: string, cwd: string, said: string, starting: boolean): Promise<string | undefined> {
     const given = starting ? new Set<string>() : this.tasted.get(session) ?? new Set<string>();
     this.tasted.set(session, given);
-    const fresh = (await tastesFor((q) => this.record.raw(q), repoOf(cwd), said)).filter((t) => !given.has(t.ask));
+    const fresh = (await tastesFor(this.raw, repoOf(cwd), said)).filter((t) => !given.has(t.ask));
     for (const t of fresh) given.add(t.ask);
     return tasteBlock(fresh);
   }
   /** `deep memory`'s list (#111). */
   private async lessons() {
-    return lessonsOf((q) => this.record.raw(q), await repoFolders(this.record, this.store));
+    return lessonsOf(this.raw, await repoFolders(this.record, this.store));
   }
   /**
    * `deep memory keep` and `remove` (#111): yours alone, from your own terminal, once the OS confirms you. Keeping a
@@ -2042,7 +2126,7 @@ export class Core {
     if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
     // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
     const agent = await this.agentAbove(context.peer);
-    const why = await confirmYou(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, this.options.confirm);
+    const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
     if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
     const guard = guardOf(lesson);
@@ -2077,7 +2161,7 @@ export class Core {
       const brief = await briefing(meta.cwd);
       const answers = own && this.options.plant !== 'ended-answer-at-next-prompt'
         // The planted wrong program gives a new session the answers of every session that worked in its folder.
-        ? await this.queue(async () => this.deliver(await this.waitingFor(meta.session, this.options.plant === 'ended-answer-to-worktree' ? `a.session_id IN (SELECT id FROM sessions WHERE worktree = '${sql(meta.cwd)}')` : undefined), 'next_prompt'))
+        ? await this.queue(async () => this.deliver(await this.waitingFor(meta.session, this.options.plant === 'ended-answer-to-worktree' ? `a.session_id IN (SELECT id FROM sessions WHERE worktree = '${sql(meta.cwd)}')` : undefined), 'next_prompt', { session: meta.session, id: meta.id }))
         : undefined;
       // After a compaction or a resume, the open asks' requirement IDs again, in one short block. The planted wrong
       // programs send them only at startup, or 25 ms late on the hook's path.
@@ -2110,7 +2194,7 @@ export class Core {
         // An answer whose delivery timed out is read for first: one a turn already showed isn't sent again.
         for (const [ask, session] of [...this.unread]) {
           if (session !== meta.session) continue;
-          const woken = await this.woken(session, `ask:${ask}`);
+          const woken = await this.woken(session, said(ask));
           if (woken === undefined) continue;
           this.unread.delete(ask);
           if (woken) await this.outcome(ask, 'next_prompt', 'delivered');
@@ -2124,7 +2208,7 @@ export class Core {
         }
         // The planted wrong program counts the waiter your settings declare as a route, shown or not, and leaves the answer for it.
         const leaves = this.options.plant === 'routes-from-settings' && !r.shown.has('waiter');
-        const answers = leaves ? undefined : await this.deliver(waiting, 'next_prompt');
+        const answers = leaves ? undefined : await this.deliver(waiting, 'next_prompt', { session: meta.session, id: meta.id });
         // A verdict that landed after the stop's reply goes with the next prompt (#83).
         const landed = await this.landedLine(meta.session);
         // Notes this prompt's hook recorded go as its context, once; a prompt typed mid-turn is acknowledged in its reply (#340).
@@ -2136,7 +2220,7 @@ export class Core {
         if (prompt.includes('rejected:')) {
           const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
           await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }], true);
-          await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+          await syncRejected(this.raw, this.root.dir).catch(() => undefined);
         }
         // A branch's name may not say which screen a session works on, so its first prompt is read too.
         const first = !this.firstPrompted.has(meta.session);
@@ -2149,6 +2233,8 @@ export class Core {
       return reply;
     }
     if (meta.event !== 'Stop') return {};
+    // What earlier replies handed this session is read from its transcript first: shown, or stalled and sent again here (#906).
+    await this.queue(async () => { for (const [ask, handed] of [...this.handed]) if (handed.session === meta.session) await this.unwoken(meta.session, ask); });
     r.holding++;
     let block: string | undefined;
     // A judged stop's claim is made, and its pull request recorded, before the hold, behind this stop's own hook (#83).
@@ -2166,7 +2252,7 @@ export class Core {
       const proceed = r.places ? undefined : await this.holds.proceed(meta, until);
       if (proceed) {
         proceeded = true;
-        const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold'));
+        const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
         block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
       } else block = lane?.sendBack ?? (r.places ? undefined : await this.stopHold(meta, r, until));
     } finally {
@@ -2254,7 +2340,7 @@ export class Core {
       if (this.releases) {
         if ((await this.queue(() => this.waitingFor(session))).length) return undefined;
       } else {
-        const block = await this.queue(async () => (this.abandoned.has(meta.id) ? undefined : this.deliver(await this.waitingFor(session), 'stop_hold')));
+        const block = await this.queue(async () => (this.abandoned.has(meta.id) ? undefined : this.deliver(await this.waitingFor(session), 'stop_hold', { session, id: meta.id })));
         if (block) return block;
       }
       if (polls) await new Promise((done) => setTimeout(done, Math.min(250, Math.max(0, until - Date.now()))));
@@ -2372,10 +2458,12 @@ export class Core {
   }
   /** The hooks whose deep-hook let them through before reading the hub's reply, by event ID: none of them is held. */
   private readonly abandoned = new Set<string>();
-  /** A held hook whose deep-hook is gone: its stop hold ends at once and delivers nothing, so the answer waits for the waiter or the next prompt. */
+  /** A held hook whose deep-hook is gone: its stop hold ends at once and delivers nothing, and an answer its reply carried reads stalled. */
   hookGone(id: string, session: string): void {
     this.abandoned.add(id);
     for (const wake of this.waiting.get(session) ?? []) wake();
+    // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
+    for (const [ask, handed] of this.handed) if (handed.hook === id) void this.queue(() => this.unwoken(handed.session, ask)).catch(() => undefined);
   }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
@@ -2399,7 +2487,7 @@ export class Core {
   }
   /** A claim's state from the record (verdict-chat), with the runs' expected times. */
   private stateOf(claim: string): Promise<ClaimState | undefined> {
-    return claimState((q) => this.record.raw(q), claim.replace(/^claim:/, ''), this.expected);
+    return claimState(this.raw, claim.replace(/^claim:/, ''), this.expected);
   }
   /**
    * A stop that is judged (design: Every stop is judged): one the stop rule (#303) reads as a claim, and a later
@@ -2460,7 +2548,7 @@ export class Core {
     const live = this.live.get(session);
     if (!live) return undefined;
     // After a restart the newest claim is the record's; its line may show once more, never go unseen.
-    live.claim ??= await newestClaim((q) => this.record.raw(q), session).then((id) => (id ? `claim:${id}` : undefined));
+    live.claim ??= await newestClaim(this.raw, session).then((id) => (id ? `claim:${id}` : undefined));
     if (!live.claim) return undefined;
     const state = await this.stateOf(live.claim);
     if (!state) return undefined;
@@ -2508,7 +2596,7 @@ export class Core {
     // the session's own state, whatever the earlier claim says; one that finished unjudged has no claim of its own.
     // With no claim at all the session's own state answers too.
     const unjudged = live?.state !== undefined && live.claimTurn !== live.turn && live.state !== 'finished';
-    const claim = unjudged ? undefined : live?.claim ?? (await newestClaim((q) => this.record.raw(q), meta.session).then((id) => (id ? `claim:${id}` : undefined)));
+    const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop'`, [meta.session])) as { at: number | null }[];
     const needsYou = (await this.asks.inbox()).length;
@@ -2905,6 +2993,7 @@ export class Core {
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
       case 'device.pair': return this.pair(params);
+      case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
       case 'status.read': return this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) }));
@@ -2917,10 +3006,10 @@ export class Core {
       case 'env.down': return this.envDown(params, context);
       case 'wiki.build': {
         const built = await this.wikiBuild.build();
-        await syncRejected((q) => this.record.raw(q), this.root.dir);
+        await syncRejected(this.raw, this.root.dir);
         return built;
       }
-      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections((q) => this.record.raw(q)) };
+      case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections(this.raw) };
       case 'memory.act': return this.memoryAct(params, context);
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
@@ -3096,7 +3185,7 @@ export class Core {
    * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
    * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
    */
-  private async trusted(params: Obj, context: CallContext, what: string, handle: string): Promise<void> {
+  private async trusted(params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
     if (params.signature !== undefined || params.device !== undefined) {
       if (this.devices.signed(params)) return;
       throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
@@ -3108,10 +3197,19 @@ export class Core {
     }
     const plant = this.options.plant;
     if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
-    const why = await confirmYou(what, this.options.confirm);
+    const why = await this.confirmer.you(what, { handle, revision });
     if (why) {
       throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
     }
+  }
+
+  /**
+   * The revision an answer to an ask is given on, which deep-confirm's signature covers (#880): the commit its session's
+   * worktree moved on to, or else what it was pinned to.
+   */
+  private async revisionOf(handle: string, ask: { pinned_to?: { ref?: string } | undefined }): Promise<string> {
+    const changed = await this.asks.card(handle).then((card) => card.changed?.to, () => undefined);
+    return changed ?? ask.pinned_to?.ref ?? 'unpinned';
   }
 
   /** Every ask, as the inbox projection holds it, with each one's question and options; `deep inbox` lists the open ones. */
@@ -3156,12 +3254,12 @@ export class Core {
       await answered();
       throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
     }
-    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[] };
+    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[]; pinned_to?: { ref?: string } };
     const chosen = ask.options.find((o) => o.id === input.option);
     if (input.option !== undefined && !chosen) {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
-    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
+    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
@@ -3172,20 +3270,20 @@ export class Core {
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [handle])) as { data: string }[];
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
-    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+    await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
   private async undo(params: Obj, context: CallContext): Promise<Obj> {
     const handle = params.ask;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
-    const [row] = (await this.record.raw(`SELECT question, status FROM asks WHERE id = ?`, [handle.slice(4)])) as { question: string; status: string }[];
+    const [row] = (await this.record.raw(`SELECT question, status, pinned_to FROM asks WHERE id = ?`, [handle.slice(4)])) as { question: string; status: string; pinned_to: string | null }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
     if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.tasks.lockedOn(handle);
     if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
-    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle);
+    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = ?`, [handle.slice(4)])) as { deadline: number }[];
     return { ask: handle, deadline: open?.deadline ?? null };
@@ -3197,23 +3295,36 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
-    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
+    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.
     dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
     await this.syncStanding().catch(() => undefined);
-    await syncRejected((q) => this.record.raw(q), this.root.dir).catch(() => undefined);
+    await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { overruled: id };
   }
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
   private async pair(params: Obj): Promise<Obj> {
     if (typeof params.name !== 'string' || !params.name) throw new Refused(refusal('required', '/params/name', 'Name the device you pair.', params.name));
     const key = checkKey(params.public_key);
-    const why = await confirmYou(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, this.options.confirm);
+    const why = await this.confirmer.you(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, { handle: `device:${params.name.slice(0, 80)}`, revision: key });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was paired: the OS didn't confirm you (${why}).`, params.name, true));
     const device = `device:${ulid(this.now())}`;
     this.devices.pair(device, params.name, key, this.now());
     return { device };
+  }
+
+  /**
+   * deep-confirm's key set up again, lost or replaced (#880): from the app alone, signed by a device you paired, and
+   * counted once you confirm with the new key, when the old one stops counting. The helper's code signature is
+   * recorded again with it, so a rebuilt helper counts only from here.
+   */
+  private async enrollAgain(params: Obj, context: CallContext): Promise<Obj> {
+    if (context.role !== 'app') throw new Refused(refusal('role', '/method', "deep-confirm's key is set up again from the app, on the trusted path.", 'confirm.enroll'));
+    await this.trusted(params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
+    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String(params.device) } });
+    if (why) throw new Refused(refusal('unconfirmed', '', `deep-confirm's key stays as it was: ${why}.`, 'confirm.enroll', true));
+    return { device: this.devices.enclave()!.device };
   }
 
   /**
@@ -3233,7 +3344,7 @@ export class Core {
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined }));
     const key = params.trust_key === true ? m.publisher_key : undefined;
     if (params.trust_key === true && (typeof key !== 'string' || typeof m.id !== 'string')) throw new Refused(refusal('required', '/params/trust_key', 'Only a signed package names a publisher key to trust.', from));
-    const why = await confirmYou(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, this.options.confirm);
+    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version) });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was installed: the OS didn't confirm you (${why}).`, from, true));
     if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', from, true));
     try {
@@ -3270,7 +3381,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/params/command', `${what} changed nothing: it runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent changes what watches it. Run it from your own terminal.`, command));
     if (this.options.plant === 'acts-on-peer-check') return { confirmed: command };
-    const why = await confirmYou(what, this.options.confirm);
+    const why = await this.confirmer.you(what, { handle: `command:${command}`, revision: what });
     if (why) throw new Refused(refusal('unconfirmed', '/params/command', `${what} changed nothing: the OS didn't confirm you (${why}). It takes effect only once the OS confirms you; run it again and confirm.`, command, true));
     return { confirmed: command };
   }
@@ -3285,7 +3396,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your rules. Add it from your own terminal.`, 'guard.add'));
     const names = isObj(params.guards) && isObj(params.guards.entries) ? Object.keys(params.guards.entries) : [];
-    const why = await confirmYou(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, this.options.confirm);
+    const why = await this.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(',') });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was added: the OS didn't confirm you (${why}).`, names.join(', '), true));
     return addGuards(this.root.dir, params.guards, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant });
   }
@@ -3864,7 +3975,7 @@ export class Core {
     const target = scrubText(String(args.target), { held: this.options.held }).slice(0, 1000);
     const change = scrubText(String(args.change), { held: this.options.held }).slice(0, 4000);
     // A direction you rejected isn't asked about again: the agent hears your decision, and you hear nothing (#111).
-    const revived = await revives((q) => this.record.raw(q), change, repoOf(this.sessions.get(session)!.cwd), session);
+    const revived = await revives(this.raw, change, repoOf(this.sessions.get(session)!.cwd), session);
     if (revived) throw refuse('rejected', '/params/arguments/change', `You can't propose \`${revived.direction}\`: the person rejected it (${revived.decision}). Take another direction; only they can overrule that decision.`, revived.decision);
     const question = `Apply this change an agent proposed to ${target}? ${change}`;
     const pinned = await this.pinOf(this.sessions.get(session)!.cwd, question);

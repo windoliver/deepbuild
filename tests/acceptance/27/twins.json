@@ -10,6 +10,7 @@
   ],
   "#27.e6116d56": [
     "skip-default-at-deadline",
+    "wake-assumed",
     "waiter-outlives-session",
     "answer-skips-held-stop"
   ],

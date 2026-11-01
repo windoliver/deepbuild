@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, recheck, rollback, store_migrations, touched_in, Issue,
-    Packs, Patched, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, recheck_with, rollback, store_migrations, touched_in,
+    Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -36,7 +36,9 @@ use sha2::{Digest, Sha256};
 
 use crate::evidence;
 use crate::frames::unfit_issue;
-use crate::hub::{diff_reply, Body, Call, Hub, Include, PatchCall, Planted, Show, Via};
+use crate::hub::{
+    diff_reply, refused_reply, Body, Call, Hub, Include, PatchCall, Planted, Show, Via,
+};
 use crate::snapshot::Unfit;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
@@ -134,6 +136,9 @@ pub struct Shared {
     /// The layers that hold an item of a kind's older major, which their writer's next patch
     /// migrates (Migration), so a patch reads its layer's kinds only when there is one.
     pub older: BTreeSet<String>,
+    /// Who names and who hangs from each item, as of the revision it gives (#896): a patch's
+    /// recheck finds what it reaches by these, and a revision made another way rebuilds them.
+    pub referrers: Option<(u64, Referrers)>,
 }
 
 impl Shared {
@@ -589,6 +594,7 @@ impl Hub<'_> {
                 }],
                 lost: BTreeMap::new(),
                 older: BTreeSet::new(),
+                referrers: None,
             };
             if let Some(state) = &self.scenario.state {
                 restore(
@@ -916,7 +922,17 @@ impl Hub<'_> {
         let issues = if added.is_some() {
             None
         } else {
-            recheck(&shared.doc, &last, &changed, &self.startup.sealed)
+            if shared.referrers.as_ref().is_none_or(|(rev, _)| *rev != cur) {
+                shared.referrers = Some((cur, Referrers::of(&shared.doc)));
+            }
+            let (_, referrers) = shared.referrers.as_ref().expect("made above");
+            recheck_with(
+                &shared.doc,
+                &last,
+                &changed,
+                &self.startup.sealed,
+                referrers,
+            )
         }
         .unwrap_or_else(|| {
             let result = check_packed(&shared.doc, &self.startup.sealed, &self.packs);
@@ -1013,6 +1029,14 @@ impl Hub<'_> {
             // The writer's layer holds no older major now: this patch migrated it.
             let shared = self.shared.get_mut(&call.doc).expect("open");
             shared.older.remove(&layer);
+            // Its referrers follow the items it changed to the revision it made.
+            if let Some((rev, referrers)) = shared.referrers.as_mut().filter(|(r, _)| *r == cur) {
+                let now = shared.revs.last().expect("committed");
+                for (id, was) in &now.before {
+                    referrers.update(id, was.as_ref(), shared.doc["items"].get(id));
+                }
+                *rev = now.rev;
+            }
             self.applied_at
                 .entry(writer.text())
                 .or_default()
@@ -1372,17 +1396,7 @@ impl Hub<'_> {
             reply.insert("blocked".into(), Value::Array(blocked));
         }
         if self.issue_reply(&issues, &mut reply) {
-            reply.insert("outcome".into(), json!("refused"));
-            if show.check {
-                // A check that needs a module or a pack version the build lacks, or that an
-                // unknown item kind blocks, is BLOCKED, never a FAIL.
-                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
-                reply.insert(
-                    "result".into(),
-                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
-                );
-            }
-            return Value::Object(reply);
+            return refused_reply(reply, &issues, show.check);
         }
 
         // Committed: the document becomes this revision, with its expansions (#306).

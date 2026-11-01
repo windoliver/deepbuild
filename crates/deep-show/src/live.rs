@@ -19,7 +19,7 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
-use crate::window::refused;
+use crate::window::{bounds, hsla, refused};
 
 /// How long each presented frame shows before the next.
 const HOLD: Duration = Duration::from_secs(6);
@@ -151,13 +151,6 @@ fn control_role(role: &str) -> accesskit::Role {
         "radiogroup" => accesskit::Role::RadioGroup,
         "spinbutton" => accesskit::Role::SpinButton,
         _ => accesskit::Role::Unknown,
-    }
-}
-
-pub(crate) fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
-    Bounds {
-        origin: point(px(b[0] as f32), px(b[1] as f32)),
-        size: size(px(b[2] as f32), px(b[3] as f32)),
     }
 }
 
@@ -361,15 +354,6 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         px((panel[0] + panel[2]) as f32),
         px((panel[1] + panel[3]) as f32 + STRIP),
     );
-    let hsla = |c: [u8; 3]| -> Hsla {
-        Rgba {
-            r: f32::from(c[0]) / 255.,
-            g: f32::from(c[1]) / 255.,
-            b: f32::from(c[2]) / 255.,
-            a: 1.,
-        }
-        .into()
-    };
     let frames = Rc::new(frames);
     let (ground, ink) = (hsla(ground), hsla(ink));
     gpui_kit::application().run(move |cx| {

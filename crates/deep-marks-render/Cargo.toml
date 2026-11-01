@@ -49,3 +49,5 @@ skrifa = { version = "0.44", default-features = false, features = ["autohint_sha
 # The GPU ledger the GPUI patch adds to the Metal renderer: frame command buffers and their time.
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-pre-apple = "=0.3.9"
+# Issue #854: an idle window's wakeups and CPU, read from the process.
+libc = "0.2"

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "31b37d0ecfd14e46b494bc5481218d579d90bb124d5e944508a02a0373378e40",
+  "set_digest": "3cd5884f2c0feb226a0c2ac424f3f75d29b0fd735b2805fe6aa3baa5037ad69f",
   "phases": {
     "validate": [
       {
@@ -169,6 +169,18 @@
         ],
         "writes": [
           "record.level"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.stack",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "scene3d.stack"
         ],
         "per": "item"
       },

@@ -155,8 +155,8 @@
     "variants": null,
     "since": "R1",
     "stability": "preview",
-    "tracking": "#58",
-    "digest": "d1:13a87be727b3bee24e988056df0a299ae55bc59ff858ea6e9bb1ff9e09aaeb98",
+    "tracking": "#366",
+    "digest": "d1:229b6e15fbbc0e66f687dc4b56b394c2e4aa7c35fe0e00e27a42fa32e8df417a",
     "params": {
       "type": "object",
       "properties": {
@@ -176,6 +176,64 @@
             "tab",
             "line"
           ]
+        },
+        "view": {
+          "type": "object",
+          "properties": {
+            "pages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "param": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "param"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "action": {
+                    "type": "string",
+                    "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z][a-z0-9_]*$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "action"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [
@@ -638,6 +696,54 @@
     }
   },
   {
+    "method": "deep.runner.run",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#366",
+    "digest": "d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0",
+    "params": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]+:.+$"
+          }
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "usd": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "usd"
+          ],
+          "additionalProperties": false
+        },
+        "deadline": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "prompt",
+        "inputs",
+        "budget",
+        "deadline"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.provide",
     "variants": null,
     "since": "R1",
@@ -942,6 +1048,50 @@
       "required": [
         "terminal",
         "from"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.canvas.read",
+    "variants": null,
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#411",
+    "digest": "d1:834d701457943f9662ca00afc85ceb81e0f0df9495d10295b5251e066d459995",
+    "params": {
+      "type": "object",
+      "properties": {
+        "doc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "<doc>@<rev>: the document and the revision read."
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "at": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "doc",
+        "query"
       ],
       "additionalProperties": false
     }

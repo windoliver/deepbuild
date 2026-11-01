@@ -4,9 +4,11 @@
 //! platform-specific; off macOS every drawing line answers `{"ok":false,"code":"unsupported_platform"}`.
 //! The surface is the #391 acceptance README's, with #392's added: `check` and `look` (on every
 //! platform), looks by ID or as look@1, status states, readings with their as-of time, replay and
-//! frame captures; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
+//! frame captures, and #882's: `look` answers each theme's roles; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
-//! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`.
+//! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
+//! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
+//! wakeups and CPU read from this process.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -99,6 +101,16 @@ enum Request {
         steps: Vec<Step>,
         store: Option<PathBuf>,
     },
+    /// #854: the document held on screen on the real clock.
+    Idle {
+        doc: Map<String, Value>,
+        look: Look,
+        view: View,
+        record: Record,
+        seconds: u64,
+        /// The wrong program: a frame clock that arms a frame each vsync.
+        arms_each_vsync: bool,
+    },
     Render {
         out: String,
         doc: Map<String, Value>,
@@ -134,6 +146,21 @@ fn palette(value: &Value) -> Option<Palette> {
         .collect()
 }
 
+/// Each theme's roles as `#rrggbb`, or `#rrggbbaa` for a role at an alpha (#882).
+fn roles(look: &Look) -> Value {
+    let theme = |opaque: &Palette, alpha: &std::collections::BTreeMap<String, look::Rgba>| {
+        let mut out: Map<String, Value> = opaque
+            .iter()
+            .map(|(r, [red, g, b])| (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}"))))
+            .collect();
+        out.extend(alpha.iter().map(|(r, [red, g, b, a])| {
+            (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}{a:02x}")))
+        }));
+        Value::Object(out)
+    };
+    json!({"light": theme(&look.light, &look.light_alpha), "dark": theme(&look.dark, &look.dark_alpha)})
+}
+
 /// A look as a request names it: a shipped look's ID, a look@1 definition, or #391's role map
 /// `{light, dark?}` (with no status map), with the definition it resolved from. The status guard
 /// refuses a look@1 that gives two states one glyph, naming the pair.
@@ -152,6 +179,8 @@ fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
             let roles = Look {
                 light,
                 dark,
+                light_alpha: Default::default(),
+                dark_alpha: Default::default(),
                 status: None,
             };
             return Some(Ok((roles, Value::Object(map.clone()))));
@@ -281,8 +310,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         },
     };
     if command == "look" {
-        let (_, def) = look?;
-        return Some(Answer::Now(json!({"ok": true, "look": def})));
+        let (look, def) = look?;
+        return Some(Answer::Now(
+            json!({"ok": true, "look": def, "roles": roles(&look)}),
+        ));
     }
     if command == "check" {
         let doc = doc(input.get("doc"))?;
@@ -322,10 +353,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             out: input.get("out")?.as_str()?.to_string(),
             doc,
             view: view(input.get("view"))?,
-            t: match input.get("t") {
-                None => 0,
-                Some(t) => t.as_i64()?,
-            },
+            t: input.get("t").map_or(Some(0), Value::as_i64)?,
             record: record(input)?,
             store: store(input.get("store"))?,
             planted,
@@ -370,10 +398,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     .ok()
                     .filter(|n| *n <= 100_000)?,
                 store: store(input.get("store"))?,
-                start: match input.get("start") {
-                    None => 0,
-                    Some(t) => t.as_i64()?,
-                },
+                start: input.get("start").map_or(Some(0), Value::as_i64)?,
                 replay: match input.get("replay") {
                     None => None,
                     Some(r) => Some(r.get("record_t")?.as_i64()?),
@@ -382,6 +407,21 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 arms_only_on_readings,
             }
         }
+        "idle" => Request::Idle {
+            doc: doc(input.get("doc"))?,
+            look,
+            view: view(input.get("view"))?,
+            record: record(input)?,
+            seconds: input
+                .get("seconds")?
+                .as_u64()
+                .filter(|s| (1..=600).contains(s))?,
+            arms_each_vsync: match input.get("planted") {
+                None => false,
+                Some(Value::String(p)) if p == "arms_each_vsync" => true,
+                Some(_) => return None,
+            },
+        },
         "session" => {
             let steps = input
                 .get("steps")?
@@ -432,10 +472,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 doc: doc(input.get("doc"))?,
                 look,
                 view: view(input.get("view"))?,
-                t: match input.get("t") {
-                    None => 0,
-                    Some(t) => t.as_i64()?,
-                },
+                t: input.get("t").map_or(Some(0), Value::as_i64)?,
                 record: record(input)?,
                 gpui_oklab,
                 store: store(input.get("store"))?,
@@ -450,7 +487,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 pub fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
     if ![
-        "frames", "session", "render", "check", "look", "raster", "geometry",
+        "frames", "session", "render", "check", "look", "raster", "geometry", "idle",
     ]
     .contains(&command.as_str())
     {
@@ -459,19 +496,11 @@ pub fn main() {
         );
         std::process::exit(2);
     }
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
+    let mut out = io::stdout().lock();
     #[cfg(target_os = "macos")]
     let mut renderer = macos::Renderer::new();
-    let mut buf = Vec::new();
-    let mut reader = stdin.lock();
-    loop {
-        buf.clear();
-        match reader.read_until(b'\n', &mut buf) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
+    for buf in io::stdin().lock().split(b'\n') {
+        let Ok(buf) = buf else { break };
         let line = std::str::from_utf8(&buf).map(|l| l.trim_end_matches(['\n', '\r']));
         let request = match line.map(serde_json::from_str::<Value>) {
             Ok(Ok(Value::Object(mut input))) => match inline_sidecars(&mut input) {

@@ -18,8 +18,8 @@ use serde_json::Value;
 
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
-use crate::reference::{inverse, Camera};
-use crate::runner::{Frame, Runner, LINEAR};
+use crate::reference::{target, Camera};
+use crate::runner::{Runner, LINEAR};
 
 /// One particles@1 item: its compute operator's params, its seed and how its dots draw.
 #[derive(Clone, Debug, Default)]
@@ -106,40 +106,7 @@ pub fn stage(id: &str, karis: bool, options: Options) -> Compiled {
 }
 
 fn make(device: &Device, size: [u32; 2]) -> wgpu::TextureView {
-    device
-        .device
-        .create_texture(&wgpu::TextureDescriptor {
-            label: Some("effects chain"),
-            size: wgpu::Extent3d {
-                width: size[0],
-                height: size[1],
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: LINEAR,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        })
-        .create_view(&Default::default())
-}
-
-fn frame_of(c: &Camera) -> Frame {
-    Frame {
-        clip: c.clip.map(|x| x as f32),
-        inverse_clip: inverse(&c.clip).map(|x| x as f32),
-        eye: [
-            c.eye[0] as f32,
-            c.eye[1] as f32,
-            c.eye[2] as f32,
-            c.near as f32,
-        ],
-        t: c.t as f32,
-        seed: c.seed,
-    }
+    target(device, "effects chain", size).create_view(&Default::default())
 }
 
 impl Effects {
@@ -242,7 +209,7 @@ impl Effects {
         let refs: Vec<&wgpu::TextureView> = views.iter().collect();
         let values = interp::inputs(&runner.compiled.checked, params, &self.settings.roles);
         let (g0, g1, buffers) =
-            runner.bind(&device.device, &frame_of(camera), size, &values, &refs, &[]);
+            runner.bind(&device.device, &camera.frame(), size, &values, &refs, &[]);
         let profiler = self.profiler.clone();
         Box::new(move |encoder| {
             let _keep = buffers;
@@ -338,7 +305,7 @@ impl Effects {
         c.seed = s.seed;
         let values = interp::inputs(&compute.compiled.checked, &s.params, &self.settings.roles);
         let (g0, g1, buffers) =
-            compute.bind(d, &frame_of(&c), [1, 1], &values, &[], &[&draw.instances]);
+            compute.bind(d, &c.frame(), [1, 1], &values, &[], &[&draw.instances]);
         let mut uni: Vec<u8> = Vec::with_capacity(112);
         let floats = camera
             .clip
@@ -529,16 +496,7 @@ impl Post for Effects {
             cur = out;
         }
         if let Some(bloom) = &s.bloom {
-            let radius = bloom
-                .get("bloom.radius")
-                .and_then(Value::as_f64)
-                .unwrap_or(0.85);
-            let runs = glow::plan(size, radius);
-            let mut params = bloom.clone();
-            params.insert(
-                "bloom.levels".into(),
-                Value::from(glow::levels(size, radius).len() as u64),
-            );
+            let (runs, params) = glow::chain(size, bloom);
             let ids = [
                 if self.planted.without_karis {
                     "glow.down@1"

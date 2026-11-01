@@ -8,10 +8,9 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { validate } from '@deepbuild/contracts';
-import { call, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
-import { startOf, type Plant } from './wire.js';
+import type { Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -83,54 +82,43 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
 }
 
 /**
+ * Rewrites `<dir>/rules.json` with the members `change` returns, keeping every other, and only when it returns some. No
+ * rules.json, or one deep-hook can't read either, has nothing to change.
+ */
+function rewriteRules(dir: string, change: (current: Obj & { entries: Obj }) => Obj | undefined): void {
+  const file = join(dir, 'rules.json');
+  let current: Obj;
+  try {
+    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
+  } catch {
+    return;
+  }
+  const changed = isObj(current.entries) ? change(current as Obj & { entries: Obj }) : undefined;
+  if (changed) writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, ...changed }, null, 2)}\n`));
+}
+
+/**
  * Copies your standing rules for cloud resources into `<dir>/rules.json` (#23), keeping every other member, so
  * deep-hook lets a call one covers through with the hub down. Written only when they changed.
  */
 export function writeStanding(dir: string, standing: readonly unknown[]): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    // No rules.json, or one deep-hook can't read either: nothing to add a rule to.
-    return;
-  }
-  if (!isObj(current.entries) || JSON.stringify(current.standing ?? []) === JSON.stringify(standing)) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, standing }, null, 2)}\n`));
+  rewriteRules(dir, (current) => (JSON.stringify(current.standing ?? []) === JSON.stringify(standing) ? undefined : { standing }));
 }
 
 /** Takes the entries `drops` names out of `<dir>/rules.json` (#111), keeping every other. */
 export function dropEntries(dir: string, drops: (name: string) => boolean): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    return;
-  }
-  if (!isObj(current.entries) || !Object.keys(current.entries).some(drops)) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries: Object.fromEntries(Object.entries(current.entries).filter(([name]) => !drops(name))) }, null, 2)}\n`));
+  rewriteRules(dir, ({ entries }) => (Object.keys(entries).some(drops) ? { entries: Object.fromEntries(Object.entries(entries).filter(([name]) => !drops(name))) } : undefined));
 }
 
 /** Copies the directions you rejected into `<dir>/rules.json` as `rejected-*` entries (#111), keeping every other. */
 export function writeRejected(dir: string, rejected: Obj): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    return;
-  }
-  if (!isObj(current.entries)) return;
-  const others = Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-')));
-  const entries = { ...others, ...rejected };
-  if (JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort())) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries }, null, 2)}\n`));
+  rewriteRules(dir, (current) => {
+    const entries = { ...Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-'))), ...rejected };
+    return JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort()) ? undefined : { entries };
+  });
 }
 
 const USAGE = 'Usage: deep guard add <file>';
-/** Refusals that leave nothing added and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */
-const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
 /** `deep guard add <file>`: exit 0 added, 1 refused, 2 a usage error, 3 not decided. */
 export async function guardCommand(args: readonly string[]): Promise<number> {
@@ -146,22 +134,8 @@ export async function guardCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep guard add: ${from} isn't readable JSON (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
-  let reply: Reply;
-  try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, 'guard.add', { guards }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
-  } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; nothing was added\n`);
-    return 3;
-  }
-  if ('error' in reply) {
-    process.stderr.write(`${reply.error.remediation}\n`);
-    return UNDECIDED_CODES.has(reply.error.code) ? 3 : 2;
-  }
-  if (reply.result.status === 'refused') {
-    process.stderr.write(`REFUSED: ${String(reply.result.reason)}\n`);
-    return 1;
-  }
-  process.stdout.write(`Added ${(reply.result.names as string[]).join(', ')} to your rules\n`);
+  const result = await callAsYou('guard.add', { guards }, 'nothing was added');
+  if (typeof result === 'number') return result;
+  process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);
   return 0;
 }

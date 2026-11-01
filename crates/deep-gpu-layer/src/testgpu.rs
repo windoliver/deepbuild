@@ -17,6 +17,7 @@ use deep_scene3d_render::LINEAR;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::frames::hex;
 use crate::liveview::{full_pass, Kit, Timer};
 
 const SHADER: &str = include_str!("testgpu.wgsl");
@@ -125,13 +126,6 @@ pub fn items(doc: &Value) -> Result<(Vec<Placed>, Option<u32>), String> {
         }
     }
     Ok((out, burn))
-}
-
-fn hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
 }
 
 /// A splitmix64 stream from a text seed.

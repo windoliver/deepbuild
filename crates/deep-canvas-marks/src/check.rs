@@ -9,7 +9,7 @@ use deep_canvas::document::Issue;
 
 use crate::look::{self, Look};
 use crate::paint::Adjust;
-use crate::scene::{self, Palette, Record, Rgb};
+use crate::scene::{self, object_or_empty, Palette, Record, Rgb};
 
 /// Every look role an item's paint names, sorted and once each.
 fn roles(value: &Value, out: &mut Vec<String>) {
@@ -70,11 +70,7 @@ fn adjust_issue(
 
 /// The module's issues for `doc`, which the core check passed, in `look`.
 pub fn check(doc: &Map<String, Value>, look: &Look) -> Vec<Issue> {
-    let empty = Map::new();
-    let items = doc
-        .get("items")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let items = object_or_empty(doc.get("items"));
     let mut issues = Vec::new();
     // Status can show wherever a status binding is.
     let status_shows = doc

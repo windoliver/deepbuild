@@ -233,65 +233,27 @@ fn a_frame_fraction_at_1920_wide_is_6_4_u() {
         frame: (1920, 1080),
         frame_rate: (30, 1),
     };
-    let value = UnitLiteral::parse("1/300fw")
-        .unwrap()
-        .convert("u", &ctx)
-        .unwrap();
+    let convert = |text: &str, to: &str| UnitLiteral::parse(text).unwrap().convert(to, &ctx);
+    let value = convert("1/300fw", "u").unwrap();
     assert_eq!(value, Rational::new(32, 5).unwrap());
     assert_eq!(value.to_f64(), 6.4);
     assert_eq!(
-        UnitLiteral::parse("300 mm")
-            .unwrap()
-            .convert("m", &ctx)
-            .unwrap(),
+        convert("300 mm", "m").unwrap(),
         Rational::new(3, 10).unwrap()
     );
-    assert_eq!(
-        UnitLiteral::parse("2km")
-            .unwrap()
-            .convert("m", &ctx)
-            .unwrap(),
-        Rational::integer(2000)
-    );
+    assert_eq!(convert("2km", "m").unwrap(), Rational::integer(2000));
     assert_eq!(UnitLiteral::parse("1.50m").unwrap().print(), "1.5m");
     assert_eq!(UnitLiteral::parse("300 mm").unwrap().print(), "300mm");
     assert_eq!(UnitLiteral::parse("1/2m").unwrap_err().code, "bad_unit");
     assert_eq!(UnitLiteral::parse("300  mm").unwrap_err().code, "bad_unit");
+    assert_eq!(convert("0.5turn", "deg").unwrap(), Rational::integer(180));
     assert_eq!(
-        UnitLiteral::parse("0.5turn")
-            .unwrap()
-            .convert("deg", &ctx)
-            .unwrap(),
-        Rational::integer(180)
-    );
-    assert_eq!(
-        UnitLiteral::parse("1.25s")
-            .unwrap()
-            .convert("flick", &ctx)
-            .unwrap(),
+        convert("1.25s", "flick").unwrap(),
         Rational::integer(882_000_000)
     );
-    assert_eq!(
-        UnitLiteral::parse("37f")
-            .unwrap()
-            .convert("s", &ctx)
-            .unwrap(),
-        Rational::new(37, 30).unwrap()
-    );
-    assert_eq!(
-        UnitLiteral::parse("50%")
-            .unwrap()
-            .convert("", &ctx)
-            .unwrap(),
-        Rational::new(1, 2).unwrap()
-    );
-    assert_eq!(
-        UnitLiteral::parse("45")
-            .unwrap()
-            .convert("deg", &ctx)
-            .unwrap(),
-        Rational::integer(45)
-    );
+    assert_eq!(convert("37f", "s").unwrap(), Rational::new(37, 30).unwrap());
+    assert_eq!(convert("50%", "").unwrap(), Rational::new(1, 2).unwrap());
+    assert_eq!(convert("45", "deg").unwrap(), Rational::integer(45));
 }
 
 #[test]
@@ -312,46 +274,16 @@ fn degrees_in_a_length_field_are_refused_listing_only_length_forms() {
     assert_eq!(forms_for("rad"), ["1rad"]);
     assert_eq!(forms_for("furlong"), Vec::<String>::new());
     // Lossy or cross-family conversions are refused too.
-    assert_eq!(
-        UnitLiteral::parse("1rad")
-            .unwrap()
-            .convert("deg", &ctx)
-            .unwrap_err()
-            .code,
-        "bad_unit"
-    );
-    assert_eq!(
-        UnitLiteral::parse("1m")
-            .unwrap()
-            .convert("u", &ctx)
-            .unwrap_err()
-            .code,
-        "bad_unit"
-    );
-    assert_eq!(
-        UnitLiteral::parse("1u")
-            .unwrap()
-            .convert("m", &ctx)
-            .unwrap_err()
-            .code,
-        "bad_unit"
-    );
-    assert_eq!(
-        UnitLiteral::parse("0.000000001s")
-            .unwrap()
-            .convert("flick", &ctx)
-            .unwrap_err()
-            .code,
-        "bad_unit"
-    );
-    assert_eq!(
-        UnitLiteral::parse("1u")
-            .unwrap()
-            .convert("furlong", &ctx)
-            .unwrap_err()
-            .code,
-        "bad_unit"
-    );
+    for (text, to) in [
+        ("1rad", "deg"),
+        ("1m", "u"),
+        ("1u", "m"),
+        ("0.000000001s", "flick"),
+        ("1u", "furlong"),
+    ] {
+        let refusal = UnitLiteral::parse(text).unwrap().convert(to, &ctx);
+        assert_eq!(refusal.unwrap_err().code, "bad_unit", "{text} to {to}");
+    }
 }
 
 #[test]

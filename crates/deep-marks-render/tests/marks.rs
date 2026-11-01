@@ -5,30 +5,13 @@
 
 #![cfg(target_os = "macos")]
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+mod common;
 
+use std::path::Path;
+
+use common::{run, scratch};
 use deep_canvas_marks::key::sha256_hex;
 use serde_json::{json, Value};
-
-fn run(subcommand: &str, line: &Value) -> Value {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-canvas-render"))
-        .arg(subcommand)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("deep-canvas-render starts");
-    writeln!(child.stdin.take().unwrap(), "{line}").unwrap();
-    let out = child.wait_with_output().unwrap();
-    serde_json::from_str(String::from_utf8(out.stdout).unwrap().trim()).unwrap()
-}
-
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("deep-marks-render-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(dir.join("store")).unwrap();
-    dir
-}
 
 /// A 40 × 40 red PNG in the store, named by its hash.
 fn red_asset(dir: &Path) -> String {
@@ -64,7 +47,7 @@ fn pixel(path: &Path, x: u32, y: u32) -> [u8; 3] {
 
 #[test]
 fn an_image_from_the_store_draws_inside_its_mask_and_nowhere_else() {
-    let dir = scratch("mask");
+    let dir = scratch("deep-marks-render", "mask");
     let hash = red_asset(&dir);
     let out = dir.join("masked.png");
     let answer = run(
@@ -99,7 +82,7 @@ fn an_image_from_the_store_draws_inside_its_mask_and_nowhere_else() {
 
 #[test]
 fn an_image_is_refused_when_its_bytes_are_missing_or_are_not_the_hash_it_names() {
-    let dir = scratch("refused");
+    let dir = scratch("deep-marks-render", "refused");
     let hash = red_asset(&dir);
     let out = dir.join("x.png");
     let missing = run(

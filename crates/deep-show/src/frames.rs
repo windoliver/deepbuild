@@ -143,9 +143,18 @@ impl<'a> Hub<'a> {
                 cost(&p.name, &m.name);
             }
         }
+        // #411: every item kind the build draws, as documents name it, with its canvas module.
+        let kinds: Map<String, Value> = crate::kit::manifest::Manifest::kinds_of(sealed)
+            .into_iter()
+            .map(|k| {
+                let module = self.module_of(&k);
+                (k, json!(module))
+            })
+            .collect();
         json!({
             "build_set": sealed.build_set.name(),
             "state": sealed.state(),
+            "kinds": kinds,
             "modules": sealed.modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
             "versions": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.version.to_string()))).collect::<Map<_, _>>(),
             "digests": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.digest))).collect::<Map<_, _>>(),
@@ -603,7 +612,7 @@ fn shape_ahead(document: &Value) -> Vec<Pending> {
 
 /// The view a frame reads: the session's current revision's defaults, with the call's locale
 /// and reduced motion over them.
-fn session_view(session: &DocSession, over: &Map<String, Value>) -> [Value; 6] {
+pub(crate) fn session_view(session: &DocSession, over: &Map<String, Value>) -> [Value; 6] {
     let mut view = default_view(session.document().unwrap_or(&Value::Null));
     if let Some(l) = over.get("locale") {
         view[deep_canvas::schedule::LOCALE] = l.clone();
@@ -692,11 +701,18 @@ fn cell_grids(
     use deep_canvas_cells::module::Grid;
     use deep_canvas_marks::scene::{self, Fill, Mark};
     let mut out = Vec::new();
+    // Each grid by its item, read once from the grid operator's own nodes (#854: a lookup per
+    // item scanned every node, which a 10,000-item board paid on every frame).
+    let grids: BTreeMap<&str, Val> = session
+        .values(sched, "cells.grid")
+        .into_iter()
+        .filter_map(|(id, v)| Some((id?, v)))
+        .collect();
+    if grids.is_empty() {
+        return out;
+    }
     for (id, _) in doc["items"].as_object().into_iter().flatten() {
-        let Some(g) = session
-            .value(sched, "cells.grid", Some(id))
-            .and_then(|v| v.as_typed::<Grid>())
-        else {
+        let Some(g) = grids.get(id.as_str()).and_then(|v| v.as_typed::<Grid>()) else {
             continue;
         };
         let mark = |m: Mark| scene::Drawn {
@@ -781,6 +797,9 @@ pub(crate) fn drawing_of(
             frame,
             runs: d.runs.clone(),
             animated: d.animated.clone(),
+            built: d.built,
+            damage: Vec::new(),
+            basis: None,
         });
     }
     let status = session

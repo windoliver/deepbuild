@@ -28,6 +28,7 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         encodes_every_frame: p == Some(Planted::EncodesEveryFrame),
         replays_after_add: p == Some(Planted::ReplaysAfterAdd),
         slow_gpu_frame: p == Some(Planted::SlowGpuFrame),
+        builds_on_first_frame: p == Some(Planted::CompilesOnFirstFrame),
     }
 }
 
@@ -121,6 +122,18 @@ pub fn open_on(on: &On, size: [u32; 2], timings: bool, with_stage: bool) -> Resu
             })
         })
         .map_err(|e| refused("no_session", e))
+}
+
+/// The pipelines the session's renderer compiled so far, by name (#854).
+pub fn pipelines(app: &mut App) -> Vec<&'static str> {
+    app.worker.call(|state| {
+        state.scene3d.as_ref().map_or_else(Vec::new, |s| {
+            lock(&s.shared)
+                .renderer
+                .as_ref()
+                .map_or_else(Vec::new, |r| r.compiled_names().to_vec())
+        })
+    })
 }
 
 pub fn close(app: &mut App) {

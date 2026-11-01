@@ -1,0 +1,85 @@
+{
+  "ask.created": {
+    "v": 4,
+    "id": "01MD8830000000000000000000",
+    "kind": "ask.created",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "kind": "authority",
+      "question": "Push feat/cart to origin?",
+      "options": [
+        { "id": "yes", "label": "Yes", "decision": "allow" },
+        { "id": "no", "label": "No", "decision": "deny" }
+      ],
+      "recommended": null,
+      "deadline": 1800172800000,
+      "fallback": "you",
+      "default": "no",
+      "provisional": false,
+      "owner": "you",
+      "key": "8830000000000000000000000000000000000000000000000000000000000000",
+      "pinned_to": { "kind": "commit", "ref": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b" }
+    }
+  },
+  "ask.answered": {
+    "v": 4,
+    "id": "01MD8830000000000000000000",
+    "kind": "ask.answered",
+    "subject": "ask:01MD8830000000000000000000",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "answer": "yes",
+      "plan_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "decision": "allow",
+      "via": "inbox",
+      "verified": true,
+      "on": { "kind": "commit", "ref": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b" },
+      "token": null,
+      "words": null,
+      "image": null
+    }
+  },
+  "ask.superseded": {
+    "v": 1,
+    "id": "01MD8830000000000000000000",
+    "kind": "ask.superseded",
+    "subject": "ask:01MD8830000000000000000000",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": { "by": "ask:01MD8830000000000000000000" }
+  },
+  "ask.moot": {
+    "v": 1,
+    "id": "01MD8830000000000000000000",
+    "kind": "ask.moot",
+    "subject": "ask:01MD8830000000000000000000",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": { "because": "check_passed", "verdict": "verdict:01MD8830000000000000000000" }
+  },
+  "ask.defaulted": {
+    "v": 1,
+    "id": "01MD8830000000000000000000",
+    "kind": "ask.defaulted",
+    "subject": "ask:01MD8830000000000000000000",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "answer": "no",
+      "plan_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "decision": "deny"
+    }
+  }
+}

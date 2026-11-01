@@ -55,7 +55,13 @@ export type Plant =
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
   // #124's: deep_drive launching replicas without the replica lease.
-  | 'deep-drive-no-lease';
+  | 'deep-drive-no-lease'
+  // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
+  | 'signature-covers-anything'
+  // #909's: a hub that never checks its lock again once it holds it.
+  | 'lock-never-rechecked'
+  // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
+  | 'delivered-when-written' | 'sends-shown-again';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -91,6 +97,9 @@ const PLANTS: readonly string[] = [
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
   'deep-drive-no-lease',
+  'signature-covers-anything',
+  'lock-never-rechecked',
+  'delivered-when-written', 'sends-shown-again',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
