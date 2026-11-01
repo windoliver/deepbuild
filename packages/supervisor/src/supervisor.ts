@@ -560,7 +560,8 @@ class LocalSupervisor implements Supervisor {
       if (r.state === 'running') r.state = 'exited';
       // A background process still holding its output doesn't keep the run open: what came by now is its output.
       // Closed after the loop's next read of the pipes, so a stalled loop doesn't cut what was already written.
-      setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
+      // The status stream too: the filter's server holds it while anything of the run runs on (bubblewrap.ts).
+      setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); (child.stdio[STATUS_FD] as Readable | undefined)?.destroy(); }), DRAIN_MS).unref();
     });
     r.exit = new Promise((resolve) => {
       child.on('error', () => resolve({ run: spec.run, code: null, signal: null, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } }));

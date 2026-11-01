@@ -15,7 +15,7 @@ import type { Grant, Launch, SandboxBackend } from './types.js';
 export const STATUS_FD = 3;
 /** What the system ships, readable and runnable by every sandboxed process; `/dev` is bwrap's own, small one. */
 const SYSTEM = ['/usr', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/etc', '/opt', '/proc', '/run/systemd/resolve'];
-/** The files agents read their hooks and MCP servers from, in a home or a run's folder: never writable, whatever the grant. */
+/** The files agents read their hooks and MCP servers from: those in a home or a run's folder are read-only mounts, and the filter's server refuses every name like them (linux.c, agent_file), whatever the grant. */
 const AGENT_FILES = ['.claude', '.claude.json', '.mcp.json', '.codex'];
 
 /** A guarded path the supervisor names: nothing writes under it, but for the folders `except` names. */
@@ -36,12 +36,12 @@ const above = (path: string): string[] => (dirname(path) === path ? [] : [...abo
 const cgroupOf = (marker: string): string => join(cgroupBase(), marker);
 
 /** The bwrap and confine options that confine one process, and its children, to `grant`, with `cwd` readable. */
-export function options(cwd: string, grant: Grant, guarded: readonly Guarded[], extra: Extra): { bwrap: string[]; confine: string[] } {
+function options(cwd: string, grant: Grant, guarded: readonly Guarded[], extra: Extra): { bwrap: string[]; confine: string[] } {
   const home = real(homedir());
   // The system's tree, with a /dev of bwrap's own (no devices) and the cgroups read-only, so no process moves itself
   // out of the run's. No pid namespace: the run's processes are its own, stopped one by one as proven, as on macOS.
   // Where the launch gives STATUS_FD, bwrap names the program's process on it once it runs (the helper's `box`).
-  const bwrap = ['--bind', '/', '/', '--dev', '/dev', '--ro-bind', '/sys', '/sys', '--unshare-user', '--unshare-ipc', '--unshare-uts'];
+  const bwrap = ['--bind', '/', '/', '--dev', '/dev', '--ro-bind', '/sys', '/sys', '--unshare-user', '--disable-userns', '--unshare-ipc', '--unshare-uts'];
   // A guarded path is read-only however the grant reads, its exceptions writable again; the folders above it are
   // mount points, so a run that may write everything else can't move one aside and put its own in its place.
   for (const g of guarded) {

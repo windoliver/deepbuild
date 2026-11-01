@@ -2,7 +2,7 @@
 // them, as the hub does), a process's run token read back from its environment, and the native helper's scan.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync } from 'node:fs';
 import { readdir, readFile, readlink, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,13 +20,24 @@ async function machinery(pid: number): Promise<boolean> {
   if (exe === BWRAP) return true;
   if (exe !== HELPER) return false;
   const argv = (await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '')).split('\0');
-  return argv[1] === 'confine';
+  // Only bwrap's own child is confine on its way to becoming the program; one a run starts is the run's.
+  const ppid = Number((await readFile(`/proc/${pid}/stat`, 'utf8').catch(() => '')).split(') ').pop()?.split(' ')[1]);
+  return argv[1] === 'confine' && (await readlink(`/proc/${ppid}/exe`).catch(() => '')) === BWRAP;
 }
-/** Linux: the cgroup this process sits in, under the unified hierarchy, where each run's own is made (bubblewrap.ts). */
+let base: string | undefined;
+/**
+ * Linux: where each run's cgroup is made (bubblewrap.ts): under this process's own, where the service manager delegated
+ * it (a user service, an app's scope), else under the user's own service, which it always delegates.
+ */
 export function cgroupBase(): string {
+  if (base) return base;
   const line = readFileSync('/proc/self/cgroup', 'utf8').split('\n').find((l) => l.startsWith('0::'));
   if (!line) throw Error('the supervisor needs the unified cgroup hierarchy (cgroup v2) to mark its runs, and /proc/self/cgroup shows none');
-  return join('/sys/fs/cgroup', line.slice(3).trim());
+  const uid = process.getuid?.() ?? 0;
+  for (const dir of [join('/sys/fs/cgroup', line.slice(3).trim()), `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service`]) {
+    try { accessSync(dir, constants.W_OK); return (base = dir); } catch { /* not delegated to this user */ }
+  }
+  throw Error('the supervisor needs a cgroup it may write to mark its runs: neither its own nor the user\'s service cgroup is delegated to this user');
 }
 
 /** The native helper (native/helper.c), built beside the package's JavaScript. */

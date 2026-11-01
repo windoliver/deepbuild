@@ -18,10 +18,10 @@
 //                               named (EPERM elsewhere). A connect to a named socket is made by the server on the
 //                               program's own socket, so the path it checked is the path connected. --any-host leaves
 //                               the network filter out: a planted backend's, for the seam's suite.
-//   The server:                 serves the filter from outside the sandbox, where it holds every capability over the
-//                               sandbox's user namespace, so it reads any process of the run; it ends once nothing is
-//                               left under the filter. Nothing in the sandbox can trace it: it isn't dumpable, and the
-//                               sandbox holds no capability.
+//   The server:                 serves the filter from outside the sandbox and the run's cgroup, where it holds every
+//                               capability over the sandbox's user namespace, so it reads any process of the run; it
+//                               ends once nothing is left under the filter. Nothing in the sandbox can trace it: it
+//                               isn't dumpable, and the sandbox holds no capability.
 //   helper devices <file>       what this process can reach of each device, by opening it: one line each for the camera
 //                               (/dev/video*), the microphone and the audio output (/dev/snd) and a screen capture (the
 //                               display's socket); "deny" where the open fails, however it fails.
@@ -202,34 +202,84 @@ static int apply_landlock(const struct policy *p) {
 
 // ---- The filter, inside the sandbox.
 
+/** The filter as it is built: each jump to one of its three ends is patched once the ends are placed. */
+static struct { struct sock_filter code[96]; int n; int to_notify[48], notifies; int to_allow[48], allows; int to_refuse[8], refuses; } bpf;
+static void emit(struct sock_filter f) { bpf.code[bpf.n++] = f; }
+static void load(size_t at) { emit((struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, (uint32_t)at)); }
+/** `nr == value` goes to the end `to` (patched later); otherwise falls through. */
+static void when(int op, uint32_t value, int *to, int *count) { to[(*count)++] = bpf.n; emit((struct sock_filter)BPF_JUMP(BPF_JMP | op | BPF_K, value, 0, 0)); }
+static void patch(const int *at, int count, int end, int on_true) {
+  for (int i = 0; i < count; i++) {
+    uint8_t off = (uint8_t)(end - at[i] - 1);
+    if (BPF_OP(bpf.code[at[i]].code) == BPF_JA) bpf.code[at[i]].k = off;
+    else if (on_true) bpf.code[at[i]].jt = off;
+    else bpf.code[at[i]].jf = off;
+  }
+}
 /**
- * connect, a send with an address, and an open for writing go to the server; every other call runs as it would. The
- * server decides connects and sends; an open it only reads, to record what Landlock is about to refuse.
+ * What goes to the server: connect; a send with an address (sendto, sendmsg, sendmmsg); an open for writing, creating
+ * or truncating; and what makes, renames or links a name (mkdirat, renameat, renameat2, linkat, symlinkat), so no
+ * agent's hook file is written by another name. io_uring, which would carry the same calls past the filter, is
+ * refused. Every other call runs as it would.
  */
 static int install_filter(void) {
-  struct sock_filter code[] = {
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, ARCH, 1, 0),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_connect, 11, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendmsg, 10, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_openat2, 9, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_openat, 0, 3),
-    // openat: only with a flag that writes, creates or truncates.
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2])),
-    BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, WRITE_FLAGS, 6, 0),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendto, 0, 5),
-    // sendto with no address goes on a connected socket, which was checked when it connected.
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[4])),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 2),
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[4]) + 4),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 1, 0),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+  memset(&bpf, 0, sizeof bpf);
+  load(offsetof(struct seccomp_data, arch));
+  emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, ARCH, 1, 0));
+  emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS));
+  load(offsetof(struct seccomp_data, nr));
+#ifdef __x86_64__
+  // The x32 ABI's numbers carry bit 30: another table, so not one this filter reads.
+  emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1));
+  emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS));
+#endif
+  when(BPF_JEQ, __NR_io_uring_setup, bpf.to_refuse, &bpf.refuses);
+  const uint32_t always[] = { __NR_connect, __NR_sendmsg, __NR_sendmmsg, __NR_openat2, __NR_mkdirat, __NR_renameat2, __NR_linkat, __NR_symlinkat,
+#ifdef __NR_renameat
+    __NR_renameat,
+#endif
+#ifdef __NR_creat
+    __NR_creat,
+#endif
   };
-  struct sock_fprog prog = { .len = sizeof code / sizeof code[0], .filter = code };
+  for (size_t i = 0; i < sizeof always / sizeof always[0]; i++) when(BPF_JEQ, always[i], bpf.to_notify, &bpf.notifies);
+  // openat (and open): only with a flag that writes, creates or truncates.
+  const struct { uint32_t nr; size_t flags; } opens[] = { { __NR_openat, offsetof(struct seccomp_data, args[2]) },
+#ifdef __NR_open
+    { __NR_open, offsetof(struct seccomp_data, args[1]) },
+#endif
+  };
+  for (size_t i = 0; i < sizeof opens / sizeof opens[0]; i++) {
+    int skip = bpf.n;
+    emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, opens[i].nr, 0, 0));
+    load(opens[i].flags);
+    when(BPF_JSET, WRITE_FLAGS, bpf.to_notify, &bpf.notifies);
+    bpf.to_allow[bpf.allows++] = bpf.n;
+    emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JA, 0, 0, 0));
+    bpf.code[skip].jf = (uint8_t)(bpf.n - skip - 1);
+    load(offsetof(struct seccomp_data, nr));
+  }
+  // sendto with no address goes on a connected socket, which was checked when it connected.
+  int sendto = bpf.n;
+  emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendto, 0, 0));
+  load(offsetof(struct seccomp_data, args[4]));
+  emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 2));
+  load(offsetof(struct seccomp_data, args[4]) + 4);
+  bpf.to_allow[bpf.allows++] = bpf.n;
+  emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 0));
+  bpf.to_notify[bpf.notifies++] = bpf.n;
+  emit((struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JA, 0, 0, 0));
+  bpf.code[sendto].jf = (uint8_t)(bpf.n - sendto - 1);
+  int allow = bpf.n;
+  emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
+  int notify = bpf.n;
+  emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF));
+  int refuse = bpf.n;
+  emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA)));
+  patch(bpf.to_notify, bpf.notifies, notify, 1);
+  patch(bpf.to_refuse, bpf.refuses, refuse, 1);
+  patch(bpf.to_allow, bpf.allows, allow, 1);
+  struct sock_fprog prog = { .len = (unsigned short)bpf.n, .filter = bpf.code };
   return (int)syscall(__NR_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER, &prog);
 }
 
@@ -247,8 +297,6 @@ static int confine(int argc, char **argv) {
   if (write(p.link, &mine, sizeof mine) != (ssize_t)sizeof mine || read(p.link, &ack, 1) != 1) return fail("the filter's server");
   close(listener);
   close(p.link);
-  // The program and its children in a group of their own: what the run's cleanup stops in bwrap's group is bwrap's.
-  setpgid(0, 0);
   // Nothing of bwrap's or the supervisor's beyond its standard streams reaches the program.
   syscall(__NR_close_range, 3, ~0U, 0);
   execvp(program[0], program);
@@ -299,7 +347,7 @@ static int read_str(pid_t pid, uint64_t at, char *to, size_t room) {
   }
   close(fd);
   to[got] = '\0';
-  return memchr(to, '\0', got + 1) ? 0 : -1;
+  return got < room - 1 || memchr(to, '\0', got) ? 0 : -1;
 }
 
 static int loopback(const struct sockaddr_storage *a) {
@@ -382,45 +430,92 @@ static int writable(const struct policy *p, const char *path) {
   return 0;
 }
 
+/** The files agents read their hooks and MCP servers from, by name, anywhere: never written, whatever the grant. */
+static int agent_file(const char *path) {
+  const char *name = strrchr(path, '/');
+  name = name ? name + 1 : path;
+  if (strcmp(name, ".mcp.json") == 0 || strcmp(name, ".claude.json") == 0) return 1;
+  for (const char *at = path; (at = strstr(at, "/.c")); at++) {
+    if ((strncmp(at, "/.claude", 8) == 0 && (at[8] == '/' || at[8] == '\0')) || (strncmp(at, "/.codex", 7) == 0 && (at[7] == '/' || at[7] == '\0'))) return 1;
+  }
+  return 0;
+}
+
+/** A name the call makes, moves or links to (its last path argument): refused where it is an agent's file. */
+static void named(int listener, const struct policy *p, struct seccomp_notif *req, struct seccomp_notif_resp *resp, int dirfd, uint64_t at) {
+  char given[PATH_MAX], path[PATH_MAX * 2];
+  if (read_str(req->pid, at, given, sizeof given) != 0) { resp->flags = 0; resp->error = -EPERM; return; }
+  if (ioctl(listener, SECCOMP_IOCTL_NOTIF_ID_VALID, &req->id) != 0) { resp->flags = 0; resp->error = -EPERM; return; }
+  opened_path(req->pid, dirfd, given, path, sizeof path);
+  if (agent_file(path)) { resp->flags = 0; resp->error = -EPERM; report("file-write-create", path); return; }
+  if (!writable(p, path)) report(req->data.nr == __NR_openat || req->data.nr == __NR_openat2 ? "file-write-data" : "file-write-create", path);
+}
+
 /** Serves one notification: continue, refuse with EPERM, or connect the socket itself. */
 static void serve(int listener, const struct policy *p, struct seccomp_notif *req, struct seccomp_notif_resp *resp) {
   memset(resp, 0, sizeof *resp);
   resp->id = req->id;
   resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
   int nr = req->data.nr;
-  if (nr == __NR_openat || nr == __NR_openat2) {
-    // Read only: Landlock refuses the open itself, and this says so to the record.
-    char given[PATH_MAX], path[PATH_MAX * 2];
-    if (read_str(req->pid, req->data.args[1], given, sizeof given) != 0) return;
-    if (ioctl(listener, SECCOMP_IOCTL_NOTIF_ID_VALID, &req->id) != 0) return;
-    opened_path(req->pid, (int)req->data.args[0], given, path, sizeof path);
-    if (!writable(p, path)) report(req->data.args[2] & O_CREAT ? "file-write-create" : "file-write-data", path);
+  const __u64 *a = req->data.args;
+  // Names: an open for writing is read only, since Landlock refuses it itself and this says so to the record; a
+  // name made, moved or linked to is refused only where it is an agent's file.
+  if (nr == __NR_openat) { named(listener, p, req, resp, (int)a[0], a[1]); return; }
+  if (nr == __NR_openat2) {
+    uint64_t flags = 0;
+    if (read_mem(req->pid, a[2], &flags, sizeof flags) != 0 || !(flags & WRITE_FLAGS)) return;
+    named(listener, p, req, resp, (int)a[0], a[1]);
     return;
   }
+#ifdef __NR_open
+  if (nr == __NR_open) { named(listener, p, req, resp, AT_FDCWD, a[0]); return; }
+#endif
+#ifdef __NR_creat
+  if (nr == __NR_creat) { named(listener, p, req, resp, AT_FDCWD, a[0]); return; }
+#endif
+  if (nr == __NR_mkdirat) { named(listener, p, req, resp, (int)a[0], a[1]); return; }
+  if (nr == __NR_renameat2 || nr == __NR_linkat) { named(listener, p, req, resp, (int)a[2], a[3]); return; }
+#ifdef __NR_renameat
+  if (nr == __NR_renameat) { named(listener, p, req, resp, (int)a[2], a[3]); return; }
+#endif
+  if (nr == __NR_symlinkat) { named(listener, p, req, resp, (int)a[1], a[2]); return; }
+  // Sockets. A send with an address goes to a host the kernel reads after this check, so it is refused outright: a
+  // socket connects first, which this process does on its behalf, then sends on the connection it has.
   struct sockaddr_storage addr;
   memset(&addr, 0, sizeof addr);
-  uint64_t at = req->data.args[1];
-  socklen_t len = (socklen_t)req->data.args[2];
-  if (nr == __NR_sendto) { at = req->data.args[4]; len = (socklen_t)req->data.args[5]; }
-  if (nr == __NR_sendmsg) {
+  uint64_t at = a[1];
+  socklen_t len = (socklen_t)a[2];
+  resp->flags = 0;
+  resp->error = -EPERM;
+  if (nr == __NR_sendto) { at = a[4]; len = (socklen_t)a[5]; }
+  if (nr == __NR_sendmsg || nr == __NR_sendmmsg) {
     struct { uint64_t name; uint32_t namelen; } head;
-    if (read_mem(req->pid, req->data.args[1], &head, sizeof head) != 0) { resp->flags = 0; resp->error = -EPERM; return; }
-    if (head.name == 0) return;
+    // sendmmsg: its first message; one with an address is refused as a sendmsg with one is, whatever the rest carry.
+    if (read_mem(req->pid, a[1], &head, sizeof head) != 0) return;
+    if (head.name == 0 && nr == __NR_sendmsg) { resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE; resp->error = 0; return; }
+    if (head.name == 0) {
+      // Every message's name must be empty for the batch to pass.
+      unsigned count = (unsigned)a[2];
+      for (unsigned i = 1; i < count && i < 1024; i++) {
+        if (read_mem(req->pid, a[1] + i * 64, &head, sizeof head) != 0 || head.name != 0) return;
+      }
+      resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE; resp->error = 0; return;
+    }
     at = head.name;
     len = head.namelen;
   }
-  resp->flags = 0;
-  resp->error = -EPERM;
   if (len < sizeof(sa_family_t) || len > sizeof addr || read_mem(req->pid, at, &addr, len) != 0) return;
   // The program may have ended, and its ID name another, between the request and the read: then nothing is decided on it.
   if (ioctl(listener, SECCOMP_IOCTL_NOTIF_ID_VALID, &req->id) != 0) return;
   if (addr.ss_family == AF_INET || addr.ss_family == AF_INET6) {
-    if (p->any_host) { resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE; resp->error = 0; return; }
-    int port = port_of(&addr);
-    for (int i = 0; i < p->connects; i++) if (p->connect_[i] == port && loopback(&addr)) { resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE; resp->error = 0; return; }
     char host[INET6_ADDRSTRLEN + 8];
     host_of(&addr, host, sizeof host);
-    report("network-outbound", host);
+    if (nr != __NR_connect) { report("network-outbound", host); return; }
+    int port = port_of(&addr);
+    int allowed = p->any_host;
+    for (int i = 0; !allowed && i < p->connects; i++) allowed = p->connect_[i] == port && loopback(&addr);
+    if (allowed) resp->error = connect_for(req->pid, (int)a[0], &addr, len);
+    else report("network-outbound", host);
     return;
   }
   if (addr.ss_family != AF_UNIX) { resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE; resp->error = 0; return; }
@@ -431,10 +526,10 @@ static void serve(int listener, const struct policy *p, struct seccomp_notif *re
   char path[sizeof un->sun_path + 1];
   memcpy(path, un->sun_path, room);
   path[room] = '\0';
+  if (nr != __NR_connect) { report("network-outbound", path); return; }
   for (int i = 0; i < p->unixes; i++) {
     if (!same_file(path, p->unix_[i])) continue;
-    if (nr != __NR_connect) { resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE; resp->error = 0; return; }
-    resp->error = connect_for(req->pid, (int)req->data.args[0], &addr, len);
+    resp->error = connect_for(req->pid, (int)a[0], &addr, len);
     return;
   }
   report("network-outbound", path);
