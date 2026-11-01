@@ -2951,7 +2951,11 @@ export class Core {
     const start = await this.startOf(meta.ppid);
     if (!start) return false;
     const session = this.sessions.get(meta.session);
+    // A Codex subagent's SubagentStart names the child's own rollout, whose file ends in its agent_id, with the root's session ID.
+    const child = meta.agent === 'codex' && meta.fields?.agent_id && transcript.endsWith(`-${meta.fields.agent_id}.jsonl`);
     if (!session) {
+      // A child's rollout is no root's: the root's own next hook establishes the session.
+      if (child) return false;
       // A session the last hub met is read from where that hub left it; one this hub meets first, from here on:
       // what its transcript held before isn't judged.
       const cursor = this.cursors.get(meta.session);
@@ -2980,9 +2984,7 @@ export class Core {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd });
       return true;
     }
-    // A Codex subagent's SubagentStart names the child's own rollout, whose file ends in its agent_id, with the root's session ID.
-    const child = meta.agent === 'codex' && meta.fields?.agent_id && transcript.endsWith(`-${meta.fields.agent_id}.jsonl`);
-    return (child || transcript === session.transcript) && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
+    return ((child && meta.event === 'SubagentStart') || transcript === session.transcript) && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
   }
 
   /** Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none. */
