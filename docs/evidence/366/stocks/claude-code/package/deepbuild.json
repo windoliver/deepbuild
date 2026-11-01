@@ -1,0 +1,104 @@
+{
+  "id": "example/stocks",
+  "version": "1.0.0",
+  "digest": "d1:89473a1c2f791dd79b29f7f60f708a0f188f9058f6ad94a30f84475fea2468f7",
+  "access": {
+    "words": [
+      "hosts"
+    ]
+  },
+  "stores": [
+    "ext.stocks.watch"
+  ],
+  "actions": [
+    "ext.stocks.watch_symbol",
+    "ext.stocks.set_target",
+    "ext.stocks.watchlist"
+  ],
+  "notices": [
+    "ext.stocks.crossed"
+  ],
+  "secrets": [
+    {
+      "name": "market_key",
+      "for": "the market feed's API key"
+    }
+  ],
+  "sources": [
+    {
+      "name": "ext.stocks.quote_nvda",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_nvda_30d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_nvda_21d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_nvda_14d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_nvda_7d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.quote_aapl",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_aapl_30d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_aapl_21d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_aapl_14d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_aapl_7d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.quote_msft",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_msft_30d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_msft_21d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_msft_14d",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.history_msft_7d",
+      "variant": "polled"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.secret",
+      "deep.registerSource",
+      "deep.store",
+      "deep.store.put",
+      "deep.store.get",
+      "deep.store.list",
+      "deep.registerAction",
+      "deep.schedule",
+      "deep.schedule.read",
+      "deep.notices.send",
+      "deep.registerView"
+    ]
+  }
+}
