@@ -238,6 +238,37 @@ pub enum Planted {
     LabelsRedactionComplete,
     /// #105: a send delivers its files at once, unasked.
     SendsWithoutApproval,
+    /// #498: the camera and microphone sessions stay open after a release, so the next request's
+    /// capture keeps what they delivered since.
+    KeepsSessionOpen,
+    /// #498: an agent's tool call is taken as a panel's capture request.
+    RecordsForAgent,
+    /// #498: a device request is armed whatever the OS's permission.
+    RecordsWithoutPermission,
+    /// #498: the decode worker checks no cap.
+    SkipsCaps,
+    /// #498: the decode worker opens what a file points at before answering.
+    FollowsUrls,
+    /// #498: probes and decodes run in this process, not the decode worker.
+    DecodesInApp,
+    /// #498: edit lists are ignored; frames are presented at their stored times.
+    IgnoresEditLists,
+    /// #498: the AAC encoder's priming samples are kept.
+    KeepsPriming,
+    /// #498: an export's encode runs in the decode worker.
+    EncodesInDecodeWorker,
+    /// #498: the probe rounds each presentation time to the nearest flick.
+    ProbeRoundsToFlicks,
+    /// #498: untagged streams are assumed BT.601 at every height.
+    AssumesBt601,
+    /// #498: the gate trusts a shipped panel: its own request to play sounds.
+    ShippedPanelsUngated,
+    /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
+    ComparerMatchesHash,
+    /// #498: opening another document leaves the previous one's voices playing.
+    KeepsVoicesOnSwitch,
+    /// #498: closing a panel fades its voices over 5 ms, longer than a block.
+    FadesOnClose,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -325,6 +356,8 @@ pub struct Panel {
     pub visible: bool,
     /// A web page the panel shows, an agent's deliverable that holds no canvas items (#384).
     pub html: Option<PathBuf>,
+    /// The shipped panel the slot holds, by its inventory ID (#498).
+    pub shipped: Option<String>,
 }
 
 pub struct RecordObject {
@@ -646,6 +679,10 @@ pub enum Call {
     Term(Box<crate::terminal::TermCall>),
     /// A capture for a bug report, its ask and its send (#105).
     Capture(Box<crate::capture::CaptureCall>),
+    /// The decode worker's probes, decodes and proxies, an export, and the helpers (#498).
+    Media(Box<crate::media::MediaCall>),
+    /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
+    Gate(Box<crate::gate::GateCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -720,6 +757,10 @@ pub struct Scenario {
     pub commit: Option<String>,
     /// The machine the hub runs on, its environment fingerprint (#379); this machine without it.
     pub machine: Option<Map<String, Value>>,
+    /// The camera and microphone DeepBuild can open, and the OS's answer for each (#498).
+    pub devices: crate::capture::Devices,
+    /// The decode worker's caps for this run (#498).
+    pub decode_caps: deep_codecs::Caps,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
     /// Every session's pool in place of its budget class's (#857).
@@ -797,6 +838,10 @@ pub struct Hub<'a> {
     pub terms: crate::terminal::Terms,
     /// Captures for bug reports, their asks and sends (#105).
     pub capturing: crate::capture::Capturing,
+    /// The decode worker and the encode tool this run started (#498).
+    pub media: crate::media::Media,
+    /// The device gate's owners and their voices (#498).
+    pub gate: crate::gate::Gate,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -935,7 +980,10 @@ impl<'a> Hub<'a> {
             capturing: crate::capture::Capturing::restore(
                 scenario.state.as_deref(),
                 scenario.planted,
+                scenario.devices.clone(),
             ),
+            media: crate::media::Media::default(),
+            gate: crate::gate::Gate::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -1421,6 +1469,8 @@ impl<'a> Hub<'a> {
             } => self.compare_images(expected, actual, tolerance),
             Call::Ring(r) => self.ring_call(r),
             Call::Capture(c) => self.capture_call(c),
+            Call::Media(m) => self.media_call(m),
+            Call::Gate(g) => self.gate_call(g),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {

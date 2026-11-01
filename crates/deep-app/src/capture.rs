@@ -259,12 +259,15 @@ mod macos {
 
     impl Indicator {
         pub fn show(mtm: MainThreadMarker) -> Self {
+            Self::titled(mtm, "● Recording a bug — let go of ⌥Space to stop")
+        }
+
+        /// The app's indicator with its own words (#498: the camera and microphone).
+        pub fn titled(mtm: MainThreadMarker, title: &str) -> Self {
             let item =
                 NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
             if let Some(button) = item.button(mtm) {
-                button.setTitle(&NSString::from_str(
-                    "● Recording a bug — let go of ⌥Space to stop",
-                ));
+                button.setTitle(&NSString::from_str(title));
             }
             Indicator(item)
         }

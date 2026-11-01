@@ -1863,6 +1863,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-codecs"
+version = "0.0.0"
+dependencies = [
+ "image",
+ "libc",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-contracts"
 version = "0.0.0"
 
@@ -2037,6 +2047,7 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
+ "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
  "deep-marks-vello",
