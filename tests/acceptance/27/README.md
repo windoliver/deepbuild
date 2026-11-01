@@ -36,9 +36,12 @@ DEEP_HARNESS_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=<from `claude setup-token`> npx vite
 DEEP_HUB_PLANT=<name> npx vitest run --root tests/acceptance/27 --no-file-parallelism <file>   # a wrong program, by hand
 ```
 
-- **Fast tests** start no agent and spend nothing. Each starts its own hub; most wait out the hub's 60 s stop hold
-  and deep_ask's 40 s wait, which are protocol, not test overhead. The five fast files take about 20 minutes at the
-  base, most of it `waits.test.ts`'s agent-command case, which waits up to 5 minutes for an overrun.
+- **Fast tests** start no agent and spend nothing. Each starts its own hub. The hub's 60 s stop hold and deep_ask's
+  40 s wait are protocol: `waits.test.ts`'s held stop keeps the full hold and asserts it, and `repeat.test.ts` keeps
+  deep_ask's wait. A test that answers inside neither starts its hub with `noAskWait` (deep_ask says "still waiting"
+  at once) or `shortHold` (a stop held with nothing answered ends after 5 s) (#964). The fast files take about 6
+  minutes, most of it `waits.test.ts`'s deadlines of 1 minute. `budgets.test.ts`'s measurement reads INCONCLUSIVE
+  without taking its runs when the machine is loaded past its core count as it starts.
 - **Live tests** (`session.live.test.ts`) run real interactive Claude Code sessions through the harness on your own
   sign-in. Without `DEEP_HARNESS_LIVE=1` (#48's opt-in), without `CLAUDE_CODE_OAUTH_TOKEN`, without a `claude` on
   `PATH`, with a Claude Code version the facts don't cover, or without the harness's `repeat` route, each fails with
