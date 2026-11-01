@@ -1,0 +1,256 @@
+{
+  "format": 1,
+  "id": "parity-140-glow-shadows",
+  "profile": "scene",
+  "title": "A lamp box glowing under a sun, with a note",
+  "description": "A lamp box and two smaller boxes on a floor under a sun that casts shadows, the look's glow on, orbited by the camera; a 2D note layer over it holds a caption, a stroked rule and a dot.",
+  "size": [
+    480,
+    360
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "2s"
+  },
+  "requires": {
+    "modules": {
+      "scene3d": "^1",
+      "effects": "^1"
+    }
+  },
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    },
+    "notes": {
+      "writer": "agent-a",
+      "title": "Notes",
+      "order": "a1"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "perspective",
+        "target": [
+          0,
+          0.4,
+          0
+        ],
+        "orbit": {
+          "azimuth": 30,
+          "elevation": 25,
+          "distance": 7
+        },
+        "fov": 40,
+        "near": 0.1
+      },
+      "layer": "main"
+    },
+    "floor": {
+      "id": "floor",
+      "kind": "mark.box@1",
+      "name": "Floor",
+      "order": "a1",
+      "params": {
+        "size": [
+          12,
+          0.1,
+          12
+        ],
+        "paint": {
+          "fill": {
+            "role": "floor"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          -0.05,
+          0
+        ]
+      },
+      "layer": "main"
+    },
+    "lamp": {
+      "id": "lamp",
+      "kind": "mark.box@1",
+      "name": "Lamp",
+      "order": "a2",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "lamp"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          0
+        ]
+      },
+      "layer": "main"
+    },
+    "block": {
+      "id": "block",
+      "kind": "mark.box@1",
+      "name": "Block",
+      "order": "a3",
+      "params": {
+        "size": [
+          0.6,
+          0.6,
+          0.6
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.6,
+          0.3,
+          0.8
+        ]
+      },
+      "layer": "main"
+    },
+    "crate": {
+      "id": "crate",
+      "kind": "mark.box@1",
+      "name": "Crate",
+      "order": "a4",
+      "params": {
+        "size": [
+          0.7,
+          0.7,
+          0.7
+        ],
+        "paint": {
+          "fill": {
+            "role": "crate"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.4,
+          0.35,
+          -0.6
+        ]
+      },
+      "layer": "main"
+    },
+    "sun": {
+      "id": "sun",
+      "kind": "light.sun@1",
+      "name": "Sun",
+      "order": "a9",
+      "params": {
+        "illuminance": 3.141592653589793,
+        "shadow": true,
+        "angle": 0.53
+      },
+      "at": {
+        "rot": [
+          -55,
+          -40,
+          0
+        ]
+      },
+      "layer": "main"
+    },
+    "note": {
+      "id": "note",
+      "kind": "text@1",
+      "layer": "notes",
+      "name": "Note",
+      "order": "a0",
+      "params": {
+        "text": "Lamp, glowing: AVATAR",
+        "font": "body",
+        "size": 14,
+        "box": {
+          "w": 260,
+          "h": 22
+        }
+      },
+      "at": {
+        "pos": [
+          16,
+          14,
+          0
+        ]
+      }
+    },
+    "rule": {
+      "id": "rule",
+      "kind": "path@1",
+      "layer": "notes",
+      "name": "Rule",
+      "order": "a1",
+      "params": {
+        "d": "M 16 44 L 236 44 M 236 44 C 300 44 320 120 360 150",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 1.5
+          }
+        }
+      }
+    },
+    "pin": {
+      "id": "pin",
+      "kind": "circle@1",
+      "layer": "notes",
+      "name": "Pin",
+      "order": "a2",
+      "params": {
+        "center": [
+          360,
+          150
+        ],
+        "r": 5.5,
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    }
+  },
+  "channels": {
+    "spin": {
+      "target": "items/cam/params/orbit/azimuth",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 30,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "2s",
+          "value": 150,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}

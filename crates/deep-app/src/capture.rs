@@ -275,4 +275,53 @@ mod macos {
             NSStatusBar::systemStatusBar().removeStatusItem(&self.0);
         }
     }
+
+    /// The capture seam's macOS backend (#140; canvas primitives: Seam and backend):
+    /// ScreenCaptureKit, started only through the system picker.
+    pub const BACKEND: (&str, &str) = ("capture.screencapturekit", "1.0.0");
+
+    /// What a capture is asked to start from: the picker's choice, or a display named by ID.
+    pub enum Source {
+        Picked(Picked),
+        Display(u32),
+    }
+
+    /// The seam's one way in: a capture starts only from what the picker answered, so a display
+    /// asked for by its ID is refused before ScreenCaptureKit hears of it.
+    pub fn admit(source: Source) -> Result<Picked, &'static str> {
+        match source {
+            Source::Picked(picked) => Ok(picked),
+            Source::Display(_) => Err("picker_only"),
+        }
+    }
+
+    /// Whether the system's screen-recording indicator shows, read from the window server: its
+    /// `StatusIndicator` window, which macOS puts in the menu bar while anything records the
+    /// screen, whatever the recording app itself draws.
+    pub fn system_indicator() -> bool {
+        use objc2_core_foundation::{CFDictionary, CFString};
+        use objc2_core_graphics::{
+            kCGNullWindowID, kCGWindowName, kCGWindowOwnerName, CGWindowListCopyWindowInfo,
+            CGWindowListOption,
+        };
+        let Some(windows) =
+            CGWindowListCopyWindowInfo(CGWindowListOption::OptionOnScreenOnly, kCGNullWindowID)
+        else {
+            return false;
+        };
+        // SAFETY: the window list is an array of CFString-keyed dictionaries, whose owner and
+        // name are CFStrings when present.
+        (0..windows.count()).any(|i| unsafe {
+            let window = &*windows.value_at_index(i).cast::<CFDictionary>();
+            let text = |key: &CFString| {
+                window
+                    .value((key as *const CFString).cast())
+                    .cast::<CFString>()
+                    .as_ref()
+                    .map(|s| s.to_string())
+            };
+            text(kCGWindowOwnerName).as_deref() == Some("Window Server")
+                && text(kCGWindowName).as_deref() == Some("StatusIndicator")
+        })
+    }
 }

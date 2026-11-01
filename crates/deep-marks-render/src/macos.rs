@@ -32,6 +32,7 @@ use deep_canvas_marks::path::{self, Mesh};
 use deep_canvas_marks::scene::{self, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
+use deep_marks_gpui::Strip;
 use deep_text_gpui::Label;
 use gpui_apple::metal_renderer::gpu_ledger::{self, Ledger};
 use gpui_kit::test::TestWindowExt;
@@ -62,6 +63,12 @@ enum Draw {
     Quad(PaintQuad),
     Path {
         mesh: Arc<Mesh>,
+        offset: [f32; 2],
+        color: Hsla,
+    },
+    /// A stroke, its edges antialiased by GPUI's path shader (#140).
+    Strip {
+        strip: Arc<Strip>,
         offset: [f32; 2],
         color: Hsla,
     },
@@ -111,6 +118,11 @@ fn paint(draw: &Draw, view: Bounds<Pixels>, window: &mut Window) {
             offset,
             color,
         } => deep_marks_gpui::paint(mesh, *offset, *color, window),
+        Draw::Strip {
+            strip,
+            offset,
+            color,
+        } => deep_marks_gpui::paint_strip(strip, *offset, *color, window),
         Draw::Text {
             label,
             origin,
@@ -128,11 +140,13 @@ impl Render for Canvas {
         let draws = self.draws.clone();
         div().size_full().child(
             canvas(
-                // Every label's glyphs placed before the first paint: a page goes up once.
-                move |_, window, _| {
+                // Every label's glyphs placed before the first paint, at the sub-pixel phases
+                // its paint draws them at (#140): a page goes up once.
+                move |bounds, window, _| {
                     for (draw, _) in prepared.borrow().iter() {
-                        if let Draw::Text { label, .. } = draw {
-                            deep_text_gpui::prepare(label, window.scale_factor());
+                        if let Draw::Text { label, origin, .. } = draw {
+                            let at = bounds.origin + *origin;
+                            deep_text_gpui::prepare_at(at, label, window.scale_factor());
                         }
                     }
                 },
@@ -179,9 +193,16 @@ impl Entry {
     }
 }
 
+/// A path's fill triangles and its stroke's strip (#140).
 struct Tessellation {
     mesh: Arc<Mesh>,
+    strip: Option<Arc<Strip>>,
     entry: Entry,
+}
+
+/// A stroke's strip at a bucket: its fringe sized for the bucket's smallest zoom.
+fn strip_at(lines: &[path::Polyline], width: f64, bucket: i32) -> Strip {
+    deep_marks_gpui::strip(lines, width, 2f64.powi(-bucket))
 }
 
 struct LayerCache {
@@ -265,6 +286,9 @@ struct Session {
     /// The resampled copies the frame on screen draws, and how many the session has made.
     resampled: HashMap<ResampleKey, Arc<RenderImage>>,
     resamples: u64,
+    /// Each text@1 item's shown string and glyph run on the presented frame, as `raster`
+    /// reports them (#140: the app and headless shape the same runs).
+    texts: Map<String, Value>,
 }
 
 fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
@@ -448,11 +472,19 @@ fn tessellation<'a>(
         .tessellations
         .entry((key, bucket))
         .or_insert_with(|| {
-            let mesh = geometry.tessellate(bucket);
-            let entry = Entry::of(key, &mesh.bytes());
+            // The fill's triangles as marks2d tessellates them; the stroke as a strip (#140).
+            let lines = path::flatten(&geometry.verbs, path::tolerance(bucket));
+            let mut mesh = Mesh::default();
+            if geometry.fill {
+                path::fill(&lines, &mut mesh);
+            }
+            let strip = geometry.stroke.map(|w| strip_at(&lines, w, bucket));
+            let mut bytes = mesh.bytes();
+            bytes.extend(strip.as_ref().map(Strip::bytes).unwrap_or_default());
             Tessellation {
                 mesh: Arc::new(mesh),
-                entry,
+                strip: strip.map(Arc::new),
+                entry: Entry::of(key, &bytes),
             }
         })
 }
@@ -478,6 +510,87 @@ fn color_space(gpui_oklab: bool) -> ColorSpace {
     } else {
         ColorSpace::OklabExact
     }
+}
+
+/// #140: `marks` alone over transparent black at `size` px, drawn by GPUI's frame path (the draws
+/// `present` makes, with no layer cache) in a window of `cx` at scale 1, read back from GPUI's
+/// offscreen Metal renderer; straight alpha. That renderer's frames are opaque, so the marks draw
+/// twice, over a black ground and over a white one: where they leave `1 - a` of the ground showing,
+/// the two differ by `(1 - a) · 255`, and the color over black is the marks' premultiplied color.
+pub(crate) fn picture(
+    cx: &mut HeadlessAppContext,
+    marks: &[&Drawn],
+    size: [u32; 2],
+) -> Result<image::RgbaImage, Value> {
+    gpui_draws(marks.iter().copied())?;
+    let mut session = Renderer::new_session();
+    let list = Renderer::draws(
+        &mut session,
+        marks,
+        path::bucket(1.0),
+        1.0,
+        false,
+        &mut BTreeSet::new(),
+    )?;
+    let whole = rect([0.0, 0.0, f64::from(size[0]), f64::from(size[1])]);
+    let over = |ground: u8| {
+        let mut over = vec![(Draw::Quad(fill_quad(whole, hsla([ground; 3]))), None)];
+        over.extend(list.iter().cloned());
+        over
+    };
+    let (over_black, over_white) = (over(0), over(255));
+    let draws = Rc::new(RefCell::new(over_black));
+    let canvas = Canvas {
+        draws: draws.clone(),
+    };
+    let (handle, _) = cx
+        .update(|cx| {
+            open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds {
+                        origin: Point::default(),
+                        size: gpui_kit::size(px(size[0] as f32), px(size[1] as f32)),
+                    })),
+                    focus: false,
+                    show: false,
+                    ..Default::default()
+                },
+                cx,
+                |_, cx| cx.new(|_| canvas),
+            )
+        })
+        .map_err(|_| refused("no_window", ""))?;
+    cx.simulate_scale_factor_change(handle, 1.0);
+    // A forced frame request draws the window again, as the display link's does.
+    let capture = |cx: &mut HeadlessAppContext| {
+        cx.present_frame(handle);
+        cx.capture_screenshot(handle).ok()
+    };
+    let black = capture(cx);
+    *draws.borrow_mut() = over_white;
+    let white = capture(cx);
+    let _ = cx.update_window(handle, |_, w, _| w.remove_window());
+    let (Some(black), Some(white)) = (black, white) else {
+        return Err(refused("no_capture", ""));
+    };
+    if black.dimensions() != (size[0], size[1]) || white.dimensions() != black.dimensions() {
+        return Err(refused("no_capture", "size"));
+    }
+    let mut out = image::RgbaImage::new(size[0], size[1]);
+    for ((o, b), w) in out.pixels_mut().zip(black.pixels()).zip(white.pixels()) {
+        let shown = (0..3)
+            .map(|c| f64::from(w[c]) - f64::from(b[c]))
+            .sum::<f64>()
+            / (3.0 * 255.0);
+        let a = (1.0 - shown).clamp(0.0, 1.0);
+        let a8 = (a * 255.0).round() as u8;
+        if a8 == 0 {
+            continue;
+        }
+        let un = |c: u8| (f64::from(c) / a).round().min(255.0) as u8;
+        *o = image::Rgba([un(b[0]), un(b[1]), un(b[2]), a8]);
+    }
+    Ok(out)
 }
 
 impl Renderer {
@@ -673,23 +786,48 @@ impl Renderer {
                     ..
                 } => {
                     let t = tessellation(session, geometry, d, bucket, used);
-                    push(Draw::Path {
-                        mesh: t.mesh.clone(),
-                        offset: [offset[0] as f32, offset[1] as f32],
-                        color: hsla(*color),
-                    });
+                    let (offset, color) = ([offset[0] as f32, offset[1] as f32], hsla(*color));
+                    if !t.mesh.indices.is_empty() {
+                        push(Draw::Path {
+                            mesh: t.mesh.clone(),
+                            offset,
+                            color,
+                        });
+                    }
+                    if let Some(strip) = &t.strip {
+                        push(Draw::Strip {
+                            strip: strip.clone(),
+                            offset,
+                            color,
+                        });
+                    }
                 }
                 Mark::Text {
                     item,
                     spec,
                     origin,
+                    role,
                     color,
                     runs,
-                    ..
                 } => {
                     let Some(label) = label_of(spec) else {
                         return Err(refused("bad_font", &format!("items/{item}/params/font")));
                     };
+                    // A text@1 item's own text; a mark set's or an axis's labels are `<id>#…`.
+                    if !item.contains('#') {
+                        let glyphs: Vec<Value> = deep_text_gpui::shape(&label)
+                            .glyphs
+                            .iter()
+                            .map(|g| {
+                                let (role, _) =
+                                    scene::run_paint(runs, g.grapheme, role.as_deref(), *color);
+                                crate::raster::glyph_row(g, role)
+                            })
+                            .collect();
+                        session
+                            .texts
+                            .insert(item.clone(), json!({"shown": spec.text, "glyphs": glyphs}));
+                    }
                     push(Draw::Text {
                         label,
                         origin: point(px(origin[0] as f32), px(origin[1] as f32)),
@@ -697,7 +835,40 @@ impl Renderer {
                         runs: runs.iter().map(|r| (r.from..r.to, hsla(r.color))).collect(),
                     });
                 }
-                Mark::Shape { item, .. } => return Err(gpui_lacks(item)),
+                Mark::Shape {
+                    item,
+                    verbs,
+                    fill,
+                    stroke,
+                } => {
+                    // #140: a path's solid fill and solid stroke as GPUI paths, the fill
+                    // tessellated as #380's lines are and the stroke as a strip; anything else
+                    // waits for Vello GPU (#385).
+                    let lines = path::flatten(verbs, path::tolerance(bucket));
+                    let solid = |paint: &Fill, opacity: f64| match paint {
+                        Fill::Solid(c) => Ok(hsla(*c).opacity(opacity as f32)),
+                        _ => Err(gpui_lacks(item)),
+                    };
+                    if let Some((f, opacity)) = fill {
+                        let color = solid(f, *opacity)?;
+                        let mut mesh = Mesh::default();
+                        path::fill(&lines, &mut mesh);
+                        push(Draw::Path {
+                            mesh: Arc::new(mesh),
+                            offset: [0., 0.],
+                            color,
+                        });
+                    }
+                    if let Some(line) = stroke.as_ref().filter(|l| l.dashes.is_none()) {
+                        push(Draw::Strip {
+                            strip: Arc::new(strip_at(&lines, line.width, bucket)),
+                            offset: [0., 0.],
+                            color: solid(&line.paint, line.opacity)?,
+                        });
+                    } else if stroke.is_some() {
+                        return Err(gpui_lacks(item));
+                    }
+                }
                 Mark::Image {
                     item,
                     asset,
@@ -770,7 +941,12 @@ impl Renderer {
         let palette = palette_of(look, view.theme);
         let frame = scene::frame(doc, &items, palette, record, view.zoom)
             .map_err(|r| refused(r.code, &r.path))?;
-        gpui_draws(&frame)?;
+        gpui_draws(
+            frame
+                .layers
+                .iter()
+                .flat_map(|l| l.marks.iter().map(|m| &**m)),
+        )?;
         let shown =
             scene::bound_texts(doc, &items, record).map_err(|r| refused(r.code, &r.path))?;
         let status = scene::status_marks(doc, &items, record, look.status.as_ref(), palette)
@@ -1042,6 +1218,7 @@ impl Renderer {
             resamples: 0,
             compiled: None,
             last_layers: BTreeMap::new(),
+            texts: Map::new(),
         }
     }
 
@@ -1229,7 +1406,7 @@ impl Renderer {
         })();
         self.close(session);
         match result {
-            Ok(()) => json!({"ok": true, "steps": out}),
+            Ok(()) => json!({"ok": true, "steps": out, "backends": crate::backends(false)}),
             Err(refusal) => refusal,
         }
     }
@@ -1261,6 +1438,7 @@ impl Renderer {
                         Ok(()) => json!({
                             "ok": true, "width": image.width(), "height": image.height(),
                             "marks": session.snapshot["marks"], "legend": session.snapshot["legend"],
+                            "texts": session.texts, "backends": crate::backends(false),
                         }),
                         Err(_) => refused("not_written", out),
                     },
@@ -1330,18 +1508,25 @@ fn status_draws(
     snapshot
 }
 
-/// R2's marks GPUI's paths can't draw: gradients past R1's two stops, stars, arcs and gradient
-/// strokes, soft masks, group opacity and adjusted images, which Vello GPU takes on (#385). Until
-/// then the live view refuses them, naming the item (technical design: Platform seams).
+/// R2's marks GPUI's paths can't draw: gradients past R1's two stops, gradient fills and strokes
+/// of paths, dashed strokes, soft masks, group opacity and adjusted images, which Vello GPU takes
+/// on (#385). Until then the live view refuses them, naming the item (technical design: Platform
+/// seams).
 fn gpui_lacks(item: &str) -> Value {
     refused("module_missing", &format!("items/{item}"))
 }
 
-fn gpui_draws(frame: &scene::Frame) -> Result<(), Value> {
-    for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+fn gpui_draws<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Result<(), Value> {
+    for drawn in marks {
+        let solid = |f: &Fill| matches!(f, Fill::Solid(_));
         let lacks = match &drawn.mark {
-            Mark::Shape { .. }
-            | Mark::Rect {
+            Mark::Shape { fill, stroke, .. } => {
+                fill.as_ref().is_some_and(|(f, _)| !solid(f))
+                    || stroke
+                        .as_ref()
+                        .is_some_and(|l| !solid(&l.paint) || l.dashes.is_some())
+            }
+            Mark::Rect {
                 fill: Fill::Ramp(_),
                 ..
             } => true,

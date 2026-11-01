@@ -107,8 +107,8 @@ export interface HookMeta {
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
-  /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
-  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
+  /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent or command (#907) started, by its call. */
+  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string };
 }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);

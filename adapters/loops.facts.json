@@ -1,11 +1,12 @@
 {
-  "readBy": "loop facts for the gate runner (#29), from a session's own tool calls: a wake-up or cron job it scheduled, with when it fires; one it cancelled; and a background subagent it started, which keeps the session looping until its report arrives as a subagent prompt",
+  "readBy": "loop facts for the gate runner (#29), from a session's own tool calls: a wake-up or cron job it scheduled, with when it fires; one it cancelled; a background subagent it started, which keeps the session looping until its report arrives as a subagent prompt; and a shell command it started in the background, which keeps it looping until its end notice arrives the same way or its process group ends. Codex and pi hooks show no background shell call, so only Claude Code names one",
   "agents": {
     "claude": {
       "wakeups": { "ScheduleWakeup": { "delaySeconds": "tool_input.delaySeconds" } },
       "crons": { "CronCreate": { "due": "tool_response.nextFireAt", "id": "tool_response.id", "recurring": "tool_input.recurring" } },
       "cancels": { "CronDelete": { "id": "tool_input.id" } },
-      "background": { "Agent": "tool_input.run_in_background", "Task": "tool_input.run_in_background" }
+      "background": { "Agent": "tool_input.run_in_background", "Task": "tool_input.run_in_background" },
+      "commands": { "Bash": "tool_input.run_in_background" }
     }
   }
 }
