@@ -372,3 +372,114 @@ describe('a dropped connection', () => {
     });
   }, 60_000);
 });
+
+describe('the turn a stop cut off (#85)', () => {
+  it('names each send call that started with no recorded end as outcome unknown in the continue, and denies the identical send at PreToolUse', async () => {
+    await withHub(async (root, home) => {
+      const id = '8a4e6b7d-6666-4777-8888-9999aaaabbbb';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), line(event, extra));
+      const CMD = 'gh pr create --title "Tasks that close themselves" --body "Part of #85"';
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await hook('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await hook('Stop', { prompt_id: 'p1', stop_hook_active: false, last_assistant_message: 'Done.' })).toContain('"ack"');
+      await new Promise((r) => setTimeout(r, 300));
+      const woken = waiter(root, id, 15_000);
+      await new Promise((r) => setTimeout(r, 300));
+      // Turn 2 opens the pull request, and the connection drops before the call's PostToolUse reaches the hub.
+      typed('open the PR', 'p2');
+      expect(await hook('UserPromptSubmit', { prompt: 'open the PR', prompt_id: 'p2' })).toContain('"ack"');
+      expect(await hook('PreToolUse', { prompt_id: 'p2', tool_name: 'Bash', tool_input: { command: CMD }, tool_use_id: 'c1', permission_mode: 'default' })).toContain('"ack"');
+      expect(await hook('StopFailure', { error: 'overloaded', prompt_id: 'p2' })).toContain('"ack"');
+      const woke = await woken;
+      expect(woke, 'the waiter woke the session with the continue').toMatchObject({ session: id, text: expect.stringContaining('one automatic continue') });
+      const text = String(woke!.text);
+      expect(text, 'the continue names the cut-off call, marked outcome unknown').toContain(`Bash \`${CMD}\` (outcome unknown)`);
+      expect(rows(root, "SELECT 1 FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE '%outcome unknown%'", id), 'the record keeps the block the session heard').toHaveLength(1);
+      // The wake's turn runs the identical send again: denied, with what the hub knows of the earlier one.
+      typed(text, 'p3');
+      expect(await hook('UserPromptSubmit', { prompt: text, prompt_id: 'p3' })).toContain('"ack"');
+      const denied = await reply(join(root, 'hub.sock'), line('PreToolUse', { prompt_id: 'p3', tool_name: 'Bash', tool_input: { command: CMD }, tool_use_id: 'c2', permission_mode: 'default' }));
+      expect(denied.exit, 'the identical send is denied').toBe(2);
+      expect(denied.stderr).toContain('DeepBuild denied this');
+      expect(denied.stderr).toContain('outcome is unknown');
+      // A different call runs; and once told, the agent's next identical call is its own informed choice.
+      const other = await reply(join(root, 'hub.sock'), line('PreToolUse', { prompt_id: 'p3', tool_name: 'Bash', tool_input: { command: 'gh pr list --head main' }, tool_use_id: 'c3', permission_mode: 'default' }));
+      expect(other.exit, 'a different call runs').toBe(0);
+      const again = await reply(join(root, 'hub.sock'), line('PreToolUse', { prompt_id: 'p3', tool_name: 'Bash', tool_input: { command: CMD }, tool_use_id: 'c4', permission_mode: 'default' }));
+      expect(again.exit, 'denied once, with the earlier result').toBe(0);
+    });
+  }, 60_000);
+});
+
+describe('a stop whose task is open (#85)', () => {
+  it('holds the turns DeepBuild would start there: a promised check due wakes nothing until the task closes, then goes with the resume', async () => {
+    await withHub(async (root, home, { restart }) => {
+      writeFileSync(join(root, 'config.json'), JSON.stringify({ asks: {
+        deadline: { taste: '3d', authority: '1d', unblock: '2d', exception: '2d', choice: '2d', definition: '4h' },
+        default: { taste: 'recommended', authority: 'no', unblock: 'stay-blocked', exception: 'no-change', choice: 'recommended', definition: 'leave-out' },
+        fallback: ['change-owner'], fold: 5,
+      } }));
+      const id = '9b5f7c8e-7777-4888-8999-aaaabbbbcccc';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      let n = 0;
+      const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), line(event, extra));
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      // Turn 1 ends with a promise: the check's wake-up is due in 20 s. Claude Code starts the waiter.
+      typed('push and watch CI', 'p1');
+      expect(await hook('UserPromptSubmit', { prompt: 'push and watch CI', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await hook('Stop', { prompt_id: 'p1', stop_hook_active: false, last_assistant_message: "Pushed. I'll check back in 20 seconds to see whether CI passed." })).toContain('"ack"');
+      expect(await until(() => rows(root, "SELECT 1 FROM events WHERE kind = 'promise.set' AND session_id = ?", id), 5_000), 'the promise is set').toHaveLength(1);
+      // Turn 2 stops on a revoked sign-in: its task is open, and the session's row carries the cause. Claude Code
+      // starts the waiter at the StopFailure too, so the session is idle with a waiter when the check comes due.
+      typed('now the docs', 'p2');
+      expect(await hook('UserPromptSubmit', { prompt: 'now the docs', prompt_id: 'p2' })).toContain('"ack"');
+      expect(await hook('StopFailure', { error: 'authentication_failed', prompt_id: 'p2' })).toContain('"ack"');
+      await new Promise((r) => setTimeout(r, 300));
+      const woken = waiter(root, id, 30_000);
+      const [task] = await until(() => rows<{ id: string; proves: string }>(root, "SELECT id, json_extract(data, '$.proves') AS proves FROM events WHERE kind = 'ask.created' AND json_extract(data, '$.kind') = 'unblock' AND session_id = ?", id), 10_000);
+      expect(task, 'the stop raised one unblock task').toBeDefined();
+      // The promised check comes due while the task is open: no turn DeepBuild causes starts in the stopped session.
+      const due = await until(() => rows<{ route: string }>(root, "SELECT json_extract(data, '$.route') AS route FROM events WHERE kind = 'promise.due' AND session_id = ?", id), 30_000);
+      expect(due.map((d) => d.route), 'the due check waits on the row, not the waiter').toEqual(['next_hook']);
+      expect(await Promise.race([woken, new Promise((r) => setTimeout(() => r('still waiting'), 2_000))]), 'no waiter fires while the sign-in task is open').toBe('still waiting');
+      // The task's check passes (/login) while the hub is down; back up, the task closes and the session resumes.
+      await restart({}, async () => {
+        const record = await openRecord({ path: join(root, 'ledger.db'), now: Date.now });
+        try {
+          const now = Date.now();
+          const commit = '0'.repeat(40);
+          const claim = `claim:${ulid(now)}`;
+          const vid = ulid(now + 1);
+          await record.append({ writer: 'core', actor: 'you', scope: 'you', session: id }, { v: 1, id: vid, kind: 'verdict.made', subject: claim, ts: now, data: {
+            outcome: 'PASS', verdict: `verdict:${vid}`, claim, reasons: [], smallest: null, points_to: null, commit,
+            requirements: [{ req: 'req:01K74G0A1B2C3D4E5F6G7H8J9K#R1', outcome: 'PASS', check: task!.proves, depth: 'unit', oracle: 'code', runs: { clean: 1, needed: 1, counted: [] }, smallest: null, points_to: null, evidence: [], proof: 'test_run' }],
+            key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: 'test', tools: [] },
+          } });
+        } finally {
+          await record.close();
+        }
+      });
+      const continued = await until(() => rows<{ because: string }>(root, "SELECT json_extract(data, '$.because') AS because FROM events WHERE kind = 'session.continued' AND session_id = ?", id), 10_000);
+      expect(continued.map((c) => c.because), 'the task closed on its check, so the session resumes').toEqual(['task_closed']);
+      // Claude Code's waiter, back after the restart, is woken: the due check goes now, and the resume goes with the wake's prompt.
+      const woke = await waiter(root, id, 10_000);
+      expect(woke, 'the waiter wakes the session once the task closed').toMatchObject({ session: id, text: expect.stringContaining('promised check') });
+      typed(String(woke!.text), 'p3');
+      const said = await reply(join(root, 'hub.sock'), line('UserPromptSubmit', { prompt: String(woke!.text), prompt_id: 'p3' }));
+      expect(said.stdout, 'the resume arrives in the woken turn').toContain('closed. Continue where you left off');
+    });
+  }, 90_000);
+});

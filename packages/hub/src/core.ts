@@ -45,7 +45,7 @@ import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { Forge, parsePrUrl, prUrlIn } from './forge.js';
+import { Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
@@ -55,7 +55,7 @@ import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } fro
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
+import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -215,7 +215,27 @@ interface Routes {
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
   /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
   places?: boolean; placing?: Set<string>;
+  /**
+   * The cause of its newest stop while that cause's task is open (#85): a sign-in, a token refresh, a refusal, a
+   * spend limit, a plan window, or any block you own. No turn DeepBuild causes starts there: what would wake it waits
+   * on its row and goes with the resume. Cleared by a turn running, a prompt you typed or the continue that resumes it.
+   */
+  blocked?: string | undefined;
 }
+/** Whether a stop's cause holds the turns DeepBuild would start in its session until its task closes (#85). */
+/** A call of the cut-off turn with no recorded end (#85): how the block names it, the key an identical send matches by, and whether it is a send that opens a pull request. */
+interface CutOff { key: string; label: string; send: boolean; pr: boolean }
+/** The effect classes each `effect:` guard entry in `<dir>/rules.json` stands for, by the entry's name. */
+function effectEntries(dir: string): Map<string, string[]> {
+  const classes = new Map<string, string[]>();
+  const entries = readJson(join(dir, 'rules.json'));
+  for (const [name, entry] of Object.entries(isObj(entries) ? entries : {})) {
+    const effect = isObj(entry) && typeof entry.match === 'string' ? /^effect:([\w-]+)$/.exec(entry.match)?.[1] : undefined;
+    if (effect) classes.set(name, [effect]);
+  }
+  return classes;
+}
+const holdsTurns = (data: Obj): boolean => data.owner === 'you' || ['sign_in_required', 'token_refresh_failed', 'plan_window_spent', 'refusal'].includes(String(data.cause));
 /** An answered ask, as a route delivers it. */
 interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
 /** Your words sent from the app into a session (#340), by the delivery's request ID. */
@@ -369,6 +389,8 @@ export class Core {
   private readonly waiting = new Map<string, Set<() => void>>();
   /** The log position of the last session.continued the hub routed (#85). */
   private continuedPos = 0;
+  /** The sends each session's cut-off turn started with no recorded end (#85), by the key an identical call matches: denied at PreToolUse with the earlier result. */
+  private readonly unknownSends = new Map<string, Map<string, { label: string; pr: boolean }>>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
   private continuing: Promise<void> = Promise.resolve();
   /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
@@ -417,7 +439,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
@@ -492,7 +514,13 @@ export class Core {
     // goes with that session's next prompt again (#85).
     for (const row of (await this.record.raw(`SELECT c.session_id, c.data FROM events c WHERE c.kind = 'session.continued' AND c.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = c.session_id AND e.log_pos > c.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'permission.request')) ORDER BY c.log_pos`)) as { session_id: string; data: string | Obj }[]) {
       const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
-      this.routesOf(row.session_id).later.push(continueText(String(d.because), typeof d.task === 'string' ? d.task : null));
+      this.routesOf(row.session_id).later.push(await this.continueBlock(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null, typeof d.stop === 'string' ? d.stop : undefined));
+    }
+    // A stop whose task is open holds its session's DeepBuild turns across a restart too (#85): each session's newest
+    // stop that no turn, prompt or continue followed.
+    for (const row of (await this.record.raw(`SELECT s.session_id, s.data FROM events s WHERE s.kind = 'agent.stop' AND s.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.session_id AND e.log_pos > s.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'session.continued', 'session.end'))`)) as { session_id: string; data: string | Obj }[]) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      if (holdsTurns(d)) this.routesOf(row.session_id).blocked = String(d.cause);
     }
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck() });
@@ -876,6 +904,10 @@ export class Core {
       if (meta.event === 'SessionEnd') this.writeCursors();
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
+    // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
+    // would start there until the task closes (#85); any other stop ends an earlier hold.
+    const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
+    if (stopped) this.routesOf(meta.session, meta.cwd).blocked = holdsTurns(stopped.data) ? String(stopped.data.cause) : undefined;
     // After a restart the core knows a session's state from its next hook on; a person's status question, which
     // changes none, takes the row's before the prompt's event reads as work (#83). Read before the queue's splice,
     // which may take the prompt's own draft.
@@ -1182,7 +1214,8 @@ export class Core {
     if (p.due > this.now()) return this.armPromise(session);
     const agent = this.sessions.get(session)?.agent ?? this.live.get(session)?.agent ?? 'claude-code';
     const r = this.routes.get(session);
-    const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && r.busy < r.waiter.since;
+    // A session stopped on a cause whose task is open isn't woken for it (#85): the check goes with the resume.
+    const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && !r.blocked && r.busy < r.waiter.since;
     await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: idle ? 'wake' : 'next_hook' });
     p.status = 'due';
     if (idle && r.waiter) return this.handPromise(session, p, r);
@@ -1727,6 +1760,8 @@ export class Core {
       if (this.options.plant !== 'stop-count-never-resets') r.continued = 0;
       r.capped = false;
     }
+    // A turn running, or a prompt you typed, is the session yours again: its stop's hold on DeepBuild's turns ends (#85).
+    if (meta.event === 'UserPromptSubmit' || meta.event === 'PreToolUse' || meta.event === 'PostToolUse') r.blocked = undefined;
     if (meta.event === 'SessionEnd') {
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
@@ -1871,10 +1906,12 @@ export class Core {
     const promised = [...this.promises].filter(([, p]) => p.status === 'due').map(([id]) => id);
     const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted, ...promised])].sort();
     const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
-    const key = `${sessions.join(' ')}|${judged.join(' ')}`;
+    // A session whose cut-off turn started a send with no recorded end has its tool calls held for the gate (#85).
+    const resend = [...this.unknownSends].filter(([, sends]) => sends.size).map(([id]) => id).sort();
+    const key = `${sessions.join(' ')}|${judged.join(' ')}|${resend.join(' ')}`;
     if (key === this.askingSent) return;
     this.askingSent = key;
-    this.asking(sessions, judged);
+    this.asking(sessions, judged, resend);
   }
 
   /**
@@ -1892,6 +1929,10 @@ export class Core {
     void this.queue(async () => {
       const waiter = r.waiter;
       if (!waiter || !idle()) return;
+      // While the session's newest stop carries a cause whose task is open, no turn DeepBuild causes starts there (#85):
+      // an answer, a promised check or a parked line waits on its row and goes with the resume. Only a message you
+      // typed goes at once.
+      if (r.blocked && !(this.notes.get(session) ?? []).length) return;
       // A promised check that came due before this waiter asked (a hub restarted on the record, the waiter back a
       // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
       const p = this.promises.get(session);
@@ -1940,17 +1981,113 @@ export class Core {
       this.continuedPos = row.log_pos;
       if (!row.session_id) continue;
       const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
-      await this.continueSession(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null);
+      await this.continueSession(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null, typeof d.stop === 'string' ? d.stop : undefined);
     }
+  }
+  /**
+   * The words a continue goes into its session with (#85): why it continues, then the block from the record for the
+   * turn the stop cut off: each change or send call that started with no recorded end, marked outcome unknown, to
+   * check before acting on. A send among them is denied at PreToolUse while its outcome is unknown. The box's resume
+   * (#146) reuses the block. The block is kept as the session's reading, so the record says what the session heard.
+   */
+  private async continueBlock(session: string, because: string, task: string | null, stop: string | undefined): Promise<string> {
+    const text = continueText(because, task);
+    const calls = stop ? await this.cutOff(session, stop) : [];
+    if (!calls.length) return text;
+    const sends = this.unknownSends.get(session) ?? this.unknownSends.set(session, new Map()).get(session)!;
+    for (const call of calls) if (call.send) sends.set(call.key, { label: call.label, pr: call.pr });
+    const block = `DeepBuild: the turn that was cut off started ${calls.length === 1 ? 'this call' : 'these calls'} with no recorded end, so ${calls.length === 1 ? 'its' : 'each one\'s'} outcome is unknown; check before acting on it: ${calls.map((c) => `${c.label} (outcome unknown)`).join('; ')}.`;
+    const agent = this.live.get(session)?.agent ?? this.sessions.get(session)?.agent ?? 'claude-code';
+    const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') = ? LIMIT 1`, [session, block]);
+    if (!seen) await this.appendReading(session, agent, block).catch(() => undefined);
+    if (sends.size) this.askingSoon();
+    return `${text}\n\n${block}`;
+  }
+  /**
+   * The change and send calls of the turn `stop` cut off that started with no recorded end: each tool.before of the
+   * session between the stop before it and the stop itself with no tool.after for its call. A change is an edit or
+   * a write; a send is a shell call that opens a pull request, or one the `effect:` guard entries deep-hook matched
+   * read as a push, merge, dispatch, send or delete, or an MCP tool whose facts give it such an effect.
+   */
+  private async cutOff(session: string, stop: string): Promise<CutOff[]> {
+    const rows = (await this.record.raw(`SELECT kind, data FROM events WHERE session_id = ? AND kind IN ('tool.before', 'tool.after')
+      AND log_pos < (SELECT log_pos FROM events WHERE id = ?)
+      AND log_pos > COALESCE((SELECT MAX(log_pos) FROM events WHERE session_id = ? AND kind IN ('agent.stop', 'session.start') AND log_pos < (SELECT log_pos FROM events WHERE id = ?)), 0) ORDER BY log_pos`, [session, stop, session, stop])) as { kind: string; data: string | Obj }[];
+    const open = new Map<string, Obj>();
+    for (const row of rows) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      if (typeof d.call !== 'string') continue;
+      if (row.kind === 'tool.before') open.set(d.call, d);
+      else open.delete(d.call);
+    }
+    const effects = effectEntries(this.root.dir);
+    const found: CutOff[] = [];
+    for (const d of open.values()) {
+      const kind = String(d.kind);
+      const command = typeof d.command === 'string' ? d.command : undefined;
+      const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
+      const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
+      const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && typeof d.effect === 'string' && EFFECTS.has(d.effect));
+      const change = kind === 'edit' || kind === 'write';
+      if (!send && !change) continue;
+      const paths = Array.isArray(d.paths) ? d.paths.map(String).join(', ') : '';
+      const label = kind === 'shell' ? `Bash \`${command ?? ''}\`` : kind === 'mcp' ? `${String(d.server)} ${String(d.tool)}` : `${kind} ${paths}`;
+      found.push({ key: kind === 'mcp' ? `mcp:${String(d.server)}/${String(d.tool)}` : `${kind}:${command ?? paths}`, label, send, pr });
+    }
+    return found;
+  }
+  /**
+   * Whether a PreToolUse repeats a send the cut-off turn started with no recorded end (#85), and why it is denied: with
+   * the earlier result when the hub can read it (a pull request the forge holds for the session's branch), else with
+   * the outcome unknown, once, so the agent checks before sending again. A send the forge shows never went out runs.
+   */
+  private async resent(meta: HookMeta): Promise<string | undefined> {
+    const sends = this.unknownSends.get(meta.session);
+    const call = meta.call;
+    if (!sends?.size || !call) return undefined;
+    const command = typeof call.input.command === 'string' ? scrubText(call.input.command, { held: this.options.held }) : undefined;
+    const mcp = /^mcp__([^_].*?)__(.+)$/.exec(call.tool);
+    const key = command !== undefined ? `shell:${command}` : mcp ? `mcp:${mcp[1]}/${mcp[2]}` : undefined;
+    const found = key ? sends.get(key) : undefined;
+    if (!key || !found) return undefined;
+    const result = found.pr ? await this.prOf(meta.session).then((url) => url ?? this.pullFor(meta)) : undefined;
+    if (result === null) {
+      // The forge holds no pull request for the branch: the send never went out, so this one runs.
+      sends.delete(key);
+      return undefined;
+    }
+    if (result) {
+      const agent = this.live.get(meta.session)?.agent ?? meta.agent;
+      await this.openedPr(meta.session, agent, result).catch(() => undefined);
+      return `DeepBuild denied this: ${found.label} is the send the turn that was cut off already made. Its result: pull request ${result}. Go on from there; don't open it again.`;
+    }
+    // Its outcome can't be read from here: denied once, with that, so the next identical call is the agent's informed choice.
+    sends.delete(key);
+    return `DeepBuild denied this: ${found.label} is the send the turn that was cut off started with no recorded end, so its outcome is unknown. Check whether it went through before sending again; only a call you've checked, or a different one, runs.`;
+  }
+  /** The pull request the forge holds for the session's branch, or null when it holds none, or undefined when it can't be read. */
+  private async pullFor(meta: HookMeta): Promise<string | null | undefined> {
+    const repo = repoOf(meta.cwd);
+    const [row] = (await this.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
+    const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 3000 }, (error, out) => done(error ? undefined : out.trim())));
+    if (!repo || !branch) return undefined;
+    const forge = new Forge(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+    return forge.pullFor(repo, branch);
   }
   /**
    * One automatic continue of a stopped session (#85), by #25's routes: a stop of the session held now is sent back
    * with it; else its idle waiter wakes the session with it; else it goes with the session's next prompt, and the
-   * record says so. The core decided it from the stop's structure; the hub only carries it.
+   * record says so. The core decided it from the stop's structure; the hub only carries it. What waited on the row
+   * while the stop's task was open (a parked line, a promised check due) goes with the resume.
    */
-  private async continueSession(session: string, because: string, task: string | null): Promise<void> {
-    const text = continueText(because, task);
+  private async continueSession(session: string, because: string, task: string | null, stop?: string): Promise<void> {
+    const block = await this.continueBlock(session, because, task, stop);
+    // A verdict that landed while the session was stopped (a slow-lane FAIL, say) waited on its row: it goes with the resume.
+    const landed = await this.landedLine(session).catch(() => undefined);
+    const claim = this.live.get(session)?.claim;
+    const text = landed ? `${block}\n\nDeepBuild: while this session was stopped, its claim${claim ? ` ${claim}` : ''} was judged: ${landed}` : block;
     const r = this.routesOf(session);
+    r.blocked = undefined;
     if (r.holding) {
       r.sendBacks.push(text);
       for (const wake of this.waiting.get(session) ?? []) wake();
@@ -1959,8 +2096,12 @@ export class Core {
     const waiter = r.waiter;
     if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < Math.max(waiter.since, r.ended)) {
       r.waiter = undefined;
-      r.handed = [...(r.handed ?? []), text];
-      waiter.give({ session, text });
+      const later = r.later.splice(0);
+      r.handed = [...(r.handed ?? []), text, ...later];
+      const p = this.promises.get(session);
+      let promised: string | undefined;
+      if (p?.status === 'due' && !p.handed) { p.handed = true; promised = wakeText(p); this.armPromiseGrace(session, p, WAKE_GRACE); }
+      waiter.give({ session, text: [text, ...later, promised].filter(Boolean).join('\n\n') });
       return;
     }
     r.later.push(text);
@@ -2068,6 +2209,12 @@ export class Core {
     if (call.screen && meta.call) {
       const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
       if (deny) return { deny };
+    }
+    // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result.
+    if (call.resend) {
+      const deny = await this.resent(meta).catch(() => undefined);
+      if (deny) return { deny };
+      if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
     }
     // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
     // can't be worked out runs only staged.
