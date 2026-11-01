@@ -82,6 +82,9 @@ export const checks = [
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
   { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
+  // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910). It
+  // reads the open issues the catalogue drift lane fetched.
+  { name: 'design links', commands: [[process.execPath, 'scripts/design-links.mjs']], fix: 'Point each link named above at a heading or <a id> its doc has, or give the doc back the heading it linked; offline, run again with network and gh signed in.' },
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
@@ -196,6 +199,10 @@ export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
   const release = process.env.DEEP_PREFLIGHT === 'release';
+  // The lanes that read the open issues share one fetch a run, in this file (scripts/open-issues.mjs); perf's
+  // copies name theirs.
+  const issues = process.env.DEEP_OPEN_ISSUES ? undefined : mkdtempSync(join(tmpdir(), 'deep-open-issues-'));
+  if (issues) process.env.DEEP_OPEN_ISSUES = join(issues, 'open-issues.json');
   let changed;
   for (const lane of lanes) {
     if (lane.paths && !release) {
@@ -251,6 +258,10 @@ export function runLanes(lanes, { cwd = root } = {}) {
     const elapsed = ((performance.now() - started) / 1000).toFixed(2);
     if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
     else console.log(`PASS ${lane.name} (${elapsed} s)`);
+  }
+  if (issues) {
+    delete process.env.DEEP_OPEN_ISSUES;
+    rmSync(issues, { recursive: true, force: true });
   }
   for (const failure of failures) console.log(failure);
   return failures.length ? 1 : 0;
