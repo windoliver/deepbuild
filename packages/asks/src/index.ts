@@ -20,10 +20,19 @@
 // answers each open ask it then covers. A decision covers an ask only within the bounds of the change it was saved
 // from, never a change touching a CI workflow file or a git hook script, and nowhere you overruled it. Resolvers
 // that disagree answer nothing: the ask reaches you showing each answer.
+//
+// Stops (#85): a stop whose block only you can clear (owner you: a revoked sign-in, a VPN, a spend limit) or whose plan
+// window is spent raises one unblock task, shared by every session the same block (the same signature) stopped; it
+// closes on its check (a PASS verdict, the reset time, or the reply a chat-app thread expects) and the core then
+// continues each of its sessions (session.continued, because task_closed). A transient the service owns, or a context
+// overflow, gets one automatic continue per turn you started, while the stop is the session's newest, under 10 minutes
+// old by deep-hook's stamp, with nothing typed since. The core reads the stop's structure alone, never the agent's text.
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { ADAPTERS, shipped } from '@deepbuild/adapters';
+import type { AdapterRegistry } from '@deepbuild/adapters';
 import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { ulid } from '@deepbuild/record';
@@ -134,6 +143,8 @@ export interface Card {
   needs_person: string[];
   /** On a paid run's request whose named budget the core refused: that budget, and what's left in it, which the run's price doesn't fit. null otherwise. */
   budget: BudgetLeft | null;
+  /** On a task whose check ran and still fails: the check, what's missing (the verdict's reasons, or the thread check's), and the thread link on a chat-app task. null otherwise. */
+  missing: Missing | null;
   /**
    * What the card says before it arms about an answer that will be saved as a decision: the decision's scope in words,
    * and how many other open asks it will also answer. Both are fixed when the card is first presented (read through
@@ -143,6 +154,10 @@ export interface Card {
   /** The answered card's one-line receipt: your answer, and every other ask it closed, those decided for you included. null while open. */
   receipt: { answer: string; also: string[] } | null;
 }
+/** What a task's check still finds missing (#85). */
+export interface Missing { check: string; reasons: string[]; link: string | null }
+/** One message in a thread of your chat app, as the read-only connector hands it over. */
+export interface ThreadMessage { from: string; text: string; at: number }
 
 /** Every refusal the core makes, naming what it refuses. */
 export class AskRefused extends Error {
@@ -166,6 +181,17 @@ export interface AsksOptions {
   /** Your ~/.deepbuild folder: its config.json holds your own settings. Left out, nothing is declared. */
   home?: string;
   plant?: AsksPlant;
+  /**
+   * The read-only connector to your chat app's threads: how a chat-app task's check reads the thread, once per tick
+   * while such a task is open. The link is the task's own words, so the connector holds it to the chat app it serves
+   * and fetches nothing else. Left out, no thread is read.
+   */
+  threads?: { read(link: string): Promise<ThreadMessage[]> };
+  /**
+   * A network task's check, once per tick while one is open: a try's result, with when it started, when one has finished
+   * since the last call, and null otherwise. Left out, a network task closes only on a verdict.
+   */
+  network?: { read(): { host: string; reached: boolean; at: number } | null };
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -184,6 +210,8 @@ export interface InboxRow {
   request: { to: string; block: string } | null;
   /** For an ask decided for you, the decision it reused; null otherwise. */
   decision: string | null;
+  /** On an open task whose check ran and still fails: what's missing, as its card says. null otherwise. */
+  missing: Missing | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -378,6 +406,14 @@ const FOLD_SOURCE = 'asks.fold';
 const OUTSIDE_SOURCE = 'effect.outside_plan';
 /** Where the core drafts a request for the owner of a block that isn't yours. */
 const REQUEST_SOURCE = 'request.draft';
+/** Where the core raises the task for a stop's block (#85): one per block, shared by every session it stopped. */
+const BLOCK_SOURCE = 'stop.block';
+/** How old a stop may be, by deep-hook's stamp, when the core sees it, for an automatic continue (design: 10 minutes). */
+const CONTINUE_WINDOW = 10 * 60_000;
+/** The causes that pass by themselves when the service owns the block: a dropped connection, an overloaded service. */
+const TRANSIENT = new Set(['timed_out', 'rate_limited']);
+/** The ask.moot reasons ask.moot@2 added. */
+const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached']);
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
@@ -441,7 +477,16 @@ interface Ask {
   unread: boolean;
   /** Since when it waits for a batch: raised, or read by the agent when raised held for your message. */
   since: number;
+  /** What its check still finds missing, when it ran and failed, or the thread it watches has no right reply yet. */
+  missing?: Missing;
+  /** A stop's task (#85): the block's signature, and the stop it covers in each session it unblocks. */
+  block?: { signature: string; stops: Map<string, string> };
 }
+
+/** One stop of a session, as agent.stop@4 records it (#85): the structure the core raises a task or a continue from. */
+interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; who: Ask['who'] }
+/** An automatic continue the core recorded: the stop it continued from, why, and when. */
+interface Continued { stop: string; because: string; ts: number }
 
 /** Batches every `every` ms since the epoch, showing at most `cap` asks a UTC day. */
 interface Batches { every: number; cap: number }
@@ -463,7 +508,21 @@ const CLOSING: Readonly<Record<string, string>> = {
 
 class AsksCore implements Asks {
   private cursor = 0;
-  private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null }>();
+  private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
+  /** Each session's stops in log order, and every stop by ID (#85). */
+  private readonly stops = new Map<string, Stop[]>();
+  private readonly stopIds = new Map<string, Stop>();
+  /** The stamp of the last prompt you typed in each session, and the continues the core recorded for it. */
+  private readonly typedAt = new Map<string, number>();
+  private readonly continued = new Map<string, Continued[]>();
+  /** Each block's signature by the key its task is raised under, and the open task of each signature. */
+  private readonly signatures = new Map<string, string>();
+  private readonly blockTasks = new Map<string, Ask>();
+  /** The stops a task covers, so a session's stop raises or joins one task once. */
+  private readonly covered = new Set<string>();
+  /** Sessions whose newest stop the core hasn't read yet, and block tasks closed on their check whose sessions resume. */
+  private readonly fresh = new Set<string>();
+  private readonly resumes = new Set<Ask>();
   private readonly asks = new Map<string, Ask>();
   /** Each thread's asks, open or closed, in log order. */
   private readonly threads = new Map<string, Ask[]>();
@@ -711,8 +770,9 @@ class AsksCore implements Asks {
         this.hand(member, allow.id, null, false, allow.decision);
         ask.receiptAlso.push(member.handle);
       }
-      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim.
-      const scope = chosen && !ask.fold ? this.scopeOf(ask) : null;
+      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
+      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
+      const scope = chosen && !ask.fold && !ask.block ? this.scopeOf(ask) : null;
       if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
@@ -808,7 +868,7 @@ class AsksCore implements Asks {
       return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
-        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null,
+        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null,
       }));
     });
   }
@@ -1276,7 +1336,8 @@ class AsksCore implements Asks {
     // An ask you put off with Later waits for its Later, not for a batch.
     // A block someone else owns never shows: its drafted request does.
     // The same question from another thread shows through the older one's card, and is answered with it.
-    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined && !a.theirs && !this.rides(a));
+    // A session's task that joins the shared one is superseded before it could show: the shared task is the card.
+    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined && !a.theirs && !this.rides(a) && a.pending.superseded === undefined);
     // A Later that ends shows its ask again, recorded like any showing; so does one that an ask joining the
     // exception since would outlast.
     const now = this.options.now();
@@ -1422,6 +1483,7 @@ class AsksCore implements Asks {
       conflict: ask.conflict.map((c) => ({ ...c })),
       needs_person: needsPerson(ask.data),
       budget: ask.budget && !ask.closed ? { ...ask.budget } : null,
+      missing: ask.missing && !ask.closed ? { ...ask.missing, reasons: [...ask.missing.reasons] } : null,
       saves: ask.saves ?? null,
       receipt: ask.closed?.outcome === 'answered' && ask.closed.answer !== undefined ? { answer: ask.closed.answer, also: [...ask.receiptAlso] } : null,
     };
@@ -1470,12 +1532,34 @@ class AsksCore implements Asks {
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     switch (e.kind) {
       case 'session.start':
-        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
+        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null, agent: String(d.agent ?? e.agent ?? '') });
+        return;
+      case 'agent.stop': {
+        // The hook's record of a stop: its cause from the closed set and, from the adapter's facts, who owns the block
+        // and its signature. A stop without a signature is its own block, by cause.
+        if (!e.session || e.writer !== 'hook') return;
+        const cause = String(d.cause);
+        const stop: Stop = {
+          id: e.id, session: e.session, ts: e.ts, pos: e.log_pos, cause, owner: typeof d.owner === 'string' ? d.owner : 'agent',
+          signature: typeof d.signature === 'string' ? d.signature : cause, resets: typeof d.plan_resets === 'number' ? d.plan_resets : null, who: { actor: e.actor, scope: e.scope },
+        };
+        this.stops.set(e.session, [...(this.stops.get(e.session) ?? []), stop]);
+        this.stopIds.set(stop.id, stop);
+        this.signatures.set(blockKey(stop.signature), stop.signature);
+        this.fresh.add(e.session);
+        return;
+      }
+      case 'session.continued':
+        if (e.writer === 'core' && e.session) this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop: String(d.stop), because: String(d.because), ts: e.ts }]);
         return;
       case 'ask.created': {
         const thread = this.threadOf(e.session);
         const fold = e.writer === 'core' && d.key === foldKey(thread);
         const theirs = isTheirs(d, e.actor);
+        // A stop's task (#85): raised by the core under its block's key, one open per signature. A later session's
+        // joins the open one, superseded by it, so one task unblocks every session the block stopped.
+        const signature = e.writer === 'core' && d.kind === 'unblock' ? this.signatures.get(String(d.key)) : undefined;
+        const joins = signature === undefined ? undefined : this.blockTasks.get(signature);
         // A request the core drafted names its block as its subject and is keyed on the block's subject.
         const block = e.writer === 'core' && e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
         const request = block?.theirs && !this.requested.has(block.handle) && d.key === requestKey(block) ? { to: String(block.data.owner), block: block.handle } : undefined;
@@ -1486,10 +1570,16 @@ class AsksCore implements Asks {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
           created: e.ts, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
+          ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
+        if (ask.block) {
+          for (const id of ask.block.stops.values()) this.covered.add(id);
+          if (joins) ask.pending.superseded = joins.handle;
+          else this.blockTasks.set(ask.block.signature, ask);
+        }
         // A newer ask on the same subject in the same thread supersedes the older one, and keeps what it decided.
-        for (const older of open) {
+        for (const older of joins ? [] : open) {
           if (older.data.key !== d.key) continue;
           older.pending.superseded = ask.handle;
           for (const path of older.decided) ask.decided.add(path);
@@ -1560,6 +1650,16 @@ class AsksCore implements Asks {
           const steps = Array.isArray(d.steps) ? d.steps.filter((n): n is number => typeof n === 'number') : null;
           ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision), steps };
         }
+        if (ask.block) {
+          if (this.blockTasks.get(ask.block.signature) === ask) this.blockTasks.delete(ask.block.signature);
+          // A session's task folded into the shared one: the shared task covers its stop from then on.
+          const into = e.kind === 'ask.superseded' ? this.asks.get(bare(String(d.by))) : undefined;
+          if (into?.block) for (const [session, id] of ask.block.stops) into.block.stops.set(session, id);
+          // Closed on its check, or by your "I did it" (its done option; until the done gate re-runs the check on that
+          // answer, #323, the next turn is the check: a block that holds stops the session again): its sessions
+          // resume. "Leave it blocked" and a default leave them stopped, as the option says.
+          if (e.kind === 'ask.moot' || (e.kind === 'ask.answered' && d.answer === 'done')) this.resumes.add(ask);
+        }
         // An ask the exception held but hadn't shown yet wasn't in what you closed: it gets its own card.
         if (ask.fold) for (const a of this.openIn(ask.thread)) if (a.folded === ask.handle && !a.shown) delete a.folded;
         // A block that's moot, its check passed or its attempt replaced, needs no request: that one's moot too.
@@ -1573,6 +1673,7 @@ class AsksCore implements Asks {
         delete target.closed;
         delete target.folded;
         target.data = { ...target.data, deadline: d.deadline };
+        if (target.block && !this.blockTasks.has(target.block.signature)) this.blockTasks.set(target.block.signature, target);
         return;
       case 'ask.batched': {
         if (e.writer !== 'core' || !Array.isArray(d.asks)) return;
@@ -1605,7 +1706,10 @@ class AsksCore implements Asks {
         for (const a of this.open()) if (a.session === e.session && a.unread) [a.unread, a.since] = [false, e.ts];
         return;
       case 'user.ask': {
-        if (d.from === 'person' && e.session) this.unread.add(e.session);
+        if (d.from === 'person' && e.session) {
+          this.unread.add(e.session);
+          this.typedAt.set(e.session, Math.max(this.typedAt.get(e.session) ?? -Infinity, e.ts));
+        }
         if (d.from !== 'person' || typeof d.text !== 'string') return;
         const thread = this.threadOf(e.session);
         const open = this.openIn(thread);
@@ -1617,9 +1721,18 @@ class AsksCore implements Asks {
         return;
       }
       case 'verdict.made': {
-        if (d.outcome !== 'PASS' || !Array.isArray(d.requirements)) return;
-        const passed = new Set(d.requirements.filter((r) => isObj(r) && r.outcome === 'PASS').map((r) => (r as Obj).check));
-        for (const a of this.open()) if (a.data.kind === 'unblock' && passed.has(a.data.proves!)) a.pending.moot ??= { because: 'check_passed', verdict: String(d.verdict) };
+        const requirements = Array.isArray(d.requirements) ? d.requirements : [];
+        if (!requirements.length) return;
+        const checks = (outcome: string) => new Set(requirements.filter((r) => isObj(r) && r.outcome === outcome).map((r) => (r as Obj).check));
+        const passed = d.outcome === 'PASS' ? checks('PASS') : new Set<JsonValue | undefined>();
+        const failed = checks('FAIL');
+        const reasons = Array.isArray(d.reasons) ? d.reasons.filter((r): r is string => typeof r === 'string') : [];
+        for (const a of this.open()) {
+          if (a.data.kind !== 'unblock') continue;
+          if (passed.has(a.data.proves!)) a.pending.moot ??= { because: 'check_passed', verdict: String(d.verdict) };
+          // Its check ran and still fails: the task stays open, its card saying what's missing (#85).
+          else if (failed.has(a.data.proves!)) a.missing = { check: String(a.data.proves), reasons, link: chatThread(a.data)?.link ?? null };
+        }
         return;
       }
       case 'claim.made': {
@@ -1653,6 +1766,9 @@ class AsksCore implements Asks {
     // The asks that had shown before this call: only they can take a default in it, whatever the clock reads.
     // One under Later, or held by an exception under Later, wasn't in sight.
     const seen = new Set(this.open().filter((a) => this.inSight(a)).map((a) => a.handle));
+    // Each open chat-app task's thread, read once a call through the connector.
+    await this.readThreads();
+    this.readNetwork();
     for (let acted = true; acted;) {
       // A block someone else owns gets its request drafted first, so the request shows when the block is raised.
       acted = false;
@@ -1661,6 +1777,8 @@ class AsksCore implements Asks {
         await this.draftRequest(block);
         acted = true;
       }
+      // What the sessions' stops call for: a task, its sessions' resumes, an automatic continue (#85).
+      if (await this.stopsSettled(this.options.now())) acted = true;
       // What shows comes first, so no ask takes its default before it has shown.
       if (await this.show()) acted = true;
       const now = this.options.now();
@@ -1670,7 +1788,7 @@ class AsksCore implements Asks {
         if (ask.pending.superseded) {
           await this.options.record.append(as, { ...base, kind: 'ask.superseded', data: { by: ask.pending.superseded } });
         } else if (ask.pending.moot) {
-          await this.options.record.append(as, { ...base, kind: 'ask.moot', data: ask.pending.moot });
+          await this.options.record.append(as, { ...base, v: MOOT_V2.has(String(ask.pending.moot.because)) ? 2 : 1, kind: 'ask.moot', data: ask.pending.moot });
         } else if (ask.pending.typed !== undefined) {
           // Typed in the session: the answer to that question only, unverified, never a decision.
           await this.options.record.append(as, {
@@ -1700,6 +1818,173 @@ class AsksCore implements Asks {
       // Once its exception closes, by your answer or its default, a folded ask waits for its own default: the
       // exception isn't raised again for asks it already showed you.
       await this.sync();
+    }
+  }
+
+  // ---- Stops (#85): a block's task, its sessions' resumes, and the one automatic continue.
+
+  /** A session's newest stop, by deep-hook's stamp (then by log order), or none. */
+  private newest(session: string): Stop | undefined {
+    let top: Stop | undefined;
+    for (const stop of this.stops.get(session) ?? []) if (!top || stop.ts > top.ts || (stop.ts === top.ts && stop.pos > top.pos)) top = stop;
+    return top;
+  }
+  /** The stop a task covers in each session it unblocks: that session's newest when the task was raised. */
+  private coveringStops(data: Obj): Map<string, string> {
+    const stops = new Map<string, string>();
+    for (const handle of Array.isArray(data.unblocks) ? data.unblocks : []) {
+      const session = typeof handle === 'string' && handle.startsWith('session:') ? handle.slice('session:'.length) : undefined;
+      const stop = session === undefined ? undefined : this.newest(session) ?? this.newest([...this.stops.keys()].find((s) => letters(s) === session) ?? '');
+      if (stop) stops.set(stop.session, stop.id);
+    }
+    return stops;
+  }
+  private wasContinued(stop: Stop): boolean {
+    return (this.continued.get(stop.session) ?? []).some((c) => c.stop === stop.id);
+  }
+  /** Whether a prompt you typed reached the session after the stop: the session is yours again, not the core's to continue or task. */
+  private typedAfter(stop: Stop): boolean {
+    return (this.typedAt.get(stop.session) ?? -Infinity) > stop.ts;
+  }
+  /**
+   * Whether the turn you started already had its one automatic continue: a continue from an earlier stop stamped after
+   * your last prompt (or after the last resume of a task that closed, which starts a turn of its own).
+   */
+  private continuedSince(stop: Stop): boolean {
+    const resumed = (this.continued.get(stop.session) ?? []).filter((c) => c.because === 'task_closed').map((c) => c.ts);
+    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed);
+    return (this.continued.get(stop.session) ?? []).some((c) => {
+      const earlier = c.because !== 'task_closed' ? this.stopIds.get(c.stop) : undefined;
+      return earlier !== undefined && earlier.ts > since && earlier.ts < stop.ts;
+    });
+  }
+
+  /**
+   * What the sessions' stops call for: for a block only you can clear or a spent plan window, one task shared by every
+   * session the same block stopped, and its sessions' resumes once it closed on its check; for a transient the service
+   * owns or a context overflow, one automatic continue per turn you started, while the stop is the session's newest,
+   * under 10 minutes old by its stamp when the core first sees it, with nothing typed since. A stop is read once; a
+   * refusal, a block someone else owns, and any other cause get nothing: the session stays stopped with its cause on its row.
+   */
+  private async stopsSettled(now: number): Promise<boolean> {
+    let acted = false;
+    for (const session of [...this.fresh]) {
+      this.fresh.delete(session);
+      const stop = this.newest(session);
+      if (!stop || this.wasContinued(stop) || this.typedAfter(stop)) continue;
+      if (stop.owner === 'you' || stop.cause === 'plan_window_spent') {
+        if (this.covered.has(stop.id)) continue;
+        if (await this.raiseBlock(stop, now)) acted = true;
+        else this.fresh.add(session); // BLOCKED on the settings: kept for the next tick the hub owes (a stop or verdict landing, an open ask).
+      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
+        && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
+        await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
+        acted = true;
+      }
+    }
+    // A spent window's task closes at its reset: the time is its check, and no check runs.
+    for (const task of this.blockTasks.values()) {
+      const resets = Math.max(...[...task.block!.stops.values()].map((id) => this.stopIds.get(id)?.resets ?? -Infinity));
+      if (Number.isFinite(resets) && now >= resets && !task.pending.moot) task.pending.moot = { because: 'window_reset', at: resets };
+    }
+    // A task closed on its check: each session it unblocks resumes from the stop it covered, while that stop is still
+    // the session's newest and nothing was typed since; a newer stop decides for itself.
+    for (const task of [...this.resumes]) {
+      this.resumes.delete(task);
+      for (const [session, id] of task.block!.stops) {
+        const stop = this.newest(session);
+        if (!stop || stop.id !== id || this.wasContinued(stop) || this.typedAfter(stop)) continue;
+        await this.continueFrom(stop, 'task_closed', task.handle, now);
+        acted = true;
+      }
+    }
+    return acted;
+  }
+
+  /**
+   * The task for a stop's block, from ask.sources@1's stop.block row: keyed on the block's signature, pinned to it,
+   * owned by the person it stopped, unblocking the session, proved by the block's check. With a task of the same block
+   * open, the session's joins it (superseded by it as soon as it's recorded). The deadline comes from your settings, as
+   * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the next tick the hub owes) and
+   * the session stays stopped with its cause on its row. A spent window's stop always carries its reset (agent.stop@4
+   * requires plan_resets on that cause), so its task always has the time that closes it.
+   */
+  private async raiseBlock(stop: Stop, now: number): Promise<boolean> {
+    const template = askSources().find((r) => r.source === BLOCK_SOURCE)!.fixture.ask as Obj;
+    const { deadline: _deadline, ...rest } = template;
+    const unfilled: Obj = {
+      ...rest, ...blockText(stop), owner: stop.who.actor, key: blockKey(stop.signature), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(stop.signature)) },
+      unblocks: [`session:${letters(stop.session)}`], proves: `${stop.cause}@${stop.signature}`,
+    };
+    let data: Obj;
+    try {
+      data = this.fill(stop.session, unfilled, now) as Obj;
+    } catch (error) {
+      if (error instanceof AskRefused) return false;
+      throw error;
+    }
+    const id = ulid(now);
+    const checked = validate('ask.created@3', { v: 3, id, kind: 'ask.created', writer: 'core', actor: stop.who.actor, scope: stop.who.scope, ts: now, data });
+    if (!checked.ok) throw new AskRefused(`ask.created@3 refuses the block's task at ${checked.issues[0]!.path}: ${checked.issues[0]!.remediation}`, { field: checked.issues[0]!.path, source: BLOCK_SOURCE });
+    await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, { v: 3, id, kind: 'ask.created', ts: now, data });
+    await this.sync();
+    return true;
+  }
+
+  /** The continue the core starts in a stopped session: recorded first; the hub reads it and takes the route (#25). */
+  private async continueFrom(stop: Stop, because: 'transient' | 'context_overflow' | 'task_closed', task: string | null, now: number): Promise<void> {
+    await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, {
+      v: 1, id: ulid(now), kind: 'session.continued', subject: `session:${letters(stop.session)}`, ts: now, data: { stop: stop.id, because, task },
+    });
+    await this.sync();
+  }
+
+  /** Each open network task's check: a failed try is what's missing; the first that succeeds closes the task. */
+  private readNetwork(): void {
+    const tasks = [...this.blockTasks.values()].filter((t) => [...t.block!.stops.values()].some((id) => this.stopIds.get(id)?.cause === 'timed_out'));
+    const tried = tasks.length ? this.options.network?.read() : null;
+    if (!tried) return;
+    for (const task of tasks) {
+      // A try from before the task says nothing of the block that raised it.
+      if (tried.at < task.created) continue;
+      if (tried.reached) task.pending.moot ??= { because: 'network_reached', host: tried.host };
+      else task.missing = { check: String(task.data.proves), reasons: [`${tried.host} can't be reached yet`], link: null };
+    }
+  }
+
+  /**
+   * Each open chat-app task's thread, read through the read-only connector: a reply from someone other than you, after
+   * your post, whose text contains what the task expects closes it; before you post nothing changes; after it, no reply
+   * or a wrong one is what's missing, with the thread link. The core never posts.
+   */
+  private async readThreads(): Promise<void> {
+    const threads = this.options.threads;
+    if (!threads) return;
+    for (const ask of this.open()) {
+      const thread = chatThread(ask.data);
+      if (!thread || ask.pending.moot) continue;
+      const check = String(ask.data.proves);
+      let messages: ThreadMessage[];
+      try {
+        messages = await threads.read(thread.link);
+      } catch (error) {
+        ask.missing = { check, reasons: [`the thread couldn't be read through the connector: ${(error as Error)?.message ?? String(error)}`], link: thread.link };
+        continue;
+      }
+      const you = String(ask.data.owner);
+      // Only your post since the task was raised: an old exchange in the thread never closes a new task.
+      const posted = messages.findIndex((m) => m.from === you && m.at >= ask.created);
+      if (posted < 0) { delete ask.missing; continue; }
+      const replies = messages.slice(posted + 1).filter((m) => m.from !== you);
+      if (replies.some((m) => typeof m.text === 'string' && m.text.includes(thread.expect))) {
+        ask.pending.moot = { because: 'thread_replied', link: thread.link };
+        continue;
+      }
+      const last = replies.at(-1);
+      ask.missing = {
+        check, link: thread.link,
+        reasons: [last ? `the last reply in the thread, ${JSON.stringify(String(last.text).slice(0, 200))}, doesn't contain ${JSON.stringify(thread.expect)}` : 'no reply in the thread since your post'],
+      };
     }
   }
 
@@ -1803,6 +2088,41 @@ const isTheirs = (data: Obj, actor: string): boolean => data.kind === 'unblock' 
 
 /** A request is keyed on its block's subject, so a newer block on the same subject supersedes its request too. */
 const requestKey = (block: Ask): string => sha256Hex(new TextEncoder().encode(`${REQUEST_SOURCE}:${String(block.data.key)}`));
+
+/** A stop's task is keyed on its block's signature: the same block in any session is one task (#85). */
+const blockKey = (signature: string): string => sha256Hex(new TextEncoder().encode(`${BLOCK_SOURCE}:${signature}`));
+/** The thread a chat-app task's check reads, when the task names one. */
+const chatThread = (data: Obj): { link: string; expect: string } | undefined => {
+  const thread = data.thread;
+  return isObj(thread) && typeof thread.link === 'string' && typeof thread.expect === 'string' ? { link: thread.link, expect: thread.expect } : undefined;
+};
+let adapters: AdapterRegistry | undefined;
+/**
+ * Whether an agent's facts give a hook for a turn that ends in an error: without one (Codex) no automatic continue could
+ * reach the session, so none starts. An agent no adapter knows gets none either.
+ */
+function errorTurnHook(agent: string): boolean {
+  try {
+    return (adapters ??= shipped()).get(ADAPTERS[agent] ?? agent).caps.errorTurnHook === true;
+  } catch {
+    return false;
+  }
+}
+/** What a block's task says, by its cause: the words on the card. The task's identity is the block's structure, never these words. */
+function blockText(stop: Stop): { question: string; steps: string[]; where: string; why: string } {
+  const WORDS: Readonly<Record<string, [question: string, step: string, where: string]>> = {
+    sign_in_required: ['Sign in again? The sign-in the sessions used was revoked.', 'Sign in again where the agent runs (Claude Code: /login)', 'your terminal'],
+    token_refresh_failed: ["Sign in again? The sessions' token couldn't be refreshed.", 'Sign in again where the agent runs (Claude Code: /login)', 'your terminal'],
+    rate_limited: ['Raise the spend limit the sessions ran into?', 'Raise the limit, or wait it out, at the service', 'the service account'],
+    timed_out: ['Reconnect the network the sessions reach the service through?', 'Reconnect the network (a VPN, a proxy) the sessions need', 'your machine'],
+    plan_window_spent: [`Wait for the plan window to reset${stop.resets === null ? '' : ` at ${new Date(stop.resets).toISOString()}`}?`, 'Nothing: the task closes by itself at the reset', 'nowhere'],
+  };
+  const [question, step, where] = WORDS[stop.cause] ?? [`Clear the block that stopped session ${stop.session} (${stop.cause})?`, `Clear the block (${stop.cause})`, 'outside DeepBuild'];
+  const why = stop.cause === 'plan_window_spent'
+    ? `session ${stop.session} stopped: its plan window is spent; the reset time is the check`
+    : `session ${stop.session} stopped: ${stop.cause}, block ${stop.signature}, which only you can clear`;
+  return { question, steps: [step, 'Its check passes, the task closes by itself, and every session it unblocks resumes'], where, why };
+}
 
 export async function openAsks(options: AsksOptions): Promise<Asks> {
   const core = new AsksCore(options);

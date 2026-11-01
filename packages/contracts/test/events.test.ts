@@ -259,7 +259,7 @@ describe('the design says', () => {
   });
 
   it('the hub alone records what it made, ran, read or closed: an action and its report, layer rows, readings and rollups, a dry merge, a closed task, a superseded or moot ask', () => {
-    for (const name of ['action.entered@1', 'action.reported@1', 'layer.rows@1', 'reading.recorded@1', 'reading.batch@1', 'reading.rollup@1', 'merge.dry_run@1', 'task.closed@1', 'ask.superseded@1', 'ask.moot@1']) {
+    for (const name of ['action.entered@1', 'action.reported@1', 'layer.rows@1', 'reading.recorded@1', 'reading.batch@1', 'reading.rollup@1', 'merge.dry_run@1', 'task.closed@1', 'ask.superseded@1', 'ask.moot@1', 'ask.moot@2', 'session.continued@1']) {
       for (const writer of ['mcp:s1', 'ext:infra', 'hook', 'app', 'cli']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
       expect(ok(name, { ...first(name), writer: 'core' }), name).toBe(true);
     }
@@ -303,7 +303,7 @@ describe('the design says', () => {
       return { root, shared: { ...shared, v: version }, required: required.filter((key) => key !== 'subject') };
     };
     const kinds = catalogue().map((e) => e.schema);
-    expect(kinds).toHaveLength(143);
+    expect(kinds).toHaveLength(145);
     for (const name of kinds) expect(envelope(name), name).toEqual(envelope(kinds[0]!));
   });
 

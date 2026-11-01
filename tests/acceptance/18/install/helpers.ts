@@ -214,12 +214,29 @@ export function stopHoldEntry(settings: Line): Entry {
   if (found.length !== 1) throw Error(`setup must write one foreground Stop entry of DeepBuild's into ~/.claude/settings.json; found ${found.length}: ${JSON.stringify(found.map((e) => e.hook))}`);
   return found[0]!;
 }
-/** DeepBuild's waiter: its entry with asyncRewake, which wakes an idle session (design: Getting an answer back). */
-export function waiterEntry(settings: Line): Entry {
-  const found = deepEntries(settings).filter((e) => e.hook.asyncRewake === true);
-  if (found.length !== 1) throw Error(`setup must write one asyncRewake waiter entry of DeepBuild's into ~/.claude/settings.json; found ${found.length}: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
-  return found[0]!;
+/**
+ * DeepBuild's waiter entries: its entries with asyncRewake, which wake an idle session (design: Getting an answer
+ * back). Since the Oct 29 amendment (#85) setup writes one under Stop and one under StopFailure, with the same command
+ * and timeout, since a turn that ends on an API error fires only StopFailure. A setup that writes the waiter under
+ * Stop only fails here, naming StopFailure.
+ */
+export function waiterEntries(settings: Line): { stop: Entry; stopFailure: Entry } {
+  const all = deepEntries(settings).filter((e) => e.hook.asyncRewake === true);
+  const shownAll = JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })));
+  const under = (event: string): Entry => {
+    const found = all.filter((e) => e.event === event);
+    if (found.length !== 1) throw Error(`setup must write one asyncRewake waiter entry of DeepBuild's under ${event} in ~/.claude/settings.json${event === 'StopFailure' ? ' (a turn that ends on an API error fires only StopFailure, so a waiter under Stop only never starts for it)' : ''}; found ${found.length}: ${shownAll}`);
+    return found[0]!;
+  };
+  const stop = under('Stop');
+  const stopFailure = under('StopFailure');
+  const elsewhere = all.filter((e) => e.event !== 'Stop' && e.event !== 'StopFailure');
+  if (elsewhere.length) throw Error(`setup must write DeepBuild's waiter only under Stop and StopFailure; found it under ${elsewhere.map((e) => e.event).join(', ')}: ${shownAll}`);
+  return { stop, stopFailure };
 }
+/** The waiter's entry under Stop, and under StopFailure, as picks for setTimeoutOf. */
+export const stopWaiter = (settings: Line): Entry => waiterEntries(settings).stop;
+export const stopFailureWaiter = (settings: Line): Entry => waiterEntries(settings).stopFailure;
 /** Sets one entry's timeout, in seconds, as you would in an editor; every other byte of meaning stays. */
 export function setTimeoutOf(home: string, pick: (s: Line) => Entry, seconds: number): void {
   const settings = readSettings(home);
