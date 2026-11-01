@@ -1,0 +1,854 @@
+BASE-FAILURE.txt: the acceptance suite for #103 run on the base commit c9225aa3 (origin/main), nothing implemented.
+
+Command:  node node_modules/vitest/vitest.mjs run --root tests/acceptance/103 --no-file-parallelism
+Date:     2026-11-01
+Node:     v24.22.0
+Vitest:   vitest/5.0.5 darwin-arm64 node-v24.22.0
+tsc:      node node_modules/typescript/bin/tsc -p tests/acceptance/103/tsconfig.json  -> no diagnostics
+Exit:     1
+Result:   34 failed, 0 passed (34 tests in 6 files)
+
+Why each test fails at the base (the first line of its failure). 31 fail where a provider's manifest carries the
+composition rows (provides[].schema and digests, uses[].schema, from, optional), which extension.manifest@1 at the
+base refuses as unlisted fields: the manifest surface #103 adds. AC6 fails on the graph (edges() lists no first-party
+provider), AC14's lane test on the missing perf-lane tasks. Each wrong-program twin fails because the scenario never
+reaches the step its message names.
+
+  FAILED access.test.ts: AC3 the composite reads the stocks plug-in's prices through its use, and its own source on the same host never carries the stocks plug-in's market key
+         AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace
+  FAILED access.test.ts: AC4 the job runs on the used piece's reading, and the plug-in gets neither your transcript, nor the notes file, nor any cite but that reading, though the provider's grant names text
+         AssertionError: the stocks plug-in, granted text is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_fiel
+  FAILED access.test.ts: AC11 the post through the edge raises one ask naming the watchlist plug-in and posts only after your yes; mute, with no standing rule, asks the same way
+         AssertionError: the chat plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"key":{"type":"string"},"channel":{"type":"string"},"text":{"type":"string"}},"required":["key","channel","text"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: 
+  FAILED access.test.ts: AC11 your no to the post sends nothing, and the watchlist's call is refused
+         AssertionError: the chat plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"key":{"type":"string"},"channel":{"type":"string"},"text":{"type":"string"}},"required":["key","channel","text"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: 
+  FAILED access.test.ts: AC11 (wrong program) a hub that runs the call under the chat plug-in's own grant posts with no ask and fails, naming the caller
+         AssertionError: expected [Function] to throw error matching /the call through the edge po…/watchlist but got 'the chat plug-in is admitted (install…'
+  FAILED access.test.ts: AC12 the query is refused naming alerts@1, the use reaches A, and B's new version reopens A once (the query-only piece not at all) and reruns the contract test
+         AssertionError: the alerts plug-in (B) is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"alerts":{"type":"array","items":{"type":"object","properties":{"symbol":{"type":"string"},"above":{"type":"number"}},"required":["symbol","above"],"additionalProperties":false}}},"required":["alerts"],"
+  FAILED access.test.ts: AC12 (wrong program) a hub that answers the query from B's store fails, naming the kind
+         AssertionError: expected [Function] to throw error matching /…/digest's query of ext\.alerts\.alert was answered from acme\ but got 'the alerts plug-in (B) is admitted (i…'
+  FAILED brief.test.ts: AC2 the brief is two uses, a schedule and a send: it installs, wires to the stocks and CI plug-ins, and its run sends you a brief of both readings
+         AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"readings":{"type":"array","items":{"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}}},"required":["readings"],
+  FAILED budgets.test.ts: AC14 the perf lane has a task for each timing, and the budgets are valid against the merge base's
+         AssertionError: timings with no perf-lane task to compare with the merge base: expected [ 'composition-wire', …(1) ] to deeply equal []
+  FAILED budgets.test.ts: AC14 wiring a composition at install takes under 100 ms (five runs after a warm-up)
+         AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace
+  FAILED budgets.test.ts: AC14 a reading crossing an edge adds under 1 ms (five runs of 200 reads after a warm-up)
+         AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace
+  FAILED replace.test.ts: AC9 the brief's next run reads the new source's readings, and its claims reopen once
+         AssertionError: the stocks source is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2
+  FAILED replace.test.ts: AC9 (wrong program) a hub that keeps the brief wired to the removed piece by name leaves it reading nothing and fails, naming the use
+         AssertionError: expected [Function] to throw error matching /…/brief uses ext\.stocks\.prices@1 read nothing after the replacement but got 'the stocks source is admitted (instal…'
+  FAILED replace.test.ts: AC10 required: one ask naming the brief; nothing is detached before your answer; your yes removes it
+         AssertionError: the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"checks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"state":{"type":"string"}},"required":["name","state"],"additionalProperties":false}}},"required":["checks"],"additionalPr
+  FAILED replace.test.ts: AC10 required: your no keeps the CI plug-in and the brief's edge
+         AssertionError: the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"checks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"state":{"type":"string"}},"required":["name","state"],"additionalProperties":false}}},"required":["checks"],"additionalPr
+  FAILED replace.test.ts: AC10 optional: the brief's next run reads the CI value as missing, never as an empty list or zero
+         AssertionError: the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"checks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"state":{"type":"string"}},"required":["name","state"],"additionalProperties":false}}},"required":["checks"],"additionalPr
+  FAILED replace.test.ts: AC10 (wrong program) a hub that detaches silently fails, naming the use
+         AssertionError: expected [Function] to throw error matching /…/brief uses ext\.ci\.status@1 was detached with no ask but got 'the CI plug-in is admitted (installed…'
+  FAILED replace.test.ts: AC10 (wrong program) a hub that reads the optional use as empty fails, naming the use
+         AssertionError: expected [Function] to throw error matching /…/brief uses ext\.ci\.status@1, optional, read .* with no provider, not missing but got 'the CI plug-in is admitted (installed…'
+  FAILED replace.test.ts: AC13 a new version that fails to start leaves 1.0.0 in use and wired to both users, each still reading it
+         AssertionError: stocks 1.0.0 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a5113
+  FAILED replace.test.ts: AC13 a read the old version began before its removal and finished after the new one was active is refused at its edge; the next read is the new version's
+         AssertionError: stocks 1.0.0, which answers a read after 6 s is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: u
+  FAILED versions.test.ts: AC5 with A using B and B using C, a new version of C reopens B's and A's claims once each, and a rollback of C does it again
+         AssertionError: C is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa
+  FAILED versions.test.ts: AC5 with A using B and C, both using D, a new version of D reopens A's claims once (and B's and C's once each)
+         AssertionError: D is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa
+  FAILED versions.test.ts: AC6 env-local's environment@1 is an output whose users are the pieces whose journeys ran in it; env-local's new version reopens each of them once
+         AssertionError: the graph shows env-local's environment@1 with acme/web as its one user: expected [] to deeply equal [ { user: 'acme/web', …(3) } ]
+  FAILED versions.test.ts: AC7 the halving version is refused, naming the edge; 1.0.0 stays in use and the brief still totals 300.00; a version that changes only an output no test reads installs
+         AssertionError: stocks 1.0.0 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"readings":{"type":"array","items":{"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}}},"required":["readings"],"addit
+  FAILED wiring.test.ts: AC1 against a provider of prices@1 whose minor-1 digest differs from the use's, the install fails, naming the edge and /properties/volume/type
+         AssertionError: the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"volume":{"type":"number"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/dig
+  FAILED wiring.test.ts: AC1 against a provider still at minor 0, the install fails, naming the edge and /properties/volume
+         AssertionError: the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"
+  FAILED wiring.test.ts: AC1 against a provider of prices@2 only, the install fails, naming the edge and /properties/cents/type
+         AssertionError: the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"string"},"volume":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/dig
+  FAILED wiring.test.ts: AC1 a provider at minor 2 that keeps minor 1's digest wires: the edge is listed and the brief reads its reading
+         AssertionError: the provider acme/stocks at minor 2 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"volume":{"type":"integer"},"currency":{"type":"string"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fail
+  FAILED wiring.test.ts: AC1 (wrong program) a hub that compares names alone wires the first and fails, naming the edge
+         AssertionError: expected [Function] to throw error matching /…/brief uses ext\.stocks\.prices\@1 was wired to but got 'the provider acme/stocks is admitted …'
+  FAILED wiring.test.ts: AC8 X, which uses B's reading and provides the action B uses, is refused at install naming the cycle; X isn't installed and nothing is wired
+         AssertionError: B, whose use of X's action is optional is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315d
+  FAILED wiring.test.ts: AC8 (control) the same X without the use that closes the cycle installs, and B's use of its action wires to it
+         AssertionError: B is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa
+  FAILED wiring.test.ts: AC15 its readings arrive without currency, and halted arrives as unknown
+         AssertionError: the provider at minor 2 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"status":{"type":"string","enum":["open","closed","unknown","halted"],"x-closure":{"closed":"each value is a market state the stocks plug-in reports
+  FAILED wiring.test.ts: AC15 the provider's update to minor 2 runs the brief's contract tests, which pass, and installs
+         AssertionError: the provider at minor 1 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"status":{"type":"string","enum":["open","closed","unknown"],"x-closure":{"closed":"each value is a market state the stocks plug-in reports","reopen
+  FAILED wiring.test.ts: AC15 (wrong program) a hub that hands the brief minor 2's shape fails, naming the field
+         AssertionError: expected [Function] to throw error matching /the brief was handed minor 2's field …/ but got 'the provider at minor 2 is admitted (…'
+
+---- The run's output ----
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-103-9c88c8/agent-ab643e4dcb25b0ed9/tests/acceptance/103
+
+ ❯ access.test.ts (7 tests | 7 failed) 1565ms
+   ❯ #103.3419af40 a composite can't read a secret its own grant doesn't name (1)
+     × AC3 the composite reads the stocks plug-in's prices through its use, and its own source on the same host never carries the stocks plug-in's market key 783ms
+   ❯ #103.41052f7f for a sandboxed plug-in granted only content-free fields, a job it starts with the readings of a piece it uses runs, and nothing the job finds gives it transcript text or a file the grant doesn't name (1)
+     × AC4 the job runs on the used piece's reading, and the plug-in gets neither your transcript, nor the notes file, nor any cite but that reading, though the provider's grant names text 114ms
+   ❯ #103.592e1775 a watchlist plug-in with no host grant calls a chat plug-in's post and mute through edges: each asks, naming the watchlist plug-in as the caller, and nothing happens before your yes (3)
+     × AC11 the post through the edge raises one ask naming the watchlist plug-in and posts only after your yes; mute, with no standing rule, asks the same way 83ms
+     × AC11 your no to the post sends nothing, and the watchlist's call is refused 83ms
+     × AC11 (wrong program) a hub that runs the call under the chat plug-in's own grant posts with no ask and fails, naming the caller 70ms
+   ❯ #103.cacc49e2 plug-in A's deep.record.query of B's store kind is refused, naming the use to declare; the same data through a declared use of B's alerts@1 reaches A, and B's new version reopens A's claims once and reruns their contract test (2)
+     × AC12 the query is refused naming alerts@1, the use reaches A, and B's new version reopens A once (the query-only piece not at all) and reruns the contract test 88ms
+     × AC12 (wrong program) a hub that answers the query from B's store fails, naming the kind 85ms
+ ❯ replace.test.ts (9 tests | 9 failed) 1317ms
+   ❯ #103.04e2ba94 a weekly brief that uses prices@1 from a stocks source keeps working when a second source that provides prices@1 and replaces the first is installed (2)
+     × AC9 the brief's next run reads the new source's readings, and its claims reopen once 156ms
+     × AC9 (wrong program) a hub that keeps the brief wired to the removed piece by name leaves it reading nothing and fails, naming the use 90ms
+   ❯ #103.770ba796 removing the CI plug-in while the brief's use of ci.status@1 is required raises one ask naming the brief, nothing detached before your answer; optional, the brief reads it as missing (5)
+     × AC10 required: one ask naming the brief; nothing is detached before your answer; your yes removes it 115ms
+     × AC10 required: your no keeps the CI plug-in and the brief's edge 100ms
+     × AC10 optional: the brief's next run reads the CI value as missing, never as an empty list or zero 108ms
+     × AC10 (wrong program) a hub that detaches silently fails, naming the use 114ms
+     × AC10 (wrong program) a hub that reads the optional use as empty fails, naming the use 111ms
+   ❯ #103.de8a47db replacing a provider whose new version fails to start leaves the version in use wired to every user, and a call the old version began before its removal that finishes after the new one is active is refused at its edge (2)
+     × AC13 a new version that fails to start leaves 1.0.0 in use and wired to both users, each still reading it 92ms
+     × AC13 a read the old version began before its removal and finished after the new one was active is refused at its edge; the next read is the new version's 98ms
+ ❯ wiring.test.ts (10 tests | 10 failed) 1239ms
+   ❯ #103.119d48b4 a use of prices@1 built at minor 1 fails at install against a provider whose minor-1 digest differs, one still at minor 0 and prices@2, and wires to one at minor 2 that keeps minor 1's digest (5)
+     × AC1 against a provider of prices@1 whose minor-1 digest differs from the use's, the install fails, naming the edge and /properties/volume/type 147ms
+     × AC1 against a provider still at minor 0, the install fails, naming the edge and /properties/volume 89ms
+     × AC1 against a provider of prices@2 only, the install fails, naming the edge and /properties/cents/type 75ms
+     × AC1 a provider at minor 2 that keeps minor 1's digest wires: the edge is listed and the brief reads its reading 86ms
+     × AC1 (wrong program) a hub that compares names alone wires the first and fails, naming the edge 76ms
+   ❯ #103.a7f0eb05 installing a piece that uses B's reading while B uses one of that piece's actions is refused at install, naming the cycle, and nothing is wired (2)
+     × AC8 X, which uses B's reading and provides the action B uses, is refused at install naming the cycle; X isn't installed and nothing is wired 81ms
+     × AC8 (control) the same X without the use that closes the cycle installs, and B's use of its action wires to it 82ms
+   ❯ #103.334e66dd a brief built against prices@1 minor 1 reads from a provider at minor 2: no currency, halted as unknown, and its contract tests pass (3)
+     × AC15 its readings arrive without currency, and halted arrives as unknown 84ms
+     × AC15 the provider's update to minor 2 runs the brief's contract tests, which pass, and installs 86ms
+     × AC15 (wrong program) a hub that hands the brief minor 2's shape fails, naming the field 79ms
+ ❯ versions.test.ts (4 tests | 4 failed) 1897ms
+   ❯ #103.c7b27417 a new version of a piece, or a rollback, reopens the claims of everything that uses it, directly or through other pieces, each once (2)
+     × AC5 with A using B and B using C, a new version of C reopens B's and A's claims once each, and a rollback of C does it again 141ms
+     × AC5 with A using B and C, both using D, a new version of D reopens A's claims once (and B's and C's once each) 88ms
+   ❯ #103.fce0bc6c the environment env-local registers shows in the composition graph as an output, with the pieces whose journeys used it as users, and a new version of it reopens those users' claims (1)
+     × AC6 env-local's environment@1 is an output whose users are the pieces whose journeys ran in it; env-local's new version reopens each of them once 1131ms
+   ❯ #103.680f00cb a provider's new version whose readings keep their schema but halve every value fails a user's contract test, so the install fails, naming the edge, and the version in use stays; one that changes nothing those tests read installs (1)
+     × AC7 the halving version is refused, naming the edge; 1.0.0 stays in use and the brief still totals 300.00; a version that changes only an output no test reads installs 94ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 382ms
+   ❯ #103.84a93fb7 budgets on the reference Mac, compared with the merge base: wiring a composition at install takes under 100 ms, and a reading crossing an edge adds under 1 ms (3)
+     × AC14 the perf lane has a task for each timing, and the budgets are valid against the merge base's 89ms
+     × AC14 wiring a composition at install takes under 100 ms (five runs after a warm-up) 125ms
+     × AC14 a reading crossing an edge adds under 1 ms (five runs of 200 reads after a warm-up) 94ms
+ ❯ brief.test.ts (1 test | 1 failed) 174ms
+   ❯ #103.0c4256a2 "A weekly brief of my watchlist and CI status" builds with no new data code (1)
+     × AC2 the brief is two uses, a schedule and a send: it installs, wires to the stocks and CI plug-ins, and its run sends you a brief of both readings 132ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 34 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  access.test.ts > #103.3419af40 a composite can't read a secret its own grant doesn't name > AC3 the composite reads the stocks plug-in's prices through its use, and its own source on the same host never carries the stocks plug-in's market key
+AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ access.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/34]⎯
+
+ FAIL  access.test.ts > #103.41052f7f for a sandboxed plug-in granted only content-free fields, a job it starts with the readings of a piece it uses runs, and nothing the job finds gives it transcript text or a file the grant doesn't name > AC4 the job runs on the used piece's reading, and the plug-in gets neither your transcript, nor the notes file, nor any cite but that reading, though the provider's grant names text
+AssertionError: the stocks plug-in, granted text is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ access.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/34]⎯
+
+ FAIL  access.test.ts > #103.592e1775 a watchlist plug-in with no host grant calls a chat plug-in's post and mute through edges: each asks, naming the watchlist plug-in as the caller, and nothing happens before your yes > AC11 the post through the edge raises one ask naming the watchlist plug-in and posts only after your yes; mute, with no standing rule, asks the same way
+AssertionError: the chat plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"key":{"type":"string"},"channel":{"type":"string"},"text":{"type":"string"}},"required":["key","channel","text"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:bea78ef42b6d88f78c4ec24215f2c445d19c3a5494b372192a4fb8a03fe54e83"}; its manifest fails extension.manifest@1 at /provides/1/schema: unlisted_field {"type":"object","properties":{"channel":{"type":"string"}},"required":["channel"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/1/digests: unlisted_field {"0":"d1:69086b9ee23029091f5bdff5f1dd33cee7787c127dcd590298c092c3cc331eba"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ chatScene access.test.ts:201:3
+ ❯ callsThroughEdges access.test.ts:226:26
+ ❯ access.test.ts:269:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/34]⎯
+
+ FAIL  access.test.ts > #103.592e1775 a watchlist plug-in with no host grant calls a chat plug-in's post and mute through edges: each asks, naming the watchlist plug-in as the caller, and nothing happens before your yes > AC11 your no to the post sends nothing, and the watchlist's call is refused
+AssertionError: the chat plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"key":{"type":"string"},"channel":{"type":"string"},"text":{"type":"string"}},"required":["key","channel","text"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:bea78ef42b6d88f78c4ec24215f2c445d19c3a5494b372192a4fb8a03fe54e83"}; its manifest fails extension.manifest@1 at /provides/1/schema: unlisted_field {"type":"object","properties":{"channel":{"type":"string"}},"required":["channel"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/1/digests: unlisted_field {"0":"d1:69086b9ee23029091f5bdff5f1dd33cee7787c127dcd590298c092c3cc331eba"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ chatScene access.test.ts:201:3
+ ❯ access.test.ts:273:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/34]⎯
+
+ FAIL  access.test.ts > #103.592e1775 a watchlist plug-in with no host grant calls a chat plug-in's post and mute through edges: each asks, naming the watchlist plug-in as the caller, and nothing happens before your yes > AC11 (wrong program) a hub that runs the call under the chat plug-in's own grant posts with no ask and fails, naming the caller
+AssertionError: expected [Function] to throw error matching /the call through the edge po…/watchlist but got 'the chat plug-in is admitted (install…'
+
+- Expected:
+/the call through the edge posted with no ask naming the caller acme\/watchlist/
+
++ Received:
+"the chat plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"key\":{\"type\":\"string\"},\"channel\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"}},\"required\":[\"key\",\"channel\",\"text\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:bea78ef42b6d88f78c4ec24215f2c445d19c3a5494b372192a4fb8a03fe54e83\"}; its manifest fails extension.manifest@1 at /provides/1/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"channel\":{\"type\":\"string\"}},\"required\":[\"channel\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/1/digests: unlisted_field {\"0\":\"d1:69086b9ee23029091f5bdff5f1dd33cee7787c127dcd590298c092c3cc331eba\"}: expected false to be true // Object.is equality"
+
+ ❯ access.test.ts:288:65
+    286|
+    287|   it('AC11 (wrong program) a hub that runs the call under the chat plu…
+    288|     await expect(callsThroughEdges('call-under-provider-grant')).rejec…
+       |                                                                 ^
+    289|   }, 240_000);
+    290| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/34]⎯
+
+ FAIL  access.test.ts > #103.cacc49e2 plug-in A's deep.record.query of B's store kind is refused, naming the use to declare; the same data through a declared use of B's alerts@1 reaches A, and B's new version reopens A's claims once and reruns their contract test > AC12 the query is refused naming alerts@1, the use reaches A, and B's new version reopens A once (the query-only piece not at all) and reruns the contract test
+AssertionError: the alerts plug-in (B) is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"alerts":{"type":"array","items":{"type":"object","properties":{"symbol":{"type":"string"},"above":{"type":"number"}},"required":["symbol","above"],"additionalProperties":false}}},"required":["alerts"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:40918a208875e3fd680ce19297152b1fe31dfcae55d2b491db78968f9f16bd1e"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ storeThroughUse access.test.ts:340:3
+ ❯ access.test.ts:364:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/34]⎯
+
+ FAIL  access.test.ts > #103.cacc49e2 plug-in A's deep.record.query of B's store kind is refused, naming the use to declare; the same data through a declared use of B's alerts@1 reaches A, and B's new version reopens A's claims once and reruns their contract test > AC12 (wrong program) a hub that answers the query from B's store fails, naming the kind
+AssertionError: expected [Function] to throw error matching /…/digest's query of ext\.alerts\.alert was answered from acme\ but got 'the alerts plug-in (B) is admitted (i…'
+
+- Expected:
+/acme\/digest's query of ext\.alerts\.alert was answered from acme\/alerts's store/
+
++ Received:
+"the alerts plug-in (B) is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"alerts\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"symbol\":{\"type\":\"string\"},\"above\":{\"type\":\"number\"}},\"required\":[\"symbol\",\"above\"],\"additionalProperties\":false}}},\"required\":[\"alerts\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:40918a208875e3fd680ce19297152b1fe31dfcae55d2b491db78968f9f16bd1e\"}: expected false to be true // Object.is equality"
+
+ ❯ access.test.ts:369:59
+    367|   it('AC12 (wrong program) a hub that answers the query from B\'s stor…
+    368|     // #363's planted record read by the grant's words alone answers a…
+    369|     await expect(storeThroughUse('record-by-grant-words')).rejects.toT…
+       |                                                           ^
+    370|   }, 180_000);
+    371| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/34]⎯
+
+ FAIL  brief.test.ts > #103.0c4256a2 "A weekly brief of my watchlist and CI status" builds with no new data code > AC2 the brief is two uses, a schedule and a send: it installs, wires to the stocks and CI plug-ins, and its run sends you a brief of both readings
+AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"readings":{"type":"array","items":{"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}}},"required":["readings"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:def1f03f3c06439ac42df66a6eaffb48ca7d1a38835018c496d0de5233912639"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ brief.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/34]⎯
+
+ FAIL  budgets.test.ts > #103.84a93fb7 budgets on the reference Mac, compared with the merge base: wiring a composition at install takes under 100 ms, and a reading crossing an edge adds under 1 ms > AC14 the perf lane has a task for each timing, and the budgets are valid against the merge base's
+AssertionError: timings with no perf-lane task to compare with the merge base: expected [ 'composition-wire', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "composition-wire",
++   "composition-edge-read",
++ ]
+
+ ❯ budgets.test.ts:96:138
+     94|     }
+     95|     validateBudgets(current, baseBudgets);
+     96|     expect(TASKS.filter((t) => !current.tasks.some((x) => x.id === t))…
+       |                                                                                                                                          ^
+     97|   });
+     98|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/34]⎯
+
+ FAIL  budgets.test.ts > #103.84a93fb7 budgets on the reference Mac, compared with the merge base: wiring a composition at install takes under 100 ms, and a reading crossing an edge adds under 1 ms > AC14 wiring a composition at install takes under 100 ms (five runs after a warm-up)
+AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ providers budgets.test.ts:68:3
+ ❯ budgets.test.ts:100:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/34]⎯
+
+ FAIL  budgets.test.ts > #103.84a93fb7 budgets on the reference Mac, compared with the merge base: wiring a composition at install takes under 100 ms, and a reading crossing an edge adds under 1 ms > AC14 a reading crossing an edge adds under 1 ms (five runs of 200 reads after a warm-up)
+AssertionError: the stocks plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ providers budgets.test.ts:68:3
+ ❯ budgets.test.ts:122:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/34]⎯
+
+ FAIL  replace.test.ts > #103.04e2ba94 a weekly brief that uses prices@1 from a stocks source keeps working when a second source that provides prices@1 and replaces the first is installed > AC9 the brief's next run reads the new source's readings, and its claims reopen once
+AssertionError: the stocks source is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ keepsWorking replace.test.ts:35:3
+ ❯ replace.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/34]⎯
+
+ FAIL  replace.test.ts > #103.04e2ba94 a weekly brief that uses prices@1 from a stocks source keeps working when a second source that provides prices@1 and replaces the first is installed > AC9 (wrong program) a hub that keeps the brief wired to the removed piece by name leaves it reading nothing and fails, naming the use
+AssertionError: expected [Function] to throw error matching /…/brief uses ext\.stocks\.prices@1 read nothing after the replacement but got 'the stocks source is admitted (instal…'
+
+- Expected:
+/acme\/brief uses ext\.stocks\.prices@1 read nothing after the replacement/
+
++ Received:
+"the stocks source is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"symbol\":{\"type\":\"string\"},\"cents\":{\"type\":\"integer\"}},\"required\":[\"symbol\",\"cents\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50\"}: expected false to be true // Object.is equality"
+
+ ❯ replace.test.ts:56:48
+     54|
+     55|   it('AC9 (wrong program) a hub that keeps the brief wired to the remo…
+     56|     await expect(keepsWorking('wires-by-name')).rejects.toThrow(/acme\…
+       |                                                ^
+     57|   }, 180_000);
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/34]⎯
+
+ FAIL  replace.test.ts > #103.770ba796 removing the CI plug-in while the brief's use of ci.status@1 is required raises one ask naming the brief, nothing detached before your answer; optional, the brief reads it as missing > AC10 required: one ask naming the brief; nothing is detached before your answer; your yes removes it
+AssertionError: the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"checks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"state":{"type":"string"}},"required":["name","state"],"additionalProperties":false}}},"required":["checks"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:500a809f7c2197cd1d46ea5891bd68c98f8f46e8399885917957a2efff665f7a"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ ciScene replace.test.ts:67:3
+ ❯ asksBeforeDetaching replace.test.ts:75:20
+ ❯ replace.test.ts:111:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/34]⎯
+
+ FAIL  replace.test.ts > #103.770ba796 removing the CI plug-in while the brief's use of ci.status@1 is required raises one ask naming the brief, nothing detached before your answer; optional, the brief reads it as missing > AC10 required: your no keeps the CI plug-in and the brief's edge
+AssertionError: the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"checks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"state":{"type":"string"}},"required":["name","state"],"additionalProperties":false}}},"required":["checks"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:500a809f7c2197cd1d46ea5891bd68c98f8f46e8399885917957a2efff665f7a"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ ciScene replace.test.ts:67:3
+ ❯ replace.test.ts:115:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/34]⎯
+
+ FAIL  replace.test.ts > #103.770ba796 removing the CI plug-in while the brief's use of ci.status@1 is required raises one ask naming the brief, nothing detached before your answer; optional, the brief reads it as missing > AC10 optional: the brief's next run reads the CI value as missing, never as an empty list or zero
+AssertionError: the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"checks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"state":{"type":"string"}},"required":["name","state"],"additionalProperties":false}}},"required":["checks"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:500a809f7c2197cd1d46ea5891bd68c98f8f46e8399885917957a2efff665f7a"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ ciScene replace.test.ts:67:3
+ ❯ readsMissing replace.test.ts:101:20
+ ❯ replace.test.ts:126:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/34]⎯
+
+ FAIL  replace.test.ts > #103.770ba796 removing the CI plug-in while the brief's use of ci.status@1 is required raises one ask naming the brief, nothing detached before your answer; optional, the brief reads it as missing > AC10 (wrong program) a hub that detaches silently fails, naming the use
+AssertionError: expected [Function] to throw error matching /…/brief uses ext\.ci\.status@1 was detached with no ask but got 'the CI plug-in is admitted (installed…'
+
+- Expected:
+/acme\/brief uses ext\.ci\.status@1 was detached with no ask/
+
++ Received:
+"the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"checks\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"state\":{\"type\":\"string\"}},\"required\":[\"name\",\"state\"],\"additionalProperties\":false}}},\"required\":[\"checks\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:500a809f7c2197cd1d46ea5891bd68c98f8f46e8399885917957a2efff665f7a\"}: expected false to be true // Object.is equality"
+
+ ❯ replace.test.ts:130:59
+    128|
+    129|   it('AC10 (wrong program) a hub that detaches silently fails, naming …
+    130|     await expect(asksBeforeDetaching('detaches-silently')).rejects.toT…
+       |                                                           ^
+    131|   }, 180_000);
+    132|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/34]⎯
+
+ FAIL  replace.test.ts > #103.770ba796 removing the CI plug-in while the brief's use of ci.status@1 is required raises one ask naming the brief, nothing detached before your answer; optional, the brief reads it as missing > AC10 (wrong program) a hub that reads the optional use as empty fails, naming the use
+AssertionError: expected [Function] to throw error matching /…/brief uses ext\.ci\.status@1, optional, read .* with no provider, not missing but got 'the CI plug-in is admitted (installed…'
+
+- Expected:
+/acme\/brief uses ext\.ci\.status@1, optional, read .* with no provider, not missing/
+
++ Received:
+"the CI plug-in is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"checks\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"state\":{\"type\":\"string\"}},\"required\":[\"name\",\"state\"],\"additionalProperties\":false}}},\"required\":[\"checks\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:500a809f7c2197cd1d46ea5891bd68c98f8f46e8399885917957a2efff665f7a\"}: expected false to be true // Object.is equality"
+
+ ❯ replace.test.ts:134:55
+    132|
+    133|   it('AC10 (wrong program) a hub that reads the optional use as empty …
+    134|     await expect(readsMissing('optional-reads-empty')).rejects.toThrow…
+       |                                                       ^
+    135|   }, 180_000);
+    136| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/34]⎯
+
+ FAIL  replace.test.ts > #103.de8a47db replacing a provider whose new version fails to start leaves the version in use wired to every user, and a call the old version began before its removal that finishes after the new one is active is refused at its edge > AC13 a new version that fails to start leaves 1.0.0 in use and wired to both users, each still reading it
+AssertionError: stocks 1.0.0 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ replace.test.ts:148:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/34]⎯
+
+ FAIL  replace.test.ts > #103.de8a47db replacing a provider whose new version fails to start leaves the version in use wired to every user, and a call the old version began before its removal that finishes after the new one is active is refused at its edge > AC13 a read the old version began before its removal and finished after the new one was active is refused at its edge; the next read is the new version's
+AssertionError: stocks 1.0.0, which answers a read after 6 s is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ replace.test.ts:163:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/34]⎯
+
+ FAIL  versions.test.ts > #103.c7b27417 a new version of a piece, or a rollback, reopens the claims of everything that uses it, directly or through other pieces, each once > AC5 with A using B and B using C, a new version of C reopens B's and A's claims once each, and a rollback of C does it again
+AssertionError: C is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa833adc5c"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ versions.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/34]⎯
+
+ FAIL  versions.test.ts > #103.c7b27417 a new version of a piece, or a rollback, reopens the claims of everything that uses it, directly or through other pieces, each once > AC5 with A using B and C, both using D, a new version of D reopens A's claims once (and B's and C's once each)
+AssertionError: D is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa833adc5c"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ versions.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/34]⎯
+
+ FAIL  versions.test.ts > #103.fce0bc6c the environment env-local registers shows in the composition graph as an output, with the pieces whose journeys used it as users, and a new version of it reopens those users' claims > AC6 env-local's environment@1 is an output whose users are the pieces whose journeys ran in it; env-local's new version reopens each of them once
+AssertionError: the graph shows env-local's environment@1 with acme/web as its one user: expected [] to deeply equal [ { user: 'acme/web', …(3) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "interface": "environment@1",
+-     "provider": "env-local",
+-     "user": "acme/web",
+-     "uses": "environment@1",
+-   },
+- ]
++ []
+
+ ❯ versions.test.ts:95:114
+     93|
+     94|     const users = (es: Awaited<ReturnType<typeof edgesOf>>) => es.filt…
+     95|     expect(users(await edgesOf(h1)), 'the graph shows env-local\'s env…
+       |                                                                                                                  ^
+     96|     expect(await reopenCounts(w, 'env-local', '0.0.0'), 'nothing reope…
+     97|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/34]⎯
+
+ FAIL  versions.test.ts > #103.680f00cb a provider's new version whose readings keep their schema but halve every value fails a user's contract test, so the install fails, naming the edge, and the version in use stays; one that changes nothing those tests read installs > AC7 the halving version is refused, naming the edge; 1.0.0 stays in use and the brief still totals 300.00; a version that changes only an output no test reads installs
+AssertionError: stocks 1.0.0 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"readings":{"type":"array","items":{"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}}},"required":["readings"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:def1f03f3c06439ac42df66a6eaffb48ca7d1a38835018c496d0de5233912639"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ versions.test.ts:143:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/34]⎯
+
+ FAIL  wiring.test.ts > #103.119d48b4 a use of prices@1 built at minor 1 fails at install against a provider whose minor-1 digest differs, one still at minor 0 and prices@2, and wires to one at minor 2 that keeps minor 1's digest > AC1 against a provider of prices@1 whose minor-1 digest differs from the use's, the install fails, naming the edge and /properties/volume/type
+AssertionError: the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"volume":{"type":"number"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50","1":"d1:f2d1f6d436148404b685023a63122af37b251a7e33919892c75e80abd8f13aeb"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ refusedBeside wiring.test.ts:49:3
+ ❯ wiring.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/34]⎯
+
+ FAIL  wiring.test.ts > #103.119d48b4 a use of prices@1 built at minor 1 fails at install against a provider whose minor-1 digest differs, one still at minor 0 and prices@2, and wires to one at minor 2 that keeps minor 1's digest > AC1 against a provider still at minor 0, the install fails, naming the edge and /properties/volume
+AssertionError: the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ refusedBeside wiring.test.ts:49:3
+ ❯ wiring.test.ts:65:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/34]⎯
+
+ FAIL  wiring.test.ts > #103.119d48b4 a use of prices@1 built at minor 1 fails at install against a provider whose minor-1 digest differs, one still at minor 0 and prices@2, and wires to one at minor 2 that keeps minor 1's digest > AC1 against a provider of prices@2 only, the install fails, naming the edge and /properties/cents/type
+AssertionError: the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"string"},"volume":{"type":"integer"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:1b8b8d6f6d63eadb191356b9ee957ac2c0442117f6ed3442b44c21ec7b50d5c1"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ refusedBeside wiring.test.ts:49:3
+ ❯ wiring.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/34]⎯
+
+ FAIL  wiring.test.ts > #103.119d48b4 a use of prices@1 built at minor 1 fails at install against a provider whose minor-1 digest differs, one still at minor 0 and prices@2, and wires to one at minor 2 that keeps minor 1's digest > AC1 a provider at minor 2 that keeps minor 1's digest wires: the edge is listed and the brief reads its reading
+AssertionError: the provider acme/stocks at minor 2 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"volume":{"type":"integer"},"currency":{"type":"string"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50","1":"d1:42fd1f9fc7547326d75f46f5d72ac0e71c4ce18d3d98ab2d81ea28c0ac6ca245","2":"d1:b8df0c522568c09aefd1417f550dcb6dd48cd9a250b3102b836fbb90fc026b78"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ wiring.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/34]⎯
+
+ FAIL  wiring.test.ts > #103.119d48b4 a use of prices@1 built at minor 1 fails at install against a provider whose minor-1 digest differs, one still at minor 0 and prices@2, and wires to one at minor 2 that keeps minor 1's digest > AC1 (wrong program) a hub that compares names alone wires the first and fails, naming the edge
+AssertionError: expected [Function] to throw error matching /…/brief uses ext\.stocks\.prices\@1 was wired to but got 'the provider acme/stocks is admitted …'
+
+- Expected:
+/the edge acme\/brief uses ext\.stocks\.prices\@1 was wired to/
+
++ Received:
+"the provider acme/stocks is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"symbol\":{\"type\":\"string\"},\"cents\":{\"type\":\"integer\"},\"volume\":{\"type\":\"number\"}},\"required\":[\"symbol\",\"cents\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50\",\"1\":\"d1:f2d1f6d436148404b685023a63122af37b251a7e33919892c75e80abd8f13aeb\"}: expected false to be true // Object.is equality"
+
+ ❯ wiring.test.ts:82:145
+     80|
+     81|   it('AC1 (wrong program) a hub that compares names alone wires the fi…
+     82|     await expect(refusedBeside(stocks(P1, [S0, S1_OTHER], { symbol: 'A…
+       |                                                                                                                                                 ^
+     83|       .rejects.toThrow(new RegExp(`the edge ${EDGE.replace(/[.@/]/g, '…
+     84|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/34]⎯
+
+ FAIL  wiring.test.ts > #103.a7f0eb05 installing a piece that uses B's reading while B uses one of that piece's actions is refused at install, naming the cycle, and nothing is wired > AC8 X, which uses B's reading and provides the action B uses, is refused at install naming the cycle; X isn't installed and nothing is wired
+AssertionError: B, whose use of X's action is optional is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa833adc5c"}; its manifest fails extension.manifest@1 at /uses/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /uses/0/optional: unlisted_field true: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ wiring.test.ts:104:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/34]⎯
+
+ FAIL  wiring.test.ts > #103.a7f0eb05 installing a piece that uses B's reading while B uses one of that piece's actions is refused at install, naming the cycle, and nothing is wired > AC8 (control) the same X without the use that closes the cycle installs, and B's use of its action wires to it
+AssertionError: B is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"level":{"type":"integer"}},"required":["level"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:dbd4e2e35798446315de82eb917cfada172cdc159cd5d1d784727cfa833adc5c"}; its manifest fails extension.manifest@1 at /uses/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /uses/0/optional: unlisted_field true: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ wiring.test.ts:120:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/34]⎯
+
+ FAIL  wiring.test.ts > #103.334e66dd a brief built against prices@1 minor 1 reads from a provider at minor 2: no currency, halted as unknown, and its contract tests pass > AC15 its readings arrive without currency, and halted arrives as unknown
+AssertionError: the provider at minor 2 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"status":{"type":"string","enum":["open","closed","unknown","halted"],"x-closure":{"closed":"each value is a market state the stocks plug-in reports","reopens":"a new minor that adds a state","mark":"extensible"}},"currency":{"type":"string"}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50","1":"d1:dbf6364956a873e0442ef989e222d6b4ef1691ce65eb6f660cb1888d08b068fd","2":"d1:b5b94e7adc4cae59bbae283d58f12e6f52ac5b607256f6f00ff13995402d921e"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ readsAtItsMinor wiring.test.ts:150:3
+ ❯ wiring.test.ts:162:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/34]⎯
+
+ FAIL  wiring.test.ts > #103.334e66dd a brief built against prices@1 minor 1 reads from a provider at minor 2: no currency, halted as unknown, and its contract tests pass > AC15 the provider's update to minor 2 runs the brief's contract tests, which pass, and installs
+AssertionError: the provider at minor 1 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {"type":"object","properties":{"symbol":{"type":"string"},"cents":{"type":"integer"},"status":{"type":"string","enum":["open","closed","unknown"],"x-closure":{"closed":"each value is a market state the stocks plug-in reports","reopens":"a new minor that adds a state","mark":"extensible"}}},"required":["symbol","cents"],"additionalProperties":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {"0":"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50","1":"d1:dbf6364956a873e0442ef989e222d6b4ef1691ce65eb6f660cb1888d08b068fd"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:430:117
+    428| export async function admitted(h: ExtensionHost, dir: string, what: st…
+    429|   const got = await admit(h, dir, grant);
+    430|   expect(got.ok, `${what} is admitted (installed, checked, loaded): ${…
+       |                                                                                                                     ^
+    431|   return (got as { installed: Installed }).installed;
+    432| }
+ ❯ wiring.test.ts:167:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/34]⎯
+
+ FAIL  wiring.test.ts > #103.334e66dd a brief built against prices@1 minor 1 reads from a provider at minor 2: no currency, halted as unknown, and its contract tests pass > AC15 (wrong program) a hub that hands the brief minor 2's shape fails, naming the field
+AssertionError: expected [Function] to throw error matching /the brief was handed minor 2's field …/ but got 'the provider at minor 2 is admitted (…'
+
+- Expected:
+/the brief was handed minor 2's field currency/
+
++ Received:
+"the provider at minor 2 is admitted (installed, checked, loaded): check: its manifest fails extension.manifest@1 at /provides/0/schema: unlisted_field {\"type\":\"object\",\"properties\":{\"symbol\":{\"type\":\"string\"},\"cents\":{\"type\":\"integer\"},\"status\":{\"type\":\"string\",\"enum\":[\"open\",\"closed\",\"unknown\",\"halted\"],\"x-closure\":{\"closed\":\"each value is a market state the stocks plug-in reports\",\"reopens\":\"a new minor that adds a state\",\"mark\":\"extensible\"}},\"currency\":{\"type\":\"string\"}},\"required\":[\"symbol\",\"cents\"],\"additionalProperties\":false}; its manifest fails extension.manifest@1 at /provides/0/digests: unlisted_field {\"0\":\"d1:ace2a511344cc35f23dc9dde9fb33e0de46ea0e3afc7d31a11ac9d0353c83e50\",\"1\":\"d1:dbf6364956a873e0442ef989e222d6b4ef1691ce65eb6f660cb1888d08b068fd\",\"2\":\"d1:b5b94e7adc4cae59bbae283d58f12e6f52ac5b607256f6f00ff13995402d921e\"}: expected false to be true // Object.is equality"
+
+ ❯ wiring.test.ts:178:57
+    176|
+    177|   it('AC15 (wrong program) a hub that hands the brief minor 2\'s shape…
+    178|     await expect(readsAtItsMinor('serves-newest-minor')).rejects.toThr…
+       |                                                         ^
+    179|   }, 120_000);
+    180| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/34]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  34 failed (34)
+   Start at  10:33:59
+   Duration  8.49s (tests 84%, import 13%, transform 3%)
+
+    Isolate  6 workers spawned · ~105ms startup each (spawn + environment, per file)
+             at least ~526ms faster with isolate: false — reuses workers across files instead of one per file
+
