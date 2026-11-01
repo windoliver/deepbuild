@@ -3,7 +3,9 @@
 // snapshot, never the live worktree, as the fast lane inside the stop's hold, and the hold's reply carries its FAIL;
 // each run records where it ran and what it needed, and each stop its held time and split. The check runs through the
 // command check kind (#30): hermetic, so it reads none of your files whatever the head's trust, its tests counted from
-// node:test's report, and the claim's verdict made from the run and recorded as verdict.made.
+// node:test's report, and the claim's verdict made from the run and recorded as verdict.made. A requirement a fix
+// proves needs its check's run on the merge base, which is #31's: with none, the verdict is INVALID naming it, recorded
+// and never sent back, since no agent can act on it.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -20,8 +22,8 @@ const SUITE = '.deepbuild/checks/auth.test.mjs';
  * whether it can read a file of your home folder, outside its checkout (`home: yes|no`), and one fails until
  * `src/auth.ts` says Date.now.
  */
-async function world(): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
-  const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK })], deliverables: ['src/auth.ts'] })] });
+async function world(requirement: Record<string, unknown> = {}): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
+  const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK, ...requirement })], deliverables: ['src/auth.ts'] })] });
   const { writeFileSync, chmodSync } = await import('node:fs');
   writeFileSync(join(w.home, 'secret.txt'), 'yours\n');
   writeFileSync(join(w.repo, CHECK), `#!/bin/sh\nnode --test ${SUITE}\n`);
@@ -77,7 +79,8 @@ describe('the gate runner at a real stop', () => {
   }, 240_000);
 
   it('a claim\'s check runs in a checkout of its snapshot, in the fast lane, through the command check kind, and its verdict is recorded', async () => {
-    const { hub, s, ref, repo } = await world();
+    // Behavior that must not change: the one requirement a check can prove with no run on the merge base (#31).
+    const { hub, s, ref, repo } = await world({ on_base: 'passes' });
     try {
       await s.read('src/auth.ts');
       await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
@@ -131,6 +134,24 @@ describe('the gate runner at a real stop', () => {
       const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
       expect(started, 'the check still runs, in the sandbox').toBeDefined();
       expect(stdoutOf(hub, started!, events), 'an untrusted head\'s run reads none of your files').toContain('home: no');
+    } finally { await stopHub(hub); }
+  }, 240_000);
+
+  it('a fix requirement with no run on the merge base is INVALID naming it, recorded for a person and never sent back', async () => {
+    const { hub, s, ref } = await world();
+    try {
+      await s.read('src/auth.ts');
+      await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
+      const r = await s.stop('checkToken now compares `src/auth.ts:2` with the clock.');
+      expect(JSON.parse(r.stdout || '{}').decision, `an INVALID is no send-back: ${r.stdout}`).toBeUndefined();
+      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
+      const [claim] = claimsOf(events, ref);
+      const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
+      const finished = events.find((e) => e.kind === 'run.finished' && e.data.run === started?.data.run);
+      expect(finished?.data.outcome, 'the check itself passes on the snapshot').toBe('passed');
+      const verdicts = (await settle(hub, (e) => e.some((x) => x.kind === 'verdict.made' && x.subject === `claim:${claim!.id}`), 30_000)).filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`);
+      expect(verdicts.at(-1)?.data.outcome, `the verdict: ${JSON.stringify(verdicts.at(-1)?.data.reasons)}`).toBe('INVALID');
+      expect(JSON.stringify(verdicts.at(-1)?.data.reasons), 'naming the base run it lacks').toContain('no run on the merge base');
     } finally { await stopHub(hub); }
   }, 240_000);
 
