@@ -1,0 +1,10 @@
+{
+  "name": "ext.stocks.watchlist",
+  "pages": [{ "name": "Stock", "param": "symbol", "values": ["NVDA", "AAPL", "AMD"] }],
+  "commands": [
+    { "name": "Add alert", "action": "ext.stocks.add_alert" },
+    { "name": "Add alert above target", "action": "ext.stocks.add_alert_above" },
+    { "name": "Add to watchlist", "action": "ext.stocks.add_to_watchlist" },
+    { "name": "Read prices", "action": "ext.stocks.read_prices" }
+  ]
+}
