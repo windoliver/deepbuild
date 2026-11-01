@@ -27,7 +27,9 @@ mod planted;
 mod query;
 mod ring;
 mod scene3d;
+mod seams;
 mod serve;
+mod shaper;
 mod shared;
 mod snapshot;
 mod terminal;
@@ -425,6 +427,24 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 agent: acting(c)?.is_some(),
             })
         }
+        "frontmost" => {
+            return Some(Call::Frontmost {
+                window: c.get("window")?.as_str()?.to_string(),
+                front: c.get("frontmost")?.as_bool()?,
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "test_window" => {
+            c.get("id")?.as_str()?;
+            match c.get("rect")? {
+                Value::Null => {}
+                r => {
+                    rect(Some(r))?;
+                }
+            }
+            return Some(Call::TestWindow);
+        }
+        "window_caps" => return Some(Call::WindowCaps),
         "windows" => return Some(Call::Windows),
         "layout" => return Some(Call::Layout),
         "card" => return Some(Call::CardState),
@@ -475,7 +495,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::RenderBack {
                 session: c.get("session")?.as_str()?.to_string(),
                 doc: doc()?,
-                t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
+                // #140: `t` in flicks, or the time grammar's text; at 0 when it is left out.
+                t: match c.get("t") {
+                    None => Some(0),
+                    Some(Value::String(text)) => hub::flicks(text),
+                    Some(t) => t.as_i64(),
+                }
+                .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
             });
@@ -498,6 +524,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "fixtures" => return Some(Call::Fixtures),
+        "seam_suite" => return seams::parse(c),
         "schedule" => return Some(Call::Schedule),
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
@@ -1199,7 +1226,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     })
 }
 
-fn answer(command: &str, startup: &Startup, line: &str) -> Value {
+/// A line's input object and the scenario it holds; `None` for a line that isn't one.
+fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
     // A number past f64's range is the document's fault, refused at its path by the check
     // (#387: "a NaN or an infinity in a param is refused with out_of_range"), not the line's.
     let parsed = serde_json::from_str::<Value>(line).or_else(|e| match tame_overflow(line) {
@@ -1207,9 +1235,14 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
         None => Err(e),
     });
     let Ok(Value::Object(input)) = parsed else {
-        return bad_input();
+        return None;
     };
-    let Some(scenario) = scenario(&input) else {
+    let scenario = scenario(&input)?;
+    Some((input, scenario))
+}
+
+fn answer(command: &str, startup: &Startup, line: &str) -> Value {
+    let Some((input, scenario)) = read_line(line) else {
         return bad_input();
     };
     match command {
@@ -1228,7 +1261,6 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             };
             screen(&scenario, startup, out)
         }
-        "live" => live(&scenario, startup),
         _ => bad_input(),
     }
 }
@@ -1350,16 +1382,29 @@ fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
-/// `live` (#376): the screen-reader smoke run's window, on macOS.
+/// `live` (#376): the screen-reader smoke run's window, on macOS; with a `live` object (#140),
+/// the window paced, watched, read back and played to as it asks. The run keeps its scenario
+/// for the life of the process, which ends with the window.
 #[cfg(target_os = "macos")]
-fn live(scenario: &Scenario, startup: &Startup) -> Value {
-    let mut hub = hub::Hub::new(scenario, startup);
-    hub.run_calls();
-    live::show(&mut hub)
+fn live(startup: &'static Startup, line: &str) -> Value {
+    let Some((input, scenario)) = read_line(line) else {
+        return bad_input();
+    };
+    match input.get("live") {
+        None => {
+            let mut hub = hub::Hub::new(&scenario, startup);
+            hub.run_calls();
+            live::show(&mut hub)
+        }
+        Some(options) => match watch::parse(options, call) {
+            Some(options) => watch::run(Box::leak(Box::new(scenario)), startup, options),
+            None => bad_input(),
+        },
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
-fn live(_: &Scenario, _: &Startup) -> Value {
+fn live(_: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -1553,13 +1598,19 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
         test_build: TEST_BUILD,
         shapes_on_ui_thread: planted == Some(StartPlanted::ShapesOnUiThread),
         run_per_document: planted == Some(StartPlanted::RunPerDocument),
+        network: match planted {
+            Some(StartPlanted::Network(fault)) => Some(fault),
+            _ => None,
+        },
+        ignores_unknown_occlusion: planted == Some(StartPlanted::IgnoresUnknownOcclusion),
     })
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
 /// reads every dependency as required, #387's scheduler that orders steps at one time by
-/// canvas-module name, #388's seal that lets a build without look start, or #856's hub that
-/// shapes a long text on the UI thread and its shaped-run cache per document.
+/// canvas-module name, #388's seal that lets a build without look start, #856's hub that
+/// shapes a long text on the UI thread and its shaped-run cache per document, or #140's network
+/// backends with a fault.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
@@ -1567,6 +1618,10 @@ enum StartPlanted {
     StartsWithoutLook,
     ShapesOnUiThread,
     RunPerDocument,
+    /// #140: a network backend with one fault, run through the network seam's suite.
+    Network(seams::NetFault),
+    /// #140: the card that treats unknown occlusion as unobscured.
+    IgnoresUnknownOcclusion,
 }
 
 #[cfg(test)]
@@ -1583,6 +1638,8 @@ mod tests {
             test_build: false,
             shapes_on_ui_thread: false,
             run_per_document: false,
+            network: None,
+            ignores_unknown_occlusion: false,
         }
     }
 
@@ -1913,7 +1970,10 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
         "run_per_document" => Ok(StartPlanted::RunPerDocument),
-        _ => Err(()),
+        "card_ignores_unknown_occlusion" => Ok(StartPlanted::IgnoresUnknownOcclusion),
+        _ => seams::NetFault::named(twin)
+            .map(StartPlanted::Network)
+            .ok_or(()),
     }
 }
 
@@ -1964,8 +2024,8 @@ fn main() {
         }
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
-    let startup = match seal(fault, coefficients) {
-        Ok(startup) => startup,
+    let startup: &'static Startup = match seal(fault, coefficients) {
+        Ok(startup) => Box::leak(Box::new(startup)),
         Err(err) => {
             let line = json!({
                 "ok": false,
@@ -1990,8 +2050,9 @@ fn main() {
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         let reply = match command.as_str() {
-            "canvas" => canvas.line(&startup, &line),
-            _ => answer(&command, &startup, &line),
+            "canvas" => canvas.line(startup, &line),
+            "live" => live(startup, &line),
+            _ => answer(&command, startup, &line),
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
@@ -2003,5 +2064,7 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod live;
+#[cfg(target_os = "macos")]
+mod watch;
 #[cfg(target_os = "macos")]
 mod window;

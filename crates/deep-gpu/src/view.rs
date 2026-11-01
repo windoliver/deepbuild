@@ -262,6 +262,14 @@ impl View {
         self.device.force_loss();
     }
 
+    /// Rebuilds on the app's current device if the view's was lost or replaced.
+    pub fn recover(&mut self) -> Result<(), String> {
+        if self.device.is_lost() || self.gpu.device().epoch != self.device.epoch {
+            self.rebuild()?;
+        }
+        Ok(())
+    }
+
     /// After a loss: the app's new device and every declared resource built again on it, the
     /// slots' storage included. What's on screen stays until a new frame is ready.
     fn rebuild(&mut self) -> Result<(), String> {
@@ -306,9 +314,7 @@ impl View {
     /// Begins `frame` in a free slot, encodes and submits it; `None` when no slot is free. Never
     /// waits on the GPU.
     pub fn render(&mut self, frame: u64) -> Result<Option<Drawn>, String> {
-        if self.device.is_lost() || self.gpu.device().epoch != self.device.epoch {
-            self.rebuild()?;
-        }
+        self.recover()?;
         self.collect();
         let Some((slot, stale)) = lock(&self.ui.ring).begin(frame) else {
             return Ok(None);

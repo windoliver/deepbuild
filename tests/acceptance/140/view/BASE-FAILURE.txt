@@ -1,0 +1,105 @@
+The view group's suite run once at the base, f41a5b3e ("Merge pull request #888 ..."), on the reference Mac
+(Mac15,7, M3 Pro), 2026-10-31, home paths redacted. Run in five slices (each under the session's 10-minute
+command cap) with:
+
+  npx vitest run --root tests/acceptance/140/view --no-file-parallelism <files>
+
+Summary: 21 tests; 19 fail, 2 pass.
+
+  glyphs.test.ts      3 tests | 1 failed   (the tree half passes at the base, as #381's did; its twins fail, named)
+  locale.test.ts      2 tests | 2 failed
+  backends.test.ts    2 tests | 2 failed
+  parity.test.ts      5 tests | 5 failed
+  doctor.test.ts      3 tests | 3 failed
+  timing.test.ts      2 tests | 2 failed
+  access.test.ts      2 tests | 2 failed   (the VoiceOver half: INCONCLUSIVE without DEEP_140_LIVE=1)
+  renderback.test.ts  2 tests | 2 failed
+
+Passing at the base (the property already holds there; README: Criteria to tests):
+  ✓ #140.8f5be3c4 (C3) the dependency tree of each of deep-text, deep-canvas-marks, deep-marks-vello,
+    deep-canvas-scene3d, deep-scene3d-render, for every target, holds no gpui crate, no system font library and
+    no system-font feature
+  ✓ #140.8f5be3c4 (C3) the tree check's twins: a member that adds a system font library, a system-font feature
+    or gpui fails, named; the clean member passes
+
+Each failure's first lines:
+
+ FAIL glyphs.test.ts > #140.8f5be3c4 (C3) each fixture document shapes to the same glyph runs, glyph for glyph,
+      in the app's GPUI frame (zoom 1 and 2) as in the headless Vello CPU raster
+AssertionError: figure: render (the app at zoom 1): texts is an object, got undefined
+
+ FAIL locale.test.ts > #140.1c7b76f7 (C15) under LANG=de_DE.UTF-8 and LANG=en_US.UTF-8 the fixture gives
+      identical glyph runs, and only the document's locale changes 1,234.5 to 1.234,5
+AssertionError: the fixture across process and document locales: expected [ …(2) ] to deeply equal []
++   "the item amount shows \"1,234.5\" under LANG=de_DE.UTF-8, where the document's locale de-DE writes \"1.234,5\"",
++   "the item amount shows \"1,234.5\" under LANG=en_US.UTF-8, where the document's locale de-DE writes \"1.234,5\"",
+
+ FAIL locale.test.ts > #140.1c7b76f7 (C15) the planted formatter that reads the process locale fails the same
+      check, naming the item
+AssertionError: raster under LANG=de_DE.UTF-8, document locale en-US answered ok: {"ok":false,"code":"bad_input"}
+
+ FAIL backends.test.ts > #140.fabe5dd3 (C7) the headless raster, the app's frame and session, a render-back reply
+      with a snapshot and a GPU snapshot each name every backend that fed them, with its name and version
+AssertionError: the headless raster: backends (Seam and backend: "its name and version enter every … result it
+feeds") is an object, got undefined
+
+ FAIL backends.test.ts > #140.fabe5dd3 (C7) the fonts backend at a new version: the result names the new
+      version, and every text cache entry it keyed misses, while two runs of one build key alike
+AssertionError: the binary builds: cargo build --locked --bin deep-canvas-render --features test-fonts-next
++ error: none of the selected packages contains this feature: test-fonts-next
+
+ FAIL parity.test.ts > #140.e2e712fe (C6) figure-2d: the settled live frame and the headless snapshot taken with
+      the app closed agree, data byte for byte, each 2D writer layer through the perceptual oracle
+AssertionError: figure-2d: the live frame settled: {"code":"bad_input","reason":"unknown call"}
+
+ FAIL parity.test.ts > #140.e2e712fe (C6) scene3d-glow-shadows: ... the GPU layer bit for bit, ...
+AssertionError: scene3d-glow-shadows: the live frame settled: {"code":"bad_input","reason":"unknown call"}
+
+ FAIL parity.test.ts > #140.e2e712fe (C6) film-frame: ...
+AssertionError: film-frame: the live frame settled: {"code":"bad_input","reason":"unknown call"}
+
+ FAIL parity.test.ts > #140.e2e712fe (C6) the planted one-code shift in one GPU-layer pixel (--planted
+      shifts_gpu_pixel) fails, naming the pixel
+AssertionError: deep-gpu run --planted shifts_gpu_pixel exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ FAIL parity.test.ts > #140.e2e712fe (C6) a frame that reports settling is never compared: with a pipeline held
+      compiling, live_frame answers not settled and writes no record
+AssertionError: the frame never settles: {"code":"bad_input","reason":"unknown call"}
+
+ FAIL doctor.test.ts > #140.a4a4b47c (C10) on this Mac, whose headless rendering works, the doctor lists the GPU
+      adapter and its tier's features and gives a healthy verdict once its fixture renders within its golden
+AssertionError: deep doctor gives one canvas verdict; its canvas items: []: expected +0 to be 1
+
+ FAIL doctor.test.ts > #140.a4a4b47c (C10) with headless rendering forced to fail, the verdict is unhealthy and
+      the failed finding names a fix an agent can run
+AssertionError: deep doctor gives one canvas verdict; its canvas items: []: expected +0 to be 1
+
+ FAIL doctor.test.ts > #140.a4a4b47c (C10) with the render skipped, the verdict is unverified, never healthy
+AssertionError: deep doctor gives one canvas verdict; its canvas items: []: expected +0 to be 1
+
+ FAIL timing.test.ts > #140.81e434c9 (C2) a moving film in the app's window, paced at 60 Hz and at 120 Hz: every
+      presented frame's predicted presentation is within one refresh of its measured one
+AssertionError: deep-show live finished within 120000 ms (it must not hold its window once `live` is done)
+  (the base's `deep-show live` ignores `live` and holds its window for #376's screen-reader walk)
+
+ FAIL timing.test.ts > #140.81e434c9 (C2) the still figure, once settled in the app's window, schedules zero
+      wakeups and presents no frame over 10 s
+AssertionError: deep-show live finished within 120000 ms (it must not hold its window once `live` is done)
+
+ FAIL access.test.ts > #140.94c6f71e (C4) the figure's tree read from the app's window through NSAccessibility
+      equals the headless tree, node for node: ID, role and name in reading order, and the readout's value
+AssertionError: deep-show live finished within 120000 ms (it must not hold its window once `live` is done)
+  (the headless `see` half answered at the base: #376's surface)
+
+ FAIL access.test.ts > #140.94c6f71e (C4) live, with a person: VoiceOver names every part and announces the
+      readout when it changes from 3 to 4
+AssertionError: INCONCLUSIVE: the VoiceOver smoke test needs a person at the reference Mac with VoiceOver on;
+run with DEEP_140_LIVE=1 (README: The live runs)
+
+ FAIL renderback.test.ts > #140.66011009 (C8) the figure at twice its size: the same pixel hash for the same
+      revision, view, size and t
+AssertionError: deep-show live finished within 120000 ms (it must not hold its window once `live` is done)
+
+ FAIL renderback.test.ts > #140.66011009 (C8) the film at 1.25 s: the same pixel hash for the same revision,
+      view, size and t
+AssertionError: deep-show live finished within 120000 ms (it must not hold its window once `live` is done)

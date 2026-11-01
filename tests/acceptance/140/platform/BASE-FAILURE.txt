@@ -1,0 +1,121 @@
+Base commit: f41a5b3e ("Merge pull request #888 from windoliver/worktree-github-issue-884-352f42")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/140/platform --no-file-parallelism
+Run in the blind job's worktree at the base commit, with only these test files added (untracked), node_modules from npm ci.
+Trimmed to the summary and each failure's first lines; home paths redacted.
+Date: 2026-10-31T11:22Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (the checkout's toolchain)
+Machine: Mac15,7 (M3 Pro, 36 GiB); 1-minute load about 65-80 on 12 cores, so the reference-Mac gate was closed and the
+timing parts would have read INCONCLUSIVE; every test failed at a structural assertion before the gate.
+
+All 19 tests fail for the expected reason, at a named assertion:
+- wasm.test.ts (#140.12): no lane wasm32 in scripts/lanes.mjs; no scripts/wasm32.mjs (both planted tests); the
+  independent build fails because the wasm32-unknown-unknown target isn't installed ("can't find crate for `core`").
+  Its rustc cfg and .cargo/config.toml checks held (no atomics), then the build failed.
+- network.test.ts (#140.13): deep-show run answers the seam_suite scenario {"ok":false,"code":"bad_input"} (no
+  such call); with each planted name it refuses the startup and exits 2.
+- window.test.ts (#140.14): cargo answers "none of the selected packages contains this feature: test-window", so the
+  build every test uses fails. (The shipped build's window_caps half of the first test isn't reached at the base.)
+- budgets.test.ts (#140.18): budgets.json has no task seam-suites; scripts/lanes.mjs has no lane seams; the
+  frame-time test built deep-gpu and deep-show and ran `benchmarks/canvas.mjs class core_view` (146 s), whose report
+  names no backends.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/140/platform
+
+ ❯ window.test.ts (5 tests | 5 failed) 222334ms
+   ❯ #140.14 the window and input seams declare their capabilities, and every consumer names its behavior when one is absent (1)
+     × #140.14 the test window backend's capability table declares occlusion, positions, pointer lock, cursor warp and input-method composition; it declares no occlusion report, and the question card, among occlusion's consumers, names its behavior without one 9ms
+   ❯ #140.14 with a test window backend that declares no occlusion report, the question card arms only while its window is active and frontmost by the platform's own report (4)
+     × #140.14 the card arms 500 ms after its window is active and frontmost, never while the test backend reports it inactive or not frontmost, and arms again 500 ms after both hold again 4ms
+     × #140.14 with no report from the test backend that its window is active and frontmost, the card never arms (unknown is not cleared) 5ms
+     × #140.14 under a covering test window of another app, its window still active but not frontmost, the card stays unarmed, and arms 500 ms after the window leaves and its own is frontmost again 3ms
+     × #140.14 under a covering test window of another app, its window still active but not frontmost, a planted card that treats unknown occlusion as unobscured (--planted card_ignores_unknown_occlusion) arms under it and fails, naming the capability 3ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 146035ms
+   ❯ #140.18 the conformance suites run in under 3 minutes, in the local preflight, compared with the merge base (2)
+     × #140.18 the perf lane has a task seam-suites running node scripts/seams.mjs, a #140 first measurement, valid against the merge base's budgets 121ms
+     × #140.18 the lane seams runs every seam's conformance suite and passes; five timed runs after a warm-up each finish in under 3 minutes on the reference Mac 34ms
+   ❯ #140.18 the seams add under 1% to the canvas budget fixtures' frame time, compared with the merge base (1)
+     × #140.18 each budget class's fixture, recorded by the perf lane's bench on this checkout and on its merge base: every warm run's p95 GPU and CPU frame time within 1% of the merge base's, on the reference Mac 145879ms
+ ❯ network.test.ts (7 tests | 7 failed) 101456ms
+   ❯ #140.13 the network seam's suite passes a correct test backend through a local test relay that delays, drops, duplicates and reorders 10,000 messages (3)
+     × #140.13 seed 1: the correct test backend passes, every one of 10,000 messages arrives once and in order through the relay's delays, drops, duplicates and reorders, nothing is sent before the join call and no connection goes to a host it wasn't given 1243ms
+     × #140.13 seed 2: the correct test backend passes, every one of 10,000 messages arrives once and in order through the relay's delays, drops, duplicates and reorders, nothing is sent before the join call and no connection goes to a host it wasn't given 16ms
+     × #140.13 seed 3: the correct test backend passes, every one of 10,000 messages arrives once and in order through the relay's delays, drops, duplicates and reorders, nothing is sent before the join call and no connection goes to a host it wasn't given 40ms
+   ❯ #140.13 the network seam's suite fails each planted backend, naming its fault (4)
+     × #140.13 a planted backend (--planted net_delivers_twice) fails the suite, naming the fault delivered_twice 22ms
+     × #140.13 a planted backend (--planted net_delivers_out_of_order) fails the suite, naming the fault out_of_order 17ms
+     × #140.13 a planted backend (--planted net_sends_before_join) fails the suite, naming the fault sent_before_join 20ms
+     × #140.13 a planted backend (--planted net_connects_unlisted_host) fails the suite, naming the fault unlisted_host 22ms
+ ❯ wasm.test.ts (4 tests | 4 failed) 89008ms
+   ❯ #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight (4)
+     × #140.12 the local preflight has a lane named wasm32 running node scripts/wasm32.mjs; each of its commands exits 0, and it prints PASS for every canvas core crate 231ms
+     × #140.12 built here, apart from the lane, every canvas core crate compiles for wasm32-unknown-unknown with threads off (no atomics target feature, no flags that add it) 88775ms
+     × #140.12 a planted dependency that needs threads (it spawns a std thread) (--planted threads, the crate deep-planted-threads) fails the wasm32 lane's build, naming the crate, where the clean run passes 1ms
+     × #140.12 a planted dependency that calls an API only native targets have (--planted native, the crate deep-planted-native) fails the wasm32 lane's build, naming the crate, where the clean run passes 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #140.18 the conformance suites run in under 3 minutes, in the local preflight, compared with the merge base > #140.18 the perf lane has a task seam-suites running node scripts/seams.mjs, a #140 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task seam-suites: expected undefined to be defined
+
+ FAIL  budgets.test.ts > #140.18 the conformance suites run in under 3 minutes, in the local preflight, compared with the merge base > #140.18 the lane seams runs every seam's conformance suite and passes; five timed runs after a warm-up each finish in under 3 minutes on the reference Mac
+AssertionError: scripts/lanes.mjs has a lane named seams in checks (the local preflight): expected undefined to be defined
+
+ FAIL  budgets.test.ts > #140.18 the seams add under 1% to the canvas budget fixtures' frame time, compared with the merge base > #140.18 each budget class's fixture, recorded by the perf lane's bench on this checkout and on its merge base: every warm run's p95 GPU and CPU frame time within 1% of the merge base's, on the reference Mac
+AssertionError: the core_view report names the backends that made it (backends: {seam → {name, version}}), got undefined: expected false to be true // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite passes a correct test backend through a local test relay that delays, drops, duplicates and reorders 10,000 messages > #140.13 seed 1: the correct test backend passes, every one of 10,000 messages arrives once and in order through the relay's delays, drops, duplicates and reorders, nothing is sent before the join call and no connection goes to a host it wasn't given
+AssertionError: the network seam's suite, seed 1: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite passes a correct test backend through a local test relay that delays, drops, duplicates and reorders 10,000 messages > #140.13 seed 2: the correct test backend passes, every one of 10,000 messages arrives once and in order through the relay's delays, drops, duplicates and reorders, nothing is sent before the join call and no connection goes to a host it wasn't given
+AssertionError: the network seam's suite, seed 2: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite passes a correct test backend through a local test relay that delays, drops, duplicates and reorders 10,000 messages > #140.13 seed 3: the correct test backend passes, every one of 10,000 messages arrives once and in order through the relay's delays, drops, duplicates and reorders, nothing is sent before the join call and no connection goes to a host it wasn't given
+AssertionError: the network seam's suite, seed 3: deep-show run answers the scenario ok (README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite fails each planted backend, naming its fault > #140.13 a planted backend (--planted net_delivers_twice) fails the suite, naming the fault delivered_twice
+AssertionError: the network seam's suite, seed 1, --planted net_delivers_twice: deep-show run --planted net_delivers_twice exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite fails each planted backend, naming its fault > #140.13 a planted backend (--planted net_delivers_out_of_order) fails the suite, naming the fault out_of_order
+AssertionError: the network seam's suite, seed 1, --planted net_delivers_out_of_order: deep-show run --planted net_delivers_out_of_order exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite fails each planted backend, naming its fault > #140.13 a planted backend (--planted net_sends_before_join) fails the suite, naming the fault sent_before_join
+AssertionError: the network seam's suite, seed 1, --planted net_sends_before_join: deep-show run --planted net_sends_before_join exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+ FAIL  network.test.ts > #140.13 the network seam's suite fails each planted backend, naming its fault > #140.13 a planted backend (--planted net_connects_unlisted_host) fails the suite, naming the fault unlisted_host
+AssertionError: the network seam's suite, seed 1, --planted net_connects_unlisted_host: deep-show run --planted net_connects_unlisted_host exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+ FAIL  wasm.test.ts > #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight > #140.12 the local preflight has a lane named wasm32 running node scripts/wasm32.mjs; each of its commands exits 0, and it prints PASS for every canvas core crate
+AssertionError: scripts/lanes.mjs has a lane named wasm32 in checks (the local preflight): expected undefined to be defined
+
+ FAIL  wasm.test.ts > #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight > #140.12 built here, apart from the lane, every canvas core crate compiles for wasm32-unknown-unknown with threads off (no atomics target feature, no flags that add it)
+AssertionError: cargo build --locked --target wasm32-unknown-unknown -p deep-canvas -p deep-canvas-cells -p deep-canvas-effects -p deep-canvas-graph -p deep-canvas-marks -p deep-canvas-motion -p deep-canvas-record -p deep-canvas-scene3d -p deep-canvas-sheet -p deep-text exits 0
+error[E0463]: can't find crate for `core`
+  |
+  = note: the `wasm32-unknown-unknown` target may not be installed
+  = help: consider downloading the target with `rustup target add wasm32-unknown-unknown`
+
+ FAIL  wasm.test.ts > #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight > #140.12 a planted dependency that needs threads (it spawns a std thread) (--planted threads, the crate deep-planted-threads) fails the wasm32 lane's build, naming the crate, where the clean run passes
+
+ FAIL  wasm.test.ts > #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight > #140.12 a planted dependency that calls an API only native targets have (--planted native, the crate deep-planted-native) fails the wasm32 lane's build, naming the crate, where the clean run passes
+AssertionError: scripts/wasm32.mjs exists (the wasm32 lane's command): expected false to be true // Object.is equality
+
+ FAIL  window.test.ts > #140.14 the window and input seams declare their capabilities, and every consumer names its behavior when one is absent > #140.14 the test window backend's capability table declares occlusion, positions, pointer lock, cursor warp and input-method composition; it declares no occlusion report, and the question card, among occlusion's consumers, names its behavior without one
+AssertionError: the binary builds: cargo build --locked --bin deep-show --features test-window: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+ FAIL  window.test.ts > #140.14 with a test window backend that declares no occlusion report, the question card arms only while its window is active and frontmost by the platform's own report > #140.14 the card arms 500 ms after its window is active and frontmost, never while the test backend reports it inactive or not frontmost, and arms again 500 ms after both hold again
+AssertionError: the binary builds: cargo build --locked --bin deep-show --features test-window: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+ FAIL  window.test.ts > #140.14 with a test window backend that declares no occlusion report, the question card arms only while its window is active and frontmost by the platform's own report > #140.14 with no report from the test backend that its window is active and frontmost, the card never arms (unknown is not cleared)
+AssertionError: the binary builds: cargo build --locked --bin deep-show --features test-window: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+ FAIL  window.test.ts > #140.14 with a test window backend that declares no occlusion report, the question card arms only while its window is active and frontmost by the platform's own report > #140.14 under a covering test window of another app, its window still active but not frontmost, the card stays unarmed, and arms 500 ms after the window leaves and its own is frontmost again
+
+ FAIL  window.test.ts > #140.14 with a test window backend that declares no occlusion report, the question card arms only while its window is active and frontmost by the platform's own report > #140.14 under a covering test window of another app, its window still active but not frontmost, a planted card that treats unknown occlusion as unobscured (--planted card_ignores_unknown_occlusion) arms under it and fails, naming the capability
+AssertionError: the binary builds: cargo build --locked --bin deep-show --features test-window: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ Test Files  4 failed (4)
+      Tests  19 failed (19)
+   Start at  11:22:41
+   Duration  562.29s (tests 100%)

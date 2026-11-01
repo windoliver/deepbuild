@@ -116,6 +116,16 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
     out
 }
 
+/// A glyph of a text's run as `texts` reports it, in document units (#381); the app's frame
+/// reports its runs the same way (#140).
+pub(crate) fn glyph_row(g: &deep_text::Glyph, role: Option<&str>) -> Value {
+    let font = deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
+    json!({
+        "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
+        "grapheme": g.grapheme, "role": role,
+    })
+}
+
 impl Painter<'_> {
     fn text(&mut self, label: &deep_text_gpui::Label, origin: [f64; 2], color: Rgb) {
         let shaped = deep_text_gpui::shape(label);
@@ -144,12 +154,7 @@ impl Painter<'_> {
                 .font_size(g.size)
                 .hint(false)
                 .fill_glyphs(std::iter::once(glyph));
-            let font =
-                deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
-            out.push(json!({
-                "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
-                "grapheme": g.grapheme, "role": role,
-            }));
+            out.push(glyph_row(g, role));
         }
         out
     }
@@ -367,7 +372,35 @@ fn draw(req: &Request) -> Result<Value, Value> {
         .map_err(|_| refused("not_written", &req.out))?;
     Ok(json!({
         "ok": true, "width": w, "height": h, "offscreen": p.scopes.offscreen, "texts": p.texts,
+        "backends": crate::backends(true),
     }))
+}
+
+/// #140: `marks` alone over transparent black at `size` px and zoom 1, as `draw` paints them with
+/// no ground and no status marks; straight alpha.
+pub(crate) fn picture(marks: &[&scene::Drawn], size: [u32; 2]) -> Result<image::RgbaImage, Value> {
+    let (Ok(w), Ok(h)) = (u16::try_from(size[0]), u16::try_from(size[1])) else {
+        return Err(refused("out_of_range", "size"));
+    };
+    let mut p = Painter {
+        ctx: RenderContext::new_with(w, h, settings()),
+        resources: Resources::new(),
+        store: None,
+        scopes: Scopes::new(false),
+        zoom: 1.0,
+        spans_apart: false,
+        texts: Map::new(),
+    };
+    for drawn in marks {
+        p.scopes.enter(&mut p.ctx, &mut p.resources, &drawn.scopes);
+        p.mark(&drawn.mark)?;
+    }
+    p.scopes.enter(&mut p.ctx, &mut p.resources, &[]);
+    let mut pixmap = Pixmap::new(w, h);
+    p.ctx
+        .render_with(&mut pixmap, &mut p.resources, rasterizer());
+    image::RgbaImage::from_raw(size[0], size[1], pixmap.take_rgba8(ImageAlphaType::Alpha))
+        .ok_or_else(|| refused("not_written", "picture"))
 }
 
 /// Every look role a document names, in black: geometry needs the outline, never its colors.

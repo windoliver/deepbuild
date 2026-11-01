@@ -6,15 +6,17 @@ The GPU layer for 3D and effects (#377): one wgpu device per app drawing offscre
 
 ## Where new code goes
 
-- One module per concern under `src/`, declared in `src/lib.rs`: `device.rs`, `ring.rs` and `surface.rs` (device, slots and fences, handoff storage), `view.rs` and `render.rs` (views and render modules), `encode.rs`, `upload.rs`, `compile.rs`, `guard.rs`, `meter.rs`, `memory.rs`, `cache.rs`, `alloc.rs`.
+- One module per concern under `src/`, declared in `src/lib.rs`: `device.rs`, `ring.rs` and `surface.rs` (device, slots and fences, handoff storage), `view.rs` and `render.rs` (views and render modules), `encode.rs`, `upload.rs`, `compile.rs`, `guard.rs`, `meter.rs`, `memory.rs`, `cache.rs`, `alloc.rs`; and `seam.rs`, the GPU seam (#140): its backend, the tier's feature table, the quirk table (`quirks.json`, reviewed data) and the adapter it picks.
 - Tests: unit tests in a `#[cfg(test)]` module beside the code; render logic that needs no GPU in `tests/noop.rs`, the noop lane (`cargo test -p deep-gpu` on wgpu's noop backend). Pixel and budget proofs are in tests/acceptance/377 and 379, through `deep-gpu` (crates/deep-gpu-layer).
 - What a render module draws goes in its render crate (deep-scene3d-render, deep-effects-render); the proof binary's calls go in crates/deep-gpu-layer.
 
 ## What it may import
 
-The bottom of the Rust GPU stack: deep-canvas through its crate root, wgpu, pollster and, on macOS only, the objc2 Metal, IOSurface and CoreVideo bindings. It never imports GPUI, deep-app or a render crate; those depend on it.
+The bottom of the Rust GPU stack: deep-canvas through its crate root, deep-canvas-seams (the backend type every seam names), wgpu, pollster, serde_json and, on macOS only, the objc2 Metal, IOSurface and CoreVideo bindings. It never imports GPUI, deep-app or a render crate; those depend on it.
 
 ## Deviations
+
+- `build.rs`: reads wgpu's version from the workspace's Cargo.lock into the GPU seam's backend version, as deep-gpu-layer's build script does, so a new wgpu is a new backend in every key it feeds (#140).
 
 - `src/alloc.rs`: every build marks wgpu's calls, but only a test build installs the counting allocator that reads the marks, so #379's zero-allocations-per-frame count leaves out what wgpu or the driver allocates.
 - `src/memory.rs`: the `unsafe` reads Metal's own `allocatedSize` through wgpu's HAL, since memory is counted as the device reports it, never a formula; elsewhere a count that needs it is BLOCKED.
