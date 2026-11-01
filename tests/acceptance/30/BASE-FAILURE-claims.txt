@@ -1,0 +1,612 @@
+Acceptance tests for #30, the blind redraft's new files run on its base commit c9225aa3 (no implementation of the
+claim halves or of AC5's slot half; the command check kind, the gate, the extension host and the slots exist).
+
+Command:  env -u CLAUDECODE -u AI_AGENT node node_modules/vitest/vitest.mjs run --root tests/acceptance/30 --no-file-parallelism claims.test.ts replaces.test.ts blocked.test.ts
+          (PATH with the repo's Node first)
+Node:     v24.22.0
+Date:     2026-11-01
+Machine:  Linux (not a reference Mac); the supervisor refuses every start here ("no platform sandbox backend for
+          linux yet (#70); nothing runs outside one"); packages/checks-command/dist isn't built; pnpm is missing.
+
+Result: 3 of 3 files fail, 26 of 26 tests fail, nothing passes.
+
+Why each fails, all for the expected reason:
+- claims.test.ts (23 tests): every run returns `missing` (the supervisor refuses the start), so each test fails
+  either on the run-half assertion it repeats first (outcome, seeded, the six outcomes), on `claimOf`'s
+  "BLOCKED: run <id> of <check> never started", or, for the twins, on the planted run not having run; the pnpm
+  three fail "BLOCKED: pnpm isn't on PATH". None reaches `claimVerdict`, which @deepbuild/gate doesn't export at
+  this base (the type check names it; see REDRAFT.md).
+- replaces.test.ts (2 tests): "BLOCKED: packages/checks-command/dist/index.js isn't built (npm run build
+  --workspaces)".
+- blocked.test.ts (1 test): "BLOCKED: the timing check (#87) ... no surface at this base".
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/30/tsconfig.json
+- at this base: 5 x TS2305 (claimVerdict, ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedRun missing from
+  packages/gate/src/index.ts) and 4 x TS7006 (implicit any on callbacks typed from claimVerdict's result).
+- against a declaration-only copy of the SURFACE-CLAIMS block in a scratch mirror of the repo: clean (exit 0).
+
+Output of the run (ANSI colors stripped):
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/30
+
+ ❯ claims.test.ts (23 tests | 23 failed) 69591ms
+   ❯ AC2 #30.5f9be4a0 a suite that runs zero tests is INVALID (the claim's half; the run's is in record.test.ts) (1)
+     × AC2 a claim whose check's run ran zero tests is INVALID, naming the check and that it ran nothing, never PASS 358ms
+   ❯ AC7 #30.b213a878 an overrun counts as a failed run; a run a hub restart cuts short is INCONCLUSIVE, never PASS or FAIL (the claim's half; the runs are in ending.test.ts) (2)
+     × AC7 a check whose only run overran its deadline is FAIL in the claim's verdict, naming the overrun; a crash of its own is a failed run too 351ms
+     × AC7 a check run that a hub restart cuts short (its stop signalled as the hub goes down) is kept as stopped and makes the claim INCONCLUSIVE, never PASS or FAIL 60339ms
+   ❯ AC8 #30.626ffab8 a stand-in can't pass a requirement about what real users get (the claim's half; the marking is in standin.test.ts) (3)
+     × AC8 a requirement about what real users get, covered by the stand-in check, stays INCONCLUSIVE, naming policies and the script that seeds it 305ms
+     × AC8 covered by its twin, where src/ inserts into policies, the same requirement can pass 322ms
+     × AC8 (wrong program) a rule that marks every seeded table a stand-in leaves the twin's requirement INCONCLUSIVE and fails this test, naming policies 313ms
+   ❯ AC9 #30.506a2ee0 a failure in any of the six runs while another passes makes the claim INCONCLUSIVE; a test that fails every run is FAIL (the claim's half; the runs are in added.test.ts) (2)
+     × AC9 the claim that adds the test failing only a month ahead is INCONCLUSIVE, naming "the trial is still open", counting all six runs and keeping the failing run's output as evidence 311ms
+     × AC9 the claim whose added test fails every run is FAIL, naming "the trial is still open" 332ms
+   ❯ AC10 #30.9c363cec `pnpm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `pnpm test` is FAIL (the claim's half; the runs are in mask.test.ts) (3)
+     × AC10 the claim on `pnpm test || true` over a suite with one failing test is INVALID, naming "exit status masked by `|| true`" 1ms
+     × AC10 the claim on the bare `pnpm test` is FAIL on the failing test 0ms
+     × AC10 (wrong program) a gate that judges only the exit code passes the claim on `pnpm test || true` and fails this test, naming the phrase 0ms
+   ❯ AC10 #30.9c363cec `npm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `npm test` is FAIL (the claim's half; the runs are in mask.test.ts) (3)
+     × AC10 the claim on `npm test || true` over a suite with one failing test is INVALID, naming "exit status masked by `|| true`" 340ms
+     × AC10 the claim on the bare `npm test` is FAIL on the failing test 298ms
+     × AC10 (wrong program) a gate that judges only the exit code passes the claim on `npm test || true` and fails this test, naming the phrase 297ms
+   ❯ AC14 #30.4df04268 the FAIL names src/cart.test.ts and line 30 (the claim's half; the stored output and the failure's place are in privacy.test.ts) (2)
+     × AC14 the claim's FAIL from the cart check, run with NODE_ENV=test and PORT=3000, names src/cart.test.ts:30 and the failing test 305ms
+     × AC14 (wrong program) a scrub of every passed value leaves the FAIL pointing to src/cart.[redacted].ts:30, and fails this test, naming the line 340ms
+   ❯ AC17 #30.a06dc35a a test that fails and then passes on its retry is a pass and a fail on that commit, so its check is INCONCLUSIVE naming the test (the claim's half; the attempts are in retries.test.ts) (2)
+     × AC17 the claim on the retry suite's check is INCONCLUSIVE, naming "settles the order" 309ms
+     × AC17 (wrong program) a runner that reads only each test's last attempt passes the claim on the suite, and fails this test, naming "settles the order" 308ms
+   ❯ AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim's half; the counts are in contract.test.ts; the timing check's half is in blocked.test.ts) (5)
+     × AC19 the claim on the check that compared 40,960 of out's 4,096,000 elements is INVALID, naming out 299ms
+     × AC19 the claim on its twin, which compared all 4,096,000, counts it 302ms
+     × AC19 the claim on a check whose report gives no count for out is INVALID, naming out: missing is never complete 287ms
+     × AC19 (wrong program) a runner that reads the counts from the test's printed output lets the sample claim count, and fails this test, naming out 373ms
+     × AC19 (wrong program) a runner that takes a silent report as complete lets that claim count, and fails this test, naming out 314ms
+ ❯ replaces.test.ts (2 tests | 2 failed) 98ms
+   ❯ AC5 #30.47dbce22 with the command check kind replaced by a test check kind installed with `replaces`, its checks are still sandboxed (the slot's half; the kind's is in sandbox.test.ts) (2)
+     × AC5 a test check kind installed with `replaces` in place of the command check kind runs a check that still can't reach the hub's socket or write outside its declared paths; the supervisor records the denial 58ms
+     × AC5 (wrong program) on a supervisor planted to leave the sandbox to its caller, the same kind's check reaches the hub's socket and writes outside: the confinement is the supervisor's, and a sandbox built inside the command check kind, or the slot, would fail this test 23ms
+ ❯ blocked.test.ts (1 test | 1 failed) 2ms
+   ❯ AC19 #30.aebc2446 a timing check's unflushed repeat is recorded as not flushed (#87's half; the counts are in contract.test.ts and the claim's INVALID in claims.test.ts) (1)
+     × AC19 a timing check whose report leaves out whether a repeat's caches were flushed records that repeat as not flushed, never cold 2ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 26 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blocked.test.ts > AC19 #30.aebc2446 a timing check's unflushed repeat is recorded as not flushed (#87's half; the counts are in contract.test.ts and the claim's INVALID in claims.test.ts) > AC19 a timing check whose report leaves out whether a repeat's caches were flushed records that repeat as not flushed, never cold
+Error: BLOCKED: the timing check (#87), its timed repeats and the report that says whether each repeat's caches were flushed have no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:9:9
+      7|
+      8| const blocked = (what: string): never => {
+      9|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     10| };
+     11|
+ ❯ blocked.test.ts:14:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/26]⎯
+
+ FAIL  claims.test.ts > AC2 #30.5f9be4a0 a suite that runs zero tests is INVALID (the claim's half; the run's is in record.test.ts) > AC2 a claim whose check's run ran zero tests is INVALID, naming the check and that it ran nothing, never PASS
+Error: BLOCKED: run run:01M6C8H906EC26BZ8PW7SD17MS of skipped-suite never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claims.test.ts:29:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/26]⎯
+
+ FAIL  claims.test.ts > AC7 #30.b213a878 an overrun counts as a failed run; a run a hub restart cuts short is INCONCLUSIVE, never PASS or FAIL (the claim's half; the runs are in ending.test.ts) > AC7 a check whose only run overran its deadline is FAIL in the claim's verdict, naming the overrun; a crash of its own is a failed run too
+AssertionError: 
+: expected 'missing' to be 'overran' // Object.is equality
+
+Expected: "overran"
+Received: "missing"
+
+ ❯ claims.test.ts:39:62
+     37|   it('AC7 a check whose only run overran its deadline is FAIL in the c…
+     38|     const overran = await runCommandCheck(command(world.sup, project('…
+     39|     expect(overran.outcome, outputOf(overran).slice(0, 800)).toBe('ove…
+       |                                                              ^
+     40|     const v = claimVerdict(claimOf({ check: 'slow-suite', command: VIT…
+     41|     expect(v.outcome, `an overran run counts as a failed run: ${reason…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/26]⎯
+
+ FAIL  claims.test.ts > AC7 #30.b213a878 an overrun counts as a failed run; a run a hub restart cuts short is INCONCLUSIVE, never PASS or FAIL (the claim's half; the runs are in ending.test.ts) > AC7 a check run that a hub restart cuts short (its stop signalled as the hub goes down) is kept as stopped and makes the claim INCONCLUSIVE, never PASS or FAIL
+Error: timed out after 60000 ms waiting for the slow suite's second test (its progress marker in the checkout)
+ ❯ waitFor helpers.ts:271:38
+    269|     const value = await probe();
+    270|     if (value !== undefined && value !== false) return value;
+    271|     if (Date.now() > deadline) throw Error(`timed out after ${timeoutM…
+       |                                      ^
+    272|     await sleep(50);
+    273|   }
+ ❯ claims.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/26]⎯
+
+ FAIL  claims.test.ts > AC8 #30.626ffab8 a stand-in can't pass a requirement about what real users get (the claim's half; the marking is in standin.test.ts) > AC8 a requirement about what real users get, covered by the stand-in check, stays INCONCLUSIVE, naming policies and the script that seeds it
+AssertionError: the run marks the stand-in: expected [] to deep equally contain { name: 'policies', …(2) }
+
+- Expected:
+{
+  "by": "scripts/seed.ts",
+  "name": "policies",
+  "standIn": true,
+}
+
++ Received:
+[]
+
+ ❯ claims.test.ts:77:52
+     75|   it('AC8 a requirement about what real users get, covered by the stan…
+     76|     const r = await runCommandCheck(policiesCheck(world.sup, false));
+     77|     expect(r.seeded, 'the run marks the stand-in').toContainEqual({ na…
+       |                                                    ^
+     78|     const v = claimVerdict(claim(r));
+     79|     expect(v.outcome, reasons(v)).toBe('INCONCLUSIVE');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/26]⎯
+
+ FAIL  claims.test.ts > AC8 #30.626ffab8 a stand-in can't pass a requirement about what real users get (the claim's half; the marking is in standin.test.ts) > AC8 covered by its twin, where src/ inserts into policies, the same requirement can pass
+Error: BLOCKED: run run:01M6C8K4WDXFFNWRM5X7YBY9XN of policies never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:68:36
+ ❯ claims.test.ts:87:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/26]⎯
+
+ FAIL  claims.test.ts > AC8 #30.626ffab8 a stand-in can't pass a requirement about what real users get (the claim's half; the marking is in standin.test.ts) > AC8 (wrong program) a rule that marks every seeded table a stand-in leaves the twin's requirement INCONCLUSIVE and fails this test, naming policies
+Error: BLOCKED: run run:01M6C8K5661863NC4Z110G2ATA of policies never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:68:36
+ ❯ claims.test.ts:94:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/26]⎯
+
+ FAIL  claims.test.ts > AC9 #30.506a2ee0 a failure in any of the six runs while another passes makes the claim INCONCLUSIVE; a test that fails every run is FAIL (the claim's half; the runs are in added.test.ts) > AC9 the claim that adds the test failing only a month ahead is INCONCLUSIVE, naming "the trial is still open", counting all six runs and keeping the failing run's output as evidence
+AssertionError: five passes and the month-ahead failure: expected [ 'missing', 'missing', …(4) ] to deeply equal [ 'passed', 'passed', 'passed', …(3) ]
+
+- Expected
++ Received
+
+  [
+-   "passed",
+-   "passed",
+-   "passed",
+-   "passed",
+-   "passed",
+-   "failed",
++   "missing",
++   "missing",
++   "missing",
++   "missing",
++   "missing",
++   "missing",
+  ]
+
+ ❯ claims.test.ts:107:83
+    105|   it(`AC9 the claim that adds the test failing only a month ahead is I…
+    106|     const runs = await runAddedTests(command(world.sup, trial(), VITES…
+    107|     expect(runs.map((r) => r.outcome), 'five passes and the month-ahea…
+       |                                                                                   ^
+    108|     const month = runs[5]!;
+    109|     const v = claimVerdict(claim(runs));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/26]⎯
+
+ FAIL  claims.test.ts > AC9 #30.506a2ee0 a failure in any of the six runs while another passes makes the claim INCONCLUSIVE; a test that fails every run is FAIL (the claim's half; the runs are in added.test.ts) > AC9 the claim whose added test fails every run is FAIL, naming "the trial is still open"
+AssertionError: expected [ 'missing', 'missing', …(4) ] to deeply equal [ 'failed', 'failed', 'failed', …(3) ]
+
+- Expected
++ Received
+
+  [
+-   "failed",
+-   "failed",
+-   "failed",
+-   "failed",
+-   "failed",
+-   "failed",
++   "missing",
++   "missing",
++   "missing",
++   "missing",
++   "missing",
++   "missing",
+  ]
+
+ ❯ claims.test.ts:127:40
+    125| `;
+    126|     const runs = await runAddedTests(command(world.sup, trial({ [ADDED…
+    127|     expect(runs.map((r) => r.outcome)).toEqual(Array<string>(6).fill('…
+       |                                        ^
+    128|     const v = claimVerdict(claim(runs));
+    129|     expect(v.outcome, reasons(v)).toBe('FAIL');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/26]⎯
+
+ FAIL  claims.test.ts > AC10 #30.9c363cec `pnpm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `pnpm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 the claim on `pnpm test || true` over a suite with one failing test is INVALID, naming "exit status masked by `|| true`"
+Error: BLOCKED: pnpm isn't on PATH on this machine (corepack would fetch it from the network)
+ ❯ gate helpers.ts:312:22
+    310|   if (!gates.has(name)) gates.set(name, probe());
+    311|   const problem = gates.get(name);
+    312|   if (problem) throw Error(`BLOCKED: ${problem}`);
+       |                      ^
+    313| }
+    314| const onPath = (program: string): string | null => {
+ ❯ needPnpm helpers.ts:347:3
+ ❯ claims.test.ts:146:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/26]⎯
+
+ FAIL  claims.test.ts > AC10 #30.9c363cec `pnpm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `pnpm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 the claim on the bare `pnpm test` is FAIL on the failing test
+Error: BLOCKED: pnpm isn't on PATH on this machine (corepack would fetch it from the network)
+ ❯ gate helpers.ts:312:22
+    310|   if (!gates.has(name)) gates.set(name, probe());
+    311|   const problem = gates.get(name);
+    312|   if (problem) throw Error(`BLOCKED: ${problem}`);
+       |                      ^
+    313| }
+    314| const onPath = (program: string): string | null => {
+ ❯ needPnpm helpers.ts:347:3
+ ❯ claims.test.ts:154:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/26]⎯
+
+ FAIL  claims.test.ts > AC10 #30.9c363cec `pnpm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `pnpm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 (wrong program) a gate that judges only the exit code passes the claim on `pnpm test || true` and fails this test, naming the phrase
+Error: BLOCKED: pnpm isn't on PATH on this machine (corepack would fetch it from the network)
+ ❯ gate helpers.ts:312:22
+    310|   if (!gates.has(name)) gates.set(name, probe());
+    311|   const problem = gates.get(name);
+    312|   if (problem) throw Error(`BLOCKED: ${problem}`);
+       |                      ^
+    313| }
+    314| const onPath = (program: string): string | null => {
+ ❯ needPnpm helpers.ts:347:3
+ ❯ claims.test.ts:163:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/26]⎯
+
+ FAIL  claims.test.ts > AC10 #30.9c363cec `npm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `npm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 the claim on `npm test || true` over a suite with one failing test is INVALID, naming "exit status masked by `|| true`"
+TypeError: claimVerdict is not a function
+ ❯ claims.test.ts:150:28
+    148|       const r = await runCommandCheck(command(world.sup, project('npm-…
+    149|       expect(r.outcome, 'a masked check never passes').not.toBe('passe…
+    150|       invalidNamingTheMask(claimVerdict(claimOf({ check, command: mask…
+       |                            ^
+    151|     }, 180_000);
+    152|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/26]⎯
+
+ FAIL  claims.test.ts > AC10 #30.9c363cec `npm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `npm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 the claim on the bare `npm test` is FAIL on the failing test
+Error: BLOCKED: run run:01M6C8K6E91C2E2972DS8XMMV0 of npm-script never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claims.test.ts:157:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/26]⎯
+
+ FAIL  claims.test.ts > AC10 #30.9c363cec `npm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `npm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 (wrong program) a gate that judges only the exit code passes the claim on `npm test || true` and fails this test, naming the phrase
+Error: BLOCKED: the planted runner didn't run the masked command to a clean exit (exit null), so the wrong program wasn't shown
+ ❯ claims.test.ts:166:37
+    164|       const masked = `${tool} test || true`;
+    165|       const r = await runCommandCheck(command(world.sup, project('npm-…
+    166|       if (r.exit?.code !== 0) throw Error(`BLOCKED: the planted runner…
+       |                                     ^
+    167|       const v = claimVerdict(claimOf({ check, command: masked, runs: […
+    168|       expect(v.outcome, 'the planted gate passes the masked check').to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/26]⎯
+
+ FAIL  claims.test.ts > AC14 #30.4df04268 the FAIL names src/cart.test.ts and line 30 (the claim's half; the stored output and the failure's place are in privacy.test.ts) > AC14 the claim's FAIL from the cart check, run with NODE_ENV=test and PORT=3000, names src/cart.test.ts:30 and the failing test
+Error: BLOCKED: run run:01M6C8K7119GKM1NQ2TN9H3AYJ of cart-suite never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:176:36
+ ❯ claims.test.ts:187:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/26]⎯
+
+ FAIL  claims.test.ts > AC14 #30.4df04268 the FAIL names src/cart.test.ts and line 30 (the claim's half; the stored output and the failure's place are in privacy.test.ts) > AC14 (wrong program) a scrub of every passed value leaves the FAIL pointing to src/cart.[redacted].ts:30, and fails this test, naming the line
+AssertionError: the scrubbed record places its failures in src/cart.[redacted].ts: expected [ 'src/**' ] to include 'src/cart.[redacted].ts'
+ ❯ claims.test.ts:195:116
+    193|     const r = await runCommandCheck(command(world.sup, project('cart')…
+    194|     const wrong = scrubsEveryPassedValue(r, passed);
+    195|     expect(wrong.failures.map((f) => f.file), 'the scrubbed record pla…
+       |                                                                                                                    ^
+    196|     const v = claimVerdict(claim(wrong));
+    197|     expect(() => namesTheLine(v)).toThrow(/src\/cart\.test\.ts:30/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/26]⎯
+
+ FAIL  claims.test.ts > AC17 #30.a06dc35a a test that fails and then passes on its retry is a pass and a fail on that commit, so its check is INCONCLUSIVE naming the test (the claim's half; the attempts are in retries.test.ts) > AC17 the claim on the retry suite's check is INCONCLUSIVE, naming "settles the order"
+Error: BLOCKED: run run:01M6C8K7NB60GNH9PZFHJ5A61K of retry-suite never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:203:36
+ ❯ claims.test.ts:216:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/26]⎯
+
+ FAIL  claims.test.ts > AC17 #30.a06dc35a a test that fails and then passes on its retry is a pass and a fail on that commit, so its check is INCONCLUSIVE naming the test (the claim's half; the attempts are in retries.test.ts) > AC17 (wrong program) a runner that reads only each test's last attempt passes the claim on the suite, and fails this test, naming "settles the order"
+Error: BLOCKED: the planted runner didn't pass the retried test (outcome missing), so the wrong program wasn't shown: 
+
+ ❯ claims.test.ts:221:39
+    219|   it(`AC17 (wrong program) a runner that reads only each test's last a…
+    220|     const r = await runCommandCheck(command(world.sup, project('retry'…
+    221|     if (r.outcome !== 'passed') throw Error(`BLOCKED: the planted runn…
+       |                                       ^
+    222|     const v = claimVerdict(claim(r));
+    223|     expect(v.outcome, `the planted runner's run passes the claim: ${re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/26]⎯
+
+ FAIL  claims.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim's half; the counts are in contract.test.ts; the timing check's half is in blocked.test.ts) > AC19 the claim on the check that compared 40,960 of out's 4,096,000 elements is INVALID, naming out
+Error: BLOCKED: run run:01M6C8K88BYYNWZZP329D55ZZ5 of matmul never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:240:36
+ ❯ claims.test.ts:256:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/26]⎯
+
+ FAIL  claims.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim's half; the counts are in contract.test.ts; the timing check's half is in blocked.test.ts) > AC19 the claim on its twin, which compared all 4,096,000, counts it
+Error: BLOCKED: run run:01M6C8K8HS2KKBFV2QFGQ5ACJZ of matmul never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:240:36
+ ❯ claims.test.ts:261:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/26]⎯
+
+ FAIL  claims.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim's half; the counts are in contract.test.ts; the timing check's half is in blocked.test.ts) > AC19 the claim on a check whose report gives no count for out is INVALID, naming out: missing is never complete
+Error: BLOCKED: run run:01M6C8K8TR3PKPREPV81VW7Z71 of matmul never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:240:36
+ ❯ claims.test.ts:266:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/26]⎯
+
+ FAIL  claims.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim's half; the counts are in contract.test.ts; the timing check's half is in blocked.test.ts) > AC19 (wrong program) a runner that reads the counts from the test's printed output lets the sample claim count, and fails this test, naming out
+Error: BLOCKED: run run:01M6C8K96CQSZ4M8XH92THVBQT of matmul never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:240:36
+ ❯ claims.test.ts:271:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/26]⎯
+
+ FAIL  claims.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts (the claim's half; the counts are in contract.test.ts; the timing check's half is in blocked.test.ts) > AC19 (wrong program) a runner that takes a silent report as complete lets that claim count, and fails this test, naming out
+Error: BLOCKED: run run:01M6C8K9G70Y69GK2FC78112TX of matmul never started, so no verdict can be made from it: no platform sandbox backend for linux yet (#70); nothing runs outside one
+ ❯ claimOf helpers.ts:213:40
+    211| export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'>…
+    212|   for (const r of check.runs) {
+    213|     if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of…
+       |                                        ^
+    214|   }
+    215|   return {
+ ❯ claim claims.test.ts:240:36
+ ❯ claims.test.ts:277:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/26]⎯
+
+ FAIL  replaces.test.ts > AC5 #30.47dbce22 with the command check kind replaced by a test check kind installed with `replaces`, its checks are still sandboxed (the slot's half; the kind's is in sandbox.test.ts) > AC5 a test check kind installed with `replaces` in place of the command check kind runs a check that still can't reach the hub's socket or write outside its declared paths; the supervisor records the denial
+Error: BLOCKED: <repo>/packages/checks-command/dist/index.js isn't built (npm run build --workspaces), and a package in the hub imports the command runner from it
+ ❯ installed replaces.test.ts:19:47
+     17| /** The test check kind installed in the hub of a fresh host on `world…
+     18| async function installed(world: World, env: Record<string, string>): P…
+     19|   if (!existsSync(CHECKS_COMMAND_DIST)) throw Error(`BLOCKED: ${CHECKS…
+       |                                               ^
+     20|   const dir = pkg('command-kind', { 'command.json': JSON.stringify({ c…
+     21|   const host = await openHostOn(world, [dir]);
+ ❯ escape replaces.test.ts:34:22
+ ❯ replaces.test.ts:43:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/26]⎯
+
+ FAIL  replaces.test.ts > AC5 #30.47dbce22 with the command check kind replaced by a test check kind installed with `replaces`, its checks are still sandboxed (the slot's half; the kind's is in sandbox.test.ts) > AC5 (wrong program) on a supervisor planted to leave the sandbox to its caller, the same kind's check reaches the hub's socket and writes outside: the confinement is the supervisor's, and a sandbox built inside the command check kind, or the slot, would fail this test
+Error: BLOCKED: <repo>/packages/checks-command/dist/index.js isn't built (npm run build --workspaces), and a package in the hub imports the command runner from it
+ ❯ installed replaces.test.ts:19:47
+     17| /** The test check kind installed in the hub of a fresh host on `world…
+     18| async function installed(world: World, env: Record<string, string>): P…
+     19|   if (!existsSync(CHECKS_COMMAND_DIST)) throw Error(`BLOCKED: ${CHECKS…
+       |                                               ^
+     20|   const dir = pkg('command-kind', { 'command.json': JSON.stringify({ c…
+     21|   const host = await openHostOn(world, [dir]);
+ ❯ escape replaces.test.ts:34:22
+ ❯ replaces.test.ts:54:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/26]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  26 failed (26)
+   Start at  11:14:13
+   Duration  70.31s (tests 99%)
+
+exit 1
+
+
+================================================================================
+2026-11-01: timing.test.ts, the second redraft, run on its base commit 2ea4b4a2 (no implementation of
+the timing half: CommandCheck.timing and CommandRun.timing are not in packages/checks-command/src/index.ts).
+
+Command:  env -u CLAUDECODE -u AI_AGENT node node_modules/vitest/vitest.mjs run --root tests/acceptance/30 --no-file-parallelism timing.test.ts
+          (PATH with the repo's Node first)
+Node:     v24.22.0
+Machine:  Linux (not a reference Mac); the supervisor refuses every start here (the first section above names the
+          reason), so every run returns `missing` with empty output, which is why each failure's message is bare.
+
+Result: 1 of 1 files fail, 5 of 5 tests fail on outcome `missing` (expected `passed`), the two wrong-program
+twins included since they run the real check first; nothing passes.
+
+
+ RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/issue-30-e7e603/tests/acceptance/30
+
+ ❯ timing.test.ts (5 tests | 5 failed) 2833ms
+   ❯ AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) (5)
+     × AC19 a timing check whose report says each of its three repeats flushed its caches records all three as flushed 339ms
+     × AC19 a timing check whose report leaves out whether repeat 2's caches were flushed records that repeat as not flushed, never cold or flushed, and the others as flushed 322ms
+     × AC19 the record comes from the report file, never from printed output: the silent repeat printing "repeat 2: caches flushed" changes nothing 333ms
+     × AC19 (wrong program) a runner that takes a silent repeat as flushed fails this test, naming repeat 2 312ms
+     × AC19 (wrong program) a runner that reads whether a repeat flushed from the test's printed output fails this test, naming repeat 2 360ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 a timing check whose report says each of its three repeats flushed its caches records all three as flushed
+AssertionError: 
+: expected 'missing' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "missing"
+
+ ❯ readFromReport timing.test.ts:23:48
+     21| /** The criterion's assertion on one run: each repeat recorded flushed…
+     22| function readFromReport(r: CommandRun, mode: Mode): void {
+     23|   expect(r.outcome, outputOf(r).slice(0, 800)).toBe('passed');
+       |                                                ^
+     24|   expect(r.timing, `the record has one entry per timed repeat (timing:…
+     25|   expect(r.timing!.map((t) => t.repeat)).toEqual([1, 2, 3]);
+ ❯ timing.test.ts:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 a timing check whose report leaves out whether repeat 2's caches were flushed records that repeat as not flushed, never cold or flushed, and the others as flushed
+AssertionError: 
+: expected 'missing' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "missing"
+
+ ❯ readFromReport timing.test.ts:23:48
+     21| /** The criterion's assertion on one run: each repeat recorded flushed…
+     22| function readFromReport(r: CommandRun, mode: Mode): void {
+     23|   expect(r.outcome, outputOf(r).slice(0, 800)).toBe('passed');
+       |                                                ^
+     24|   expect(r.timing, `the record has one entry per timed repeat (timing:…
+     25|   expect(r.timing!.map((t) => t.repeat)).toEqual([1, 2, 3]);
+ ❯ timing.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 the record comes from the report file, never from printed output: the silent repeat printing "repeat 2: caches flushed" changes nothing
+AssertionError: expected '\n' to match /repeat 2: caches flushed/
+
+- Expected:
+/repeat 2: caches flushed/
+
++ Received:
+"
+"
+
+ ❯ timing.test.ts:43:25
+     41|   it('AC19 the record comes from the report file, never from printed o…
+     42|     const r = await timingRun('printed');
+     43|     expect(outputOf(r)).toMatch(/repeat 2: caches flushed/);
+       |                         ^
+     44|     readFromReport(r, 'printed');
+     45|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 (wrong program) a runner that takes a silent repeat as flushed fails this test, naming repeat 2
+AssertionError: expected [Function] to throw error matching /repeat 2/ but got '\n: expected \'missing\' to be \'pass…'
+
+- Expected:
+/repeat 2/
+
++ Received:
+"
+: expected 'missing' to be 'passed' // Object.is equality"
+
+ ❯ timing.test.ts:49:51
+     47|   it('AC19 (wrong program) a runner that takes a silent repeat as flus…
+     48|     const wrong = silentRepeatAsFlushed(await timingRun('silent'));
+     49|     expect(() => readFromReport(wrong, 'silent')).toThrow(/repeat 2/);
+       |                                                   ^
+     50|   }, 180_000);
+     51|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  timing.test.ts > AC19 #30.aebc2446 a timing check's repeats are recorded flushed as the report says; a repeat the report leaves out is not flushed (the run's half; the claim's INVALID naming the repeat is #87's) > AC19 (wrong program) a runner that reads whether a repeat flushed from the test's printed output fails this test, naming repeat 2
+AssertionError: expected [Function] to throw error matching /repeat 2/ but got '\n: expected \'missing\' to be \'pass…'
+
+- Expected:
+/repeat 2/
+
++ Received:
+"
+: expected 'missing' to be 'passed' // Object.is equality"
+
+ ❯ timing.test.ts:54:52
+     52|   it('AC19 (wrong program) a runner that reads whether a repeat flushe…
+     53|     const wrong = flushedFromPrintedOutput(await timingRun('printed'));
+     54|     expect(() => readFromReport(wrong, 'printed')).toThrow(/repeat 2/);
+       |                                                    ^
+     55|   }, 180_000);
+     56| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  12:50:43
+   Duration  3.67s (tests 78%, transform 18%, import 4%)
+
+exit 1

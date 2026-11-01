@@ -414,6 +414,10 @@
           "spec": "0.0.0",
           "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
         },
+        "@deepbuild/checks-command": {
+          "spec": "0.0.0",
+          "why": "Issue #30: a claim's checks run through the command check kind, hermetically through host@1, and its closed run records are what the claim's verdict is made from."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."

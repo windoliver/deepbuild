@@ -34,7 +34,7 @@ async function world(): Promise<{ record: RecordStore; gate: GateRunner; started
 async function stop(gate: GateRunner, s: string, n: number): Promise<string> {
   const claim = `claim:${ulid()}`;
   const { dir } = makeRepo({ 'src/cart.ts': `export const total = ${n};\n` });
-  const ran = await gate.stop({ session: s, claim, cwd: dir, checks: [{ check: J, approved: 'journey', on_base: 'passes' }], stopAt: Date.now() });
+  const ran = await gate.stop({ session: s, claim, task: 'task:907', cwd: dir, requirements: [], checks: [{ check: J, approved: 'journey', command: `sh '${J}'`, covers: [], depth: 'unit', on_base: 'passes' }], stopAt: Date.now() });
   expect(ran.slow, 'the 300 s journey is a slow-lane check').toEqual([J]);
   return claim;
 }

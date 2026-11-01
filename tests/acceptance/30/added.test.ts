@@ -1,7 +1,7 @@
 // AC9, the runs' half: a test the claim adds or changes runs five times inside the full suite, and once with the
 // clock a month ahead, each run kept with its output; the test that fails only a month ahead fails that run alone,
 // naming it, and a test that fails every run fails all six. Which tests a claim adds or changes, and the claim's
-// INCONCLUSIVE or FAIL from these runs, are the gate runner's (#29), in blocked.test.ts.
+// INCONCLUSIVE or FAIL from these runs, are the gate runner's (#29), in claims.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runAddedTests, type CommandRun } from '../../../packages/checks-command/src/index.ts';
 import { command, DAY, openWorld, outputOf, project, VITEST, type World } from './helpers.ts';

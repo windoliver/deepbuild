@@ -1,8 +1,9 @@
 // Test-side tools for the #30 acceptance tests: temp folders, a world (the record, the asks core and the
-// supervisor, #236's local host@1), a recording host, the fixture projects, the tool gates, local listeners and
-// the reference-Mac timing judge. Nothing here stands in for the command check kind: the tests reach it only
-// through `@deepbuild/checks-command` (README, The surface under test), whose types alone are imported here (so
-// this file loads at the base, where that package doesn't exist). The wrong programs are in wrong.ts.
+// supervisor, #236's local host@1), a recording host, the fixture projects, the tool gates, local listeners, the
+// reference-Mac timing judge, an extension host on a world (AC5's slot half) and the claim a verdict is made from
+// (the claim halves). Nothing here stands in for the command check kind or the gate: the tests reach them only
+// through `@deepbuild/checks-command` and `@deepbuild/gate` (README, The surface under test and The claim's
+// surface), whose types alone are imported here. The wrong programs are in wrong.ts.
 //
 // Safety: every folder is under /tmp/dh30-* (real paths); HOME is a temp folder for this process and every child;
 // the agent's own CLAUDE_* and DEEP_* variables are removed first; no test touches the real ~/.deepbuild; and every
@@ -10,15 +11,17 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, expect } from 'vitest';
 import type { CommandCheck } from '../../../packages/checks-command/src/index.ts';
-import { openAsks } from '../../../packages/asks/src/index.ts';
+import { openAsks, type Asks } from '../../../packages/asks/src/index.ts';
 import type { CheckSpec } from '../../../packages/conformance/src/index.ts';
+import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ReleaseEntry } from '../../../packages/extension-host/src/index.ts';
+import type { ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedRun } from '../../../packages/gate/src/index.ts';
 import { openRecord, type Event, type RecordStore } from '../../../packages/record/src/index.ts';
 import { openSupervisor, type Exit, type Host, type HostFacts, type Plant as SupervisorPlant, type Started, type StartSpec, type Supervisor } from '../../../packages/supervisor/src/index.ts';
 
@@ -115,6 +118,23 @@ export function command(host: Host, checkout: string, runner: string, extra: Par
   return { host, run: runId(), spec: spec(runner, inputs ?? []), checkout, deadline: 180_000, ...rest };
 }
 
+/** AC8's twin: the app itself writes the refund policy too. */
+export const POLICIES_TWIN_SRC = `import type { Db } from '../test/db';
+
+// The app reads the refund window from the policies table, and an admin screen sets it.
+export function refundWindow(db: Db): number {
+  const row = db.get('SELECT days FROM policies WHERE name = ?', ['refunds']);
+  return Number(row?.days ?? 0);
+}
+
+export function setRefundWindow(db: Db, days: number): void {
+  db.run('INSERT INTO policies (name, days) VALUES (?, ?)', ['refunds', days]);
+}
+`;
+/** AC8's check: the policies fixture, seeded from scripts/seed.ts, or its twin whose src/ inserts into policies. */
+export const policiesCheck = (host: Host, twin: boolean): CommandCheck =>
+  command(host, project('policies', twin ? { 'src/policies.ts': POLICIES_TWIN_SRC } : {}), VITEST, { inputs: ['src/**', 'test/**', 'scripts/**'] });
+
 /** Every file under a folder, relative with `/`, links left out (a clone's workspace links dangle). */
 export function filesIn(root: string): string[] {
   const out: string[] = [];
@@ -131,7 +151,7 @@ export function filesIn(root: string): string[] {
 }
 
 // ---- The world: a record, the asks core and the supervisor on them (#236), the local host@1.
-export interface World { dir: string; record: RecordStore; sup: Supervisor; events(kind?: string): Promise<Event[]>; close(): Promise<void> }
+export interface World { dir: string; record: RecordStore; asks: Asks; sup: Supervisor; events(kind?: string): Promise<Event[]>; close(): Promise<void> }
 export async function openWorld(plant?: SupervisorPlant): Promise<World> {
   const dir = tempDir('world');
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
@@ -147,8 +167,59 @@ export async function openWorld(plant?: SupervisorPlant): Promise<World> {
     }
     return kind ? all.filter((e) => e.kind === kind) : all;
   };
-  return { dir, record, sup, events, close: async () => { await sup.close(); await record.close(); } };
+  return { dir, record, asks, sup, events, close: async () => { await sup.close(); await record.close(); } };
 }
+
+// ---- The extension host on a world (#348, #349): where a check kind installed with `replaces` runs (AC5's slot half).
+/**
+ * A test package in a temp folder: `fixtures/<name>` copied as `project` copies it, `files` written over it, and the
+ * manifest's `digest` set to the host's own `packageDigest` of the result, as tests/acceptance/349's `pkg` does.
+ */
+export function pkg(name: string, files: Record<string, string> = {}): string {
+  const dir = project(name, files);
+  const manifestPath = join(dir, 'deepbuild.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+  manifest.digest = packageDigest(dir);
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return dir;
+}
+/** The release entry for a package folder: DeepBuild's signed release listing it, so its code runs in the hub. */
+export function releaseEntry(dir: string): ReleaseEntry {
+  const m = JSON.parse(readFileSync(join(dir, 'deepbuild.json'), 'utf8')) as { id: string; version: string };
+  return { id: m.id, version: m.version, digest: packageDigest(dir) };
+}
+const hosts: ExtensionHost[] = [];
+afterAll(async () => { for (const h of hosts.splice(0)) await h.close().catch(() => undefined); });
+/** An extension host on the world's record, asks and supervisor, with a ~/.deepbuild of its own, whose release lists `packages`. */
+export async function openHostOn(world: World, packages: string[]): Promise<ExtensionHost> {
+  const home = join(tempDir('deephome'), 'deepbuild');
+  mkdirSync(home, { recursive: true });
+  const trust = await openTrust({ record: world.record, now: Date.now });
+  const host = await openExtensionHost({ record: world.record, asks: world.asks, supervisor: world.sup, trust, home, release: packages.map(releaseEntry), now: Date.now });
+  hosts.push(host);
+  await host.ready();
+  return host;
+}
+/** The command check kind's built entry, which a package in the hub imports (README, The claim's surface: AC5). */
+export const CHECKS_COMMAND_DIST = join(REPO, 'packages/checks-command/dist/index.js');
+
+// ---- A claim from command runs (README, The claim's surface): what the gate judges through @deepbuild/gate's claimVerdict.
+/** The one requirement the claims here cover. */
+export const REQ = 'req:30#R1';
+export const CLAIM = 'claim:30';
+/** A claim of one check, `source` spec, covering REQ, from the given runs; `requirement` overrides the requirement's fields. */
+export function claimOf(check: Omit<ClaimedCheck, 'source' | 'covers'> & { source?: ClaimedCheck['source'] }, requirement: Partial<ClaimRequirement> = {}): ClaimedRuns {
+  for (const r of check.runs) {
+    if (r.outcome === 'missing') throw Error(`BLOCKED: run ${r.run} of ${check.check} never started, so no verdict can be made from it: ${r.failures[0]?.message ?? '(no message)'}`);
+  }
+  return {
+    claim: CLAIM, agent: 'session:AGENT', repo: 'repo:dh30', task: 'task:30', commit: '0'.repeat(40),
+    requirements: [{ req: REQ, depth: 'unit', oracle: 'code', on_base: 'passes', ...requirement }],
+    checks: [{ source: 'spec', covers: [REQ], ...check }],
+    now: Date.now(),
+  };
+}
+export type { RecordedRun };
 export const dataOf = (e: Event): Record<string, unknown> => e.data as Record<string, unknown>;
 
 /** One call a check made on host@1, as the recording host saw it. */

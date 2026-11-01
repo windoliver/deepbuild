@@ -32,7 +32,9 @@ describe('#907 a background command holds a stop\'s slow checks in a real hub un
   it('the journey waits while the command runs, the row names it, and the journey starts once its process group ends', async () => {
     // The journey takes 11 s: its first run, in the fast lane, records that, so the 10 s budget leaves it to the slow lane after.
     const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK })], deliverables: ['src/auth.ts'] })] });
-    writeFileSync(join(w.repo, CHECK), '#!/bin/sh\nsleep 11\n');
+    // A node:test suite, so the command check kind counts its one test (#30); its 11 s wait is the journey's.
+    writeFileSync(join(w.repo, CHECK), '#!/bin/sh\nnode --test .deepbuild/checks/journey.test.mjs\n');
+    writeFileSync(join(w.repo, '.deepbuild/checks/journey.test.mjs'), "import { test } from 'node:test';\ntest('the journey', async () => { await new Promise((done) => setTimeout(done, 11_000)); });\n");
     chmodSync(join(w.repo, CHECK), 0o755);
     const { execFileSync } = await import('node:child_process');
     execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'add', '-A'], { cwd: w.repo });

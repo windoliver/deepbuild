@@ -5,7 +5,7 @@ export { API as EXTENSION_API, type ApiMethod } from '../runtime/deep.mjs';
 export { packageDigest } from './digest.js';
 export {
   openExtensionHost, type ActionCall, type ActionListing, type ActionResult, type ActionTarget, type Conformance, type Delivered, type ExtensionHost, type ExtensionHostOptions, type HookReply, type HookRequest,
-  type HostGrant, type IndexFill, type Installed, type InstallFrom, type KitRun, type Load, type Loaded, type PackageTests, type Plant, type Refused, type ReleaseEntry, type Route,
+  type HostGrant, type HubCheckContext, type IndexFill, type Installed, type InstallFrom, type KitRun, type Load, type Loaded, type PackageTests, type Plant, type Refused, type ReleaseEntry, type Route,
 } from './host.js';
 export { type ScheduleRow, type ScheduleRun, type Verdict } from './schedules.js';
 export { type SendRow, type SendRule } from './sends.js';

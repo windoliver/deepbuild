@@ -1,7 +1,7 @@
 // AC17, the run's half: a suite whose tool retries a failed test inside one run counts every attempt the tool's
 // report lists, so a test that fails and then passes on its retry shows both on the record; a tool whose report
 // can't list attempts runs with its own retries off, by its flag, and the record says so. The claim's INCONCLUSIVE
-// naming the test is the gate runner's (#29), in blocked.test.ts.
+// naming the test is the gate runner's (#29), in claims.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCommandCheck, type CommandRun } from '../../../packages/checks-command/src/index.ts';
 import { command, openWorld, outputOf, project, VITEST, type World } from './helpers.ts';

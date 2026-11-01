@@ -7,7 +7,7 @@ The first-party command check kind (#30). It runs a check's shell command in its
 ## Where new code goes
 
 - `src/index.ts`: the run (`runCommandCheck`, `runAddedTests`, `commandCheckKind`).
-- `src/report.ts`: reading a run's evidence files back; `src/listing.ts`: the tests a file holds, listed from its source; `src/shell.ts`: what a command hides (masks, untraced programs, detached children); `src/seeded.ts`: stand-in detection.
+- `src/report.ts`: reading a run's evidence files back; `src/listing.ts`: the tests a file holds, listed from its source; `src/shell.ts`: what a command hides (masks, untraced programs, detached children), and a shell script it runs as `sh file`, read as the command (the hub's drafted checks); `src/seeded.ts`: stand-in detection.
 - `runtime/`: reporters and tracers loaded into the run's processes. A new test tool's reporter goes here.
 - Tests: `test/` for regressions; the acceptance suite is `tests/acceptance/30/`.
 

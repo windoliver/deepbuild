@@ -273,6 +273,10 @@ def runRows (k : Counter) (s : Spec) : List Row :=
   row (s.contract && has k s (fun r => (r.outcome == .passed || r.outcome == .failed) && r.contract == .none))
     .no_contract_report
 
+/- Assumption (#30): three rows the engine added for command runs are outside this model, which says nothing
+about them: a test that failed and passed on its attempts within one run (INCONCLUSIVE, naming the test), a
+requirement about what real users get covered by a run whose setup seeded a stand-in (INCONCLUSIVE, naming the
+table), and the failing tests named on the flaky row's reason. None reads a field the generator in Vectors draws. -/
 /-- Rows that judge a check once its runs end. -/
 def endedRows (reqs : List Req) (k : Counter) (s : Spec) : List Row :=
   let passes := count k s isPass

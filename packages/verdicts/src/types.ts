@@ -26,6 +26,8 @@ export interface Requirement {
   ask?: string;
   /** A person's answer: absent while the ask is open, unanswered once it ended so. */
   answer?: 'PASS' | 'FAIL' | 'unanswered';
+  /** About what real users get (#30): a check whose setup seeds a stand-in can't pass it. */
+  real_users?: boolean;
 }
 
 /** How a check ran on the merge base. */
@@ -107,6 +109,10 @@ export interface Run {
   missing?: { cause: string; owner: string; since: number };
   steps?: JourneyStep[];
   contract?: ContractResult;
+  /** Every attempt the tool's report lists (#30): a test that failed and passed within one run is a pass and a fail on the commit. */
+  attempts?: { test: string; outcome: 'passed' | 'failed' }[];
+  /** Tables the run's setup wrote that nothing outside the repo's test, fixture and script folders writes (#30). */
+  stand_ins?: { table: string; by: string }[];
 }
 /** The paths that changed from an earlier commit to the claim's commit. */
 export interface Change { from: string; paths: string[] }
@@ -230,7 +236,8 @@ export interface NumericContract {
   assert: string;
 }
 export interface ContractSide {
-  outcome: 'passed' | 'failed';
+  /** unrun: a side the report never compared, as a command run's precision twin (#30). */
+  outcome: 'passed' | 'failed' | 'unrun';
   failed_at: string | null;
   compared: Record<string, number>;
   largest_error: Record<string, number>;
