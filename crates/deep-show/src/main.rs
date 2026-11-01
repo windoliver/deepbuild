@@ -530,6 +530,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "fixtures" => return Some(Call::Fixtures),
         "seam_suite" => return seams::parse(c),
+        "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
