@@ -1,5 +1,5 @@
 // What a run records: AC2, a suite that runs zero tests is a run that ran nothing (its INVALID is the claim's,
-// blocked.test.ts); AC3, the exit code, the output and the test count, counted for Vitest, Jest, pytest and go
+// claims.test.ts); AC3, the exit code, the output and the test count, counted for Vitest, Jest, pytest and go
 // test; AC15, the count is read from the reporter file the runner asked for, so a test that prints a summary of
 // its own changes nothing.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

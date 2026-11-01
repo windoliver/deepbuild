@@ -1,7 +1,7 @@
 // AC7, the run's half: a check stopped at its deadline keeps the output it wrote, its exit cause and its test count
 // so far, and ends overran (a failed run); one cut short by a hub restart (the hub aborting its runs as it goes
 // down) keeps the same and ends stopped; a check that crashes on its own ends failed. How those runs make the
-// claim's verdict (a failed run, INCONCLUSIVE never PASS or FAIL) is the gate runner's (#29), in blocked.test.ts.
+// claim's verdict (a failed run, INCONCLUSIVE never PASS or FAIL) is the gate runner's (#29), in claims.test.ts.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
