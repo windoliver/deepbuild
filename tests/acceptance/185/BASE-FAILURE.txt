@@ -1,0 +1,383 @@
+Base commit: c9225aa3 ("Merge pull request #976 from windoliver/worktree-github-issue-140-0cfedc")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/185 --no-file-parallelism (output not a TTY, so no color)
+Run in the worktree at the base commit holding only these test files (untracked) and node_modules from npm ci.
+All 15 tests fail, each at a named assertion, none fails to load:
+- 12 tests use a test feature this suite chooses (test-sim-a, test-sim-b, test-sim-b-f64, test-sim-b-false-bit, test-sim-b-off,
+  test-sim-b-private-renamed, test-sim-b-public-renamed, test-sim-c, test-sim-behavior, test-gpu-second-backend), none of which
+  exists at the base, so cargo refuses the build ("none of the selected packages contains this feature") and each test fails at
+  "the binary builds"; the release builds in kit.test.ts are never reached.
+- shipped.test.ts's R2 test: the r2 build seals, but deep://schedule (the `schedule` reply) carries no `interfaces`.
+- budgets.test.ts (both): the r2 build's `registry.seal` carries no `interfaces` ({ms, runs} of the seal's interface checks).
+  The startup timing would skip as INCONCLUSIVE here anyway (this Mac15,7 was on battery with a 1-minute load near 45), but the
+  structural check before the gate fails first. The per-frame test's six frames were presented before it failed (an earlier
+  draft's board text "One implementation each" was refused as an unsourced number; fixed before this run).
+Date: 2026-11-01T18:29:45Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+Paths below have the checkout's absolute path as printed by vitest.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/185
+
+ ❯ budgets.test.ts (2 tests | 2 failed) 117023ms
+   ❯ #185.5d087cb0 budgets on the reference Mac against the merge base: the seal's interface checks add under 5 ms at startup, and nothing runs per frame (2)
+     × #185.5d087cb0 the seal's interface checks add under 5 ms at startup to the R2 build, compared with the merge base (five fresh processes after a warm-up) 1585ms
+     × #185.5d087cb0 nothing runs per frame: after six frames at six times the seal and its interface checks have still run once, with the same times 303ms
+ ❯ shipped.test.ts (2 tests | 2 failed) 73855ms
+   ❯ #185.2a8a1971 every R2 canvas module names its interface and implementation and the set seals; two GPU backends for macOS are refused at the seal (2)
+     × #185.2a8a1971 the R2 build seals, and deep://schedule names each of its canvas modules' interface, with its digest, and the implementation the build chose: the shipped module, its interface's bit and canonical reference 2308ms
+     × #185.2a8a1971 a test build with two GPU backends for macOS, two implementations of seam.gpu@1, is refused at the seal, naming the interface 3ms
+ ❯ kit.test.ts (4 tests | 4 failed) 564ms
+   ❯ #185.da9aab76 the kit admits B only by the interface's behavior part, and a planted B that claims bit or lands outside a tolerance fails, naming what differs (4)
+     × #185.da9aab76 while test.sim@1 holds no behavior part, a release build refuses B, declared measured, naming the interface 6ms
+     × #185.da9aab76 with a behavior part of three fixtures with analytic answers and tolerances, B passes the kit and its release build seals 5ms
+     × #185.da9aab76 a planted B that declares bit while one kit fixture's hash differs from A's fails the kit, naming the fixture and the first field 2ms
+     × #185.da9aab76 a planted B that lands 2% off an answer whose tolerance is 1% fails, naming the fixture, the answer and the tolerance 3ms
+ ❯ implementations.test.ts (3 tests | 3 failed) 473ms
+   ❯ #185.f6c38595 two implementations of test.sim@1 seal alone with one interface digest, never together, and a changed array type is refused at the seal (3)
+     × #185.f6c38595 A (bit, canonical, the reference) and B (measured, backend_bytes) each seal alone in a test build, and deep://schedule names test.sim@1 with the same digest and the implementation each build chose 10ms
+     × #185.f6c38595 a build with both A and B is refused at startup, naming test.sim@1, A and B 5ms
+     × #185.f6c38595 a B whose one registered array test.sim.pos changes type from f32 to f64 is refused at the seal, naming test.sim@1 and that array, though the same B with the array unchanged seals 3ms
+ ❯ private.test.ts (4 tests | 4 failed) 673ms
+   ❯ #185.ade96791 a private array stays out of test.sim@1's digest and is read only by its owner (4)
+     × #185.ade96791 B with its private array test.sim.scratch renamed test.sim.scratch2 seals with test.sim@1's digest unchanged 10ms
+     × #185.ade96791 the same rename of the public array test.sim.pos to test.sim.pos2 is refused at the seal, naming test.sim@1 and the array 57ms
+     × #185.ade96791 a test module c that reads B's private array test.sim.scratch is refused at the seal, naming the array, B and c 9ms
+     × #185.ade96791 a planted digest that hashes private arrays refuses the B with its private array renamed, naming the array, so the private-rename proof fails on it 8ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #185.5d087cb0 budgets on the reference Mac against the merge base: the seal's interface checks add under 5 ms at startup, and nothing runs per frame > #185.5d087cb0 the seal's interface checks add under 5 ms at startup to the R2 build, compared with the merge base (five fresh processes after a warm-up)
+AssertionError: registry: seal.interfaces (the seal's interface checks) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+     47| }
+     48| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     49|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     50|   return value as JsonObject;
+     51| }
+ ❯ interfaceChecks helpers.ts:232:13
+ ❯ budgets.test.ts:32:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  budgets.test.ts > #185.5d087cb0 budgets on the reference Mac against the merge base: the seal's interface checks add under 5 ms at startup, and nothing runs per frame > #185.5d087cb0 nothing runs per frame: after six frames at six times the seal and its interface checks have still run once, with the same times
+AssertionError: registry: seal.interfaces (the seal's interface checks) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+     47| }
+     48| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     49|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     50|   return value as JsonObject;
+     51| }
+ ❯ interfaceChecks helpers.ts:232:13
+ ❯ budgets.test.ts:55:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  implementations.test.ts > #185.f6c38595 two implementations of test.sim@1 seal alone with one interface digest, never together, and a changed array type is refused at the seal > #185.f6c38595 A (bit, canonical, the reference) and B (measured, backend_bytes) each seal alone in a test build, and deep://schedule names test.sim@1 with the same digest and the implementation each build chose
+AssertionError: the binary builds: deep-show with features core,test-sim-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-a failed:
++ error: none of the selected packages contains this feature: test-sim-a
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ implementations.test.ts:20:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  implementations.test.ts > #185.f6c38595 two implementations of test.sim@1 seal alone with one interface digest, never together, and a changed array type is refused at the seal > #185.f6c38595 a build with both A and B is refused at startup, naming test.sim@1, A and B
+AssertionError: the binary builds: deep-show with features core,test-sim-a,test-sim-b: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-a,test-sim-b failed:
++ error: none of the selected packages contains these features: test-sim-a, test-sim-b
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ implementations.test.ts:38:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  implementations.test.ts > #185.f6c38595 two implementations of test.sim@1 seal alone with one interface digest, never together, and a changed array type is refused at the seal > #185.f6c38595 a B whose one registered array test.sim.pos changes type from f32 to f64 is refused at the seal, naming test.sim@1 and that array, though the same B with the array unchanged seals
+AssertionError: the binary builds: deep-show with features core,test-sim-b-f64: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b-f64 failed:
++ error: none of the selected packages contains this feature: test-sim-b-f64
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ implementations.test.ts:45:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  kit.test.ts > #185.da9aab76 the kit admits B only by the interface's behavior part, and a planted B that claims bit or lands outside a tolerance fails, naming what differs > #185.da9aab76 while test.sim@1 holds no behavior part, a release build refuses B, declared measured, naming the interface
+AssertionError: the binary builds: deep-show with features core,test-sim-b: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b failed:
++ error: none of the selected packages contains this feature: test-sim-b
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ kit.test.ts:53:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  kit.test.ts > #185.da9aab76 the kit admits B only by the interface's behavior part, and a planted B that claims bit or lands outside a tolerance fails, naming what differs > #185.da9aab76 with a behavior part of three fixtures with analytic answers and tolerances, B passes the kit and its release build seals
+AssertionError: the binary builds: deep-show with features core,test-sim-b,test-sim-behavior: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b,test-sim-behavior failed:
++ error: none of the selected packages contains these features: test-sim-b, test-sim-behavior
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ kit.test.ts:65:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  kit.test.ts > #185.da9aab76 the kit admits B only by the interface's behavior part, and a planted B that claims bit or lands outside a tolerance fails, naming what differs > #185.da9aab76 a planted B that declares bit while one kit fixture's hash differs from A's fails the kit, naming the fixture and the first field
+AssertionError: the binary builds: deep-show with features core,test-sim-b-false-bit: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b-false-bit failed:
++ error: none of the selected packages contains this feature: test-sim-b-false-bit
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ kit.test.ts:89:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  kit.test.ts > #185.da9aab76 the kit admits B only by the interface's behavior part, and a planted B that claims bit or lands outside a tolerance fails, naming what differs > #185.da9aab76 a planted B that lands 2% off an answer whose tolerance is 1% fails, naming the fixture, the answer and the tolerance
+AssertionError: the binary builds: deep-show with features core,test-sim-b-off,test-sim-behavior: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b-off,test-sim-behavior failed:
++ error: none of the selected packages contains these features: test-sim-b-off, test-sim-behavior
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ kit.test.ts:100:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  private.test.ts > #185.ade96791 a private array stays out of test.sim@1's digest and is read only by its owner > #185.ade96791 B with its private array test.sim.scratch renamed test.sim.scratch2 seals with test.sim@1's digest unchanged
+AssertionError: the binary builds: deep-show with features core,test-sim-b: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b failed:
++ error: none of the selected packages contains this feature: test-sim-b
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ private.test.ts:23:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  private.test.ts > #185.ade96791 a private array stays out of test.sim@1's digest and is read only by its owner > #185.ade96791 the same rename of the public array test.sim.pos to test.sim.pos2 is refused at the seal, naming test.sim@1 and the array
+AssertionError: the binary builds: deep-show with features core,test-sim-b-public-renamed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b-public-renamed failed:
++ error: none of the selected packages contains this feature: test-sim-b-public-renamed
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ private.test.ts:37:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  private.test.ts > #185.ade96791 a private array stays out of test.sim@1's digest and is read only by its owner > #185.ade96791 a test module c that reads B's private array test.sim.scratch is refused at the seal, naming the array, B and c
+AssertionError: the binary builds: deep-show with features core,test-sim-b,test-sim-c: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b,test-sim-c failed:
++ error: none of the selected packages contains these features: test-sim-b, test-sim-c
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ private.test.ts:44:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  private.test.ts > #185.ade96791 a private array stays out of test.sim@1's digest and is read only by its owner > #185.ade96791 a planted digest that hashes private arrays refuses the B with its private array renamed, naming the array, so the private-rename proof fails on it
+AssertionError: the binary builds: deep-show with features core,test-sim-b-private-renamed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sim-b-private-renamed failed:
++ error: none of the selected packages contains this feature: test-sim-b-private-renamed
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ private.test.ts:53:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  shipped.test.ts > #185.2a8a1971 every R2 canvas module names its interface and implementation and the set seals; two GPU backends for macOS are refused at the seal > #185.2a8a1971 the R2 build seals, and deep://schedule names each of its canvas modules' interface, with its digest, and the implementation the build chose: the shipped module, its interface's bit and canonical reference
+AssertionError: schedule: interfaces (each interface with its digest and the implementation the build chose) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+     47| }
+     48| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     49|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     50|   return value as JsonObject;
+     51| }
+ ❯ interfaces helpers.ts:273:13
+ ❯ published helpers.ts:283:60
+ ❯ shipped.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  shipped.test.ts > #185.2a8a1971 every R2 canvas module names its interface and implementation and the set seals; two GPU backends for macOS are refused at the seal > #185.2a8a1971 a test build with two GPU backends for macOS, two implementations of seam.gpu@1, is refused at the seal, naming the interface
+AssertionError: the binary builds: deep-show with features core,test-gpu-second-backend: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-gpu-second-backend failed:
++ error: none of the selected packages contains this feature: test-gpu-second-backend
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:119:107
+    117|       const entry = made.get(buildName(build));
+    118|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    119|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    120|       return entry.bin;
+    121|     },
+ ❯ shipped.test.ts:40:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  15 failed (15)
+   Start at  10:26:26
+   Duration  194.14s (tests 100%)
+
+exit 1

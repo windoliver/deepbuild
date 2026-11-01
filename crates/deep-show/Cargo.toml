@@ -116,6 +116,21 @@ test-kit-selfish-analytic = ["test-kit"]
 # Issue #140: the window seam's test backend, which declares no occlusion report.
 test-window = []
 
+# Issue #185: the test interface test.sim@1's implementations A and B, B's variants (an array's
+# type or name changed, a planted false bit, a planted answer 2% off), test.sim@1's behavior part,
+# test module c that reads B's private array, and a second GPU backend beside the shipped one.
+test-sim = ["dep:deep-canvas-test-modules"]
+test-sim-a = ["test-sim"]
+test-sim-b = ["test-sim"]
+test-sim-b-f64 = ["test-sim"]
+test-sim-b-private-renamed = ["test-sim"]
+test-sim-b-public-renamed = ["test-sim"]
+test-sim-b-false-bit = ["test-sim"]
+test-sim-b-off = ["test-sim"]
+test-sim-behavior = ["test-sim"]
+test-sim-c = ["test-sim"]
+test-gpu-second-backend = []
+
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }

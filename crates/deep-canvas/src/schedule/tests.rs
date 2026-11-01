@@ -37,6 +37,7 @@ fn boom() -> Module {
             feature: "boom".into(),
             license: "Apache-2.0".into(),
             implements: "boom@1".into(),
+            implementation: crate::registry::Implementation::reference("boom", crate::registry::Semver::parse("1.0.0").expect("a version")),
         },
         register: register_boom,
     }

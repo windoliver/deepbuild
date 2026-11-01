@@ -1469,6 +1469,15 @@ fn build_set() -> BuildSet {
 /// operator makes (#387).
 const TEST_BUILD: bool = cfg!(any(
     feature = "test-a",
+    feature = "test-sim-a",
+    feature = "test-sim-b",
+    feature = "test-sim-b-f64",
+    feature = "test-sim-b-private-renamed",
+    feature = "test-sim-b-public-renamed",
+    feature = "test-sim-b-false-bit",
+    feature = "test-sim-b-off",
+    feature = "test-sim-c",
+    feature = "test-gpu-second-backend",
     feature = "test-b",
     feature = "test-b-requires-a",
     feature = "test-two-writers",
@@ -1577,11 +1586,124 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    // Issue #185: test.sim@1's implementations, and test module c.
+    #[cfg(feature = "test-sim-a")]
+    out.push(deep_canvas_test_modules::sim::a());
+    #[cfg(feature = "test-sim-b")]
+    out.push(deep_canvas_test_modules::sim::b());
+    #[cfg(feature = "test-sim-b-f64")]
+    out.push(deep_canvas_test_modules::sim::b_f64());
+    #[cfg(feature = "test-sim-b-private-renamed")]
+    out.push(deep_canvas_test_modules::sim::b_private_renamed());
+    #[cfg(feature = "test-sim-b-public-renamed")]
+    out.push(deep_canvas_test_modules::sim::b_public_renamed());
+    #[cfg(feature = "test-sim-b-false-bit")]
+    out.push(deep_canvas_test_modules::sim::b_false_bit());
+    #[cfg(feature = "test-sim-b-off")]
+    out.push(deep_canvas_test_modules::sim::b_off());
+    #[cfg(feature = "test-sim-c")]
+    out.push(deep_canvas_test_modules::sim::c());
     out.extend(kit::modules::built());
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     out
+}
+
+/// The seams' backends this build ships, each `seam.<seam>`, an implementation of its seam's
+/// interface the seal holds beside the build set's canvas modules (#185), and under
+/// `test-gpu-second-backend` a second GPU backend beside the first, which the seal refuses.
+fn seam_backends() -> Vec<Module> {
+    use deep_canvas_seams::module;
+    #[allow(unused_mut)]
+    let mut out = vec![
+        module("fonts", "seam.fonts", deep_text::FONTS),
+        module(
+            "cpu",
+            "seam.cpu",
+            deep_canvas_seams::cpu(std::env::consts::ARCH),
+        ),
+        module("headless", "seam.headless", deep_canvas_seams::HEADLESS),
+        module("gpu", "seam.gpu", deep_gpu::seam::BACKEND),
+        module("network", "seam.network", deep_relay::macos::BACKEND),
+    ];
+    #[cfg(feature = "test-gpu-second-backend")]
+    out.push(module(
+        "gpu",
+        "seam.gpu.second",
+        deep_canvas_seams::Backend {
+            name: "wgpu-metal-second",
+            version: deep_gpu::seam::BACKEND.version,
+        },
+    ));
+    out
+}
+
+/// Every canvas interface a build may hold, each with its reference implementation (#185): every
+/// shipped canvas module is its interface's reference, as each seam's shipped backend is; the
+/// test interfaces' references are their own test modules. An implementation of an interface
+/// declared here hashes to its reference's digest or the seal refuses it.
+fn interfaces() -> Vec<deep_canvas::registry::Interface> {
+    let kit = kit::interface_parts();
+    let mut out: Vec<_> = modules(BuildSet::Full)
+        .into_iter()
+        .filter(|m| !m.manifest.name.starts_with("test."))
+        .map(|m| deep_canvas::registry::Interface {
+            name: m.manifest.implements.clone(),
+            reference: m,
+            kit: kit.clone(),
+            behavior: None,
+        })
+        .collect();
+    for m in seam_backends().into_iter().filter(|m| m.manifest.name.matches('.').count() == 1) {
+        let seam = m.manifest.name.trim_start_matches("seam.").to_string();
+        out.push(deep_canvas_seams::interface(&seam, m));
+    }
+    #[cfg(feature = "test-sim")]
+    out.push(deep_canvas_test_modules::sim::interface(
+        kit,
+        cfg!(feature = "test-sim-behavior"),
+    ));
+    out
+}
+
+/// The interfaces a build of `held` seals against: every one `interfaces()` declares, and each
+/// held test module's own, with that module its reference.
+fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
+    let mut out = interfaces();
+    for m in held {
+        if !out.iter().any(|i| i.name == m.manifest.implements) {
+            out.push(deep_canvas::registry::Interface {
+                name: m.manifest.implements.clone(),
+                reference: m.clone(),
+                kit: kit::interface_parts(),
+                behavior: None,
+            });
+        }
+    }
+    out
+}
+
+/// The registry of a `set` build holding `held`: every interface it seals against, the seams'
+/// backends and its canvas modules.
+fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
+    let mut registry = Registry::new(set);
+    for interface in declared(&held) {
+        registry = registry.declare(interface);
+    }
+    for backend in seam_backends() {
+        registry = registry.backend(backend);
+    }
+    for module in held {
+        registry = registry.with(module);
+    }
+    registry
+}
+
+/// A monotonic clock for the seal's interface checks, in nanoseconds since its first reading.
+fn clock_ns() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    u64::try_from(START.get_or_init(Instant::now).elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 /// The app's shipped panels, by the IDs its inventory lists (#882): the shipped plug-ins whose
@@ -1623,18 +1745,21 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
                 modules: vec![name.to_string()],
                 arrays: Vec::new(),
                 operators: Vec::new(),
+                interface: None,
+                implementations: Vec::new(),
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
             });
         }
     }
-    let mut registry = Registry::new(build_set()).with_costs(costs);
-    for module in held {
-        registry = registry.with(module);
-    }
+    let mut registry = assemble(build_set(), held)
+        .with_costs(costs)
+        .timed(clock_ns);
     if let Some(StartPlanted::Seal(fault)) = planted {
         registry = registry.plant(fault);
     }
-    let sealed = registry.seal()?;
+    let sealed = registry.seal();
+    hub::INTERFACE_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let sealed = sealed?;
     kit::ledger::admit(&sealed)?;
     Ok(Startup {
         sealed,
@@ -1785,11 +1910,8 @@ mod tests {
             (BuildSet::Full, include_str!("../schedule/full.json")),
         ];
         for (set, snapshot) in snapshots {
-            let mut registry = Registry::new(set);
-            for module in modules(set) {
-                registry = registry.with(module);
-            }
-            let published = registry.seal().expect("the shipped set seals").schedule();
+            let published = assemble(set, modules(set))
+                .seal().expect("the shipped set seals").schedule();
             let committed: Value = serde_json::from_str(snapshot).expect("the snapshot is JSON");
             assert_eq!(
                 published,
@@ -2012,6 +2134,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             Ok(StartPlanted::Seal(Fault::EveryDependencyRequired))
         }
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+        "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
@@ -2080,7 +2203,7 @@ fn main() {
     let startup: &'static Startup = match seal(fault, coefficients) {
         Ok(startup) => Box::leak(Box::new(startup)),
         Err(err) => {
-            let line = json!({
+            let mut line = json!({
                 "ok": false,
                 "code": "seal_refused",
                 "reason": err.code,
@@ -2089,6 +2212,13 @@ fn main() {
                 "arrays": err.arrays,
                 "what": err.what,
             });
+            // #185: the interface and the implementations a refusal involves.
+            if let Some(interface) = &err.interface {
+                line["interface"] = json!(interface);
+            }
+            if !err.implementations.is_empty() {
+                line["implementations"] = json!(err.implementations);
+            }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
             std::process::exit(2);
