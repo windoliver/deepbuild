@@ -110,6 +110,9 @@ test-kit-loose = ["test-kit"]
 test-kit-selfish = ["test-kit"]
 test-kit-selfish-analytic = ["test-kit"]
 
+# Issue #140: the window seam's test backend, which declares no occlusion report.
+test-window = []
+
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
@@ -123,6 +126,8 @@ deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
+# Issue #140: the platform seams and their conformance suites.
+deep-canvas-seams = { path = "../deep-canvas-seams" }
 deep-gpu = { path = "../deep-gpu" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }

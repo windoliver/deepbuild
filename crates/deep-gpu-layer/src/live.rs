@@ -1687,6 +1687,8 @@ impl Live {
             .collect();
         let mut out = json!({
             "frames": frames, "changes": changes, "told": told, "sessions": session_rows, "canonicals": self.canonicals,
+            // #140: the GPU seam's backend that drew the frames.
+            "backends": {"gpu": deep_gpu::seam::BACKEND.json()},
             "device_before": device_before,
         });
         if self.args.reports.meter {

@@ -24,7 +24,9 @@ mod placement;
 mod planted;
 mod ring;
 mod scene3d;
+mod seams;
 mod serve;
+mod shaper;
 mod shared;
 mod snapshot;
 mod terminal;
@@ -352,6 +354,24 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 agent: acting(c)?.is_some(),
             })
         }
+        "frontmost" => {
+            return Some(Call::Frontmost {
+                window: c.get("window")?.as_str()?.to_string(),
+                front: c.get("frontmost")?.as_bool()?,
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "test_window" => {
+            c.get("id")?.as_str()?;
+            match c.get("rect")? {
+                Value::Null => {}
+                r => {
+                    rect(Some(r))?;
+                }
+            }
+            return Some(Call::TestWindow);
+        }
+        "window_caps" => return Some(Call::WindowCaps),
         "windows" => return Some(Call::Windows),
         "layout" => return Some(Call::Layout),
         "card" => return Some(Call::CardState),
@@ -405,7 +425,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::RenderBack {
                 session: c.get("session")?.as_str()?.to_string(),
                 doc: doc()?,
-                t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
+                // #140: `t` in flicks, or the time grammar's text; at 0 when it is left out.
+                t: match c.get("t") {
+                    None => Some(0),
+                    Some(Value::String(text)) => hub::flicks(text),
+                    Some(t) => t.as_i64(),
+                }
+                .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
             });
@@ -428,6 +454,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "fixtures" => return Some(Call::Fixtures),
+        "seam_suite" => return seams::parse(c),
         "schedule" => return Some(Call::Schedule),
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
@@ -1513,13 +1540,19 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
         test_build: TEST_BUILD,
         shapes_on_ui_thread: planted == Some(StartPlanted::ShapesOnUiThread),
         run_per_document: planted == Some(StartPlanted::RunPerDocument),
+        network: match planted {
+            Some(StartPlanted::Network(fault)) => Some(fault),
+            _ => None,
+        },
+        ignores_unknown_occlusion: planted == Some(StartPlanted::IgnoresUnknownOcclusion),
     })
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
 /// reads every dependency as required, #387's scheduler that orders steps at one time by
-/// canvas-module name, #388's seal that lets a build without look start, or #856's hub that
-/// shapes a long text on the UI thread and its shaped-run cache per document.
+/// canvas-module name, #388's seal that lets a build without look start, #856's hub that
+/// shapes a long text on the UI thread and its shaped-run cache per document, or #140's network
+/// backends with a fault.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
@@ -1527,6 +1560,10 @@ enum StartPlanted {
     StartsWithoutLook,
     ShapesOnUiThread,
     RunPerDocument,
+    /// #140: a network backend with one fault, run through the network seam's suite.
+    Network(seams::NetFault),
+    /// #140: the card that treats unknown occlusion as unobscured.
+    IgnoresUnknownOcclusion,
 }
 
 #[cfg(test)]
@@ -1562,6 +1599,8 @@ mod tests {
             test_build: false,
             shapes_on_ui_thread: false,
             run_per_document: false,
+            network: None,
+            ignores_unknown_occlusion: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-305-stamp-{}", std::process::id()));
         let doc = "01JB7D00000000000000000001";
@@ -1719,6 +1758,8 @@ mod tests {
             test_build: false,
             shapes_on_ui_thread: false,
             run_per_document: false,
+            network: None,
+            ignores_unknown_occlusion: false,
         };
         let evidence = std::env::temp_dir().join(format!("deep-383-view-{}", std::process::id()));
         let doc = "01JB383V00000000000000000A";
@@ -1879,7 +1920,10 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
         "run_per_document" => Ok(StartPlanted::RunPerDocument),
-        _ => Err(()),
+        "card_ignores_unknown_occlusion" => Ok(StartPlanted::IgnoresUnknownOcclusion),
+        _ => seams::NetFault::named(twin)
+            .map(StartPlanted::Network)
+            .ok_or(()),
     }
 }
 

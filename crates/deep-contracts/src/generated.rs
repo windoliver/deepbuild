@@ -20403,6 +20403,8 @@ pub enum DoctorItemCode {
     TokenExpiring,
     PromptFailed,
     DeprecatedUsed,
+    GpuUnsupported,
+    RenderFailed,
     Unknown,
 }
 
@@ -20430,6 +20432,8 @@ impl Contract for DoctorItemCode {
             "token_expiring" => Ok(Self::TokenExpiring),
             "prompt_failed" => Ok(Self::PromptFailed),
             "deprecated_used" => Ok(Self::DeprecatedUsed),
+            "gpu_unsupported" => Ok(Self::GpuUnsupported),
+            "render_failed" => Ok(Self::RenderFailed),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -20457,6 +20461,8 @@ impl Contract for DoctorItemCode {
             Self::TokenExpiring => "token_expiring",
             Self::PromptFailed => "prompt_failed",
             Self::DeprecatedUsed => "deprecated_used",
+            Self::GpuUnsupported => "gpu_unsupported",
+            Self::RenderFailed => "render_failed",
             Self::Unknown => "unknown",
         }.to_string())
     }

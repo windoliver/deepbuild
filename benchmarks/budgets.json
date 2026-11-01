@@ -850,6 +850,18 @@
         "peakBytes": 500000000
       },
       "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process replays #124's recorded Claude Code run in a replica on the fixture panel, its launch to its close. The issue's 500 MB per replica caps the peak resident memory /usr/bin/time reads, the larger of Node's and the replica's. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "seam-suites",
+      "command": [
+        "node",
+        "scripts/seams.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "p50Ms": 180000
+      },
+      "initialReason": "Issue #140 first measurement: the merge base has no platform seams. One run of every seam's conformance suite (node scripts/seams.mjs: the GPU seam's suite and gated fixtures, the network seam's suite through its test relay, the window and input seams' capabilities and the text, accessibility and headless suites), its start to its last line; the issue caps the suites at 3 minutes, which tests/acceptance/140/platform/budgets.test.ts judges on five runs. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

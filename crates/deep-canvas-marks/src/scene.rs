@@ -345,7 +345,10 @@ impl TextSpec {
     /// The shaped run's content key: the shaper's inputs, never where the text sits.
     pub fn key(&self) -> ContentKey {
         let mut k = KeyBuilder::new("shape@text.1");
-        k.text("text@1")
+        // #140: the fonts backend's name and version, so a new version misses what it keyed.
+        k.text(deep_text::FONTS.name)
+            .text(deep_text::FONTS.version)
+            .text("text@1")
             .text(&self.text)
             .text(&self.font)
             .number(self.size)
@@ -1482,16 +1485,18 @@ fn show(
 /// `missing` says where the run supplies none, stale once its reading is older than its
 /// `stale_after`. A counter is a text whose `text` is `{counter: {source: <bound value ID>,
 /// format}}`: it formats that bound value's reading as it changes, with tabular figures (canvas
-/// primitives: Text animator and counter). Numbers are written as `en` writes them.
+/// primitives: Text animator and counter). Numbers are written as the document's `locale` writes
+/// them (`en` without one), never the process's (#140).
 pub fn bound_texts(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     record: &Record,
 ) -> Result<BTreeMap<String, Shown>, Refused> {
     let mut out = BTreeMap::new();
+    let locale = doc.get("locale").and_then(Value::as_str).unwrap_or("en");
     for id in bound_ids(doc, items)? {
         let item = items.get(&id).unwrap_or(&Value::Null);
-        if let Some(shown) = bound_text(doc, &id, item, record, "en")? {
+        if let Some(shown) = bound_text(doc, &id, item, record, locale)? {
             out.insert(id, shown);
         }
     }

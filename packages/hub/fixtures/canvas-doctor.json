@@ -1,0 +1,146 @@
+{
+  "golden": {
+    "png_sha256": "cf7dd713d81121106d060d9f1797fe6289e09445027e02b2d4550ea8de50f63c",
+    "why": "deep-canvas-render raster's PNG of this figure as Vello CPU draws it at the scalar SIMD level; a changed renderer re-blesses it with the change that moved it."
+  },
+  "doc": {
+    "format": 1,
+    "id": "doctor-canvas-140",
+    "profile": "figure",
+    "title": "Canvas check",
+    "description": "The figure deep doctor renders headless to judge the canvas: a block, a stroked arc and a label.",
+    "size": [
+      240,
+      120
+    ],
+    "layers": {
+      "main": {
+        "writer": "deepbuild",
+        "title": "Main",
+        "order": "a0"
+      }
+    },
+    "items": {
+      "block": {
+        "id": "block",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Block",
+        "order": "a0",
+        "params": {
+          "box": [
+            16,
+            16,
+            64,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "arc": {
+        "id": "arc",
+        "kind": "path@1",
+        "layer": "main",
+        "name": "Arc",
+        "order": "a1",
+        "params": {
+          "d": "M 100 80 Q 150 10 200 80",
+          "paint": {
+            "stroke": {
+              "role": "ink",
+              "width": 3
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "label": {
+        "id": "label",
+        "kind": "text@1",
+        "layer": "main",
+        "name": "Label",
+        "role": "label",
+        "order": "a2",
+        "params": {
+          "text": "Canvas check",
+          "font": "body",
+          "size": 14,
+          "box": {
+            "w": 200,
+            "h": 22
+          }
+        },
+        "at": {
+          "pos": [
+            16,
+            84,
+            0
+          ]
+        }
+      }
+    }
+  },
+  "look": {
+    "light": {
+      "ground": [
+        250,
+        250,
+        248
+      ],
+      "ink": [
+        24,
+        26,
+        31
+      ],
+      "muted": [
+        214,
+        218,
+        224
+      ],
+      "accent": [
+        26,
+        163,
+        200
+      ]
+    },
+    "dark": {
+      "ground": [
+        16,
+        17,
+        20
+      ],
+      "ink": [
+        232,
+        234,
+        238
+      ],
+      "muted": [
+        52,
+        56,
+        64
+      ],
+      "accent": [
+        64,
+        190,
+        224
+      ]
+    }
+  }
+}

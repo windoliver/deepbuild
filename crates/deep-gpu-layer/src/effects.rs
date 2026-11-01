@@ -1018,7 +1018,7 @@ pub fn op(app: &mut App, call: &Value) -> Value {
 }
 
 /// The Metal GPU family of an Apple-silicon chip, by its name.
-fn family(gpu: &str) -> String {
+pub fn family(gpu: &str) -> String {
     let n = gpu
         .split_whitespace()
         .find_map(|w| w.strip_prefix('M').and_then(|d| d.parse::<u32>().ok()));
@@ -1038,9 +1038,10 @@ fn hash_fixture() -> Vec<u32> {
         .collect()
 }
 
-/// `exact`: every shipped exact operator on its exactness fixture on this GPU, as a record.
-pub fn exact(app: &mut App, out: &str) -> Value {
-    let words = app.worker.call(|state| {
+/// This GPU's name, and the bits of every shipped exact operator on its exactness fixture: the
+/// exact-class fixtures (#140's GPU seam suite compares them across GPU families).
+pub fn exact_bits(app: &mut App) -> (String, BTreeMap<String, String>) {
+    let (info, ops) = app.worker.call(|state| {
         let device = state.gpu.device();
         let info = device.adapter.clone();
         let mut ops = BTreeMap::new();
@@ -1059,10 +1060,15 @@ pub fn exact(app: &mut App, out: &str) -> Value {
         }
         (info, ops)
     });
-    let (info, ops) = words;
     let name = info
         .as_ref()
         .map_or_else(|| "unknown".to_string(), |i| i.name.clone());
+    (name, ops)
+}
+
+/// `exact`: every shipped exact operator on its exactness fixture on this GPU, as a record.
+pub fn exact(app: &mut App, out: &str) -> Value {
+    let (name, ops) = exact_bits(app);
     let record = json!({
         "format": 1,
         "gpu": {"name": name, "family": family(&name)},

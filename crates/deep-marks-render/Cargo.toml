@@ -20,7 +20,14 @@ canvas_text = true
 name = "deep-canvas-render"
 path = "src/main.rs"
 
+# Issue #140: the fonts backend at its next version, nothing else changed (the fonts seam's
+# acceptance test that a new version misses the caches it keyed); no shipped build has it.
+[features]
+test-fonts-next = ["deep-text/test-fonts-next"]
+
 [dependencies]
+# Issue #140: every result names the seams' backends that fed it.
+deep-canvas-seams = { path = "../deep-canvas-seams" }
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }

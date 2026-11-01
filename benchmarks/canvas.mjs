@@ -321,6 +321,8 @@ workloads.class = () => {
       if (first.sessions[0]?.state !== 'live') throw Error(`${cls}: the fixture isn't live: ${JSON.stringify(first.sessions[0]).slice(0, 800)}`);
     }
     const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES })));
+    // #140: the seams' backends that drew the frames, as the live view names them.
+    report.backends = runs[0]?.backends;
     report.warm = {
       limits: CLASS_LIMITS[cls],
       runs: runs.map((r) => {
