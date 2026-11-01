@@ -17,7 +17,7 @@ import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
 import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
 import { listSource } from '../src/listing.js';
-import { under } from '../src/report.js';
+import { under, vitest as vitestReport } from '../src/report.js';
 import { absent, hiddenChild, maskIn, maskOf, programsIn, untraced } from '../src/shell.js';
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
@@ -922,5 +922,30 @@ describe('a shell script the command runs is read as the command', () => {
     expect(maskOf('sh .deepbuild/checks/two.sh', cwd)).toBe('; node in .deepbuild/checks/two.sh');
     expect(maskOf('sh .deepbuild/checks/one.sh', cwd)).toBeNull();
     expect(maskOf('sh .deepbuild/checks/one.sh || true', cwd), 'the command\'s own mask comes first').toBe('|| true');
+  });
+});
+
+// #30 AC17: a test that failed and then passed on the tool's own retry is a pass and a fail on the commit: the run
+// is the tool's pass, with the failed attempt on its attempts, never a failed run; the planted last-attempt runner
+// drops the earlier attempt.
+describe('a test retried by its tool inside one run', () => {
+  const checkout = '/tmp/dh30-report';
+  const line = (type: 'test:pass' | 'test:fail', retries: number, errors: unknown[]) =>
+    JSON.stringify({ type, name: 'settles the order', file: `${checkout}/test/order.test.ts`, retries, errors, meta: {} });
+  const error = { message: 'expected 1 to be 2', stack: `AssertionError: expected 1 to be 2\n    at ${checkout}/test/order.test.ts:9:3`, name: 'AssertionError', assertion: true };
+  it('failed once and passed on its retry: both attempts on the record, no failure of the run', () => {
+    const r = vitestReport([line('test:pass', 1, [error])], checkout);
+    expect(r.ran.map((t) => t.attempts)).toEqual([['failed', 'passed']]);
+    expect(r.failures, 'the run passed as the tool says; the fail is an attempt').toEqual([]);
+  });
+  it('failed on every attempt: the failures stand, with every attempt listed', () => {
+    const r = vitestReport([line('test:fail', 1, [error, error])], checkout);
+    expect(r.ran.map((t) => t.attempts)).toEqual([['failed', 'failed']]);
+    expect(r.failures.map((f) => f.test)).toEqual(['settles the order', 'settles the order']);
+  });
+  it('(wrong program) a reader of the last attempt alone records one passed attempt and no failure', () => {
+    const r = vitestReport([line('test:pass', 1, [error])], checkout, true);
+    expect(r.ran.map((t) => t.attempts)).toEqual([['passed']]);
+    expect(r.failures).toEqual([]);
   });
 });
