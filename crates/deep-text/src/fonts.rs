@@ -50,8 +50,9 @@ pub struct Face {
     pub bytes: &'static [u8],
 }
 
-/// Every bundled face, in the order they register.
-pub const FACES: &[Face] = &[
+/// Every bundled face, in the order they register: one static, so a face's bytes have one
+/// address wherever they are read.
+pub static FACES: &[Face] = &[
     Face {
         role: Role::Body,
         weight: 400,
@@ -92,8 +93,14 @@ pub fn blob(face: &Face) -> Blob<u8> {
 /// The bundled face a shaped glyph's font is, by its bytes.
 pub fn face_of(font: &parley::FontData) -> Option<&'static Face> {
     let data = font.data.data();
-    // By value: `FACES` is a const, so each use may hold its own copy of the bytes.
+    // By address first: a run's glyphs are read every frame, and comparing a face's bytes costs
+    // a pass over the whole file. Then by value, for bytes that came from elsewhere.
     FACES
         .iter()
-        .find(|f| f.bytes.len() == data.len() && f.bytes == data)
+        .find(|f| std::ptr::eq(f.bytes, data))
+        .or_else(|| {
+            FACES
+                .iter()
+                .find(|f| f.bytes.len() == data.len() && f.bytes == data)
+        })
 }
