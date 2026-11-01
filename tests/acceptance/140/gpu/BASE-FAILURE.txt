@@ -1,0 +1,133 @@
+Base commit: f41a5b3e ("Merge pull request #888 from windoliver/worktree-github-issue-884-352f42")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 DEEP_140_LIVE=1 NO_COLOR=1 npx vitest run --root tests/acceptance/140/gpu --no-file-parallelism
+Run in this worktree at the base with only these test files added, on the reference Mac (Mac15,7, M3 Pro, one GPU), with
+DEEP_140_LIVE=1 so the live files reach deep-app (at the base it panics on the unknown argument before any window or
+picker opens), and without DEEP_140_M1_RECORD.
+All 26 tests fail for the expected reason, at a named assertion:
+- 11 at "the adapter call ...: seam is an object, got undefined" (#379's adapter reply has no seam, table or quirks):
+  every test in features.test.ts, quirks.test.ts and adapters.test.ts;
+- 3 in exact.test.ts: the first at the adapter call's missing seam (it reads the adapter first), two at 'call {"call":"seam_suite","seam":"gpu"} was answered {"code":"bad_input","reason":"unknown call"}';
+- 2 in device-loss.test.ts: the clean run at 'call {"call":"lose_device"} was answered ... unknown call', the planted
+  run at the startup, '--planted installs_stale_pipelines' answering {"ok":false,"code":"bad_input"};
+- 6 in validation.test.ts and errors.test.ts: the lane test at "scripts/lanes.mjs has a release lane named gpu
+  validation", the other five at "the binary builds: cargo build --locked --bin deep-gpu --features test-seam";
+- 4 in color.live.test.ts and capture.live.test.ts at "deep-app --color-check exits 0" / "deep-app --capture-seam
+  exits 0" (deep-app panics "unknown argument ...", status 101).
+Home paths redacted. Node v23.9.0, vitest 5.0.5, darwin-arm64, cargo 1.99.1.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/140/gpu
+
+ ❯ features.test.ts (6 tests | 6 failed) 112341ms
+   ❯ AC1 the GPU feature table is checked at startup, and an adapter missing a required feature is refused with its name (3)
+     × AC1 on this Mac's adapter the tier's table holds pass timestamps and depth-clip control each with its fallback, at least one required feature, and every required feature granted 2326ms
+     × AC1 a test adapter missing one required feature is refused at startup, naming that feature; the same adapter with it starts 156ms
+     × AC1 ported from wgpu's request_device_error_message: an adapter reporting no feature at all is refused at startup, naming every required feature 152ms
+   ❯ AC11 each feature in the macOS tier's table runs its fixtures granted and withheld at device creation on the same adapter, the absent run taking the table's fallback (2)
+     × AC11 every gated feature: its fixtures pass with the feature granted on its own path, and with it withheld at device creation on the same adapter through the fallback the table names; none crashes or skips 147ms
+     × AC11 a required feature withheld at device creation ends the startup with a refusal naming it, never a crash 159ms
+   ❯ the surface's fences: the test adapters and quirk table are test-seam's alone, and input outside the table is refused (1)
+     × AC1 AC16 AC17 the shipped build refuses --adapters and --quirks, and every build refuses a withheld or gated feature the table doesn't hold, with bad_input 143ms
+ ❯ color.live.test.ts (3 tests | 3 failed) 57016ms
+   ❯ AC5 status color swatches read back from the surface as the same 8-bit values (live) (1)
+     × AC5 every status color of the look, drawn through each Metal layer the app presents through, reads back from that layer as the look's 8-bit values 56964ms
+   ❯ AC9 the window's CAMetalLayer reports the sRGB colorspace, which the GPUI patch sets and GPUI alone leaves unset, and a status swatch reads back as the same 8-bit values (live) (1)
+     × AC9 the window's GPUI layer reports sRGB and its swatches read back exactly; with the patch's tag dropped it reads nil and fails, naming the layer 14ms
+   ❯ AC19 every Metal layer the app presents through reports an sRGB colorspace, including a surface wgpu configures with its Srgb color space (live) (1)
+     × AC19 every layer reports sRGB, the wgpu-configured Srgb surface among them; a planted surface left at wgpu's default reads nil and fails, naming the layer 12ms
+ ❯ exact.test.ts (3 tests | 3 failed) 63488ms
+   ❯ AC1 the exact-class fixtures give identical bits on two GPUs of different families; with one GPU that comparison is BLOCKED with one unblock ask, never PASS (3)
+     × AC1 on this one GPU the suite's cross-family comparison is BLOCKED with exactly one unblock ask and the suite is never PASS; this GPU's record names it and holds the same bits run after run 5104ms
+     × AC1 the comparison on twins of this record: another family's equal bits PASS, a fixture's changed bits FAIL naming it, and two records of one family stay BLOCKED 139ms
+     × AC1 on an M1 and an M3: the M1's record (DEEP_140_M1_RECORD) has this M3's bits for every exact-class fixture; without that record this is BLOCKED, never PASS 130ms
+ ❯ validation.test.ts (4 tests | 4 failed) 210ms
+   ❯ AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS (4)
+     × AC21 the lane is a release lane named gpu validation, and runs with Metal's API and shader validation on and the translator's bounds checks off 4ms
+     × AC21 a planted operator reading one element past its storage buffer, its wrong pixels inside its golden's share, fails naming the pipeline and the binding; its clean twin passes 5ms
+     × AC21 a planted pass writing NaN into one texel of an rgba16float target fails naming the pass and the texel; its clean twin passes 2ms
+     × AC21 a fixture whose shader kind the validation can't instrument is BLOCKED naming the kind, listed as uncovered, never PASS 3ms
+ ❯ quirks.test.ts (2 tests | 2 failed) 159577ms
+   ❯ AC16 a test adapter whose quirk-table row withholds a feature it reports runs that feature's absent path, carries the table's digest, and changing the row changes its content keys (2)
+     × AC16 the row withholds F on the matching test adapter: its absent path runs, every result carries the table's digest, the same table keeps the keys and a changed row changes every one; a row for another adapter withholds nothing 3510ms
+     × AC16 a planted backend that withholds F in code without a table row passes its gated fixtures and fails this test, naming F 305ms
+ ❯ device-loss.test.ts (2 tests | 2 failed) 54439ms
+   ❯ AC20 a device lost while a compile-thread job for a document's pipelines is held open: nothing from the lost device is drawn, the pipelines compile again on the new epoch, and the next settled frame equals a clean start's (2)
+     × AC20 the released job's pipelines are dropped, every frame draws only pipelines made on the new device's epoch, all eight compile again there, and the first settled frame equals a clean start's by pixel hash 6073ms
+     × AC20 a planted view that installs whatever the compile thread returns fails, naming the pipeline and both epochs 27ms
+ ❯ adapters.test.ts (3 tests | 3 failed) 22795ms
+   ❯ AC17 among several adapters the seam picks the one granting the most of the tier's features, ties to the highest memory, and every receipt names it (3)
+     × AC17 with a test integrated adapter listed first and a test discrete adapter granting every feature of the tier, the seam picks the discrete one and every receipt names it, whether features or memory decide 2117ms
+     × AC17 with the discrete adapter withheld, the seam picks the integrated one and every receipt names that 173ms
+     × AC17 a planted pick of the first adapter enumerated fails, naming both 237ms
+ ❯ errors.test.ts (2 tests | 2 failed) 186ms
+   ❯ AC22 a check whose render raises an undeclared validation error through the device's uncaptured-error callback fails, naming it, while its pixels match the golden (2)
+     × AC22 the undeclared error fails the check, naming it, with its pixels matching the golden; declared, the same check passes; a render with no error passes 13ms
+     × AC22 a planted runner that reads only the pixels passes the check and fails this test 5ms
+ ❯ capture.live.test.ts (1 test | 1 failed) 19079ms
+   ❯ AC5 capture starts only through the system picker, with the system's indicator showing (live) (1)
+     × AC5 a capture asked for without the picker is refused with no frame and no indicator; through the picker a person answers, it records what they picked, and the system's indicator shows while it does 19078ms
+
+
+ FAIL  adapters.test.ts > AC17 among several adapters the seam picks the one granting the most of the tier's features, ties to the highest memory, and every receipt names it > AC17 with a test integrated adapter listed first and a test discrete adapter granting every feature of the tier, the seam picks the discrete one and every receipt names it, whether features or memory decide
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  adapters.test.ts > AC17 among several adapters the seam picks the one granting the most of the tier's features, ties to the highest memory, and every receipt names it > AC17 with the discrete adapter withheld, the seam picks the integrated one and every receipt names that
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  adapters.test.ts > AC17 among several adapters the seam picks the one granting the most of the tier's features, ties to the highest memory, and every receipt names it > AC17 a planted pick of the first adapter enumerated fails, naming both
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  capture.live.test.ts > AC5 capture starts only through the system picker, with the system's indicator showing (live) > AC5 a capture asked for without the picker is refused with no frame and no indicator; through the picker a person answers, it records what they picked, and the system's indicator shows while it does
+  AssertionError: deep-app --capture-seam exits 0 (no signal): 
+  thread 'main' (120471243) panicked at crates/deep-app/src/main.rs:152:22:
+  unknown argument --capture-seam
+ FAIL  color.live.test.ts > AC5 status color swatches read back from the surface as the same 8-bit values (live) > AC5 every status color of the look, drawn through each Metal layer the app presents through, reads back from that layer as the look's 8-bit values
+  AssertionError: deep-app --color-check exits 0 (no signal): 
+  thread 'main' (120364962) panicked at crates/deep-app/src/main.rs:152:22:
+  unknown argument --color-check
+ FAIL  color.live.test.ts > AC9 the window's CAMetalLayer reports the sRGB colorspace, which the GPUI patch sets and GPUI alone leaves unset, and a status swatch reads back as the same 8-bit values (live) > AC9 the window's GPUI layer reports sRGB and its swatches read back exactly; with the patch's tag dropped it reads nil and fails, naming the layer
+  AssertionError: deep-app --color-check exits 0 (no signal): 
+  thread 'main' (120365157) panicked at crates/deep-app/src/main.rs:152:22:
+  unknown argument --color-check
+ FAIL  color.live.test.ts > AC19 every Metal layer the app presents through reports an sRGB colorspace, including a surface wgpu configures with its Srgb color space (live) > AC19 every layer reports sRGB, the wgpu-configured Srgb surface among them; a planted surface left at wgpu's default reads nil and fails, naming the layer
+  AssertionError: deep-app --color-check exits 0 (no signal): 
+  thread 'main' (120365158) panicked at crates/deep-app/src/main.rs:152:22:
+  unknown argument --color-check
+ FAIL  device-loss.test.ts > AC20 a device lost while a compile-thread job for a document's pipelines is held open: nothing from the lost device is drawn, the pipelines compile again on the new epoch, and the next settled frame equals a clean start's > AC20 the released job's pipelines are dropped, every frame draws only pipelines made on the new device's epoch, all eight compile again there, and the first settled frame equals a clean start's by pixel hash
+  AssertionError: deep-gpu run: call {"call":"lose_device"} was answered {"code":"bad_input","reason":"unknown call"}: expected true to be false // Object.is equality
+ FAIL  device-loss.test.ts > AC20 a device lost while a compile-thread job for a document's pipelines is held open: nothing from the lost device is drawn, the pipelines compile again on the new epoch, and the next settled frame equals a clean start's > AC20 a planted view that installs whatever the compile thread returns fails, naming the pipeline and both epochs
+  AssertionError: deep-gpu run --planted installs_stale_pipelines exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ FAIL  errors.test.ts > AC22 a check whose render raises an undeclared validation error through the device's uncaptured-error callback fails, naming it, while its pixels match the golden > AC22 the undeclared error fails the check, naming it, with its pixels matching the golden; declared, the same check passes; a render with no error passes
+  AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-seam: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+ FAIL  errors.test.ts > AC22 a check whose render raises an undeclared validation error through the device's uncaptured-error callback fails, naming it, while its pixels match the golden > AC22 a planted runner that reads only the pixels passes the check and fails this test
+  AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-seam: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+ FAIL  exact.test.ts > AC1 the exact-class fixtures give identical bits on two GPUs of different families; with one GPU that comparison is BLOCKED with one unblock ask, never PASS > AC1 on this one GPU the suite's cross-family comparison is BLOCKED with exactly one unblock ask and the suite is never PASS; this GPU's record names it and holds the same bits run after run
+  AssertionError: the adapter call: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  exact.test.ts > AC1 the exact-class fixtures give identical bits on two GPUs of different families; with one GPU that comparison is BLOCKED with one unblock ask, never PASS > AC1 the comparison on twins of this record: another family's equal bits PASS, a fixture's changed bits FAIL naming it, and two records of one family stay BLOCKED
+  AssertionError: deep-gpu run: call {"call":"seam_suite","seam":"gpu"} was answered {"code":"bad_input","reason":"unknown call"}: expected true to be false // Object.is equality
+ FAIL  exact.test.ts > AC1 the exact-class fixtures give identical bits on two GPUs of different families; with one GPU that comparison is BLOCKED with one unblock ask, never PASS > AC1 on an M1 and an M3: the M1's record (DEEP_140_M1_RECORD) has this M3's bits for every exact-class fixture; without that record this is BLOCKED, never PASS
+  AssertionError: deep-gpu run: call {"call":"seam_suite","seam":"gpu"} was answered {"code":"bad_input","reason":"unknown call"}: expected true to be false // Object.is equality
+ FAIL  features.test.ts > AC1 the GPU feature table is checked at startup, and an adapter missing a required feature is refused with its name > AC1 on this Mac's adapter the tier's table holds pass timestamps and depth-clip control each with its fallback, at least one required feature, and every required feature granted
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  features.test.ts > AC1 the GPU feature table is checked at startup, and an adapter missing a required feature is refused with its name > AC1 a test adapter missing one required feature is refused at startup, naming that feature; the same adapter with it starts
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  features.test.ts > AC1 the GPU feature table is checked at startup, and an adapter missing a required feature is refused with its name > AC1 ported from wgpu's request_device_error_message: an adapter reporting no feature at all is refused at startup, naming every required feature
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  features.test.ts > AC11 each feature in the macOS tier's table runs its fixtures granted and withheld at device creation on the same adapter, the absent run taking the table's fallback > AC11 every gated feature: its fixtures pass with the feature granted on its own path, and with it withheld at device creation on the same adapter through the fallback the table names; none crashes or skips
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  features.test.ts > AC11 each feature in the macOS tier's table runs its fixtures granted and withheld at device creation on the same adapter, the absent run taking the table's fallback > AC11 a required feature withheld at device creation ends the startup with a refusal naming it, never a crash
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  features.test.ts > the surface's fences: the test adapters and quirk table are test-seam's alone, and input outside the table is refused > AC1 AC16 AC17 the shipped build refuses --adapters and --quirks, and every build refuses a withheld or gated feature the table doesn't hold, with bad_input
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  quirks.test.ts > AC16 a test adapter whose quirk-table row withholds a feature it reports runs that feature's absent path, carries the table's digest, and changing the row changes its content keys > AC16 the row withholds F on the matching test adapter: its absent path runs, every result carries the table's digest, the same table keeps the keys and a changed row changes every one; a row for another adapter withholds nothing
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  quirks.test.ts > AC16 a test adapter whose quirk-table row withholds a feature it reports runs that feature's absent path, carries the table's digest, and changing the row changes its content keys > AC16 a planted backend that withholds F in code without a table row passes its gated fixtures and fails this test, naming F
+  AssertionError: the adapter call on this Mac: seam is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  validation.test.ts > AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS > AC21 the lane is a release lane named gpu validation, and runs with Metal's API and shader validation on and the translator's bounds checks off
+  AssertionError: scripts/lanes.mjs has a release lane named gpu validation: expected undefined to be defined
+ FAIL  validation.test.ts > AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS > AC21 a planted operator reading one element past its storage buffer, its wrong pixels inside its golden's share, fails naming the pipeline and the binding; its clean twin passes
+  AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-seam: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+ FAIL  validation.test.ts > AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS > AC21 a planted pass writing NaN into one texel of an rgba16float target fails naming the pass and the texel; its clean twin passes
+  AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-seam: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+ FAIL  validation.test.ts > AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS > AC21 a fixture whose shader kind the validation can't instrument is BLOCKED naming the kind, listed as uncovered, never PASS
+  AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-seam: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+ Test Files  9 failed (9)
+      Tests  26 failed (26)
+   Duration  490.73s (tests 100%)

@@ -31,7 +31,7 @@ const MAPPING: Record<FamilyName, Record<string, Verdict>> = {
   doctor: {
     healthy: 'PASS', binary_missing: 'FAIL', version_uncovered: 'FAIL', hooks_missing: 'FAIL', hooks_disabled: 'FAIL', hooks_untrusted: 'FAIL', mcp_unregistered: 'FAIL',
     statusline_missing: 'FAIL', signed_out: 'BLOCKED', nested_session: 'FAIL', timing_relation_broken: 'FAIL', telemetry_unreadable: 'FAIL', not_checked: 'BLOCKED',
-    hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', unknown: 'INCONCLUSIVE',
+    hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', gpu_unsupported: 'FAIL', render_failed: 'FAIL', unknown: 'INCONCLUSIVE',
   },
   exit: { '0': 'PASS', '1': 'FAIL', '2': 'INVALID', '3': 'INCONCLUSIVE' },
 };
