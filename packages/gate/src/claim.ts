@@ -39,6 +39,9 @@ export interface ClaimedCheck {
   deadline?: string;
   contract?: NumericContract;
   runs: RecordedRun[];
+  /** Absent: the engine reads it from the runs; running while more start; ended once the gate starts no more (an uncounted run alone leaves it short of clean runs, never pending). */
+  state?: 'running' | 'ended' | 'never_started';
+  never_started?: 'quick_check_failed' | 'kept_working' | 'loop' | 'newer_claim';
 }
 /** The definition's requirement, and whether it is about what real users get. */
 export interface ClaimRequirement extends Requirement { real_users?: boolean }
@@ -48,8 +51,8 @@ export type VerdictPlant = 'exit-code-only';
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_, v: unknown) =>
   (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
-/** A check's digest: what its runs must have run, the command and the contract, so a run of another counts for nothing. */
-const digestOf = (c: ClaimedCheck): string => createHash('sha256').update(canonical({ check: c.check, command: c.command, contract: c.contract ?? null })).digest('hex');
+/** A check's digest, as the record names one (`d1:` and the sha256): the command and the contract, so a run of another counts for nothing. */
+const digestOf = (c: ClaimedCheck): string => `d1:${createHash('sha256').update(canonical({ check: c.check, command: c.command, contract: c.contract ?? null })).digest('hex')}`;
 
 /** The contract report the engine reads, from the counts the tool's report gave: a count below the size, or none, is INVALID naming the output. */
 function contractOf(contract: NumericContract, r: RecordedRun): ContractResult | undefined {
@@ -107,6 +110,7 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
       ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}),
       ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : {}),
       ...(c.contract ? { contract: c.contract } : {}),
+      ...(c.state ? { state: c.state } : {}), ...(c.never_started ? { never_started: c.never_started } : {}),
       environment: {}, tools: {},
     });
     for (const r of c.runs) runs.push(recordOf(claim, c, digest, r, exitOnly));
