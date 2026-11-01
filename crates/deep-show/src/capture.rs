@@ -16,6 +16,13 @@
 //!
 //! The model's frames are `frame <display uuid> <vsync> <feed>\n` per vsync, and its encoder keeps
 //! them unchanged and in order (the #105 acceptance README: Frames).
+//!
+//! Issue #498 adds the camera and the microphone, through the same gate: a panel's request opens a
+//! capture only while the OS's permission for that device is granted, and it keeps nothing until
+//! the next hold; the device's session runs from the HID down to the release, so nothing is kept
+//! at or after the release, and the capture is spent with its hold. An agent's tool call never
+//! opens one: it is refused, naming the session it came from. A device's items are camera frames
+//! or microphone buffers on its own clock, written as frame lines too (the #498 capture README).
 
 use std::fs;
 use std::io::{Read, Write};
@@ -38,6 +45,13 @@ pub enum CaptureCall {
         session: String,
         words: String,
     },
+    /// #498: a panel's request for the camera or the microphone, or, with `tool`, the same request
+    /// made by an agent's tool call in that session.
+    Device {
+        kind: Kind,
+        panel: String,
+        tool: Option<String>,
+    },
     /// Your answer in the picker: a display's uuid, or `None` for cancel.
     Pick(Option<String>),
     Shortcut {
@@ -59,10 +73,18 @@ pub enum CaptureCall {
 pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<CaptureCall> {
     let s = |k: &str| Some(c.get(k)?.as_str()?.to_string());
     Some(match name {
-        // Camera and microphone land in R6; window capture has no window to pick in this model.
+        // Window capture has no window to pick in this model.
         "capture" if s("source")? == "screen" => CaptureCall::Start {
             session: s("session")?,
             words: s("words")?,
+        },
+        "capture" => CaptureCall::Device {
+            kind: Kind::parse(&s("source")?)?,
+            panel: s("panel")?,
+            tool: match c.get("tool") {
+                None => None,
+                Some(t) => Some(t.get("session")?.as_str()?.to_string()),
+            },
         },
         "pick" => match c.get("cancel") {
             Some(Value::Bool(true)) => CaptureCall::Pick(None),
@@ -104,11 +126,102 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<CaptureCall> {
     })
 }
 
+/// #498's devices.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Camera,
+    Microphone,
+}
+
+impl Kind {
+    fn parse(text: &str) -> Option<Kind> {
+        match text {
+            "camera" => Some(Kind::Camera),
+            "microphone" => Some(Kind::Microphone),
+            _ => None,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Kind::Camera => "camera",
+            Kind::Microphone => "microphone",
+        }
+    }
+}
+
+/// A capture device DeepBuild can open: it delivers item k at `first + k × period`.
+#[derive(Clone)]
+pub struct Device {
+    kind: Kind,
+    uuid: String,
+    first: i64,
+    period: i64,
+    feed: String,
+}
+
+/// The scenario's `devices` and the OS's answer for each kind: `true` only when granted.
+#[derive(Clone, Default)]
+pub struct Devices {
+    list: Vec<Device>,
+    camera: bool,
+    microphone: bool,
+}
+
+impl Devices {
+    /// The scenario's `devices` and `permissions`; `None` for a malformed one.
+    pub fn parse(input: &Map<String, Value>) -> Option<Devices> {
+        let mut devices = Devices::default();
+        if let Some(list) = input.get("devices") {
+            for d in list.as_array()? {
+                let rate = d
+                    .get("rate_hz")?
+                    .as_i64()
+                    .filter(|r| *r > 0 && FLICKS % r == 0)?;
+                devices.list.push(Device {
+                    kind: Kind::parse(d.get("kind")?.as_str()?)?,
+                    uuid: d.get("uuid")?.as_str()?.to_string(),
+                    first: d.get("first")?.as_i64().filter(|t| *t >= 0)?,
+                    period: FLICKS / rate,
+                    feed: d.get("feed")?.as_str()?.to_string(),
+                });
+            }
+        }
+        if let Some(p) = input.get("permissions") {
+            let granted = |k: &str| -> Option<bool> {
+                match p.get(k).map(Value::as_str) {
+                    None => Some(false),
+                    Some(Some("granted")) => Some(true),
+                    Some(Some("denied" | "undetermined" | "restricted")) => Some(false),
+                    Some(_) => None,
+                }
+            };
+            devices.camera = granted("camera")?;
+            devices.microphone = granted("microphone")?;
+        }
+        Some(devices)
+    }
+
+    fn granted(&self, kind: Kind) -> bool {
+        match kind {
+            Kind::Camera => self.camera,
+            Kind::Microphone => self.microphone,
+        }
+    }
+}
+
+/// What a capture records: a display the picker named, or a device.
+#[derive(Clone, Copy)]
+enum Source {
+    Display(usize),
+    Device(usize),
+}
+
 enum State {
     Picking,
-    Armed(usize),
+    Armed(Source),
     Recording {
-        display: usize,
+        source: Source,
         down: i64,
         /// The next vsync whose frame is due.
         next: i64,
@@ -139,6 +252,11 @@ struct Capture {
     frames: u64,
     asset: Option<String>,
     ask: Option<String>,
+    /// #498: the device and the panel that asked for it; `None` for a screen capture.
+    device: Option<(Kind, String)>,
+    /// The times of the first and last items kept.
+    first: Option<i64>,
+    last: Option<i64>,
 }
 
 struct Task {
@@ -158,6 +276,9 @@ struct Send {
 #[derive(Default)]
 pub struct Capturing {
     captures: Vec<Capture>,
+    devices: Devices,
+    /// The planted session left open: each device's release time, whose items run on.
+    open_since: Vec<(usize, i64)>,
     /// The HID key-state table's entry for the capture chord.
     held: bool,
     tasks: Vec<(String, Task)>,
@@ -182,8 +303,11 @@ impl Capturing {
     /// The saved captures and the asks they opened, from the `capture.saved` events of the
     /// record in `state`, as #96's documents restart from it. A hold a crash cut short wrote no
     /// event, so it isn't there.
-    pub fn restore(state: Option<&Path>, planted: Option<Planted>) -> Self {
-        let mut capturing = Capturing::default();
+    pub fn restore(state: Option<&Path>, planted: Option<Planted>, devices: Devices) -> Self {
+        let mut capturing = Capturing {
+            devices,
+            ..Capturing::default()
+        };
         let Some(text) = state.and_then(|s| fs::read_to_string(s.join("record.jsonl")).ok()) else {
             return capturing;
         };
@@ -214,6 +338,9 @@ impl Capturing {
                 frames: data["frames"].as_u64().unwrap_or_default(),
                 asset: Some(sha.to_string()),
                 ask: Some(ask.to_string()),
+                device: None,
+                first: None,
+                last: None,
             });
             let task = Task {
                 session: session.to_string(),
@@ -299,6 +426,14 @@ pub(crate) fn local_http(url: &str, body: Option<&[u8]>) -> bool {
         && stream.read_to_end(&mut Vec::new()).is_ok()
 }
 
+/// The first item `d` delivers at or after `t`.
+fn next_item(d: &Device, t: i64) -> i64 {
+    if t <= d.first {
+        return d.first;
+    }
+    d.first + (t - d.first + d.period - 1).div_euclid(d.period) * d.period
+}
+
 impl Hub<'_> {
     /// One of this issue's calls, at `self.now`.
     pub fn capture_call(&mut self, call: &CaptureCall) -> Value {
@@ -319,8 +454,54 @@ impl Hub<'_> {
                     frames: 0,
                     asset: None,
                     ask: None,
+                    device: None,
+                    first: None,
+                    last: None,
                 });
                 json!({"capture": format!("capture:{n}"), "state": "picking"})
+            }
+            CaptureCall::Device { kind, panel, tool } => {
+                // Nothing records for an agent; the planted service takes its call as a panel's.
+                if let Some(session) = tool {
+                    if planted != Some(Planted::RecordsForAgent) {
+                        return json!({"code": "agent_caller", "caller": session});
+                    }
+                }
+                if !self.capturing.devices.granted(*kind)
+                    && planted != Some(Planted::RecordsWithoutPermission)
+                {
+                    return refused("no_permission");
+                }
+                let devices = &self.capturing.devices.list;
+                let Some(d) = devices.iter().position(|d| d.kind == *kind) else {
+                    return refused("no_device");
+                };
+                // The planted session never closed at the last release: its items since then
+                // run into this capture before any hold.
+                let state = match self.capturing.open_since.iter().find(|(i, _)| *i == d) {
+                    Some(&(_, since)) => State::Recording {
+                        source: Source::Device(d),
+                        down: since,
+                        next: next_item(&devices[d], since),
+                        frames: Vec::new(),
+                    },
+                    None => State::Armed(Source::Device(d)),
+                };
+                let c = &mut self.capturing.captures;
+                let n = c.last().map_or(0, |c| c.n) + 1;
+                c.push(Capture {
+                    n,
+                    session: String::new(),
+                    words: String::new(),
+                    state,
+                    frames: 0,
+                    asset: None,
+                    ask: None,
+                    device: Some((*kind, panel.clone())),
+                    first: None,
+                    last: None,
+                });
+                json!({"capture": format!("capture:{n}"), "state": "armed"})
             }
             CaptureCall::Pick(display) => {
                 let display = match display {
@@ -341,7 +522,7 @@ impl Hub<'_> {
                     return refused("no_picker");
                 };
                 c.state = match display {
-                    Some(i) => State::Armed(i),
+                    Some(i) => State::Armed(Source::Display(i)),
                     None => State::Cancelled,
                 };
                 json!({"state": c.state.name()})
@@ -352,11 +533,17 @@ impl Hub<'_> {
                     match (*down, self.capturing.held) {
                         (true, false) => {
                             for c in &mut self.capturing.captures {
-                                if let State::Armed(display) = c.state {
-                                    let next =
-                                        self.scenario.displays[display].grid().vsync_from(now);
+                                if let State::Armed(source) = c.state {
+                                    let next = match source {
+                                        Source::Display(i) => {
+                                            self.scenario.displays[i].grid().vsync_from(now)
+                                        }
+                                        Source::Device(i) => {
+                                            next_item(&self.capturing.devices.list[i], now)
+                                        }
+                                    };
                                     c.state = State::Recording {
-                                        display,
+                                        source,
                                         down: now,
                                         next,
                                         frames: Vec::new(),
@@ -379,7 +566,25 @@ impl Hub<'_> {
                 let red = redaction(planted);
                 let list: Vec<Value> = (self.capturing.captures.iter())
                     .map(|c| {
+                        let asset = c.asset.as_ref().map(
+                            |sha| json!({"sha256": sha, "redaction": red, "origin": "deepbuild"}),
+                        );
+                        if let Some((kind, panel)) = &c.device {
+                            return json!({
+                                "capture": format!("capture:{}", c.n),
+                                "source": kind.name(),
+                                "panel": panel,
+                                "via": "os_permission + trusted control",
+                                "hold": "shortcut",
+                                "state": c.state.name(),
+                                "frames": c.frames,
+                                "first": c.first,
+                                "last": c.last,
+                                "asset": asset,
+                            });
+                        }
                         json!({
+                            "source": "screen",
                             "capture": format!("capture:{}", c.n),
                             "session": c.session,
                             "state": c.state.name(),
@@ -475,7 +680,7 @@ impl Hub<'_> {
         for (i, c) in self.capturing.captures.iter_mut().enumerate() {
             let n = c.n;
             let State::Recording {
-                display,
+                source,
                 down,
                 next,
                 frames,
@@ -487,13 +692,26 @@ impl Hub<'_> {
                 Some(Planted::RecordsPastMax) => i64::MAX,
                 _ => *down + MAX,
             };
-            let d = &self.scenario.displays[*display];
-            let grid = d.grid();
-            let feed = d.feed.as_deref().unwrap_or_default();
+            let (uuid, feed, period) = match *source {
+                Source::Display(i) => {
+                    let d = &self.scenario.displays[i];
+                    (
+                        &d.uuid,
+                        d.feed.as_deref().unwrap_or_default(),
+                        d.grid().period,
+                    )
+                }
+                Source::Device(i) => {
+                    let d = &self.capturing.devices.list[i];
+                    (&d.uuid, d.feed.as_str(), d.period)
+                }
+            };
             while *next < to.min(end) {
-                let frame = format!("frame {} {} {feed}\n", d.uuid, *next);
+                let frame = format!("frame {uuid} {} {feed}\n", *next);
                 frames.extend_from_slice(frame.as_bytes());
                 c.frames += 1;
+                c.first.get_or_insert(*next);
+                c.last = Some(*next);
                 if let (Some(Planted::FramesToRecord), Some(state)) = (planted, &state) {
                     let data = json!({"capture": format!("capture:{n}"), "vsync": *next,
                         "bytes": base64(frame.as_bytes())});
@@ -502,7 +720,7 @@ impl Hub<'_> {
                 if planted == Some(Planted::KeepsAssetAfterCrash) {
                     let _ = evidence::put(&self.scenario.evidence, frames);
                 }
-                *next += grid.period;
+                *next += period;
             }
             if to >= end {
                 ended.push((i, end));
@@ -521,6 +739,18 @@ impl Hub<'_> {
             .map(|(i, _)| i)
             .collect();
         for i in recording {
+            if let (
+                Some(Planted::KeepsSessionOpen),
+                State::Recording {
+                    source: Source::Device(d),
+                    ..
+                },
+            ) = (self.scenario.planted, &self.capturing.captures[i].state)
+            {
+                let d = *d;
+                self.capturing.open_since.retain(|(x, _)| *x != d);
+                self.capturing.open_since.push((d, now));
+            }
             self.save(i, now);
         }
     }
@@ -539,6 +769,19 @@ impl Hub<'_> {
             return;
         };
         let id = format!("capture:{}", c.n);
+        // A camera or microphone capture is evidence of its panel's, with no ask of its own.
+        if let Some((kind, panel)) = &c.device {
+            if let Some(state) = &self.scenario.state {
+                let data = json!({
+                    "capture": id, "source": kind.name(), "panel": panel,
+                    "via": "os_permission + trusted control", "frames": c.frames,
+                    "held": [down, at], "redaction": redaction(planted), "origin": "deepbuild",
+                });
+                append(state, "", "capture.saved", &id, data, &[&sha]);
+            }
+            c.asset = Some(sha);
+            return;
+        }
         let handle = format!("task:{}-capture-{}", c.session, c.n);
         if let Some(state) = &self.scenario.state {
             let data = json!({
