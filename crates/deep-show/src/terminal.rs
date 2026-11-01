@@ -24,6 +24,7 @@ use deep_canvas_cells::palette::{off_status, resolve};
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Hub, Planted};
+use crate::optional;
 use crate::shared::FLICKS;
 
 /// The default history a terminal keeps, in rows.
@@ -63,6 +64,7 @@ pub struct Term {
 }
 
 /// A sound or video stream to one panel, drop-and-count.
+#[derive(Clone)]
 pub struct Media {
     kind: String,
     panel: String,
@@ -94,15 +96,7 @@ pub enum TermCall {
     Cells(Target),
     Cell(Target, u16, u16),
     Updates(Target),
-    StreamOpen {
-        stream: String,
-        kind: String,
-        panel: String,
-        rate: i64,
-        from: i64,
-        until: i64,
-        pauses: Vec<(i64, i64)>,
-    },
+    StreamOpen(String, Media),
     Stream(String),
     StreamRead(String, String),
     SessionPage(String, String),
@@ -146,10 +140,8 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<TermCall> {
             },
             cols: u16_of(c.get("cols"))?,
             rows: u16_of(c.get("rows"))?,
-            history: match c.get("history") {
-                None => HISTORY,
-                Some(h) => usize::try_from(h.as_u64()?).ok()?,
-            },
+            history: optional(c.get("history"), |h| usize::try_from(h.as_u64()?).ok())?
+                .unwrap_or(HISTORY),
             feed: match c.get("feed") {
                 None => Vec::new(),
                 Some(f) => f
@@ -173,22 +165,24 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<TermCall> {
                 .or_else(|| src.get("packets_per_second"))?
                 .as_i64()
                 .filter(|r| *r > 0)?;
-            TermCall::StreamOpen {
-                stream: s("stream")?,
-                kind: s("kind").filter(|k| k == "video" || k == "sound")?,
-                panel: s("panel")?,
-                rate,
-                from: src.get("from")?.as_i64()?,
-                until: src.get("until")?.as_i64()?,
-                pauses: match c.get("pauses") {
-                    None => Vec::new(),
-                    Some(p) => p
-                        .as_array()?
-                        .iter()
-                        .map(|x| Some((x.get("from")?.as_i64()?, x.get("until")?.as_i64()?)))
-                        .collect::<Option<_>>()?,
+            TermCall::StreamOpen(
+                s("stream")?,
+                Media {
+                    kind: s("kind").filter(|k| k == "video" || k == "sound")?,
+                    panel: s("panel")?,
+                    rate,
+                    from: src.get("from")?.as_i64()?,
+                    until: src.get("until")?.as_i64()?,
+                    pauses: match c.get("pauses") {
+                        None => Vec::new(),
+                        Some(p) => p
+                            .as_array()?
+                            .iter()
+                            .map(|x| Some((x.get("from")?.as_i64()?, x.get("until")?.as_i64()?)))
+                            .collect::<Option<_>>()?,
+                    },
                 },
-            }
+            )
         }
         "stream" => TermCall::Stream(s("stream")?),
         "stream_read" => TermCall::StreamRead(s("stream")?, s("panel")?),
@@ -597,29 +591,11 @@ impl<'a> Hub<'a> {
                 Ok(t) => self.updates_reply(t),
                 Err(e) => e,
             },
-            TermCall::StreamOpen {
-                stream,
-                kind,
-                panel,
-                rate,
-                from,
-                until,
-                pauses,
-            } => {
-                if !self.scenario.panels.contains_key(panel) {
+            TermCall::StreamOpen(stream, media) => {
+                if !self.scenario.panels.contains_key(&media.panel) {
                     return json!({"code": "unknown_panel"});
                 }
-                self.terms.media.insert(
-                    stream.clone(),
-                    Media {
-                        kind: kind.clone(),
-                        panel: panel.clone(),
-                        rate: *rate,
-                        from: *from,
-                        until: *until,
-                        pauses: pauses.clone(),
-                    },
-                );
+                self.terms.media.insert(stream.clone(), media.clone());
                 json!({"opened": true, "stream": stream})
             }
             TermCall::Stream(id) => match self.terms.media.get(id) {

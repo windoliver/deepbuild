@@ -307,6 +307,8 @@ export class Core {
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   private blocked: string | undefined;
+  /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
+  private lost = false;
   /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
   private extensions: ExtensionHost | undefined;
   private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
@@ -333,8 +335,11 @@ export class Core {
   private ahead: { after: number; limit: number; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
-  /** Each background job's last failure, cleared by its next clean run: a job that keeps failing shows in hub.health. */
-  private readonly jobs = new Map<string, { at: number; error: string } | null>();
+  /**
+   * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
+   * next clean run (#909): one blip reads apart from a job that has failed for an hour.
+   */
+  private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
@@ -563,6 +568,7 @@ export class Core {
     // Each staged copy is let go at its set time (#347): at start, then once an hour.
     await this.staging.prune().catch(() => undefined);
     this.every('staging', HOUR, () => this.staging.prune());
+    if (this.options.failJob) this.testJob(this.options.failJob);
     // The transcript archive (#20) copies what the agents' cleanups would delete, and the CI runs of the GitHub repos
     // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
     const env: Record<string, string | undefined> = { ...process.env };
@@ -591,7 +597,7 @@ export class Core {
     });
     this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
-    this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
+    this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
     if (this.options.plant !== 'restores-at-session-start-only') this.watchSettings();
     // The promised checks the record still holds wait on, armed again (#120).
@@ -637,6 +643,7 @@ export class Core {
   }
   /** Appends one event; a storage failure turns every gate watch-only, BLOCKED, until a write succeeds again. */
   private async append(connection: Connection, input: EventInput, backfill = false): Promise<void> {
+    if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
     if (!backfill) this.inflight.add(appended);
@@ -666,8 +673,25 @@ export class Core {
       await job();
       this.jobs.set(name, null);
     } catch (error) {
-      this.jobs.set(name, { at: this.now(), error: error instanceof Error ? error.message : String(error) });
+      const at = this.now();
+      const last = this.jobs.get(name);
+      this.jobs.set(name, { failures: (last?.failures ?? 0) + 1, since: last?.since ?? at, at, error: error instanceof Error ? error.message : String(error) });
     }
+  }
+  /** The test job (#909): one run per line a test appends to `file`, `fail` a failed run and `ok` a clean one. */
+  private testJob(file: string): void {
+    this.jobs.set('test', null);
+    let taken = 0;
+    this.timers.push(setInterval(() => {
+      const lines = readFileSync(file, 'utf8').split('\n').slice(0, -1);
+      for (const run of lines.slice(taken)) void this.run('test', async () => { if (run === 'fail') throw Error('the test job failed'); });
+      taken = lines.length;
+    }, 200));
+  }
+  /** The hub's lock file is no longer the one it holds (#909): another hub may start on it, so this one appends nothing more. */
+  lockLost(path: string): void {
+    this.lost = true;
+    this.blocked = `BLOCKED: lock lost: ${path} is no longer the file this hub holds locked; stop this hub and start it again`;
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {

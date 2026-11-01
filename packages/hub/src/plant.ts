@@ -58,6 +58,8 @@ export type Plant =
   | 'deep-drive-no-lease'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
+  // #909's: a hub that never checks its lock again once it holds it.
+  | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
   | 'delivered-when-written' | 'sends-shown-again';
 const PLANTS: readonly string[] = [
@@ -96,6 +98,7 @@ const PLANTS: readonly string[] = [
   'silent-deprecated',
   'deep-drive-no-lease',
   'signature-covers-anything',
+  'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

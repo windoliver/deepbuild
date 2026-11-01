@@ -25,7 +25,9 @@ use deep_text::{Role, Shaped, Shaper};
 use serde_json::{json, Map, Value};
 
 use crate::look::Status;
-use crate::scene::{self, Frame, Mark, Palette, Record, Refused, Rgb, Shown, StatusMark, TextSpec};
+use crate::scene::{
+    self, object_or_empty, Frame, Mark, Palette, Record, Refused, Rgb, Shown, StatusMark, TextSpec,
+};
 
 fn manifest(name: &str, deps: &[&str]) -> Manifest {
     Manifest {
@@ -355,11 +357,7 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     // The locale picks the shaping language; it keys every run, a label's included.
     let _ = v.locale()?;
     let id = v.id().unwrap_or_default();
-    let empty = Map::new();
-    let params = fields
-        .get("params")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let params = object_or_empty(fields.get("params"));
     let spec = scene::text_spec(id, params, shown.as_ref()).map_err(refused)?;
     // The size is an f32 (Text `text@1`: `size: f32`): one past its range is an infinity.
     if !(spec.size as f32).is_finite() {
