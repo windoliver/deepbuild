@@ -17,7 +17,7 @@ And a plug-in, [`extension-guide/plugin`](extension-guide/plugin/): a weather pa
 
 ## The manifest
 
-`deepbuild.json` holds `id`, `version`, `digest` and `access.words` (`hosts` for a source's host, `agent` for model jobs), then every name the package adds, each `ext.<plugin>.<name>`: `stores`, `actions`, `notices`, `checks` and `events` as lists of names; `secrets` as `{ name, for }`; `sources` as `{ name, variant }`. `requires.preview` lists every preview method its code calls, or the call is refused. Nothing else goes in it: a view, a schedule and a source's host and quota are declared in code, and the hosts it may reach are granted at install.
+`deepbuild.json` holds `id`, `version`, `digest` and `access.words` (`hosts` for a source's host, `agent` for model jobs), then every name the package adds, each `ext.<plugin>.<name>` with `<name>` in lower-case letters, digits and underscores (`ext.stocks.quote_nvda`, never `ext.stocks.quote.nvda`): `stores`, `actions`, `notices`, `checks` and `events` as lists of names; `secrets` as `{ name, for }`; `sources` as `{ name, variant }`. `requires.preview` lists every preview method its code calls, or the call is refused. Nothing else goes in it: a view, a schedule and a source's host and quota are declared in code, and the hosts it may reach are granted at install.
 
 To build one, copy the folder, write `packageDigest` of it into `deepbuild.json`'s `digest`, and point a `main`'s `#!/usr/bin/env` line at its interpreter. Then install it, run its conformance, load it, and run its check.
 
@@ -56,7 +56,7 @@ A JavaScript panel in the app, in the sidebar, the home screen, a tab or the lin
 
 In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`
 
-A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read.
+A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.
 
 | Parameter | Type | Required |
 |---|---|---|
