@@ -4365,15 +4365,22 @@ export class Core {
     if (run.command !== undefined) {
       // A claim's check runs through the command check kind (#30): hermetic, through host@1, with its deadline and the
       // hub going down stopping it; its output, counts, failures, attempts and stand-ins come back as one closed record.
+      // A kind a loaded package installed in place of the shipped one (`replaces`, #349) runs it instead, through the
+      // extension host, which hands it host@1: its result is check.kind@1's, with no exit, output, attempts or stand-ins.
+      const spec = { kind: 'command', runner: run.command, inputs: [run.check], depth: 'unit', oracle: 'code' as const, contract: null };
+      const deadline = run.deadline ?? CHECK_DEADLINE_MS;
       const controller = new AbortController();
       stop = () => controller.abort();
-      ended = runCommandCheck({
-        host: this.host, run: run.run, spec: { kind: 'command', runner: run.command, inputs: [run.check], depth: 'unit', oracle: 'code', contract: null },
-        checkout: run.cwd, deadline: run.deadline ?? CHECK_DEADLINE_MS, env, stop: controller.signal,
-      }).then(
-        (record) => ({ code: record.exit?.code ?? null, record }),
-        (error: Error) => ({ code: null, failed: error.message }),
-      );
+      const empty = { stdout: '', stderr: '', sha256: { stdout: sha256Hex(new Uint8Array()), stderr: sha256Hex(new Uint8Array()) } };
+      const replaced = async (): Promise<boolean> => (await this.extensions?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
+      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun }> => {
+        if (!byPackage) {
+          const record = await runCommandCheck({ host: this.host, run: run.run, spec, checkout: run.cwd, deadline, env, stop: controller.signal });
+          return { code: record.exit?.code ?? null, record };
+        }
+        const result = await this.extensions!.runCheck('command', spec, { checkout: run.cwd, deadline });
+        return { code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, clock: 0 } };
+      }).catch((error: Error) => ({ code: null, failed: error.message }));
     } else if (this.options.plant === 'run-spawns-itself') {
       // The planted wrong program: the hub spawns the run itself, past the host and its sandbox.
       const child = spawn(run.argv[0]!, run.argv.slice(1), { cwd: run.cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -4444,6 +4451,8 @@ export class Core {
         this.gate.recorded(run.run, record);
         const outcome = record.outcome;
         const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
+        // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
+        findings.push(...record.evidence.filter((e) => !/^(stdout|stderr) [0-9a-f]{64}$/.test(e)).slice(0, 20));
         const first = record.failures[0];
         await this.finish(run, outcome, findings, evidence, {
           tests_run: record.testsRun, passed: Math.max(0, record.testsRun - new Set(record.failures.map((f) => f.test)).size),
