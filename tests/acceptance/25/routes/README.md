@@ -21,7 +21,9 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json
 ```
 
 - `--no-file-parallelism`: each file starts its own hub and many stand-in sessions (AC2 and AC6 run twenty at once).
-  A full run takes about 15 minutes; AC6 alone about 5.
+  A full run takes about 4 minutes: a test that answers inside neither starts its hub with `noAskWait` (deep_ask
+  says "still waiting" at once, not after 40 s) or `shortHold` (a stop held with nothing answered ends after 5 s, not
+  60 s) (#964).
 - Every test makes its folders under `/tmp/dh25r-*` (a socket path must fit in 104 bytes), sets `HOME` to `<tmp>/h`
   for every process it starts, and never touches the real `~/.deepbuild`, `~/.claude` or `~/.codex`. It stops only
   processes it started, by PID, and the process groups its stand-ins started for hook entries, by group ID. No child

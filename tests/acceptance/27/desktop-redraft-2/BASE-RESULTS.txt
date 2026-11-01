@@ -1,0 +1,121 @@
+#27 AC3 (#27.f8331d25), second blind redraft: runs on the base a1707356 (origin/main, which holds #27's
+implementation, PR #816), Oct 31 2026, on this shared Mac (12 cores, other sessions' load around it). Only this
+folder's test files differ from the base. <checkout> stands for the worktree's path.
+
+Summary
+- Base, run 1 (beside the AC4 folder's run): FAIL at step 3, "must come with the session's next prompt": deep-hook
+  "could not spool ... within the hook's 50 ms" (load 40-48), the documented load miss (README: Machine load), not a
+  reading on the program.
+- Base, run 2 (alone, load 32 -> 20): PASS. The base records stalled and the reading, carries the answer with the next
+  prompt, records delivered as it replies (before this test's 30 s wait starts) and keeps the session's limit.
+- DEEP_HUB_PLANT=wake-assumed (the AC3 twin): FAIL at step 1, "its delivery must read stalled within 60 s" (outcomes:
+  delivered via next_prompt).
+- DEEP_HUB_PLANT=delivered-on-waiter-exit (merged plant): FAIL at the same assertion.
+- Not run here: a hub that confirms delivery from the transcript (none on the base; this job looks at no other
+  branch), and a mutant forgetting the session's limit.
+
+---- base, run 1
+== 2026-11-01T00:07:19Z folder=desktop-redraft-2 plant=none code=a1707356 (the base; only test files differ)
+uptime before: 17:07  up  4:31, 7 users, load averages: 40.22 53.31 62.93
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/desktop-redraft-2
+
+ ❯ desktop.test.ts (1 test | 1 failed) 252943ms
+   ❯ #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit (1)
+     × #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt 233454ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  desktop.test.ts > #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit > #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt
+AssertionError: #27.f8331d25 step 3: your answer to ask:01M6A70TWN3CDNVSQ222N36ATH (Green header ee750ba4) must come with the session's next prompt; DeepBuild replied: {"runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":"deep-hook: could not spool 01M6A74CV9XGSMM402A94RGVRA within the hook's 50 ms\n"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ desktop.test.ts:105:206
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:07:20
+   Duration  253.27s (tests 100%)
+
+exit 1
+uptime after: 17:11  up  4:35, 7 users, load averages: 47.89 43.07 55.42
+
+---- base, run 2 (alone)
+== 2026-11-01T00:13:00Z folder=desktop-redraft-2 plant=none code=a1707356 (the base; only test files differ)
+uptime before: 17:13  up  4:36, 7 users, load averages: 32.25 39.13 52.73
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/desktop-redraft-2
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  17:13:01
+   Duration  176.91s (tests 100%)
+
+exit 0
+uptime after: 17:15  up  4:39, 7 users, load averages: 19.97 34.11 48.50
+
+---- DEEP_HUB_PLANT=wake-assumed
+== 2026-11-01T00:16:11Z folder=desktop-redraft-2 plant=wake-assumed code=a1707356 (the base; only test files differ)
+uptime before: 17:16  up  4:40, 7 users, load averages: 20.29 33.52 48.04
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/desktop-redraft-2
+
+ ❯ desktop.test.ts (1 test | 1 failed) 167757ms
+   ❯ #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit (1)
+     × #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt 166910ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  desktop.test.ts > #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit > #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt
+AssertionError: #27.f8331d25 step 1: no turn showed your answer to ask:01M6A7DH55D8FCDKQ71ENAMGP3, so its delivery must read stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: expected undefined to be defined
+ ❯ desktop.test.ts:73:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:16:11
+   Duration  167.90s (tests 100%)
+
+exit 1
+uptime after: 17:18  up  4:42, 7 users, load averages: 41.95 35.96 46.30
+
+---- DEEP_HUB_PLANT=delivered-on-waiter-exit
+== 2026-11-01T00:18:59Z folder=desktop-redraft-2 plant=delivered-on-waiter-exit code=a1707356 (the base; only test files differ)
+uptime before: 17:19  up  4:42, 7 users, load averages: 41.95 35.96 46.30
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/desktop-redraft-2
+
+ ❯ desktop.test.ts (1 test | 1 failed) 169774ms
+   ❯ #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit (1)
+     × #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt 166575ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  desktop.test.ts > #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit > #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt
+AssertionError: #27.f8331d25 step 1: no turn showed your answer to ask:01M6A7JRV4C6JS60ME4XH74D3R, so its delivery must read stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: expected undefined to be defined
+ ❯ desktop.test.ts:73:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:19:01
+   Duration  169.99s (tests 100%)
+
+exit 1
+uptime after: 17:21  up  4:45, 7 users, load averages: 164.07 76.33 59.97
