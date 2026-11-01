@@ -40,8 +40,16 @@ gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # Issue #373: goldens and snapshots render with Vello CPU, its f32 pipeline at the scalar SIMD
-# level (the scalar level on every platform comes from deep-text's fearless_simd feature).
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# level (the scalar level on every platform comes from deep-text's fearless_simd feature). Issue
+# #385: `raster` draws a reading through the u8 pipeline too, which a golden refuses.
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
+# Issue #385: a 2D writer layer drawn by Vello GPU on the GPU layer's device (`gpu`), never Vello's
+# compute renderer.
+vello_gpu = { version = "0.3", default-features = false, features = ["wgpu", "std", "text"] }
+wgpu = { version = "30", default-features = false }
+# Issue #385: the GPUI live view draws a layer that needs Vello GPU on a device the GPU layer's
+# code opens the first time a layer needs it.
+deep-gpu = { path = "../deep-gpu" }
 # Issue #140: a glyph's outline, for the edges a layer draws (`layer::edges`); the outline reader
 # Vello CPU's glyphs already use, at its version and features.
 skrifa = { version = "0.44", default-features = false, features = ["autohint_shaping"] }
