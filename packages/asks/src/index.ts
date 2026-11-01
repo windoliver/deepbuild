@@ -484,7 +484,7 @@ interface Ask {
 }
 
 /** One stop of a session, as agent.stop@4 records it (#85): the structure the core raises a task or a continue from. */
-interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; who: Ask['who'] }
+interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; finished: boolean; who: Ask['who'] }
 /** An automatic continue the core recorded: the stop it continued from, why, and when. */
 interface Continued { stop: string; because: string; ts: number }
 
@@ -528,6 +528,10 @@ class AsksCore implements Asks {
   private readonly threads = new Map<string, Ask[]>();
   /** Each session's newest attempt at each task, from its claims. */
   private readonly attempts = new Map<string, Map<string, number>>();
+  /** Sessions a shared task's resume skips (#85): those you stopped (their SessionEnd), by its stamp; those whose attempt a newer one replaced; those whose task closed. */
+  private readonly ended = new Map<string, number>();
+  private readonly replaced = new Set<string>();
+  private readonly done = new Set<string>();
   private queue: Promise<unknown> = Promise.resolve();
   /** Sessions with a message you typed that the agent hasn't read yet. */
   private readonly unread = new Set<string>();
@@ -1532,6 +1536,8 @@ class AsksCore implements Asks {
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     switch (e.kind) {
       case 'session.start':
+        // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
+        if (typeof d.parent === 'string') for (const session of [d.parent, ...this.stops.keys()]) if (session === d.parent || letters(session) === letters(d.parent)) this.replaced.add(session);
         if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null, agent: String(d.agent ?? e.agent ?? '') });
         return;
       case 'agent.stop': {
@@ -1541,7 +1547,9 @@ class AsksCore implements Asks {
         const cause = String(d.cause);
         const stop: Stop = {
           id: e.id, session: e.session, ts: e.ts, pos: e.log_pos, cause, owner: typeof d.owner === 'string' ? d.owner : 'agent',
-          signature: typeof d.signature === 'string' ? d.signature : cause, resets: typeof d.plan_resets === 'number' ? d.plan_resets : null, who: { actor: e.actor, scope: e.scope },
+          signature: typeof d.signature === 'string' ? d.signature : cause, resets: typeof d.plan_resets === 'number' ? d.plan_resets : null,
+          // A turn that ended normally is a Stop (outcome finished); one that ended on an API error is a StopFailure (failed).
+          finished: d.outcome !== 'failed', who: { actor: e.actor, scope: e.scope },
         };
         this.stops.set(e.session, [...(this.stops.get(e.session) ?? []), stop]);
         this.stopIds.set(stop.id, stop);
@@ -1552,6 +1560,19 @@ class AsksCore implements Asks {
       case 'session.continued':
         if (e.writer === 'core' && e.session) this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop: String(d.stop), because: String(d.because), ts: e.ts }]);
         return;
+      case 'session.end':
+        // A session you stopped (its SessionEnd) isn't resumed by a task closing: a continue would wake nobody.
+        if (e.writer === 'hook' && e.session) this.ended.set(e.session, e.ts);
+        return;
+      case 'task.closed': {
+        // A task closed by a verdict: the session whose prompt opened it (task_ref session:<id>#<message>), and the
+        // sessions whose attempts were at it, have nothing left to resume into.
+        const subject = typeof e.subject === 'string' ? e.subject : '';
+        const own = /^session:([0-9A-Za-z]+)#/.exec(subject)?.[1];
+        if (own) for (const session of this.stops.keys()) if (letters(session) === own) this.done.add(session);
+        if (subject.startsWith('task:')) for (const [session, tasks] of this.attempts) if (tasks.has(subject)) this.done.add(session);
+        return;
+      }
       case 'ask.created': {
         const thread = this.threadOf(e.session);
         const fold = e.writer === 'core' && d.key === foldKey(thread);
@@ -1744,6 +1765,7 @@ class AsksCore implements Asks {
           if (older === undefined || older >= d.attempt || this.threadOf(session) === thread) continue;
           const by = { because: 'attempt_replaced', session: `session:${e.session}` };
           for (const a of this.openIn(this.threadOf(session))) a.pending.moot ??= by;
+          this.replaced.add(session);
         }
         const tasks = this.attempts.get(e.session) ?? this.attempts.set(e.session, new Map()).get(e.session)!;
         tasks.set(d.task_ref, Math.max(tasks.get(d.task_ref) ?? 0, d.attempt));
@@ -1847,12 +1869,15 @@ class AsksCore implements Asks {
     return (this.typedAt.get(stop.session) ?? -Infinity) > stop.ts;
   }
   /**
-   * Whether the turn you started already had its one automatic continue: a continue from an earlier stop stamped after
-   * your last prompt (or after the last resume of a task that closed, which starts a turn of its own).
+   * Whether the session already had its one automatic continue since its last turn that ended normally: a continue
+   * from an earlier stop stamped after the session's newest finished stop before this one (a Stop, not a StopFailure),
+   * after your last prompt, or after the last resume of a task that closed, whichever is latest; each starts the
+   * count again. Counted per session, never per stop: a second transient stop right after a continue gets none.
    */
   private continuedSince(stop: Stop): boolean {
     const resumed = (this.continued.get(stop.session) ?? []).filter((c) => c.because === 'task_closed').map((c) => c.ts);
-    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed);
+    const finished = (this.stops.get(stop.session) ?? []).filter((s) => s.finished && s.ts < stop.ts).map((s) => s.ts);
+    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed, ...finished);
     return (this.continued.get(stop.session) ?? []).some((c) => {
       const earlier = c.because !== 'task_closed' ? this.stopIds.get(c.stop) : undefined;
       return earlier !== undefined && earlier.ts > since && earlier.ts < stop.ts;
@@ -1888,13 +1913,19 @@ class AsksCore implements Asks {
       if (Number.isFinite(resets) && now >= resets && !task.pending.moot) task.pending.moot = { because: 'window_reset', at: resets };
     }
     // A task closed on its check: each session it unblocks resumes from the stop it covered, while that stop is still
-    // the session's newest and nothing was typed since; a newer stop decides for itself.
+    // the session's newest and nothing was typed since; a newer stop decides for itself. A session you stopped, one
+    // whose attempt was replaced, and one whose task closed are skipped, and the record says why.
     for (const task of [...this.resumes]) {
       this.resumes.delete(task);
       for (const [session, id] of task.block!.stops) {
         const stop = this.newest(session);
-        if (!stop || stop.id !== id || this.wasContinued(stop) || this.typedAfter(stop)) continue;
-        await this.continueFrom(stop, 'task_closed', task.handle, now);
+        const why = !stop || stop.id !== id ? 'a newer stop of it decides for itself' : this.wasContinued(stop) ? 'it already continued from that stop' : this.typedAfter(stop) ? 'a message you typed reached it since'
+          : (this.ended.get(session) ?? -Infinity) > stop.ts ? 'you stopped it after the stop' : this.replaced.has(session) ? 'a newer attempt replaced its attempt' : this.done.has(session) ? 'its task closed' : undefined;
+        if (why) {
+          if (stop) await this.skipped(stop, task.handle, why, now);
+          continue;
+        }
+        await this.continueFrom(stop!, 'task_closed', task.handle, now);
         acted = true;
       }
     }
@@ -1931,6 +1962,12 @@ class AsksCore implements Asks {
     return true;
   }
 
+  /** Why a shared task's resume skipped a session (#85), kept as the session's reading so its row says so. */
+  private async skipped(stop: Stop, task: string, why: string, now: number): Promise<void> {
+    await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, {
+      v: 1, id: ulid(now), kind: 'session.reading', subject: `session:${letters(stop.session)}`, ts: now, data: { reading: `DeepBuild didn't resume this session when ${task} closed: ${why}.` },
+    });
+  }
   /** The continue the core starts in a stopped session: recorded first; the hub reads it and takes the route (#25). */
   private async continueFrom(stop: Stop, because: 'transient' | 'context_overflow' | 'task_closed', task: string | null, now: number): Promise<void> {
     await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, {

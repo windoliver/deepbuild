@@ -127,6 +127,8 @@ export interface Gated {
   screen?: boolean;
   /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
   stage?: string[] | null;
+  /** A call in a session whose cut-off turn started a send with no recorded end (#85): checked against it first. */
+  resend?: boolean;
 }
 /**
  * How long the hub holds a call it stages (#347): under Claude Code's 60 s PreToolUse timeout with room for the reply,
