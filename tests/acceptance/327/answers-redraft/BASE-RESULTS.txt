@@ -1,0 +1,54 @@
+#327 AC2 blind redraft (answers-redraft/ac2.test.ts), run once on the base a1707356 (origin/main, "Merge pull request
+#914 …"), macOS, Node 24 (fnm), deep-hook built with `cargo build --locked -q -p deep-hook`, workspaces built.
+
+Command:
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/327/answers-redraft --no-file-parallelism
+
+Result: FAILS on the base, as a fix's test must (the base is #906's wrong program: it records delivered when it
+writes the Stop hold's reply). 1 failed, 1 passed:
+
+- "a taste call … answered by a click on C …" FAILS at its one assertion, `expect(failures).toEqual([])`, with exactly
+  one failure: delivery.outcome reads delivered while the session's transcript doesn't show the answer yet. Every
+  other check in it held on the base: ask.answered records c-cobalt; the Stop was held and sent back (blocked,
+  continued) with "C: cobalt header (c-cobalt)"; the transcript's next input holds C's ID and label and not B's;
+  delivered is in the record within 30 s of the transcript showing it.
+- "wrong program: a card that maps the click to the record's index …" PASSES: the planted card's run fails naming
+  b-bone (B: bone header), at ask.answered and at the agent's next input.
+
+The machine was loaded (uptime before and after, below); the run doesn't depend on it beyond the Stop being held,
+which it was. The run's output, the checkout path shortened:
+
+17:06  up  4:30, 7 users, load averages: 34.59 55.49 64.31
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/327/answers-redraft
+
+ ❯ ac2.test.ts (2 tests | 1 failed) 20163ms
+   ❯ AC2 #327.da06e3b1 a click on C records C, the agent's next input holds C's ID and label, and delivery.outcome is delivered once the turn shows it (2)
+     × #327.da06e3b1 a taste call (A, C, B in the record; B recommended, drawn first) answered by a click on C: ask.answered records C, the session's transcript shows C's ID and label as its next input, and delivered is recorded only once it does 14015ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2.test.ts > AC2 #327.da06e3b1 a click on C records C, the agent's next input holds C's ID and label, and delivery.outcome is delivered once the turn shows it > #327.da06e3b1 a taste call (A, C, B in the record; B recommended, drawn first) answered by a click on C: ask.answered records C, the session's transcript shows C's ID and label as its next input, and delivered is recorded only once it does
+AssertionError: the answer C reaches the agent, delivered and acknowledged: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "delivery.outcome for ask:01M6A6VZHENPWZK5TFD4624Y8N reads delivered (delivered) while session a7ea7096-3e7b-4cab-9008-4fa2eb22162d's transcript doesn't show the answer yet: delivered and acknowledged is when the agent's turn shows it, not when the hub replies (the Stop came back {\"blocked\":true,\"reasons\":[\"DeepBuild delivers your answers:\\nYour answer to ask:01M6A6VZHENPWZK5TFD4624Y8N (\\\"Which header colour on the checkout total?\\\"): C: cobalt header (c-cobalt).\"],\"continued\":true,\"overridden\":false,\"count\":1})",
++ ]
+
+ ❯ ac2.test.ts:153:84
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  17:06:28
+   Duration  23.19s (tests 90%, transform 5%, import 5%)
+
+exit 1
+17:06  up  4:30, 7 users, load averages: 35.52 54.01 63.52

@@ -1,0 +1,43 @@
+#909 acceptance tests on the base, a1707356 (Merge pull request #914), Oct 31 2026.
+macOS (Darwin 25.6.0), Node v24.22.0: npm ci; npm run build --workspaces; npx vitest run tests/acceptance/909
+Trimmed to the hub's health output, the summary and the four failures, each for the expected reason (README, On the base).
+
+---- The hub's health output, as the tests printed it
+AC2 hub.health jobs at start: {"asks":{"failing":null},"leases":{"failing":null},"supervisor":{"failing":null},"rules":{"failing":null},"retention":{"failing":null},"staging":{"failing":null}}
+AC1 61.4 s after the lock file was removed, hub.health reads gates {"watch_only":false,"reason":null}
+AC1 the second start: ready as pid 91900; stderr:
+
+---- Summary
+ ❯ tests/acceptance/909/jobs.test.ts (1 test | 1 failed) 4734ms
+     × AC2 two failures read failing with 2 and their start, doctor quiet; the third shows in doctor; a clean run clears both 4733ms
+ ❯ tests/acceptance/909/lock.test.ts (3 tests | 3 failed) 71756ms
+     × AC1 with the lock file removed under a running hub, within 60 s every gate is watch-only with BLOCKED, lock lost 66809ms
+     × AC1 a second start beside a hub whose lock file was removed leaves the first hub's socket in place, and the first hub's gates still turn watch-only within 60 s 4080ms
+     × AC1 (wrong program) a hub that never checks its lock again fails this test 866ms
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Duration  72.17s
+
+---- Failed Tests 4
+
+ FAIL  tests/acceptance/909/jobs.test.ts > AC2 #909 a failing job is counted in a row; deep doctor reports it at the third > AC2 two failures read failing with 2 and their start, doctor quiet; the third shows in doctor; a clean run clears both
+AssertionError: hub.health lists the test job from the start: expected undefined to be defined
+ ❯ tests/acceptance/909/jobs.test.ts:55:71
+
+ FAIL  tests/acceptance/909/lock.test.ts > AC1 … > AC1 with the lock file removed under a running hub, within 60 s every gate is watch-only with BLOCKED, lock lost
+AssertionError: every gate is watch-only within 60 s: 61.4 s after the lock file was removed, hub.health reads gates {"watch_only":false,"reason":null}: expected false to be true // Object.is equality
+ ❯ lockLost tests/acceptance/909/lock.test.ts:31:88
+ ❯ tests/acceptance/909/lock.test.ts:51:5
+
+ FAIL  tests/acceptance/909/lock.test.ts > AC1 … > AC1 a second start beside a hub whose lock file was removed leaves the first hub's socket in place, and the first hub's gates still turn watch-only within 60 s
+AssertionError: the file at /private/tmp/dh16-FOqqT8/h/.deepbuild/hub.sock is still the first hub's socket (inode 1008202621) after the second start: expected 1008202756 to be 1008202621 // Object.is equality
+ ❯ tests/acceptance/909/lock.test.ts:63:116
+
+ FAIL  tests/acceptance/909/lock.test.ts > AC1 … > AC1 (wrong program) a hub that never checks its lock again fails this test
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: …
+Error: DEEP_HUB_PLANT=lock-never-rechecked names no planted program
+    at plantOf (packages/hub/dist/plant.js:42:15)
+    at runHub (packages/hub/dist/server.js:1080:19)
+ ❯ startHub tests/acceptance/16/helpers.ts:249:11
+ ❯ removeLockUnder tests/acceptance/909/lock.test.ts:40:15
+ ❯ tests/acceptance/909/lock.test.ts:72:32

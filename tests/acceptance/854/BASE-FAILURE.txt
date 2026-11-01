@@ -1,0 +1,656 @@
+Base commit: 6f637e33 ("Merge pull request #876 from windoliver/feat/857-parallel-nodes"), the worktree's HEAD
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/854 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci;
+nothing was built beforehand, and no test reached a cargo build. Paths are redacted to <checkout>.
+Every one of the 21 tests fails for the expected reason, at a named assertion:
+- 4 tests (budgets.test.ts): budgets.json has none of the four tasks ("budgets.json has the task canvas-patch-settled:
+  expected undefined to be defined", and the same for canvas-scene-read, canvas-idle and replica-cold-start); the
+  lane's validator accepted the base's budgets.json against itself before that.
+- 12 tests run a task: benchmarks/canvas.mjs has no patch-settled, scene-read, idle or replica-cold-start mode
+  ("Error: Unknown task patch-settled; one of: …"), so they fail at "node benchmarks/canvas.mjs <mode> exits 0",
+  planted runs included ("… --planted runs_every_node exits 0").
+- 5 tests judge readings made up for the judge: the base's `canvas.mjs judge` knows only budget-class reports
+  ("Error: Unknown class undefined"), so they fail at "canvas.mjs judge exits 0 on a <task> report"; in
+  release.test.ts that is the debug-built reading, before the coefficient-file half (which #855 already holds at the
+  base) is reached.
+This Mac is a Mac15,7 (Apple M3 Pro, 36 GiB, a reference Mac) on mains power, so the reference-Mac gate was open: the
+timing tests ran and failed at the missing task rather than skipping as INCONCLUSIVE.
+Date: 2026-10-31  Node v23.9.0  vitest 5.0.5 darwin-arm64
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/854
+
+ ❯ patch.test.ts (4 tests | 4 failed) 288ms
+   ❯ #854.a24082e8 patch to settled frame holds 4 ms at p95 over 200 patches, CPU plus GPU; a planted scheduler that runs every node on each frame fails, naming the frame and the nodes it ran (4)
+     × #854.a24082e8 #854.926cdce7 the task times, on a release build, five runs of 200 patches each changing one item of a 10,000-item board, each from its arrival to its settled frame on the CPU plus the GPU, naming the nodes that frame ran, and no frame runs every item's nodes 53ms
+     × #854.a24082e8 on the reference Mac each run's p95 over its 200 patches, CPU plus GPU, is within 4 ms (five runs after warm-up), and the lane's judge passes the task on those same five 150ms
+     × #854.a24082e8 a planted scheduler that runs every node on each frame runs every item's nodes after each one-item patch, and on the reference Mac the lane fails it past 4 ms, naming for each run its slowest frame and the nodes that frame ran 42ms
+     × #854.a24082e8 the lane's judge fails a reading whose p95 is past 4 ms in all five runs, naming each run's slowest frame and the nodes it ran, and passes its twin within 4 ms 43ms
+ ❯ scene-read.test.ts (4 tests | 4 failed) 307ms
+   ❯ #854.3f8dbc12 deep_query's summary returns in 20 ms and under 2,000 tokens, and a 1,000-row page in 50 ms; a planted query that returns every row unpaged fails, naming its size (4)
+     × #854.3f8dbc12 #854.926cdce7 on a release build, the task reads the 10,000-item board's summary and one 1,000-row page with a cursor to the next, each reply counted by the tokenizer an agent adapter's facts pin, and the summary is under 2,000 tokens in every run 45ms
+     × #854.3f8dbc12 on the reference Mac the summary returns within 20 ms and the 1,000-row page within 50 ms in all five runs, and the lane's judge passes the task on those same runs 169ms
+     × #854.3f8dbc12 a planted query that returns every row unpaged answers the 1,000-row read with all 10,000 rows and no cursor, and the lane fails it on any machine, naming its size in rows and tokens 46ms
+     × #854.3f8dbc12 the lane's judge fails a reading whose summary is 2,000 tokens or more, naming the summary's size, and passes its twin under 2,000 47ms
+ ❯ idle.test.ts (4 tests | 4 failed) 352ms
+   ❯ #854.022ea575 a still document draws 0 frames and makes at most 1 wakeup a minute over 60 s, under 0.1% of a core; a planted clock that arms a frame each vsync fails, naming the frames it drew (4)
+     × #854.022ea575 #854.926cdce7 on a release build and the real clock, the task watches a window showing a still document for 60 s a run, five runs, reading frames drawn, wakeups and CPU from the process, and the window draws 0 frames in every run 56ms
+     × #854.022ea575 on the reference Mac every run makes at most 1 wakeup in its minute and uses under 0.1% of a core, and the lane's judge passes the task on those same runs 215ms
+     × #854.022ea575 a planted clock that arms a frame each vsync draws at least one frame a second of the still minute, and the lane fails it on any machine, naming the frames it drew 40ms
+     × #854.022ea575 the lane's judge fails a reading that drew frames while still, naming them, and passes its twin that drew none 40ms
+ ❯ replica.test.ts (4 tests | 4 failed) 287ms
+   ❯ #854.0393e70f a replica reaches its first settled frame in 300 ms from spawn; a planted replica that compiles its pipelines on the first frame fails, naming the pipelines (4)
+     × #854.0393e70f #854.926cdce7 the task spawns a release-built replica on a fixture document, five runs, each timed from spawn to its first settled frame, and lists the fixture's pipelines, none of them compiled on that first frame 44ms
+     × #854.0393e70f on the reference Mac every run reaches its first settled frame within 300 ms of spawn, and the lane's judge passes the task on those same runs 167ms
+     × #854.0393e70f a planted replica that compiles its pipelines on the first frame lists them so, and on the reference Mac the lane fails it past 300 ms, naming the pipelines 39ms
+     × #854.0393e70f the lane's judge fails a reading past 300 ms in all five runs, naming the pipelines its first frames compiled, and passes its twin within 300 ms 37ms
+ ❯ release.test.ts (1 test | 1 failed) 47ms
+   ❯ #854.926cdce7 every task's timings come from a release build, and a coefficient file or a perf reading taken from a debug build is refused, naming the profile (1)
+     × #854.926cdce7 the lane refuses each task's perf reading taken from a debug build (dev), naming the profile, and one naming no build; the same reading from a release build is judged and passes; and the cost model refuses a coefficient file from a debug build, naming the profile, while reading its release twin 46ms
+ ❯ budgets.test.ts (4 tests | 4 failed) 675ms
+   ❯ #854 budgets.json gains the four perf-lane tasks, each with its target (4)
+     × #854.a24082e8 budgets.json has the task canvas-patch-settled: it runs node benchmarks/canvas.mjs patch-settled, holds the issue's targets {"settled_p95_ms":4}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets 392ms
+     × #854.3f8dbc12 budgets.json has the task canvas-scene-read: it runs node benchmarks/canvas.mjs scene-read, holds the issue's targets {"summary_ms":20,"summary_tokens":2000,"page_ms":50,"page_rows":1000}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets 105ms
+     × #854.022ea575 budgets.json has the task canvas-idle: it runs node benchmarks/canvas.mjs idle, holds the issue's targets {"frames":0,"wakeups":1,"cpu_fraction":0.001}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets 88ms
+     × #854.0393e70f budgets.json has the task replica-cold-start: it runs node benchmarks/canvas.mjs replica-cold-start, holds the issue's targets {"first_settled_ms":300}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets 90ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #854 budgets.json gains the four perf-lane tasks, each with its target > #854.a24082e8 budgets.json has the task canvas-patch-settled: it runs node benchmarks/canvas.mjs patch-settled, holds the issue's targets {"settled_p95_ms":4}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets
+AssertionError: budgets.json has the task canvas-patch-settled: expected undefined to be defined
+ ❯ budgets.test.ts:35:61
+     33|       const { current } = await budgets();
+     34|       const entry = current.tasks.find((t) => t.id === task.id);
+     35|       expect(entry, `budgets.json has the task ${task.id}`).toBeDefine…
+       |                                                             ^
+     36|       expect(entry!.command, `${task.id} runs its mode of the canvas b…
+     37|       expect(entry!.targets, `${task.id} holds the issue's numbers as …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  budgets.test.ts > #854 budgets.json gains the four perf-lane tasks, each with its target > #854.3f8dbc12 budgets.json has the task canvas-scene-read: it runs node benchmarks/canvas.mjs scene-read, holds the issue's targets {"summary_ms":20,"summary_tokens":2000,"page_ms":50,"page_rows":1000}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets
+AssertionError: budgets.json has the task canvas-scene-read: expected undefined to be defined
+ ❯ budgets.test.ts:35:61
+     33|       const { current } = await budgets();
+     34|       const entry = current.tasks.find((t) => t.id === task.id);
+     35|       expect(entry, `budgets.json has the task ${task.id}`).toBeDefine…
+       |                                                             ^
+     36|       expect(entry!.command, `${task.id} runs its mode of the canvas b…
+     37|       expect(entry!.targets, `${task.id} holds the issue's numbers as …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  budgets.test.ts > #854 budgets.json gains the four perf-lane tasks, each with its target > #854.022ea575 budgets.json has the task canvas-idle: it runs node benchmarks/canvas.mjs idle, holds the issue's targets {"frames":0,"wakeups":1,"cpu_fraction":0.001}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets
+AssertionError: budgets.json has the task canvas-idle: expected undefined to be defined
+ ❯ budgets.test.ts:35:61
+     33|       const { current } = await budgets();
+     34|       const entry = current.tasks.find((t) => t.id === task.id);
+     35|       expect(entry, `budgets.json has the task ${task.id}`).toBeDefine…
+       |                                                             ^
+     36|       expect(entry!.command, `${task.id} runs its mode of the canvas b…
+     37|       expect(entry!.targets, `${task.id} holds the issue's numbers as …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  budgets.test.ts > #854 budgets.json gains the four perf-lane tasks, each with its target > #854.0393e70f budgets.json has the task replica-cold-start: it runs node benchmarks/canvas.mjs replica-cold-start, holds the issue's targets {"first_settled_ms":300}, compares with the merge base at the lane's 50% margin, and passes the lane's validator against the merge base's budgets
+AssertionError: budgets.json has the task replica-cold-start: expected undefined to be defined
+ ❯ budgets.test.ts:35:61
+     33|       const { current } = await budgets();
+     34|       const entry = current.tasks.find((t) => t.id === task.id);
+     35|       expect(entry, `budgets.json has the task ${task.id}`).toBeDefine…
+       |                                                             ^
+     36|       expect(entry!.command, `${task.id} runs its mode of the canvas b…
+     37|       expect(entry!.targets, `${task.id} holds the issue's numbers as …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  idle.test.ts > #854.022ea575 a still document draws 0 frames and makes at most 1 wakeup a minute over 60 s, under 0.1% of a core; a planted clock that arms a frame each vsync fails, naming the frames it drew > #854.022ea575 #854.926cdce7 on a release build and the real clock, the task watches a window showing a still document for 60 s a run, five runs, reading frames drawn, wakeups and CPU from the process, and the window draws 0 frames in every run
+AssertionError: node benchmarks/canvas.mjs idle exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task idle; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns idle.test.ts:49:54
+ ❯ idle.test.ts:60:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  idle.test.ts > #854.022ea575 a still document draws 0 frames and makes at most 1 wakeup a minute over 60 s, under 0.1% of a core; a planted clock that arms a frame each vsync fails, naming the frames it drew > #854.022ea575 on the reference Mac every run makes at most 1 wakeup in its minute and uses under 0.1% of a core, and the lane's judge passes the task on those same runs
+AssertionError: node benchmarks/canvas.mjs idle exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task idle; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns idle.test.ts:49:54
+ ❯ idle.test.ts:69:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  idle.test.ts > #854.022ea575 a still document draws 0 frames and makes at most 1 wakeup a minute over 60 s, under 0.1% of a core; a planted clock that arms a frame each vsync fails, naming the frames it drew > #854.022ea575 a planted clock that arms a frame each vsync draws at least one frame a second of the still minute, and the lane fails it on any machine, naming the frames it drew
+AssertionError: node benchmarks/canvas.mjs idle --planted arms_each_vsync exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task idle; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ plantedRuns idle.test.ts:50:54
+ ❯ idle.test.ts:83:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  idle.test.ts > #854.022ea575 a still document draws 0 frames and makes at most 1 wakeup a minute over 60 s, under 0.1% of a core; a planted clock that arms a frame each vsync fails, naming the frames it drew > #854.022ea575 the lane's judge fails a reading that drew frames while still, naming them, and passes its twin that drew none
+AssertionError: canvas.mjs judge exits 0 on a canvas-idle report; stderr: file://<checkout>/benchmarks/canvas.mjs:415
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://<checkout>/benchmarks/canvas.mjs:415:22)
+    at file://<checkout>/benchmarks/canvas.mjs:461:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:415:22
+ ❯ ../../../benchmarks/canvas.mjs:461:16
+ ❯ judged helpers.ts:122:128
+
+ ❯ idle.test.ts:93:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  patch.test.ts > #854.a24082e8 patch to settled frame holds 4 ms at p95 over 200 patches, CPU plus GPU; a planted scheduler that runs every node on each frame fails, naming the frame and the nodes it ran > #854.a24082e8 #854.926cdce7 the task times, on a release build, five runs of 200 patches each changing one item of a 10,000-item board, each from its arrival to its settled frame on the CPU plus the GPU, naming the nodes that frame ran, and no frame runs every item's nodes
+AssertionError: node benchmarks/canvas.mjs patch-settled exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task patch-settled; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns patch.test.ts:68:54
+ ❯ patch.test.ts:85:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  patch.test.ts > #854.a24082e8 patch to settled frame holds 4 ms at p95 over 200 patches, CPU plus GPU; a planted scheduler that runs every node on each frame fails, naming the frame and the nodes it ran > #854.a24082e8 on the reference Mac each run's p95 over its 200 patches, CPU plus GPU, is within 4 ms (five runs after warm-up), and the lane's judge passes the task on those same five
+AssertionError: node benchmarks/canvas.mjs patch-settled exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task patch-settled; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns patch.test.ts:68:54
+ ❯ patch.test.ts:95:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  patch.test.ts > #854.a24082e8 patch to settled frame holds 4 ms at p95 over 200 patches, CPU plus GPU; a planted scheduler that runs every node on each frame fails, naming the frame and the nodes it ran > #854.a24082e8 a planted scheduler that runs every node on each frame runs every item's nodes after each one-item patch, and on the reference Mac the lane fails it past 4 ms, naming for each run its slowest frame and the nodes that frame ran
+AssertionError: node benchmarks/canvas.mjs patch-settled --planted runs_every_node exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task patch-settled; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ plantedRuns patch.test.ts:69:54
+ ❯ patch.test.ts:107:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  patch.test.ts > #854.a24082e8 patch to settled frame holds 4 ms at p95 over 200 patches, CPU plus GPU; a planted scheduler that runs every node on each frame fails, naming the frame and the nodes it ran > #854.a24082e8 the lane's judge fails a reading whose p95 is past 4 ms in all five runs, naming each run's slowest frame and the nodes it ran, and passes its twin within 4 ms
+AssertionError: canvas.mjs judge exits 0 on a canvas-patch-settled report; stderr: file://<checkout>/benchmarks/canvas.mjs:415
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://<checkout>/benchmarks/canvas.mjs:415:22)
+    at file://<checkout>/benchmarks/canvas.mjs:461:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:415:22
+ ❯ ../../../benchmarks/canvas.mjs:461:16
+ ❯ judged helpers.ts:122:128
+
+ ❯ patch.test.ts:121:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  release.test.ts > #854.926cdce7 every task's timings come from a release build, and a coefficient file or a perf reading taken from a debug build is refused, naming the profile > #854.926cdce7 the lane refuses each task's perf reading taken from a debug build (dev), naming the profile, and one naming no build; the same reading from a release build is judged and passes; and the cost model refuses a coefficient file from a debug build, naming the profile, while reading its release twin
+AssertionError: canvas.mjs judge exits 0 on a canvas-patch-settled report; stderr: file://<checkout>/benchmarks/canvas.mjs:415
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://<checkout>/benchmarks/canvas.mjs:415:22)
+    at file://<checkout>/benchmarks/canvas.mjs:461:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:415:22
+ ❯ ../../../benchmarks/canvas.mjs:461:16
+ ❯ judged helpers.ts:122:128
+
+ ❯ release.test.ts:38:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  replica.test.ts > #854.0393e70f a replica reaches its first settled frame in 300 ms from spawn; a planted replica that compiles its pipelines on the first frame fails, naming the pipelines > #854.0393e70f #854.926cdce7 the task spawns a release-built replica on a fixture document, five runs, each timed from spawn to its first settled frame, and lists the fixture's pipelines, none of them compiled on that first frame
+AssertionError: node benchmarks/canvas.mjs replica-cold-start exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task replica-cold-start; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns replica.test.ts:48:54
+ ❯ replica.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  replica.test.ts > #854.0393e70f a replica reaches its first settled frame in 300 ms from spawn; a planted replica that compiles its pipelines on the first frame fails, naming the pipelines > #854.0393e70f on the reference Mac every run reaches its first settled frame within 300 ms of spawn, and the lane's judge passes the task on those same runs
+AssertionError: node benchmarks/canvas.mjs replica-cold-start exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task replica-cold-start; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns replica.test.ts:48:54
+ ❯ replica.test.ts:62:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  replica.test.ts > #854.0393e70f a replica reaches its first settled frame in 300 ms from spawn; a planted replica that compiles its pipelines on the first frame fails, naming the pipelines > #854.0393e70f a planted replica that compiles its pipelines on the first frame lists them so, and on the reference Mac the lane fails it past 300 ms, naming the pipelines
+AssertionError: node benchmarks/canvas.mjs replica-cold-start --planted compiles_on_first_frame exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task replica-cold-start; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ plantedRuns replica.test.ts:49:54
+ ❯ replica.test.ts:73:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  replica.test.ts > #854.0393e70f a replica reaches its first settled frame in 300 ms from spawn; a planted replica that compiles its pipelines on the first frame fails, naming the pipelines > #854.0393e70f the lane's judge fails a reading past 300 ms in all five runs, naming the pipelines its first frames compiled, and passes its twin within 300 ms
+AssertionError: canvas.mjs judge exits 0 on a replica-cold-start report; stderr: file://<checkout>/benchmarks/canvas.mjs:415
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://<checkout>/benchmarks/canvas.mjs:415:22)
+    at file://<checkout>/benchmarks/canvas.mjs:461:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:415:22
+ ❯ ../../../benchmarks/canvas.mjs:461:16
+ ❯ judged helpers.ts:122:128
+
+ ❯ replica.test.ts:89:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  scene-read.test.ts > #854.3f8dbc12 deep_query's summary returns in 20 ms and under 2,000 tokens, and a 1,000-row page in 50 ms; a planted query that returns every row unpaged fails, naming its size > #854.3f8dbc12 #854.926cdce7 on a release build, the task reads the 10,000-item board's summary and one 1,000-row page with a cursor to the next, each reply counted by the tokenizer an agent adapter's facts pin, and the summary is under 2,000 tokens in every run
+AssertionError: node benchmarks/canvas.mjs scene-read exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task scene-read; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ scene-read.test.ts:51:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  scene-read.test.ts > #854.3f8dbc12 deep_query's summary returns in 20 ms and under 2,000 tokens, and a 1,000-row page in 50 ms; a planted query that returns every row unpaged fails, naming its size > #854.3f8dbc12 on the reference Mac the summary returns within 20 ms and the 1,000-row page within 50 ms in all five runs, and the lane's judge passes the task on those same runs
+AssertionError: node benchmarks/canvas.mjs scene-read exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task scene-read; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ shippedRuns scene-read.test.ts:45:54
+ ❯ scene-read.test.ts:72:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  scene-read.test.ts > #854.3f8dbc12 deep_query's summary returns in 20 ms and under 2,000 tokens, and a 1,000-row page in 50 ms; a planted query that returns every row unpaged fails, naming its size > #854.3f8dbc12 a planted query that returns every row unpaged answers the 1,000-row read with all 10,000 rows and no cursor, and the lane fails it on any machine, naming its size in rows and tokens
+AssertionError: node benchmarks/canvas.mjs scene-read --planted unpaged exits 0; stderr: file://<checkout>/benchmarks/canvas.mjs:460
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task scene-read; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz
+    at file://<checkout>/benchmarks/canvas.mjs:460:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:460:29
+ ❯ record helpers.ts:109:82
+    107|   const ms = performance.now() - began;
+    108|   expect(r.error, `${shown} ran: ${r.error?.message}`).toBeUndefined();
+    109|   expect(r.status, `${shown} exits 0; stderr: ${(r.stderr ?? '').slice…
+       |                                                                                  ^
+    110|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+    111|   let last: JsonValue = null;
+ ❯ plantedRuns scene-read.test.ts:46:54
+ ❯ scene-read.test.ts:86:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  scene-read.test.ts > #854.3f8dbc12 deep_query's summary returns in 20 ms and under 2,000 tokens, and a 1,000-row page in 50 ms; a planted query that returns every row unpaged fails, naming its size > #854.3f8dbc12 the lane's judge fails a reading whose summary is 2,000 tokens or more, naming the summary's size, and passes its twin under 2,000
+AssertionError: canvas.mjs judge exits 0 on a canvas-scene-read report; stderr: file://<checkout>/benchmarks/canvas.mjs:415
+  if (!limits) throw Error(`Unknown class ${cls}`);
+                     ^
+
+Error: Unknown class undefined
+    at workloads.judge (file://<checkout>/benchmarks/canvas.mjs:415:22)
+    at file://<checkout>/benchmarks/canvas.mjs:461:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ workloads.judge ../../../benchmarks/canvas.mjs:415:22
+ ❯ ../../../benchmarks/canvas.mjs:461:16
+ ❯ judged helpers.ts:122:128
+
+ ❯ scene-read.test.ts:100:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  21 failed (21)
+   Start at  07:37:09
+   Duration  3.02s (tests 82%, import 11%, transform 5%, worker 1%)
+
+    Isolate  6 workers spawned · ~92ms startup each (spawn + environment, per file)
+             at least ~459ms faster with isolate: false — reuses workers across files instead of one per file
+

@@ -58,6 +58,8 @@ export interface Root {
   wiki: string;
   /** The devices you paired, whose signatures answer for you (#34). */
   devices: string;
+  /** deep-confirm's key as the Secure Enclave wraps it, usable only by this Mac's enclave and only once you confirm (#880). */
+  confirmKey: string;
   /** Present while `deep restore` swaps a backup in, naming its folder: no hub starts until a restore finishes (#572). */
   restoring: string;
 }
@@ -77,6 +79,7 @@ export function rootOf(dir: string): Root {
     transcripts: join(at, 'transcripts.json'),
     wiki: join(at, 'wiki'),
     devices: join(at, 'devices.json'),
+    confirmKey: join(at, 'confirm.key'),
     restoring: join(at, 'restore.pending'),
   };
 }

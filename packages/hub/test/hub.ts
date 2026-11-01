@@ -1,9 +1,10 @@
 // A hub started on a temp home, and hook requests sent to it the way deep-hook sends them (#315's hub tests).
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { DatabaseSync } from 'node:sqlite';
 import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -106,4 +107,64 @@ export function mcp(home: string, cwd: string, unbound: boolean) {
     },
     close: () => child.stdin.end(),
   };
+}
+
+/** A line client of the hub's socket, as the CLI is. */
+export async function client(socket: string, token: string): Promise<(method: string, params: object) => Promise<Record<string, unknown>>> {
+  const s = net.connect(socket);
+  let buf = '';
+  const lines: Record<string, unknown>[] = [];
+  s.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
+  const until = async <T>(f: () => T | undefined): Promise<T> => { for (let i = 0; i < 600; i++) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); } throw Error('no answer from the hub'); };
+  await until(() => lines[0]);
+  s.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
+  await until(() => lines.find((l) => l.role));
+  let n = 0;
+  return async (method, params) => {
+    const id = `c${++n}`;
+    s.write(`${JSON.stringify({ v: 1, id, method, params })}\n`);
+    const reply = await until(() => lines.find((l) => l.id === id));
+    if (reply.error) throw Error(JSON.stringify(reply.error));
+    return reply.result as Record<string, unknown>;
+  };
+}
+
+/** A waiter as deep-hook's is: a cli connection that asks `session.wait` and resolves with what the hub hands it. */
+export function waiter(root: string, session: string, cwd: string): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(join(root, 'hub.sock'));
+    let got = '';
+    let said = 0;
+    sock.setEncoding('utf8');
+    sock.on('data', (chunk: string) => {
+      got += chunk;
+      const lines = got.split('\n');
+      while (lines.length - 1 > said) {
+        const line = JSON.parse(lines[said]!) as Record<string, unknown>;
+        said++;
+        if ('hello' in line) sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token: readFileSync(join(root, 'control.token'), 'utf8').trim() })}\n`);
+        else if (line.role === 'cli') sock.write(`${JSON.stringify({ v: 1, id: 'w1', method: 'session.wait', params: { session, cwd, since: Date.now() } })}\n`);
+        else if (line.id === 'w1') { sock.destroy(); if ('error' in line) reject(Error(JSON.stringify(line.error))); else resolve(line.result as Record<string, unknown>); }
+      }
+    });
+    sock.on('error', reject);
+  });
+}
+
+/** Polls the record until the session has `n` events of `kind`, up to 10 s; the count then. */
+export function recorded(root: string, session: string, kind: string, n: number): Promise<number> {
+  const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+  const count = () => (db.prepare('SELECT count(*) AS n FROM events WHERE kind = ? AND session_id = ?').get(kind, session) as { n: number }).n;
+  return (async () => { try { for (const until = Date.now() + 10_000; Date.now() < until && count() < n; await new Promise((r) => setTimeout(r, 50))); return count(); } finally { db.close(); } })();
+}
+
+/** A Claude Code session `id` working in `home`/work, its transcript where Claude Code keeps it, empty. */
+export function session(home: string, id: string) {
+  const work = join(home, 'work');
+  const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
+  mkdirSync(work, { recursive: true });
+  mkdirSync(projects, { recursive: true });
+  const transcript = join(projects, `${id}.jsonl`);
+  writeFileSync(transcript, '');
+  return { work, transcript, payload: (event: string, extra: Record<string, unknown>) => ({ session_id: id, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra }) };
 }
