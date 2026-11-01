@@ -63,7 +63,7 @@ const ASKS_CONFIG = { asks: {
 } };
 
 /** Runs `body` with `prepare`'s files in a temporary home, against a hub started on it; always stops it and removes the home. */
-export async function withHub(prepare: (home: string, root: string) => void, body: (hub: Hub) => Promise<void>): Promise<void> {
+export async function withHub(prepare: (home: string, root: string) => void, body: (hub: Hub) => Promise<void>, extra: Record<string, string> = {}): Promise<void> {
   const home = realpathSync(mkdtempSync('/tmp/hub-85-'));
   const root = join(home, '.deepbuild');
   mkdirSync(root, { recursive: true });
@@ -73,7 +73,7 @@ export async function withHub(prepare: (home: string, root: string) => void, bod
   let child: ChildProcess | undefined;
   let output = '';
   const start = async () => {
-    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, ...extra };
     delete env.HTTPS_PROXY; delete env.https_proxy; delete env.ANTHROPIC_BASE_URL;
     const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     child = hub;
@@ -343,4 +343,168 @@ export function filesHolding(dir: string, needle: string): string[] {
   };
   walk(dir);
   return found;
+}
+
+// ---- Additions for criteria 13 and 15 (cutoff.test.ts, held.test.ts; README: The cut-off turn, The held FAIL). Nothing
+// above changes: these only add. A hook line read with its reply, tool calls as Claude Code's hooks and transcript
+// report them, a GitHub-shaped forge that takes `gh pr create`'s POST (the one boundary faked there), the planted
+// verdict (`test.verdict`, as tests/acceptance/83 plants it), and the stop causes the two criteria name.
+
+/** Everything the hub answers one hook line with: the ack, and the hook's reply (hook.reply@2: exit, stdout, stderr) once any hold ends. */
+export interface HookReply { ack: Obj | undefined; reply: Obj | undefined; lines: Obj[]; ms: number }
+function sendLineAll(socket: string, line: string): Promise<Obj[]> {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(socket);
+    let buf = '';
+    let helloed = false;
+    const lines: Obj[] = [];
+    sock.on('data', (d) => {
+      buf += d;
+      for (let i; (i = buf.indexOf('\n')) >= 0; buf = buf.slice(i + 1)) {
+        const l = JSON.parse(buf.slice(0, i)) as Obj;
+        if (!helloed) { helloed = true; sock.write(line); continue; }
+        lines.push(l);
+      }
+    });
+    sock.on('close', () => resolve(lines));
+    sock.on('error', reject);
+  });
+}
+/** One hook request stamped `at`, as deep-hook stamps it, read to the end: its ack and its reply. */
+export async function hookReply(hub: Hub, s: Session, event: string, extra: Obj, at: number = Date.now()): Promise<HookReply> {
+  const line = { v: 1, agent: 'claude-code', event, seq: String(BigInt(at) * 1_000_000n), id: ulidAt(at), pid: process.pid, ppid: s.agent, matched: [],
+    payload: { session_id: s.id, cwd: s.cwd, transcript_path: s.transcript, hook_event_name: event, ...extra } };
+  const started = Date.now();
+  const lines = await sendLineAll(hub.socket, `${JSON.stringify(line)}\n`);
+  const ack = lines.find((l) => 'ack' in l);
+  if (!ack) throw Error(`the hub didn't acknowledge ${event}: ${JSON.stringify(lines)}`);
+  return { ack, reply: lines.find((l) => 'exit' in l), lines, ms: Date.now() - started };
+}
+/** Whether a PreToolUse reply ends the call: exit 2 (its words on stderr, as deep-hook's own denials), or Claude Code's `decision: block` / `permissionDecision: deny` on stdout. */
+export function denies(reply: Obj | undefined): boolean {
+  if (!reply) return false;
+  if (Number(reply.exit) === 2) return true;
+  try {
+    const out = JSON.parse(String(reply.stdout ?? '')) as Obj;
+    return out.decision === 'block' || out.hookSpecificOutput?.permissionDecision === 'deny';
+  } catch { return false; }
+}
+/** The words a PreToolUse reply carries: stderr, a block's reason, a deny's reason, any context, and the chat's line. */
+export function replyWords(reply: Obj | undefined): string {
+  if (!reply) return '';
+  let out: Obj = {};
+  try { out = JSON.parse(String(reply.stdout ?? '')) as Obj; } catch { return [reply.stderr, reply.stdout].filter(Boolean).map(String).join('\n'); }
+  return [reply.stderr, out.reason, out.hookSpecificOutput?.permissionDecisionReason, out.hookSpecificOutput?.additionalContext, out.systemMessage].filter(Boolean).map(String).join('\n');
+}
+
+let calls = 0;
+export const callId = () => `toolu_${Date.now().toString(36)}_${++calls}_${randomBytes(4).toString('hex')}`;
+/** The agent's tool_use entry, as Claude Code's transcript holds it before the call runs. */
+export function toolUseEntry(s: Session, call: string, tool: string, input: Obj): void {
+  appendFileSync(s.transcript, `${JSON.stringify({ type: 'assistant', uuid: randomUUID(), sessionId: s.id, message: { model: 'claude-haiku-5-5', id: `msg_${call.slice(-8)}`, type: 'message', role: 'assistant', content: [{ type: 'tool_use', id: call, name: tool, input }], stop_reason: 'tool_use', usage: { input_tokens: 2, output_tokens: 10 } } })}\n`);
+}
+/** The call's tool_result entry, as the transcript holds it once the call ended. */
+export function toolResultEntry(s: Session, call: string, response: Obj): void {
+  appendFileSync(s.transcript, `${JSON.stringify({ type: 'user', uuid: randomUUID(), sessionId: s.id, promptId: `p${s.prompt}`, message: { role: 'user', content: [{ tool_use_id: call, type: 'tool_result', content: JSON.stringify(response) }] }, toolUseResult: response })}\n`);
+}
+/** The agent's words, as the transcript holds them. */
+export function assistantSays(s: Session, text: string): void {
+  appendFileSync(s.transcript, `${JSON.stringify({ type: 'assistant', uuid: randomUUID(), sessionId: s.id, message: { model: 'claude-haiku-5-5', id: `msg_${randomBytes(4).toString('hex')}`, type: 'message', role: 'assistant', content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 2, output_tokens: 10 } } })}\n`);
+}
+/** A built-in tool call that ran to its end: tool_use, PreToolUse, tool_result, PostToolUse. Returns the call's ID and the PreToolUse reply. */
+export async function completedCall(hub: Hub, s: Session, tool: string, input: Obj, response: Obj): Promise<{ call: string; before: HookReply }> {
+  const call = callId();
+  toolUseEntry(s, call, tool, input);
+  const before = await hookReply(hub, s, 'PreToolUse', { tool_name: tool, tool_input: input, tool_use_id: call });
+  toolResultEntry(s, call, response);
+  await hook(hub, s, 'PostToolUse', { tool_name: tool, tool_input: input, tool_use_id: call, tool_response: response });
+  return { call, before };
+}
+/** A call that started: tool_use and PreToolUse only; what follows is the test's. */
+export async function startedCall(hub: Hub, s: Session, tool: string, input: Obj): Promise<{ call: string; before: HookReply }> {
+  const call = callId();
+  toolUseEntry(s, call, tool, input);
+  return { call, before: await hookReply(hub, s, 'PreToolUse', { tool_name: tool, tool_input: input, tool_use_id: call }) };
+}
+/** The turn the waiter's wake starts, as Claude Code starts it: a UserPromptSubmit whose prompt is the wake's text, not a prompt you typed. */
+export async function wakeTurn(hub: Hub, s: Session, text: string, at: number = Date.now()): Promise<string> {
+  const promptId = `p${++s.prompt}`;
+  appendFileSync(s.transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, sessionId: s.id, isMeta: true, message: { role: 'user', content: text } })}\n`);
+  await hook(hub, s, 'UserPromptSubmit', { prompt: text, prompt_id: promptId }, at);
+  return promptId;
+}
+/** A Stop of a turn, as Claude Code reports it, read with its reply (a hold ends in a block or lets it through). */
+export const stopTurn = (hub: Hub, s: Session, promptId: string, lastMessage: string, at: number = Date.now()) => hookReply(hub, s, 'Stop', { prompt_id: promptId, stop_hook_active: false, last_assistant_message: lastMessage }, at);
+/** The stop Claude Code reports for a revoked sign-in: StopFailure with authentication_failed. */
+export const signInStop = (hub: Hub, s: Session, promptId: string, at: number = Date.now()) => hook(hub, s, 'StopFailure', { error: 'authentication_failed', prompt_id: promptId }, at);
+/** The newest claim the record holds for a session, as `claim:<id>`, or undefined. */
+export const claimOf = (hub: Hub, s: Session): string | undefined => { const e = events(hub, 'claim.made', s.id).at(-1); return e ? `claim:${e.id}` : undefined; };
+/** What a task unblocks: its own `unblocks`, and those of every ask recorded superseded by it (joined it). */
+export function unblocksOf(hub: Hub, task: string): string[] {
+  const bare = stripHandle(task);
+  const joined = events(hub, 'ask.superseded').filter((e) => stripHandle(e.data.by) === bare).map((e) => stripHandle(e.subject));
+  const out = new Set<string>();
+  for (const id of [bare, ...joined]) for (const u of (events(hub, 'ask.created').find((e) => e.id === id)?.data.unblocks ?? []) as unknown[]) out.add(String(u));
+  return [...out];
+}
+/** The check a task's PASS closes it on, as the core raised it. */
+export const provesOf = (hub: Hub, task: string): string | undefined => { const p = events(hub, 'ask.created').find((e) => e.id === stripHandle(task))?.data.proves; return typeof p === 'string' ? p : undefined; };
+/** The sessions projection's row for one session, as `sessions.read` gives it. */
+export const rowOf = async (hub: Hub, s: Session): Promise<Obj | undefined> => (await sessionRows(hub)).find((r) => r.id === s.id || r.session === s.id);
+
+/** A planted verdict on a session's claim, by `test.verdict` (the hub runs with DEEP_HUB_TEST_VERDICT=1): the record gets the verdict.made, and a claim.sent_back for a FAIL's round. */
+export interface PlantedVerdict { session: string; claim: string; outcome: 'PASS' | 'FAIL'; round?: number; requirements: { req: string; outcome: string; check: string; smallest?: string | null }[]; ran?: { check: string; outcome: 'passed' | 'failed' }[] }
+export async function plantVerdict(hub: Hub, p: PlantedVerdict): Promise<string> {
+  let reply: Obj;
+  try { reply = await rpc(hub, 'test.verdict', p); } catch (error) { throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1: ${(error as Error).message}`); }
+  return String(reply.verdict);
+}
+export const REQ = 'req:01K74G0A1B2C3D4E5F6G7H8J9K#R1';
+
+// ---- The forge, a GitHub-shaped API: what `gh pr create` POSTs to and the hub may read PRs from. The one boundary faked
+// in cutoff.test.ts. Every PR it holds came from one POST.
+export interface ForgePull { number: number; title: string; body: string; html_url: string; state: 'open' }
+export interface Forge { url: string; owner: string; repo: string; pulls: ForgePull[]; requests: { method: string; path: string; at: number }[]; close: () => Promise<void> }
+export function startForge(owner = 'acme', repo = 'cart'): Promise<Forge> {
+  return new Promise((resolve, reject) => {
+    const forge: Forge = { url: '', owner, repo, pulls: [], requests: [], close: async () => undefined };
+    const json = (res: import('node:http').ServerResponse, status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (d) => { body += d; });
+      req.on('end', () => {
+        const url = new URL(req.url ?? '/', 'http://forge');
+        forge.requests.push({ method: req.method ?? '', path: url.pathname, at: Date.now() });
+        const base = `/repos/${owner}/${repo}`;
+        if (!url.pathname.startsWith(base)) return json(res, 404, { message: 'Not Found' });
+        const rest = url.pathname.slice(base.length);
+        if (rest === '/pulls' && req.method === 'POST') {
+          let input: Obj = {};
+          try { input = JSON.parse(body) as Obj; } catch { /* an empty body opens an untitled PR */ }
+          const number = forge.pulls.length + 1;
+          const pull: ForgePull = { number, title: String(input.title ?? ''), body: String(input.body ?? ''), html_url: `https://github.com/${owner}/${repo}/pull/${number}`, state: 'open' };
+          forge.pulls.push(pull);
+          return json(res, 201, pull);
+        }
+        if (rest === '/pulls') return json(res, 200, forge.pulls);
+        const m = /^\/pulls\/(\d+)$/.exec(rest);
+        if (m) { const p = forge.pulls.find((x) => x.number === Number(m[1])); return p ? json(res, 200, p) : json(res, 404, { message: 'Not Found' }); }
+        return json(res, 404, { message: 'Not Found' });
+      });
+    });
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      forge.url = `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`;
+      forge.close = () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()); });
+      resolve(forge);
+    });
+  });
+}
+/** What `gh pr create --title … --body …` does: one POST to the forge's pulls, answered with the PR's URL as `gh` prints it. */
+export async function ghPrCreate(forge: Forge, command: string): Promise<{ stdout: string; stderr: string; interrupted: boolean; isImage: boolean }> {
+  const title = /--title\s+"([^"]*)"/.exec(command)?.[1] ?? '';
+  const body = /--body\s+"([^"]*)"/.exec(command)?.[1] ?? '';
+  const res = await fetch(`${forge.url}/repos/${forge.owner}/${forge.repo}/pulls`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, body, head: 'fix-cart-total', base: 'main' }) });
+  const pull = await res.json() as ForgePull;
+  return { stdout: `${pull.html_url}\n`, stderr: '', interrupted: false, isImage: false };
 }

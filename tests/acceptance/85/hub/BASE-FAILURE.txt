@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-acc593499bc1d6118
+ RUN  v5.0.5 <worktree>
 
  ❯ tests/acceptance/85/hub/thread.test.ts (5 tests | 5 failed) 3022ms
    ❯ a chat-app task on the real hub (5)
@@ -265,4 +265,44 @@ AssertionError: raised: expected { refused: true, …(1) } to match object { ref
       Tests  12 failed (12)
    Start at  19:30:21
    Duration  122.89s (tests 100%)
+
+
+================================================================================================================
+== Criteria 13 and 15 (cutoff.test.ts, held.test.ts) on the base c69c9acf: criteria 1 to 12 implemented, nothing of
+== 13 to 15. Run on 2026-11-01 on Linux (20 cores, 1-minute load about 4), Node 24.22.0, Vitest 5.0.5:
+==
+==   node node_modules/vitest/vitest.mjs run tests/acceptance/85/hub/cutoff.test.ts tests/acceptance/85/hub/held.test.ts --no-file-parallelism --testTimeout=240000 --reporter=verbose
+==   node node_modules/typescript/bin/tsc -p tests/acceptance/85/hub/tsconfig.json   (no errors on the base)
+==
+== Trimmed to each failure's reason. IDs vary by run. No local path appears in what is kept.
+================================================================================================================
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Duration  23.69s (tests 100%)
+
+FAIL  cutoff.test.ts  #85.d3d3e12b  continues with the gh pr create call named as outcome unknown; the forge receives one PR; the
+                                    identical call is denied at PreToolUse
+AssertionError: the continue names the gh pr create call of the cut-off turn, which started with no recorded end: "DeepBuild: this
+turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.":
+expected 'DeepBuild: this turn stopped on a dro…' to contain 'gh pr create'
+  (The base lets the first gh pr create through, the forge gets PR #1, the drop is continued once and the waiter wakes the
+  session: with the base's continue text, which names no call. Had the scenario gone on, the identical call's reply on the
+  base is the empty allow, so the forge would hold two PRs.)
+
+FAIL  cutoff.test.ts  #85.d3d3e12b  fails on a continue that omits the call, naming it, and on one that lets the identical call run,
+                                    naming the second PR
+AssertionError: the same, on the real program's run that must pass before the plants' (the plants' runs never start on the base)
+
+FAIL  held.test.ts    #85.f2490b59  with the sign-in task open on five sessions and a journey FAIL landing on one, no waiter fires;
+                                    after /login the FAIL arrives in the resumed turn
+AssertionError: and the FAIL that landed while the task was open (verdict verdict:… on claim claim:…, "the checkout journey fails at
+step 3: the cart total reads 0") arrives in the resumed turn: "DeepBuild: the task that blocked this session, ask:…, closed.
+Continue where you left off.": expected false to be true
+  (The base passes the first half: the five stops are yours, one task, the row says sign_in_required, the FAIL lands as a
+  claim.sent_back, no waiter fires in 8 s, nothing continues, the task stays open; the PASS closes it and all five resume within
+  30 s, and the waiter wakes the first session. Its text is the resume alone: the FAIL never reaches the session.)
+
+FAIL  held.test.ts    #85.f2490b59  fails on a waiter that wakes the stopped session, naming the delivery
+AssertionError: the same, on the real program's run that must pass before the plant's
 
