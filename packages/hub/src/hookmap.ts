@@ -3,19 +3,13 @@
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
+import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
 import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
-/**
- * The agent names a hook request may carry, to the adapter that maps them. Cursor's CLI and Grok run the hooks in
- * Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts read their
- * payloads, but their events are recorded under their own agent, never as Claude Code's.
- */
-const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude', pi: 'pi' };
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   pi: { session_start: 'SessionStart', session_shutdown: 'SessionEnd', input: 'UserPromptSubmit', tool_call: 'PreToolUse', tool_result: 'PostToolUse', agent_before_settle: 'Stop' },

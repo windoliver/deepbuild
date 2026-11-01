@@ -1,0 +1,100 @@
+Acceptance tests for #85 on the base 5a6d09a4 (origin/main: #318's, #319's and #320's asks core, #25's routes, agent.stop@4,
+no implementation of #85), run on 2026-10-28 on an Apple silicon Mac (8 cores, 1-minute load far over its core count from
+other work), Node 24.22.0, Vitest 5.0.5:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/85 --no-file-parallelism --reporter=verbose --exclude budgets.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/85 --no-file-parallelism --reporter=verbose budgets.test.ts
+  node node_modules/typescript/bin/tsc -p tests/acceptance/85/tsconfig.json
+
+Trimmed to each failure's reason. Stop IDs vary by run. No local path appears in what is kept.
+
+
+== The base, behaviour tests (8.2 s)
+
+ Test Files  9 failed (9)
+      Tests  20 failed (20)
+
+FAIL  signin.test.ts       #85.828d7241  AssertionError: a revoked sign-in, five sessions stopped: the 5 sessions stopped by one
+                                         cause share one task, open in your inbox: expected [] to have a length of 1 but got +0
+FAIL  shared.test.ts       #85.0fa0b6d4  AssertionError: a VPN you must reconnect, five sessions stopped: the 5 sessions stopped by
+                                         one cause share one task, open in your inbox: expected [] to have a length of 1 but got +0
+FAIL  shared.test.ts       #85.243cc63a  AssertionError: a spend limit, five sessions stopped: the 5 sessions stopped by one cause
+                                         share one task, open in your inbox: expected [] to have a length of 1 but got +0
+FAIL  transient.test.ts    #85.0840911e  AssertionError: a dropped connection (stop …) resumes once by itself: expected [] to deeply
+                                         equal [ [ 'transient', …(1) ] ]
+FAIL  transient.test.ts    #85.9732774d  AssertionError: a context overflow (stop …) compacts once and re-sends the turn: expected []
+                                         to deeply equal [ [ 'context_overflow', …(1) ] ]
+FAIL  transient.test.ts    #85.348d7b85  AssertionError: the control stop …, with nothing after it, continues once: expected [] to
+                                         deeply equal [ '…' ]
+FAIL  transient.test.ts    (Scope, Codex) AssertionError: the Claude Code session's dropped connection (stop …) continues once:
+                                         expected [] to deeply equal [ '…' ]
+FAIL  missing.test.ts      #85.eb30d189  AssertionError: a revoked sign-in: the 1 sessions stopped by one cause share one task, open
+                                         in your inbox: expected [] to have a length of 1 but got +0
+FAIL  refusal.test.ts      #85.65bcfca8  AssertionError: the dropped connection beside it (stop …) continues once: expected [] to
+                                         deeply equal [ '…' ]
+  (The adapter half passes on the base: Claude Code's shipped adapter maps the Stop whose last message says "usage limit
+  reached" to cause unknown, outcome finished, as #312 holds it to.)
+FAIL  plan-window.test.ts  #85.6ba34710  AssertionError: a plan window spent: the 5 sessions stopped by one cause share one task, open
+                                         in your inbox: expected [] to have a length of 1 but got +0
+FAIL  thread.test.ts       #85.e12ca936  AssertionError: a step you take in a chat app, with the thread its check reads is raised, not
+                                         refused: expected 'AskRefused: ask.created@3 refuses the ask at /data/thread: …' to be undefined
+FAIL  late-stop.test.ts    #85.d96aabec  AssertionError: 9 hours late: session L's row shows its stop's cause: expected undefined to
+                                         be 'timed_out'
+  (Expected: the base continues nothing, so the first assertion the base fails is the row's cause; the 2-minute-old stop's
+  continue, asserted next, would fail too.)
+FAIL  plants.test.ts       #85.828d7241  the real program's run fails first: … share one task, open in your inbox: expected [] to have a length of 1
+FAIL  plants.test.ts       #85.0fa0b6d4  the same
+FAIL  plants.test.ts       #85.243cc63a  the same
+FAIL  plants.test.ts       #85.0840911e  the real program's run fails first: a dropped connection (stop …) resumes once by itself
+FAIL  plants.test.ts       #85.65bcfca8  the real program's run fails first: the dropped connection beside it (stop …) continues once
+FAIL  plants.test.ts       #85.d96aabec  the real program's run fails first: 9 hours late: session L's row shows its stop's cause
+FAIL  plants.test.ts       #85.348d7b85  the real program's run fails first: the control stop …, with nothing after it, continues once
+FAIL  plants.test.ts       #85.e12ca936  the real program's run fails first: a step you take in a chat app … is raised, not refused
+  (Each plant test runs its scenario on the real program before the plant, so on the base it fails there, at the same
+  assertion as the criterion's own test.)
+
+
+== The base, budgets.test.ts (11.2 s)
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+
+FAIL  budgets.test.ts  #85.051a8df3 (lane)  AssertionError: some lane must run tests/acceptance/85/budgets.test.ts with
+                                            --no-file-parallelism (it times the asks core on the real clock); the lanes' Vitest
+                                            commands are: unit: run --exclude …; unit: run --no-file-parallelism tests/acceptance/20/ …;
+                                            verdict proofs: …: expected [] to not deeply equal []
+SKIP  budgets.test.ts  #85.051a8df3 (measurement)  INCONCLUSIVE (heavy contention: 1-minute load 492.6 on 8 cores): this checkout:
+                                            task closed none, five resumed none; this checkout: no one task for the five stopped
+                                            sessions within 10 s of their stops (open unblock tasks: 0)
+  (On an idle reference Mac the measurement fails instead, with that same line as its error: the base raises no task. The
+  merge base here is this checkout's own code, so no second build was made.)
+
+
+== tsc -p tests/acceptance/85/tsconfig.json: 6 errors in 3 files, each the surface the README defines and the base lacks
+
+  TS2353 Object literal may only specify known properties, and 'threads' does not exist in type 'AsksOptions'   helpers.ts (1)
+  TS2339 Property 'missing' does not exist on type 'Card'                                                       scenarios.ts (3), missing.test.ts (2)
+
+
+== Planted wrong programs (plants.ts, run by plants.test.ts)
+
+No sample fix was built for this suite (the surface spans the asks core, a record projection and two schemas, more than a
+scratch fix in a blind job's time), so the plants were desk-checked against the scenarios rather than run on a passing
+program. Each plant acts after the real core's tick, appending what its wrong rule would append through the record:
+
+  #85.828d7241, #85.0fa0b6d4, #85.243cc63a  one task per stopped session   raises a second unblock task for each stopped session you
+                                                                            own a block of: the inbox then holds more than one open
+                                                                            task, failing "the 5 sessions stopped by one cause share
+                                                                            one task, open in your inbox"
+  #85.0840911e  continues twice                 continues a transient stop though an earlier stop since your last prompt was
+                                                already continued: fails "the continued turn dropped again (stop …): no second
+                                                automatic continue; it resumes once"
+  #85.65bcfca8  continues after a refusal        appends a continue from every refusal: fails "the refusal (stop …) gets no
+                                                automatic continue"
+  #85.d96aabec  keyed only on the cause          continues every transient stop whatever its age, what came after it, or what was
+                                                continued before: fails "stop …, 9 hours old by its stamp when it reached the hub,
+                                                starts no automatic continue"
+  #85.348d7b85  continues after a typed prompt   holds the age, newest-stop and once rules but not the typed one: fails "stop …,
+                                                followed by a prompt you typed, starts no automatic continue"
+  #85.e12ca936  closes on any bot reply          closes the thread task (ask.moot) on any message after your post, matching or
+                                                not: fails "the bot replied wrong: task ask:… stays open"

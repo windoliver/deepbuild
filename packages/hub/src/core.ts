@@ -204,7 +204,11 @@ const AUTOMATIC_QUEUED = /<task-notification>|^\s*<(?:cross-session-message|agen
  * its app showed a wake working.
  */
 interface Routes {
-  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number;
+  /**
+   * `ended`: when a StopFailure last ended the newest turn (wall ms); the session is idle from then until a hook
+   * shows work. `prompt`: the newest prompt's id, the turn a StopFailure must name to end it.
+   */
+  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined;
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
   /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
@@ -359,6 +363,10 @@ export class Core {
   private readonly settingsReadings: string[] = [];
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
+  /** The log position of the last session.continued the hub routed (#85). */
+  private continuedPos = 0;
+  /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
+  private continuing: Promise<void> = Promise.resolve();
   /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
   private readonly settling = new Map<string, Set<() => void>>();
   /** Each session's routes back into it, by session ID. */
@@ -472,13 +480,26 @@ export class Core {
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
+    // The continues the hub carried before this start are those recorded before it; opening the core below settles
+    // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
+    // continue that records is routed right after, never skipped as already carried (#85).
+    this.continuedPos = Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind = 'session.continued'`)) as { pos: number }[])[0]?.pos ?? 0);
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir });
+    await this.continues();
     this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
-    // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
-    const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
-    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => { if (await due()) await asks.tick(); });
+    // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
+    // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
+    // so a backfill never feeds it. The hub takes each continue's route every beat, since an answer records them too.
+    const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
+    let ticked = await landed();
+    const due = async (): Promise<boolean> => {
+      const pos = await landed();
+      if (pos > ticked) { ticked = pos; return true; }
+      return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
+    };
+    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => { if (await due()) await asks.tick(); await this.continues(); });
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -1646,7 +1667,7 @@ export class Core {
   /** What a session has shown of the routes back into it since it last started, its holds, waiter and continuations. */
   private routesOf(session: string, cwd = ''): Routes {
     let r = this.routes.get(session);
-    if (!r) this.routes.set(session, r = { cwd, shown: new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] });
+    if (!r) this.routes.set(session, r = { cwd, shown: new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] });
     return r;
   }
   /**
@@ -1659,9 +1680,12 @@ export class Core {
     if (meta.event === 'SessionStart') {
       // What a session has shown resets only when it starts again.
       const before = this.options.plant === 'routes-kept-across-sessions' ? [...this.routes.values()].reverse().find((r) => r.cwd === meta.cwd) : undefined;
-      const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] };
+      const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] };
       const old = this.routes.get(meta.session);
       if (old?.waiter) fresh.waiter = old.waiter;
+      // A continue parked for the next prompt goes with the first prompt after a resume (#85); a clear or a
+      // compaction starts a new session ID, and the cleared one's continues end with it.
+      if (old) fresh.later = old.later;
       if (old?.places) fresh.places = true;
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
@@ -1677,13 +1701,22 @@ export class Core {
     if (meta.event === 'SessionEnd') {
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
+      // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
+      // it as the folder's last session.
+      if (r.later.length) this.routesOf(meta.session).later = r.later;
       // A call running as its session quit returns to nobody: its answer waits for the session's resume.
       for (const [ask, waiting] of this.askWaits) if (waiting === meta.session) this.stopAskWait(ask);
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
       for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted, this.onScreen]) map.delete(meta.session);
+    } else if (meta.event === 'StopFailure') {
+      // A turn that ends on an API error ends like a Stop, and starts no waiter of its own: the one its session's
+      // earlier stop started still waits, and may wake the idle session (#85). Only the newest turn's: a prompt you
+      // queued may start before the failed turn's hook is stamped, and one that names no turn ends none.
+      if (!meta.fields?.agent_id && meta.fields?.prompt_id !== undefined && meta.fields.prompt_id === r.prompt) r.ended = Math.max(r.ended, ulidTime(meta.id));
     } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart') r.busy = Math.max(r.busy, ulidTime(meta.id));
+    if (meta.event === 'UserPromptSubmit') r.prompt = meta.fields?.prompt_id;
   }
   /** Claude Code's cap on stop-hook continuations in one turn, from its facts. */
   private cap(): number {
@@ -1818,14 +1851,14 @@ export class Core {
   /**
    * Hands what waits for an idle session to its waiter, which exits 2 with it and so wakes the session. Claude Code
    * starts the waiter at a stop, so the session is idle while no stop of it is held (the hold takes the answer) and no
-   * hook started since shows a turn running; never past the turn's cap (the next prompt does), or once its app has
-   * shown it doesn't wake.
+   * hook started since the waiter, or since a StopFailure ended a later turn, shows a turn running; never past the
+   * turn's cap (the next prompt does), or once its app has shown it doesn't wake.
    */
   private offer(session: string): void {
     const r = this.routes.get(session);
     if (!r) return;
     if (r.places) return void this.queue(() => this.placeOrRefuse(session)).catch(() => undefined);
-    const idle = () => r.waiter !== undefined && !r.holding && r.busy < r.waiter.since;
+    const idle = () => r.waiter !== undefined && !r.holding && r.busy < Math.max(r.waiter.since, r.ended);
     if (!r.covered || !r.shown.has('waiter') || r.capped || r.wakes === false || !idle()) return;
     void this.queue(async () => {
       const waiter = r.waiter;
@@ -1864,6 +1897,44 @@ export class Core {
       const at = Date.now();
       for (const row of rows) this.handed.set(row.id, { session, at, via: 'wake', timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
     }).catch(() => undefined);
+  }
+  /** The continues the asks core recorded since the hub last read them (#85): each takes a route back into its session. */
+  private continues(): Promise<void> {
+    return (this.continuing = this.continuing.then(() => this.readContinues()).catch(() => undefined));
+  }
+  private async readContinues(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT log_pos, session_id, data FROM events WHERE kind = 'session.continued' AND log_pos > ${this.continuedPos} ORDER BY log_pos`)) as { log_pos: number; session_id: string | null; data: string | Obj }[];
+    for (const row of rows) {
+      this.continuedPos = row.log_pos;
+      if (!row.session_id) continue;
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      await this.continueSession(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null);
+    }
+  }
+  /**
+   * One automatic continue of a stopped session (#85), by #25's routes: a stop of the session held now is sent back
+   * with it; else its idle waiter wakes the session with it; else it goes with the session's next prompt, and the
+   * record says so. The core decided it from the stop's structure; the hub only carries it.
+   */
+  private async continueSession(session: string, because: string, task: string | null): Promise<void> {
+    const text = because === 'task_closed' ? `DeepBuild: the task that blocked this session, ${task ?? ''}, closed. Continue where you left off.`
+      : because === 'context_overflow' ? 'DeepBuild: this turn overflowed the context. Compact, then continue where you left off; this is its one automatic re-send.'
+        : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
+    const r = this.routesOf(session);
+    if (r.holding) {
+      r.sendBacks.push(text);
+      for (const wake of this.waiting.get(session) ?? []) wake();
+      return;
+    }
+    const waiter = r.waiter;
+    if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < Math.max(waiter.since, r.ended)) {
+      r.waiter = undefined;
+      waiter.give({ session, text });
+      return;
+    }
+    r.later.push(text);
+    const agent = this.live.get(session)?.agent ?? this.sessions.get(session)?.agent ?? 'claude-code';
+    await this.appendReading(session, agent, `DeepBuild continues this session (${because}${task ? `, task ${task}` : ''}), but no route into it is open now: the continue goes with its next prompt.`).catch(() => undefined);
   }
   /**
    * An answer handed to a route that no turn has shown: the transcript is read for it, and with none it reads stalled
@@ -2051,7 +2122,7 @@ export class Core {
     const key = subjectKey({ kind: 'authority', subject: about.subject, options } as unknown as Parameters<typeof subjectKey>[0], '');
     const answer = await this.precheck({
       ask: 'ask:0', kind: 'authority', options, plan: null, words: [], changed: null, folded: [], undo: false, cost_usd: null, suggested: null, conflict: [],
-      needs_person: [], budget: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
+      needs_person: [], budget: null, missing: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
     });
     return answer !== undefined && !answer.also?.length;
   }
@@ -2211,6 +2282,8 @@ export class Core {
         const answers = leaves ? undefined : await this.deliver(waiting, 'next_prompt', { session: meta.session, id: meta.id });
         // A verdict that landed after the stop's reply goes with the next prompt (#83).
         const landed = await this.landedLine(meta.session);
+        // A continue the core recorded since the timer last read them goes with this prompt, not the one after (#85).
+        await this.continues();
         // Notes this prompt's hook recorded go as its context, once; a prompt typed mid-turn is acknowledged in its reply (#340).
         const notes = this.carried.get(meta.session);
         this.carried.delete(meta.session);
@@ -2337,6 +2410,11 @@ export class Core {
     const polls = this.options.plant === 'stop-hold-polls';
     const held = Date.now();
     while (!this.stopping && Date.now() < until && !this.abandoned.has(meta.id) && await open()) {
+      // A continue the core recorded while the stop waited (#85): sent back with it.
+      if (r.sendBacks.length) {
+        this.askingSoon();
+        return r.sendBacks.shift();
+      }
       if (this.releases) {
         if ((await this.queue(() => this.waitingFor(session))).length) return undefined;
       } else {
@@ -3241,7 +3319,8 @@ export class Core {
 
   /**
    * asks/:id/answer, from the app or `deep inbox answer`: once the trusted path allows it, the asks core records it
-   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither saves none.
+   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
+   * (#85), saves none.
    */
   private async answer(params: Obj, context: CallContext): Promise<Obj> {
     const { ask: handle, device: _device, signature: _signature, ...input } = params;
