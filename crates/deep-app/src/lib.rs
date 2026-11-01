@@ -13,12 +13,19 @@ pub mod arming;
 pub mod canvas;
 pub mod card;
 pub mod cells;
+pub mod chrome;
+pub mod commands;
 pub mod confirm;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
 pub mod kinds;
 pub mod notify;
+#[cfg(feature = "panel-check")]
+pub mod panel_check;
+#[cfg(feature = "panel-check")]
+pub mod panel_keys;
+pub mod panel_tree;
 pub mod question;
 pub mod record;
 pub mod setup;
@@ -27,7 +34,7 @@ pub mod states;
 pub mod text;
 pub mod views;
 
-use std::{path::Path, rc::Rc};
+use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};
 
 use gpui_kit::component::TitleBar;
 use gpui_kit::{prelude::FluentBuilder as _, *};
@@ -121,9 +128,12 @@ pub fn menu_bar_title(sessions: &[Session]) -> String {
     waiting_count(sessions).to_string()
 }
 
+/// The rebuilds this panel host has taken.
+pub static REBUILDS: AtomicU64 = AtomicU64::new(0);
+
 /// DeepBuild's module for panels: the recorded quotes and the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
-    HostModule::new("deepbuild")
+    let module = HostModule::new("deepbuild")
         .function("needs_you", |_| needs_you())
         .function("quotes", |_| {
             let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
@@ -146,7 +156,26 @@ pub fn deepbuild_module() -> HostModule {
                 ("interval_s".into(), json_to_host(&interval["interval_s"])),
                 ("symbols".into(), HostValue::Array(symbols)),
             ]))
+        });
+    #[cfg(feature = "panel-check")]
+    let module = module
+        // #358: a panel's script is a function of how many rebuilds its host has taken.
+        .function("rebuild_count", |_| {
+            Ok(HostValue::Number(
+                REBUILDS.load(std::sync::atomic::Ordering::Relaxed) as f64,
+            ))
         })
+        // #358: a fold whose open state follows its key in the app, where no rebuild can lose it. A host function
+        // can't make a node, so it crosses as a marked text the app reads back.
+        .function("fold", |args| {
+            let part = |at| args.string(at).map(str::to_owned);
+            let parts = [part(0)?, part(1)?, part(2)?];
+            let mark = panel_keys::FOLD_MARK;
+            Ok(HostValue::Str(
+                parts.iter().map(|part| format!("{mark}{part}")).collect(),
+            ))
+        });
+    module
 }
 
 /// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
@@ -215,6 +244,7 @@ pub fn init(cx: &mut App) {
     gpui_shell::components::init(cx);
     views::register_views(cx);
     card::init(cx);
+    commands::init(cx);
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
@@ -238,15 +268,42 @@ pub fn mount_panel(
     runtime.mount_application(&loaded, window, cx)
 }
 
-/// The first dependency a panel's gpui-shell manifest fetches from a repository, by name.
+/// The entry a view's page mounts through, written beside its panel's `main.js`.
+const PAGE_ENTRY: &str = ".deepbuild-page.js";
+
+/// Mounts one of a view's pages (#366): the panel in `dir`, its script's `init` given `props.page`. gpui-shell gives a
+/// top-level script no props, so a small entry beside the panel's `main.js` creates the panel as a nested view with
+/// them; the page is the panel's own code, reading nothing more.
+pub fn mount_page(
+    runtime: &Rc<ShellRuntime>,
+    dir: &Path,
+    page: &serde_json::Value,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<Entity<ScriptView>> {
+    if let Some(dependency) = fetched_dependency(dir) {
+        anyhow::bail!("{}", fetch_refusal(&dependency));
+    }
+    let props = serde_json::json!({ "page": page });
+    std::fs::write(
+        dir.join(PAGE_ENTRY),
+        format!(
+            "import {{ View }} from \"gpui-kit\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
+        ),
+    )?;
+    let loaded = runtime.load_application(dir, PAGE_ENTRY)?;
+    runtime.mount_application(&loaded, window, cx)
+}
+
+/// The first dependency a panel's manifest names. Every form gpui-shell takes, object or shorthand, fetches from a
+/// repository, so any entry counts. A manifest that doesn't parse fetches nothing: gpui-shell refuses it too.
 pub fn fetched_dependency(dir: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(dir.join("gpui-shell.json")).ok()?;
-    let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
-    manifest["dependencies"]
-        .as_object()?
-        .iter()
-        .find(|(_, dependency)| dependency.get("git").is_some())
-        .map(|(name, _)| name.clone())
+    // #358: a package's own manifest is read as well; what it asks for is never granted either way.
+    ["gpui-shell.json", "package.json"].iter().find_map(|file| {
+        let text = std::fs::read_to_string(dir.join(file)).ok()?;
+        let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
+        manifest["dependencies"].as_object()?.keys().next().cloned()
+    })
 }
 
 /// Why a panel whose manifest fetches a dependency is refused.
@@ -386,7 +443,8 @@ impl Spike {
 }
 
 impl Render for Spike {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let chrome = *chrome::of(window);
         let sessions = self.sessions.clone();
         let selected = self.selected;
         let list = uniform_list(
@@ -409,7 +467,7 @@ impl Render for Spike {
                             .flex()
                             .items_center()
                             .gap_2()
-                            .when(selected == Some(index), |row| row.bg(rgb(0xdbeafe)))
+                            .when(selected == Some(index), |row| row.bg(chrome.selected))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected = Some(index);
                                 cx.notify();
@@ -436,8 +494,8 @@ impl Render for Spike {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(0x111111))
+            .bg(chrome.ground)
+            .text_color(chrome.ink_primary)
             .text_sm()
             .child(title_bar())
             .child(
@@ -453,7 +511,7 @@ impl Render for Spike {
                             .flex()
                             .flex_col()
                             .border_r_1()
-                            .border_color(rgb(0xe5e7eb))
+                            .border_color(chrome.divider)
                             .child(
                                 div()
                                     .p_2()
@@ -473,7 +531,7 @@ impl Render for Spike {
                                             .test_support()
                                             .px_2()
                                             .rounded_md()
-                                            .bg(rgb(0xf3f4f6))
+                                            .bg(chrome.raised)
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 match write_report(
                                                     &this.sessions,

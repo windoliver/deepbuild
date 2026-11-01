@@ -49,6 +49,9 @@ test-leave-out-logic = []
 test-accent = []
 # Issue #857: `test.serial` (not thread-safe) and the planted `test.racy`, which touches a static.
 test-threads = []
+# Issue #411: `test.machines`, whose GPU operators write a float array and an exact one, read back
+# by its check kinds.
+test-machines = ["dep:deep-effects-render"]
 # Issue #855: a test canvas module whose frame-phase operator writes JSON, which the seal refuses;
 # a build whose Debug text for every typed value differs; and a result digesting its Debug text.
 test-json = []
@@ -129,6 +132,7 @@ deep-canvas-effects = { path = "../deep-canvas-effects" }
 # Issue #140: the platform seams and their conformance suites.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 deep-gpu = { path = "../deep-gpu" }
+deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
 deep-text = { path = "../deep-text" }
@@ -146,9 +150,10 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "n
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }
 deep-replica = { path = "../deep-replica" }
 deep-text-gpui = { path = "../deep-text-gpui" }
-gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
-# Issue #140: `deep-show live`'s options: the GPUI patch's presentation feedback, and the
-# window's occlusion state and accessibility tree read through AppKit; all already in the lockfile.
+# Issue #854: the GPU ledger the GPUI patch adds to the Metal renderer, for a settled frame's GPU time.
 gpui-pre-apple = "=0.3.9"
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+# Issue #140: `deep-show live`'s options also read the GPUI patch's presentation feedback, and
+# the window's occlusion state and accessibility tree through AppKit; all already in the lockfile.
 objc2 = "0.6"
 raw-window-handle = "0.6"

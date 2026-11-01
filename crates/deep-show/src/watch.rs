@@ -33,7 +33,8 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Call, Hub, Scenario, Startup};
-use crate::live::{bounds, nodes, AxNode, Node, STRIP};
+use crate::live::{nodes, AxNode, Node, STRIP};
+use crate::window::bounds;
 use crate::shared::FLICKS;
 use crate::window::refused;
 

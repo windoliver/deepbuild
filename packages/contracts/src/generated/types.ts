@@ -335,6 +335,13 @@ export interface AdapterFacts {
     };
   };
   readUsage?: AdapterFactsOperation;
+  tokenizer?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    name: AdapterFactsText;
+    package: AdapterFactsText;
+    version: AdapterFactsVersion;
+  };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
 }
@@ -2589,7 +2596,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -4091,6 +4098,30 @@ export interface RunStartedV2 {
   evidence?: Array<string>;
 }
 
+/** runner.answered@1 */
+export interface RunnerAnswered {
+  v: 1;
+  id: string;
+  kind: "runner.answered";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    piece: string;
+    job: string;
+    value: unknown;
+    cites: Array<string>;
+    as_of: number;
+    stale_at: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** sandbox.denied@1 */
 export interface SandboxDenied {
   v: 1;
@@ -4107,6 +4138,33 @@ export interface SandboxDenied {
     run: string;
     operation: string;
     target: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** schedule.run@1 */
+export interface ScheduleRun {
+  v: 1;
+  id: string;
+  kind: "schedule.run";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    schedule: string;
+    plugin: string;
+    phase: "queued" | "dispatched" | "ended";
+    due: number;
+    resumed?: boolean;
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID" | "uncounted";
+    cause?: string | null;
+    stopped?: boolean;
+    changes?: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -4131,6 +4189,35 @@ export interface SeedCloned {
     migration: string;
     template: string;
     cloned_at: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** send.made@1 */
+export interface SendMade {
+  v: 1;
+  id: string;
+  kind: "send.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    piece: string;
+    phase: "asked" | "claimed" | "answered" | "refused";
+    kind: string;
+    to: Array<string>;
+    plan: string;
+    schedule: string | null;
+    run: string | null;
+    call: string | null;
+    rule: string | null;
+    ask: string | null;
+    status?: number;
   };
   evidence?: Array<string>;
 }

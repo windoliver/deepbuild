@@ -4,7 +4,7 @@
 // scripted provider with no network, printing the added milliseconds per event as one JSON line. The issue's 1 ms stays
 // in tests/acceptance/40/budgets.test.ts. It stops only the hub and the pi processes it started.
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -61,6 +61,11 @@ function session(withPackage) {
 
 try {
   await new Promise((resolve, reject) => { hub.stdout.once('data', resolve); hub.once('exit', () => reject(Error('the hub did not start'))); });
+  // As setup leaves a home: the shipped rules, and the deep-hook that reads every call against them.
+  const home = join(env.HOME, '.deepbuild');
+  copyFileSync(join(REPO, 'crates/deep-hook/default-rules.json'), join(home, 'rules.json'));
+  const config = join(home, 'config.json');
+  writeFileSync(config, JSON.stringify({ ...(existsSync(config) ? JSON.parse(readFileSync(config, 'utf8')) : {}), hook: { binary: join(REPO, 'target/debug/deep-hook') } }));
   await session(true);
   await session(false);
   const added = [];

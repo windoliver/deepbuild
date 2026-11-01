@@ -20,12 +20,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver, TableValue};
 use deep_canvas::schedule::core_ops::{Datum, Edits, Fields, StatusBase, Transform};
-use deep_canvas::schedule::{Canonical, OpError, Outside, Val, View};
+use deep_canvas::schedule::{canonical, Canonical, Hasher, Key, OpError, Outside, Val, View};
 use deep_text::{Role, Shaped, Shaper};
 use serde_json::{json, Map, Value};
 
 use crate::look::Status;
-use crate::scene::{self, Frame, Mark, Palette, Record, Refused, Rgb, Shown, StatusMark, TextSpec};
+use crate::scene::{
+    self, object_or_empty, Frame, Mark, Palette, Record, Refused, Rgb, Shown, StatusMark, TextSpec,
+};
 
 fn manifest(name: &str, deps: &[&str]) -> Manifest {
     Manifest {
@@ -172,7 +174,7 @@ impl Canonical for Run {
 /// The text module's shapers: a fixed count, never one taken from the machine, so texts shaping
 /// on several of the scheduler's threads don't wait on one (#857). Each holds only the bundled
 /// fonts, so any of them shapes a spec to the same glyphs.
-pub struct Shapers(Vec<Mutex<Shaper>>);
+struct Shapers(Vec<Mutex<Shaper>>);
 
 /// How many shapers the text module holds: the most threads a live view's class sets.
 const SHAPERS: usize = 4;
@@ -355,11 +357,7 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     // The locale picks the shaping language; it keys every run, a label's included.
     let _ = v.locale()?;
     let id = v.id().unwrap_or_default();
-    let empty = Map::new();
-    let params = fields
-        .get("params")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let params = object_or_empty(fields.get("params"));
     let spec = scene::text_spec(id, params, shown.as_ref()).map_err(refused)?;
     // The size is an f32 (Text `text@1`: `size: f32`): one past its range is an infinity.
     if !(spec.size as f32).is_finite() {
@@ -915,6 +913,30 @@ pub struct Drawing {
     pub frame: Frame,
     pub runs: BTreeMap<String, Arc<Run>>,
     pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+    /// The marks this frame put into its draw list: every mark when it built the list, the
+    /// changed items' when it replaced them in the last one (#896).
+    pub built: usize,
+    /// Each layer whose marks it replaced in place, for a view to upload those alone (#896).
+    pub damage: Vec<Damage>,
+    /// What the next frame replaces marks by; `None` when it builds the whole list.
+    pub basis: Option<Basis>,
+}
+
+/// The marks a frame replaced in one layer of the last frame's list: the layer's place, its key
+/// before, and each replaced mark's place in it.
+#[derive(Clone, Debug)]
+pub struct Damage {
+    pub layer: usize,
+    pub was: crate::key::ContentKey,
+    pub marks: Vec<usize>,
+}
+
+/// A frame's list as the next one replaces marks in it (#896): built from items each of which
+/// placed its own marks, from this envelope, with where each item's marks sit.
+#[derive(Clone, Debug)]
+pub struct Basis {
+    envelope: Key,
+    places: scene::Places,
 }
 
 /// A frame by its size, its ground and each layer's ID and content key, which covers every mark
@@ -1120,9 +1142,128 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("marks2d.item", Val::typed(placed))
 }
 
+/// What a frame reads of the document beside its items: every other member, as written.
+fn envelope_of(doc: &Value) -> Key {
+    let mut h = Hasher::new("marks2d.envelope");
+    for (k, v) in doc.as_object().into_iter().flatten() {
+        if k != "items" {
+            h.text(k).bytes(&canonical(v));
+        }
+    }
+    h.finish()
+}
+
+/// The last frame's draw list with the marks of the items whose own marks changed replaced in
+/// place (#896: "a changed item rebuilds and re-uploads only itself"), when that list was built
+/// from items that each placed their own marks, the envelope is the same and no text's run
+/// changed. `None` sends the frame to build the whole list, as it must give the same list.
+fn replaced(v: &mut View<'_>, envelope: Key) -> Result<Option<Drawing>, OpError> {
+    let Some(last) = v
+        .last("marks2d.frame")
+        .and_then(|d| d.as_typed::<Drawing>())
+    else {
+        return Ok(None);
+    };
+    let Some(basis) = last.basis.as_ref().filter(|b| b.envelope == envelope) else {
+        return Ok(None);
+    };
+    let Some(at) = basis.places.at.clone() else {
+        return Ok(None);
+    };
+    // The palette's ground, or the runs it carries.
+    if v.changed("look.palette")?.is_none() {
+        return Ok(None);
+    }
+    for name in ["text.run", "text.animated"] {
+        if v.changed(name)?.is_none_or(|ids| !ids.is_empty()) {
+            return Ok(None);
+        }
+    }
+    let Some(ids) = v.changed("marks2d.item")? else {
+        return Ok(None);
+    };
+    let mut frame = last.frame.clone();
+    let mut trees = basis.places.trees.clone();
+    let mut damage: Vec<Damage> = Vec::new();
+    let mut built = 0;
+    for id in ids {
+        let Some(&(li, first, count)) = at.get(id) else {
+            return Ok(None);
+        };
+        let placed = v.at("marks2d.item", id)?;
+        let Some(p) = placed
+            .as_ref()
+            .and_then(|p| p.as_typed::<Option<scene::Placed>>())
+        else {
+            return Ok(None);
+        };
+        let (li, first, count) = (li as usize, first as usize, count as usize);
+        let layer = &mut frame.layers[li];
+        let fits = |p: &scene::Placed| {
+            p.layer == layer.id && p.drawn.len() == count && p.keys.len() == count
+        };
+        let Some(p) = p.as_ref().as_ref().filter(|p| fits(p)) else {
+            return Ok(None);
+        };
+        let at_layer = match damage.iter().position(|d| d.layer == li) {
+            Some(k) => k,
+            None => {
+                damage.push(Damage {
+                    layer: li,
+                    was: layer.key,
+                    marks: Vec::new(),
+                });
+                damage.len() - 1
+            }
+        };
+        for k in 0..count {
+            check_font(&p.drawn[k])?;
+            layer.marks.set(first + k, Arc::clone(&p.drawn[k]));
+            trees[li].set(first + k, Key(p.keys[k].0));
+            damage[at_layer].marks.push(first + k);
+        }
+        built += count;
+    }
+    for d in &damage {
+        let layer = &mut frame.layers[d.layer];
+        layer.key = scene::layer_key(&layer.id, frame.size, 1.0, &trees[d.layer]);
+    }
+    Ok(Some(Drawing {
+        frame,
+        runs: last.runs.clone(),
+        animated: last.animated.clone(),
+        built,
+        damage,
+        basis: Some(Basis {
+            envelope,
+            places: scene::Places {
+                at: Some(at),
+                trees,
+            },
+        }),
+    }))
+}
+
+/// A text mark's font names a role the shaper bundles.
+fn check_font(drawn: &scene::Drawn) -> Result<(), OpError> {
+    if let Mark::Text { item, spec, .. } = &drawn.mark {
+        if Role::parse(&spec.font).is_none() {
+            return Err(OpError::new(
+                "out_of_range",
+                format!("items/{item}/params/font"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
+    let envelope = envelope_of(doc);
+    if let Some(drawing) = replaced(v, envelope)? {
+        return v.write("marks2d.frame", Val::typed(drawing));
+    }
     let record = record_of(v.outside()?);
     // Each item's transform, looked up only for the items the frame builds itself.
     let worlds = v.every("core.world")?;
@@ -1206,38 +1347,40 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         .ok_or_else(|| OpError::new("input_missing", "look"))?;
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
-    let frame =
+    let (frame, basis) =
         match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed)
             .map_err(refused)?
         {
-            Some(frame) => frame,
+            // A list of items that each placed their own marks is one the next frame can
+            // replace marks in.
+            Some((frame, places)) => (
+                frame,
+                items.is_empty().then_some(Basis { envelope, places }),
+            ),
             // A paint spanning boxes reads every item's: the frame builds them all.
             None => {
                 let all: Map<String, Value> = fields
                     .iter()
                     .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
                     .collect();
-                scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record)
-                    .map_err(refused)?
+                let frame = scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record)
+                    .map_err(refused)?;
+                (frame, None)
             }
         };
-    // Each text mark's font names a role the shaper bundles.
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
-        if let Mark::Text { item, spec, .. } = &drawn.mark {
-            if Role::parse(&spec.font).is_none() {
-                return Err(OpError::new(
-                    "out_of_range",
-                    format!("items/{item}/params/font"),
-                ));
-            }
-        }
+        check_font(drawn)?;
     }
+    let built = frame.layers.iter().map(|l| l.marks.len()).sum();
     v.write(
         "marks2d.frame",
         Val::typed(Drawing {
             frame,
             runs,
             animated,
+            built,
+            damage: Vec::new(),
+            basis,
         }),
     )
 }

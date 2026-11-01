@@ -1,12 +1,14 @@
 // The extension host's public entry (#348, #349): the extension API schema, a package's digest, project trust, the
-// host with its slots (kits at install, resolvers, adapters and delivery routes), sources and secrets (#364), and the
-// host's kit.
+// host with its slots (kits at install, resolvers, adapters and delivery routes), sources and secrets (#364),
+// schedules, notices and sends (#365), and the host's kit.
 export { API as EXTENSION_API, type ApiMethod } from '../runtime/deep.mjs';
 export { packageDigest } from './digest.js';
 export {
   openExtensionHost, type ActionCall, type ActionListing, type ActionResult, type ActionTarget, type Conformance, type Delivered, type ExtensionHost, type ExtensionHostOptions, type HookReply, type HookRequest,
-  type HostGrant, type IndexFill, type Installed, type InstallFrom, type KitRun, type Load, type Loaded, type Plant, type Refused, type ReleaseEntry, type Route,
+  type HostGrant, type IndexFill, type Installed, type InstallFrom, type KitRun, type Load, type Loaded, type PackageTests, type Plant, type Refused, type ReleaseEntry, type Route,
 } from './host.js';
+export { type ScheduleRow, type ScheduleRun, type Verdict } from './schedules.js';
+export { type SendRow, type SendRule } from './sends.js';
 export { keychainStore, type HttpAnswer, type HttpClient, type HttpRequest, type KeyTest, type Reading, type RecordedCall, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 export { hostKit, runHostKit, type HostKit, type HostKitCase, type HostKitReport } from './kit.js';
 export { openTrust, type ProjectTrust } from './trust.js';

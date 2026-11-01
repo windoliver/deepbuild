@@ -42,11 +42,20 @@ export const API = Object.freeze([
   { method: 'deep.store.list', needs: null },
   // #44: a lease from the kernel's one table, held by the package itself.
   { method: 'deep.lease', needs: null },
+  // #365: a job on the hub's timer, whose run reads sources through `deep.schedule.read` (its context's `read`), and a
+  // send that leaves your machine for a person, through a host the grant names.
+  { method: 'deep.schedule', needs: null },
+  { method: 'deep.schedule.read', needs: null },
+  { method: 'deep.send', needs: 'hosts' },
+  // #366: a model job on your own agent through the runner, its inputs by handle, its answer a reading.
+  { method: 'deep.runner.run', needs: 'agent' },
   // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
   // only from the panel you focused, through the app.
   { method: 'deep.terminal.open', needs: 'run_as_you' },
   { method: 'deep.terminal.list', needs: 'run_as_you' },
   { method: 'deep.terminal.read', needs: 'run_as_you' },
+  // #411: a canvas revision's evaluated values by stable ID, for a check runner, under its grant's documents.
+  { method: 'deep.canvas.read', needs: 'canvas' },
 ].map((m) => Object.freeze(m)));
 
 /**
@@ -54,9 +63,10 @@ export const API = Object.freeze([
  * kept here unless the host refuses the call; and `serve`, what the host asks of the package. `load` runs the
  * package's code with its `deep` and the host's `load` params. Every call made while the package serves an action
  * goes with that action call's scope, the token the host gave it, across every await, so the host acts for that
- * call's caller and no other.
+ * call's caller and no other. `imports` loads one of the package's own test files, by its path in the folder and,
+ * from a sandbox, the source the host stripped of its types.
  */
-export function extensionSide(call, load) {
+export function extensionSide(call, load, imports = (file) => import(file)) {
   const checks = new Map();
   const handlers = new Map();
   const routes = new Map();
@@ -75,6 +85,8 @@ export function extensionSide(call, load) {
   const indexes = new Map();
   // Its sources by name (#364): a polled one's parse and a stream one's read stay here; the host sends the rest.
   const sources = new Map();
+  // Its scheduled jobs by name (#365), asked by the host for each run.
+  const schedules = new Map();
   // Each returns how to drop what it kept.
   const keep = {
     'deep.registerCheck': keeper(checks),
@@ -87,6 +99,7 @@ export function extensionSide(call, load) {
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.registerEnvironment': keeper(environments),
     'deep.registerSource': keeper(sources),
+    'deep.schedule': (name, _declared, job) => keeper(schedules)(name, job),
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
@@ -186,6 +199,30 @@ export function extensionSide(call, load) {
         const source = sources.get(params?.name);
         if (!source) throw Error(`no source ${params?.name} is registered here`);
         return method === 'source.parse' ? await source.parse(params.answer) : await source.read(params.stream, params.cursor, params.limit);
+      }
+      // A run of a scheduled job: its calls carry the run's scope, and its context reads sources through the hub.
+      if (method === 'schedule.run') {
+        const job = schedules.get(params?.name);
+        if (!job) throw Error(`no schedule ${params?.name} is registered here`);
+        const ctx = { run: params.run, at: params.at, read: (source) => call('deep.schedule.read', [source], params.scope) };
+        return (await scope.run(params.scope, () => job(ctx))) ?? null;
+      }
+      // The package's own tests in one file (#366): each named test in turn, given `t`, whose calls the host answers
+      // on its recording and clock. A test fails by throwing.
+      if (method === 'test') {
+        const tests = (await imports(params.file, params.source)).default;
+        const t = { call: (action, input) => call('test.call', [action, input]), read: (source) => call('test.read', [source]), now: () => params.now };
+        const ran = [];
+        for (const [test, fn] of Object.entries(tests && typeof tests === 'object' ? tests : {})) {
+          if (typeof fn !== 'function') continue;
+          try {
+            await fn(t);
+            ran.push({ test, error: null });
+          } catch (error) {
+            ran.push({ test, error: String(error?.message ?? error) });
+          }
+        }
+        return ran;
       }
       if (method === 'output') {
         const fn = outputs.get(params?.name);

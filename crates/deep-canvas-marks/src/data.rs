@@ -18,7 +18,8 @@ use deep_canvas::ops;
 
 use crate::path;
 use crate::scene::{
-    refuse, Align, Fill, Geometry, ImageFit, ImageSampling, Mark, Palette, Refused, TextSpec,
+    object_or_empty, refuse, Align, Fill, Geometry, ImageFit, ImageSampling, Mark, Palette,
+    Refused, TextSpec,
 };
 
 /// The most rows a mark set holds (Mark set: "exceed 1M rows per set" it can never).
@@ -338,19 +339,12 @@ pub fn mark_set(
     bound: &BoundRows,
 ) -> Result<Vec<Mark>, Refused> {
     let path = format!("items/{id}/params");
-    let empty = Map::new();
-    let p = item
-        .get("params")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let p = object_or_empty(item.get("params"));
     let n = match p.get("n").and_then(Value::as_u64) {
         Some(n) if n <= MAX_ROWS => n as usize,
         _ => return refuse("out_of_range", format!("{path}/n")),
     };
-    let columns = p
-        .get("columns")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let columns = object_or_empty(p.get("columns"));
     let mut decoded = std::collections::BTreeMap::new();
     for (name, c) in columns {
         decoded.insert(
@@ -379,7 +373,7 @@ pub fn mark_set(
             _ => return refuse("bad_column", format!("{path}/columns/{column}")),
         }
     }
-    let encode = p.get("encode").and_then(Value::as_object).unwrap_or(&empty);
+    let encode = object_or_empty(p.get("encode"));
     let mut props = std::collections::BTreeMap::new();
     for (prop, e) in encode {
         let epath = format!("{path}/encode/{prop}");
@@ -628,11 +622,7 @@ pub fn axis(
     pos: [f64; 2],
 ) -> Result<Vec<Mark>, Refused> {
     let path = format!("items/{id}/params");
-    let empty = Map::new();
-    let p = item
-        .get("params")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
+    let p = object_or_empty(item.get("params"));
     let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
         return refuse("bad_axis", format!("{path}/scale"));
     };

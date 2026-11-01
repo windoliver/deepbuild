@@ -1,0 +1,33 @@
+{
+ "build": {
+  "command": [
+   "cargo",
+   "build",
+   "--release",
+   "--locked",
+   "-p",
+   "deep-panel-host",
+   "-p",
+   "deep-app",
+   "--features",
+   "deep-app/panel-check"
+  ]
+ },
+ "check": {
+  "command": [
+   "target/release/deep-app",
+   "panel-keys",
+   "--host",
+   "target/release/deep-panel-host"
+  ]
+ },
+ "planted": {
+  "command": [
+   "target/release/deep-app",
+   "panel-keys",
+   "--host",
+   "target/release/deep-panel-host",
+   "--match-by-position"
+  ]
+ }
+}

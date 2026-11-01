@@ -278,6 +278,20 @@ impl Replica {
                 ))
             }
         };
+        // The view the panel registers, as `deep.registerView` gives it: its pages and ⌘K commands (#366).
+        let view = match (&args["view"], &panel) {
+            (Value::Null, _) => None,
+            (view, Some(dir)) => Some(
+                deep_app::commands::View::from_json(dir.clone(), view)
+                    .map_err(|e| fail("refused", format!("launch.view: {e}")))?,
+            ),
+            (_, None) => {
+                return Err(fail(
+                    "refused",
+                    "launch.view registers the panel in launch.panel, so it needs one",
+                ))
+            }
+        };
         std::fs::create_dir_all(&out)
             .map_err(|e| fail("refused", format!("{}: {e}", out.display())))?;
 
@@ -380,7 +394,7 @@ impl Replica {
                 ..Layout::shipped("needs-you")
             };
             let into = mounted.clone();
-            let (window, _) =
+            let (window, shell) =
                 open_shell_with(options, &layout, cx, move |window, cx| match panel {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
@@ -397,6 +411,20 @@ impl Replica {
                         cx,
                     )),
                 });
+            if let Some(view) = view {
+                let _ = window.update(cx, |_, window, cx| {
+                    let palette = cx.new(|cx| {
+                        deep_app::commands::Palette::new(
+                            &[view],
+                            recency(plant),
+                            opener(plant),
+                            window,
+                            cx,
+                        )
+                    });
+                    shell.update(cx, |shell, cx| shell.set_commands(palette, window, cx));
+                });
+            }
             window
         });
         let runtime = mounted
@@ -972,15 +1000,10 @@ impl Replica {
         let scope = see["scope"].as_str().unwrap_or("window");
         let root = match scope {
             "window" => None,
-            "panel" => {
-                let slot = deep_app::views::slot_bounds()
-                    .ok_or_else(|| fail("refused", "this replica has no panel"))?;
-                let d = |v: Pixels| (f32::from(v) * frame.scale).round() as i64;
-                Some(json!({
-                    "role": "pane", "name": null, "value": null,
-                    "bounds": [d(slot.origin.x), d(slot.origin.y), d(slot.size.width), d(slot.size.height)],
-                }))
-            }
+            "panel" => Some(json!({
+                "role": "pane", "name": null, "value": null,
+                "bounds": panel_bounds(frame.scale)?,
+            })),
             "locator" => match frame.one(&call["locator"]) {
                 Ok(t) => Some(
                     json!({"role": t.role, "name": t.name, "value": t.value, "bounds": t.bounds}),
@@ -1045,17 +1068,7 @@ impl Replica {
                 format!("offscreen rendering isn't available: {e}"),
             )
         })?;
-        let frame = self.frame();
-        let mut boxes = Vec::new();
-        for locator in mask {
-            boxes.extend(
-                frame
-                    .all(locator)
-                    .map_err(|why| fail("refused", why))?
-                    .into_iter()
-                    .map(|t| t.bounds),
-            );
-        }
+        let boxes = bounds_of_all(&self.frame(), mask)?;
         for b in &boxes {
             if blur {
                 blur_box(&mut image, *b);
@@ -1072,17 +1085,7 @@ impl Replica {
         let frame = self.frame();
         let crop = match args["target"].as_str().unwrap_or("window") {
             "window" => [0, 0, image.width() as i64, image.height() as i64],
-            "panel" => {
-                let slot = deep_app::views::slot_bounds()
-                    .ok_or_else(|| fail("refused", "this replica has no panel"))?;
-                let d = |v: Pixels| (f32::from(v) * frame.scale).round() as i64;
-                [
-                    d(slot.origin.x),
-                    d(slot.origin.y),
-                    d(slot.size.width),
-                    d(slot.size.height),
-                ]
-            }
+            "panel" => panel_bounds(frame.scale)?,
             "locator" => match frame.one(&args["locator"]) {
                 Ok(t) => t.bounds,
                 Err(Miss::Bad(why)) => return Err(fail("refused", why)),
@@ -1101,16 +1104,8 @@ impl Replica {
                 ))
             }
         };
-        let mut highlights = Vec::new();
-        for locator in args["highlight"].as_array().cloned().unwrap_or_default() {
-            highlights.extend(
-                frame
-                    .all(&locator)
-                    .map_err(|why| fail("refused", why))?
-                    .into_iter()
-                    .map(|t| t.bounds),
-            );
-        }
+        let highlight = args["highlight"].as_array().cloned().unwrap_or_default();
+        let highlights = bounds_of_all(&frame, &highlight)?;
         let shot = with_strips(&image, crop, &highlights, (STRIP_PT * frame.scale) as u32);
         self.shots += 1;
         let path = self
@@ -1247,6 +1242,66 @@ impl Replica {
             "trace": {"sha256": hash, "path": path},
         })
     }
+}
+
+/// ⌘K's recency list in a replica (#366): it starts empty, and never reads the live app's; only the planted ranker does.
+fn recency(plant: Option<Plant>) -> Vec<String> {
+    if plant == Some(Plant::RanksByLiveRecency) {
+        deep_app::commands::read_recency(&deep_app::commands::recency_file())
+    } else {
+        Vec::new()
+    }
+}
+
+/// What opening a ⌘K entry does in a replica (#366): a page mounts its view's panel in the extension slot, given the
+/// page as `props.page`; a command's action has no hub to run on here, so ⌘K just closes.
+fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
+    // Each page's runtime lives as long as ⌘K does, as the panel's does.
+    let runtimes = RefCell::new(Vec::new());
+    Rc::new(move |entry, window, cx| {
+        let (Some(mut page), deep_app::commands::Entry::Page { panel, .. }) =
+            (entry.page_props(), entry)
+        else {
+            return;
+        };
+        if plant == Some(Plant::PageDropsParam) {
+            page["params"] = json!({});
+        }
+        let mounted = deep_app::new_runtime().and_then(|runtime| {
+            let view = deep_app::mount_page(&runtime, panel, &page, window, cx)?;
+            runtimes.borrow_mut().push(runtime);
+            Ok(view)
+        });
+        match mounted {
+            Ok(view) => {
+                deep_app::views::fill_slot(view.into(), cx);
+            }
+            Err(e) => eprintln!("deep-drive: {} didn't open: {e:#}", entry.name()),
+        }
+    })
+}
+
+/// The panel's bounds in the window, in device pixels at `scale`.
+fn panel_bounds(scale: f32) -> Result<[i64; 4], Fail> {
+    let slot = deep_app::views::slot_bounds()
+        .ok_or_else(|| fail("refused", "this replica has no panel"))?;
+    let d = |v: Pixels| (f32::from(v) * scale).round() as i64;
+    Ok([
+        d(slot.origin.x),
+        d(slot.origin.y),
+        d(slot.size.width),
+        d(slot.size.height),
+    ])
+}
+
+/// The bounds of every match of each locator, in order.
+fn bounds_of_all(frame: &Frame, locators: &[Value]) -> Result<Vec<[i64; 4]>, Fail> {
+    let mut boxes = Vec::new();
+    for locator in locators {
+        let found = frame.all(locator).map_err(|why| fail("refused", why))?;
+        boxes.extend(found.into_iter().map(|t| t.bounds));
+    }
+    Ok(boxes)
 }
 
 fn ambiguous(locator: &Value, all: Vec<Target>) -> Fail {

@@ -168,7 +168,7 @@ fn evaluate(case: &Case) -> Result<Evaluated, Value> {
         .layers
         .iter()
         .filter(|l| !l.marks.is_empty())
-        .map(|l| (l.id.clone(), l.marks.clone()))
+        .map(|l| (l.id.clone(), l.marks.iter().cloned().collect()))
         .collect();
     let gpu = if let Some((look, themed)) = look3 {
         let scene = evaluate3(&whole, case.t.1, &look, &mut Labels::new())

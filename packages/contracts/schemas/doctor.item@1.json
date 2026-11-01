@@ -31,6 +31,7 @@
         "deprecated_used",
         "gpu_unsupported",
         "render_failed",
+        "job_failing",
         "unknown"
       ],
       "description": "What the item found: healthy when the check ran and found nothing wrong; not_checked when nobody ran it, never ok.",

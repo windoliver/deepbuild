@@ -1,0 +1,115 @@
+// The test market plug-in (#365): the stocks view's pieces that need the market key.
+// - ext.market.price: a polled source on api.market.example (#364), the key in X-Api-Key by its handle
+// - ext.market.watch: unless probe.json's `watch` is false, a schedule (probe.json's cadence) whose job reads the price through its run's context and, per
+//   probe.json's `notices`, sends a notice for each listed subscription, citing the reading it just got, or from its
+//   second run the reading the previous run got (`previous-after-first`); a job whose read gives no reading throws
+// - ext.market.above_target: a check kind that reads the price, declared with the source it reads
+// - ext.market.set_alert (change, ext.market.alert) and ext.market.list_alerts (read): #363's actions; with
+//   probe.json's setAlert `write-then-throw`, set_alert writes the alert and then throws
+// - ext.market.report: the probe check, reporting every watch job it ran and the most it ever had running at once
+import { readFileSync } from 'node:fs';
+
+interface Probe {
+  watch?: boolean;
+  cadence: { every?: number; cron?: string };
+  deadline?: number;
+  freshFor?: number;
+  timeout?: number;
+  quota?: { per_minute: number; per_day: number };
+  notices?: { subscriptions: string[]; cite: 'fresh' | 'previous-after-first' };
+  setAlert?: 'plain' | 'write-then-throw';
+}
+interface Answer { status: number; headers: Record<string, string>; body: string }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+const PRICE = 'ext.market.price';
+const ALERT = 'ext.market.alert';
+const CROSSED = 'ext.market.crossed';
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  const handle = await deep.secret('market_key');
+  await deep.registerSource(PRICE, {
+    variant: 'polled',
+    host: 'api.market.example',
+    path: '/q',
+    secret: handle,
+    header: 'X-Api-Key',
+    quota: probe.quota ?? { per_minute: 600, per_day: 100_000 },
+    timeout: probe.timeout ?? 30_000,
+    freshFor: probe.freshFor ?? 60_000,
+    parse(answer: Answer): { value: number; unit: string } {
+      if (answer.status !== 200) throw Error(`no price in a ${answer.status} answer`);
+      return { value: Number(JSON.parse(answer.body).price), unit: 'USD' };
+    },
+  });
+  await deep.store(ALERT, { generation: 1, schema: strict({ symbol: { type: 'string' }, above: { type: 'number' } }) });
+
+  const jobs: any[] = [];
+  let running = 0;
+  let most = 0;
+  let previous: string | null = null;
+  if (probe.watch !== false) await deep.schedule('ext.market.watch', {
+    ...probe.cadence,
+    deadline: probe.deadline ?? 4 * 60_000,
+    declares: { readings: [PRICE], notices: [CROSSED], stores: [], sends: [], noop: false },
+  }, async (ctx: { run: string; at: number; read(source: string): Promise<any> }) => {
+    running++;
+    most = Math.max(most, running);
+    const job: any = { run: ctx.run, at: ctx.at, read: null, notices: [] };
+    jobs.push(job);
+    try {
+      const r = await ctx.read(PRICE);
+      job.read = r?.status ?? null;
+      if (r?.status !== 'reading') {
+        job.cause = r?.cause;
+        throw Error(`no price reading: ${r?.cause}`);
+      }
+      const fresh: string = r.reading.handle;
+      job.handle = fresh;
+      for (const subscription of probe.notices?.subscriptions ?? []) {
+        const cited = probe.notices!.cite === 'previous-after-first' && previous !== null ? previous : fresh;
+        try {
+          const sent = await deep.notices.send({ kind: CROSSED, subscription, key: `${subscription}#${ctx.run}`, readings: [cited] });
+          job.notices.push({ subscription, cited, sent: String(sent) });
+        } catch (e: any) {
+          job.notices.push({ subscription, cited, refused: String(e?.message ?? e) });
+        }
+      }
+      previous = fresh;
+    } finally {
+      running--;
+    }
+  });
+
+  deep.registerCheck('ext.market.above_target', async () => ({
+    outcome: 'passed', testsRun: 1, evidence: [], read: [], mask: null, failures: [],
+  }), { readings: [PRICE] });
+
+  deep.registerCheck('ext.market.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ jobs, most }) }],
+  }));
+
+  const alertInput = strict({ symbol: { type: 'string' }, above: { type: 'number' } });
+  deep.registerAction('ext.market.set_alert', {
+    declares: 'change',
+    changes: [ALERT],
+    input: alertInput,
+    output: strict({ symbol: { type: 'string' }, above: { type: 'number' }, created: { type: 'boolean' } }),
+  }, async (input: { symbol: string; above: number }) => {
+    await deep.store.put(ALERT, input.symbol, { symbol: input.symbol, above: input.above });
+    if (probe.setAlert === 'write-then-throw') throw Error(`set_alert wrote ${input.symbol} and then failed`);
+    const now = await deep.store.get(ALERT, input.symbol);
+    return { output: { symbol: input.symbol, above: input.above, created: true }, report: { verified: now?.above === input.above, checked: `read ${input.symbol} back` } };
+  });
+  deep.registerAction('ext.market.list_alerts', {
+    declares: 'read',
+    reads: [ALERT],
+    input: strict({}),
+    output: strict({ alerts: { type: 'array', items: strict({ key: { type: 'string' }, value: { type: 'string' } }) } }),
+  }, async () => {
+    const items: { key: string; value: unknown }[] = await deep.store.list(ALERT);
+    return { alerts: items.map((i) => ({ key: i.key, value: JSON.stringify(i.value) })) };
+  });
+}

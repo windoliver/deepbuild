@@ -21,7 +21,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use serde_json::Value;
 
-use crate::{canvas, events::Inbox, states, text};
+use crate::{canvas, chrome, events::Inbox, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -118,10 +118,12 @@ pub fn register_views(cx: &mut App) {
         });
     }
     register_panel(cx, EXTENSION, |_, _, cx| {
-        Arc::new(cx.new(|cx| Slot {
+        let slot = cx.new(|cx| Slot {
             view: NEXT_EXTENSION.with(|next| next.borrow_mut().take()),
             focus_handle: cx.focus_handle(),
-        }))
+        });
+        SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
+        Arc::new(slot)
     });
 }
 
@@ -138,6 +140,23 @@ pub const EXTENSION: &str = "deepbuild/extension";
 thread_local! {
     static NEXT_EXTENSION: RefCell<Option<AnyView>> = const { RefCell::new(None) };
     static SLOT_BOUNDS: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+    static SLOT: RefCell<Option<WeakEntity<Slot>>> = const { RefCell::new(None) };
+}
+
+/// Puts `view` in the extension slot the shell drew last, in place of what it held: a view's page opened from ⌘K
+/// (#366). False when no slot is drawn.
+pub fn fill_slot(view: AnyView, cx: &mut App) -> bool {
+    let Some(slot) = SLOT
+        .with(|current| current.borrow().clone())
+        .and_then(|slot| slot.upgrade())
+    else {
+        return false;
+    };
+    slot.update(cx, |slot, cx| {
+        slot.view = Some(view);
+        cx.notify();
+    });
+    true
 }
 
 /// Hands the next layout that names [`EXTENSION`] its view.
@@ -297,7 +316,8 @@ fn status(
 }
 
 impl Render for Shipped {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let chrome = chrome::of(window);
         let decorations = current_state();
         let record = record();
         let now = now();
@@ -309,10 +329,10 @@ impl Render for Shipped {
             .flex_col()
             .p_2()
             .text_xs()
-            .text_color(rgb(0x111827));
+            .text_color(chrome.ink_primary);
         match self.kind {
             Kind::Sidebar => page
-                .bg(rgb(0xf3f4f6))
+                .bg(chrome.raised)
                 .child(title("sidebar-title", "Sessions"))
                 .children(record.sessions.iter().enumerate().map(|(index, session)| {
                     let state = states::state(&record.events, session);
@@ -326,7 +346,7 @@ impl Render for Shipped {
                         .h(px(24.))
                         .px_1()
                         .rounded_sm()
-                        .hover(|style| style.bg(rgb(0xe5e7eb)))
+                        .hover(|style| style.bg(chrome.hover))
                 })),
             Kind::Home => page
                 .child(title("home-title", "Home"))
@@ -343,10 +363,10 @@ impl Render for Shipped {
                         .is_some_and(|state| state.held.as_deref() == Some(handle.as_str()));
                     label(("ask", index), handle.clone())
                         .when(has(|state| &state.inbox.folded), |row| {
-                            row.pl_4().text_color(rgb(0x6b7280))
+                            row.pl_4().text_color(chrome.ink_secondary)
                         })
                         .when(has(|state| &state.inbox.later), |row| {
-                            row.text_color(rgb(0x9ca3af))
+                            row.text_color(chrome.ink_tertiary)
                         })
                         .when(held, |row| row.italic())
                 }),
@@ -388,7 +408,7 @@ impl Render for Shipped {
                             .w(px(600.))
                             .h(px(200.))
                             .border_1()
-                            .border_color(rgb(0xe5e7eb))
+                            .border_color(chrome.divider)
                             .flex()
                             .flex_col()
                             .child(
@@ -400,18 +420,18 @@ impl Render for Shipped {
                                     .child(text::label(
                                         "session-caption",
                                         caption,
-                                        rgb(0x374151).into(),
+                                        chrome.ink_secondary,
                                         None,
                                     ))
                                     .child(text::label(
                                         "session-readout",
                                         readout,
-                                        rgb(0xb45309).into(),
+                                        chrome.session_readout,
                                         Some("9999"),
                                     )),
                             )
                             .child(
-                                canvas::line("session-line", hours, rgb(0x2563eb).into())
+                                canvas::line("session-line", hours, chrome.session_line)
                                     .flex_1()
                                     .w_full(),
                             ),
@@ -426,7 +446,7 @@ impl Render for Shipped {
                 let session = record.sessions.first().cloned().unwrap_or_default();
                 let state = states::state(&record.events, &session);
                 let task = states::title(&record.events, &session);
-                page.bg(rgb(0xf9fafb)).child(status(
+                page.bg(chrome.raised).child(status(
                     "line-status",
                     &state,
                     format!("{task} · {}", state.text(now)),
@@ -493,28 +513,59 @@ impl Layout {
     }
 }
 
-/// The window's root: the dock area, loaded from a layout.
+/// The window's root: the dock area, loaded from a layout, and ⌘K over it once views give it entries (#366).
 pub struct Shell {
     pub dock: Entity<DockArea>,
+    commands: Option<Entity<crate::commands::Palette>>,
+    focus_handle: FocusHandle,
 }
 
 impl Shell {
     pub fn new(layout: &Layout, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        chrome::follow(window, cx);
         let dock = cx.new(|cx| DockArea::new("deepbuild", None, window, cx));
         dock.update(cx, |dock, cx| dock.load(layout.state(), window, cx))
             .expect("the layout loads");
-        Self { dock }
+        Self {
+            dock,
+            commands: None,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    /// ⌘K over the shell, which takes focus so the key reaches it wherever you are in the window.
+    pub fn set_commands(
+        &mut self,
+        palette: Entity<crate::commands::Palette>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commands = Some(palette);
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
     }
 }
 
 impl Render for Shell {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let chrome = chrome::of(window);
         div()
             .size_full()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(0x111827))
+            .relative()
+            .track_focus(&self.focus_handle)
+            .on_action(
+                cx.listener(|this, _: &crate::commands::OpenCommands, window, cx| {
+                    if let Some(palette) = &this.commands {
+                        let back = this.focus_handle.clone();
+                        palette.update(cx, |palette, cx| palette.show(back, window, cx));
+                    }
+                }),
+            )
+            .bg(chrome.ground)
+            .text_color(chrome.ink_primary)
             .text_sm()
             .child(self.dock.clone())
+            .children(self.commands.clone())
     }
 }
 

@@ -41,6 +41,14 @@
       "next_step": "Propose the change with deep_propose instead.",
       "fail_closed": true
     },
+    "no-pi-config-write": {
+      "match": "write:~/.pi/agent/settings.json ~/.pi/agent/extensions/* ~/.pi/agent/skills/* ~/.pi/agent/npm/* ~/.pi/agent/git/* .pi/settings.json .pi/extensions/* .pi/skills/* .pi/npm/* .pi/git/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "pi's settings, extensions and packages decide whether DeepBuild runs in it at all, so they change only by your decision, never by an agent's write.",
+      "next_step": "Propose the change with deep_propose instead.",
+      "fail_closed": true
+    },
     "no-deepbuild-spec-write": {
       "match": "write:.deepbuild/* !~/.deepbuild/*",
       "scope": "all_repos",
@@ -289,6 +297,22 @@
         "tool_name": "Write",
         "tool_input": {
           "file_path": "{work}/claude-settings.json",
+          "content": "x\n"
+        }
+      }
+    },
+    "no-pi-config-write": {
+      "planted": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/.pi/agent/settings.json",
+          "content": "x\n"
+        }
+      },
+      "twin": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{work}/pi-settings.json",
           "content": "x\n"
         }
       }

@@ -21,7 +21,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   Claude, answer, ask, assistantSays, carries, cleanup, firedShown, makeHome, newSession, payload, said, sendBack, setup, sleep, startHub,
-  stopCount, stopsRecorded, tag, typedPrompt, viewTexts, eventually, type Asked, type Fired,
+  NO_ASK_WAIT, stopCount, stopsRecorded, tag, typedPrompt, viewTexts, eventually, type Asked, type Fired,
 } from './helpers.ts';
 
 afterAll(cleanup, 60_000);
@@ -32,7 +32,7 @@ const saysWhy = (text: string) => /\b8\b|eight/i.test(text) && /next prompt/i.te
 describe('AC10 #25.3d50cff2 With the cap at 8, in one turn with no tool call between them, eight continuations, a mix of held-stop answers and planted send-backs, each go back through the Stop hook, and a ninth goes by the next prompt, the session\'s row saying why; with one tool call after the fourth, all nine go through the Stop hook. A counter that never resets sends the ninth of the second run by the next prompt and fails, and one with no counter blocks the ninth stop, which Claude Code overrides, and fails this test, naming the turn', () => {
   it('AC10 #25.3d50cff2 eight continuations go back through the Stop hook and the ninth by the next prompt, the row saying why; with a tool call after the fourth, all nine go through the Stop hook', async () => {
     const { home } = makeHome();
-    const hub = await startHub(home);
+    const hub = await startHub(home, NO_ASK_WAIT);
     await setup(home);
     const s = newSession(home);
     const claude = await Claude.start(home);
