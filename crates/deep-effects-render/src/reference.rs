@@ -92,12 +92,13 @@ pub fn f32_to_f16(x: f32) -> u16 {
 
 fn texture(
     device: &wgpu::Device,
+    label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,
     usage: wgpu::TextureUsages,
 ) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("operator reference"),
+        label: Some(label),
         size: wgpu::Extent3d {
             width: size[0],
             height: size[1],
@@ -189,6 +190,7 @@ pub fn depth_texture(device: &Device, img: &Image) -> wgpu::Texture {
     let size = [img.w, img.h];
     let src = texture(
         d,
+        "operator reference",
         size,
         wgpu::TextureFormat::R32Float,
         wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
@@ -201,6 +203,7 @@ pub fn depth_texture(device: &Device, img: &Image) -> wgpu::Texture {
     write(device, &src, &bytes, 4);
     let dst = texture(
         d,
+        "operator reference",
         size,
         wgpu::TextureFormat::Depth32Float,
         wgpu::TextureUsages::RENDER_ATTACHMENT
@@ -297,6 +300,7 @@ pub fn upload(device: &Device, kind: Tex, img: &Image) -> (wgpu::Texture, Image)
         Tex::Float => {
             let tex = texture(
                 d,
+                "operator reference",
                 size,
                 LINEAR,
                 wgpu::TextureUsages::TEXTURE_BINDING
@@ -315,6 +319,7 @@ pub fn upload(device: &Device, kind: Tex, img: &Image) -> (wgpu::Texture, Image)
         Tex::Uint => {
             let tex = texture(
                 d,
+                "operator reference",
                 size,
                 wgpu::TextureFormat::R32Uint,
                 wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
@@ -353,7 +358,7 @@ pub struct Camera {
 
 impl Camera {
     /// As the GPU holds it: every value an f32, the inverse taken in f64 first.
-    fn frame(&self) -> Frame {
+    pub(crate) fn frame(&self) -> Frame {
         Frame {
             clip: self.clip.map(|x| x as f32),
             inverse_clip: inverse(&self.clip).map(|x| x as f32),
@@ -420,9 +425,10 @@ pub fn cpu_pass(c: &Compiled, env: &Env<'_>, size: [u32; 2]) -> Result<Image, St
 }
 
 /// An empty linear target of `size`.
-fn target(device: &Device, size: [u32; 2]) -> wgpu::Texture {
+pub(crate) fn target(device: &Device, label: &str, size: [u32; 2]) -> wgpu::Texture {
     texture(
         &device.device,
+        label,
         size,
         LINEAR,
         wgpu::TextureUsages::RENDER_ATTACHMENT
@@ -455,7 +461,7 @@ fn gpu_pass(
         .collect::<Result<_, _>>()?;
     let refs: Vec<&wgpu::TextureView> = views.iter().collect();
     let (g0, g1, _buffers) = runner.bind(&device.device, &camera.frame(), size, values, &refs, &[]);
-    let out = target(device, size);
+    let out = target(device, "operator reference", size);
     let mut enc = device.device.create_command_encoder(&Default::default());
     runner.encode(
         &mut enc,
@@ -514,6 +520,15 @@ pub fn pass(
     Ok(Ran { gpu, cpu })
 }
 
+/// The level a glow stage's texture input `name` reads in run `r`; `None` is the scene.
+fn level_of(name: &str, r: &crate::glow::Run) -> Option<usize> {
+    match name {
+        "src" | "small" | "bloom" => r.a,
+        "large" => r.b,
+        _ => None,
+    }
+}
+
 /// Runs the glow's chain at `size` over `scene` on the GPU (`gpu_stages`) and as its CPU
 /// reference (`stages`), each stage in the chain's order at the chain's sizes.
 pub fn glow(
@@ -525,16 +540,7 @@ pub fn glow(
     camera: &Camera,
     size: [u32; 2],
 ) -> Result<Ran, String> {
-    let radius = params
-        .get("bloom.radius")
-        .and_then(serde_json::Value::as_f64)
-        .unwrap_or(0.85);
-    let runs = crate::glow::plan(size, radius);
-    let mut params = params.clone();
-    params.insert(
-        "bloom.levels".into(),
-        serde_json::json!(crate::glow::levels(size, radius).len()),
-    );
+    let (runs, params) = crate::glow::chain(size, params);
     let roles = BTreeMap::new();
     let (scene_tex, held) = upload(device, Tex::Float, scene);
     // The GPU's chain.
@@ -545,15 +551,10 @@ pub fn glow(
     let mut levels: BTreeMap<usize, wgpu::Texture> = BTreeMap::new();
     let mut last = None;
     for r in &runs {
-        let level = |i: Option<usize>| -> &wgpu::Texture { i.map_or(&scene_tex, |k| &levels[&k]) };
         let stage = &runners[r.stage];
         let mut textures: BTreeMap<String, &wgpu::Texture> = BTreeMap::new();
         for name in &stage.compiled.checked.textures {
-            let t = match name.as_str() {
-                "src" | "small" | "bloom" => level(r.a),
-                "large" => level(r.b),
-                _ => &scene_tex,
-            };
+            let t = level_of(name, r).map_or(&scene_tex, |k| &levels[&k]);
             textures.insert(name.clone(), t);
         }
         let values = interp::inputs(&stage.compiled.checked, &params, &roles);
@@ -574,11 +575,7 @@ pub fn glow(
         let stage = &stages[r.stage];
         let mut textures: BTreeMap<String, &Image> = BTreeMap::new();
         for name in &stage.checked.textures {
-            let img = match name.as_str() {
-                "src" | "small" | "bloom" => r.a.map_or(&held, |k| &images[&k]),
-                "large" => r.b.map_or(&held, |k| &images[&k]),
-                _ => &held,
-            };
+            let img = level_of(name, r).map_or(&held, |k| &images[&k]);
             textures.insert(name.clone(), img);
         }
         let env = camera.env(interp::inputs(&stage.checked, &params, &roles), textures);

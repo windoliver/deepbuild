@@ -519,6 +519,20 @@ mod tests {
         json!({"id": "r", "kind": "test.rect@1", "layer": "main", "name": "R", "order": "a1", "params": {"w": w, "h": h, "fill": [1, 2, 3]}, "at": {"pos": [x, y, 0]}})
     }
 
+    /// The scene's view through a 100 px square frame.
+    fn view_of(s: &Scene) -> Projector {
+        Projector::new(
+            &s.spec.pose(&s.rig, &Offsets::default()),
+            [100.0, 100.0],
+            [100.0, 100.0],
+        )
+    }
+
+    /// The corners of the cube 1 m each way around the origin.
+    fn unit_cube() -> impl Iterator<Item = [f64; 3]> {
+        (0..8).map(|i| [i & 1, i & 2, i & 4].map(|b| if b == 0 { -1.0 } else { 1.0 }))
+    }
+
     #[test]
     fn a_flat_fit_spans_the_kept_items_padded_over_the_fill_share_and_centres_them_at_place() {
         let s = scene(&doc(
@@ -539,11 +553,7 @@ mod tests {
             json!({"r": rect(10.0, 10.0, 40.0, 20.0)}),
         ))
         .unwrap();
-        let view = Projector::new(
-            &left.spec.pose(&left.rig, &Offsets::default()),
-            [100.0, 100.0],
-            [100.0, 100.0],
-        );
+        let view = view_of(&left);
         let centre = view.project([30.0, 20.0, 0.0]).unwrap();
         assert!(
             (centre.x - 100.0 / 3.0).abs() < 1e-9 && (centre.y - 50.0).abs() < 1e-9,
@@ -612,11 +622,7 @@ mod tests {
             json!({"r": rect(10.0, 10.0, 40.0, 20.0)}),
         ))
         .unwrap();
-        let view = Projector::new(
-            &s.spec.pose(&s.rig, &Offsets::default()),
-            [100.0, 100.0],
-            [100.0, 100.0],
-        );
+        let view = view_of(&s);
         let centre = view.project([30.0, 20.0, 0.0]).unwrap();
         assert!(
             (centre.x - 100.0 / 3.0).abs() < 1e-9 && (centre.y - 50.0).abs() < 1e-9,
@@ -643,11 +649,7 @@ mod tests {
             json!({"m": {"id": "m", "kind": "test.dot@1", "layer": "main", "name": "M", "order": "a1", "params": {"radius": 1, "fill": [1, 2, 3]}, "at": {"pos": [0, 0, 0]}}}),
         ))
         .unwrap();
-        let view = Projector::new(
-            &s.spec.pose(&s.rig, &Offsets::default()),
-            [100.0, 100.0],
-            [100.0, 100.0],
-        );
+        let view = view_of(&s);
         let centre = view.project([0.0, 0.0, 0.0]).unwrap();
         assert!(
             (centre.x - 30.0).abs() < 1e-6 && (centre.y - 50.0).abs() < 1e-6,
@@ -655,12 +657,7 @@ mod tests {
             centre.x,
             centre.y
         );
-        for i in 0..8 {
-            let c = [
-                if i & 1 == 0 { -1.0 } else { 1.0 },
-                if i & 2 == 0 { -1.0 } else { 1.0 },
-                if i & 4 == 0 { -1.0 } else { 1.0 },
-            ];
+        for c in unit_cube() {
             let p = view.project(c).unwrap();
             assert!(
                 (-1e-6..=100.0 + 1e-6).contains(&p.x) && (-1e-6..=100.0 + 1e-6).contains(&p.y),
@@ -684,17 +681,8 @@ mod tests {
                 dot.clone(),
             ))
             .unwrap();
-            let view = Projector::new(
-                &s.spec.pose(&s.rig, &Offsets::default()),
-                [100.0, 100.0],
-                [100.0, 100.0],
-            );
-            for i in 0..8 {
-                let c = [
-                    if i & 1 == 0 { -1.0 } else { 1.0 },
-                    if i & 2 == 0 { -1.0 } else { 1.0 },
-                    if i & 4 == 0 { -1.0 } else { 1.0 },
-                ];
+            let view = view_of(&s);
+            for c in unit_cube() {
                 let p = view.project(c).unwrap();
                 assert!(
                     (-1e-6..=100.0 + 1e-6).contains(&p.x) && (-1e-6..=100.0 + 1e-6).contains(&p.y),
@@ -731,11 +719,7 @@ mod tests {
             json!({"m": {"id": "m", "kind": "test.dot@1", "layer": "main", "name": "M", "order": "a1", "params": {"radius": 1, "fill": [1, 2, 3]}, "at": {"pos": [3, 1, -2]}}}),
         ))
         .unwrap();
-        let view = Projector::new(
-            &s.spec.pose(&s.rig, &Offsets::default()),
-            [100.0, 100.0],
-            [100.0, 100.0],
-        );
+        let view = view_of(&s);
         let centre = view.project([3.0, 1.0, -2.0]).unwrap();
         assert!(
             (centre.x - 50.0).abs() < 1e-6 && (centre.y - 50.0).abs() < 1e-6,

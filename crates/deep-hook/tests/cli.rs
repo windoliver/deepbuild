@@ -1,5 +1,71 @@
 use std::process::Command;
 
+const RULES: &str = r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#;
+const PKILL: &[u8] = br#"{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pkill -f node"}}"#;
+
+/// `home` made afresh with an empty `.deepbuild` folder.
+fn fresh_home(home: std::path::PathBuf) -> std::path::PathBuf {
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    home
+}
+
+/// Makes `home`'s rules.json a FIFO nobody writes: reading it never ends.
+fn stall_rules(home: &std::path::Path) {
+    let made = Command::new("/usr/bin/mkfifo")
+        .arg(home.join(".deepbuild/rules.json"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+}
+
+/// deep-hook's `claude-code <event>` with only `home` in its environment, its stdin and stderr piped and stdout dropped.
+fn hook(home: &std::path::Path, event: &str) -> std::process::Child {
+    Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .args(["claude-code", event])
+        .env_clear()
+        .env("HOME", home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap()
+}
+
+/// Writes `payload` to `child`'s stdin and closes it.
+fn feed(child: &mut std::process::Child, payload: &[u8]) {
+    use std::io::Write;
+    child.stdin.take().unwrap().write_all(payload).unwrap();
+}
+
+/// How `child` exited if it did by `limit` after `start`; otherwise it is killed and this is `None`.
+fn exit_within(
+    child: &mut std::process::Child,
+    start: std::time::Instant,
+    limit: std::time::Duration,
+) -> Option<std::process::ExitStatus> {
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return Some(status);
+        }
+        if start.elapsed() > limit {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
+/// What `child` wrote to its stderr.
+fn stderr_of(child: &mut std::process::Child) -> String {
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    stderr
+}
+
+const SECOND: std::time::Duration = std::time::Duration::from_secs(1);
+
 #[test]
 fn help_marks_the_skeleton() {
     let output = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
@@ -29,25 +95,9 @@ fn a_hook_whose_stdin_never_ends_is_allowed_within_the_deadline() {
     std::fs::create_dir_all(&home).unwrap();
     let start = std::time::Instant::now();
     // The agent never closes stdin and no hub is there: the watchdog decides.
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
-        .args(["claude-code", "PreToolUse"])
-        .env_clear()
-        .env("HOME", &home)
-        .stdin(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut child = hook(&home, "PreToolUse");
     let held = child.stdin.take();
-    let exited = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
-        }
-        if start.elapsed() > std::time::Duration::from_secs(1) {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            break None;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    };
+    let exited = exit_within(&mut child, start, SECOND);
     drop(held);
     std::fs::remove_dir_all(&home).unwrap();
     let status = exited.expect("deep-hook still waited on stdin after a second");
@@ -56,39 +106,19 @@ fn a_hook_whose_stdin_never_ends_is_allowed_within_the_deadline() {
 
 #[test]
 fn a_call_still_unread_at_the_deadline_is_denied_while_a_fail_closed_entry_is_installed() {
-    let home = std::env::temp_dir().join(format!("dh316-stdin-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    let home = fresh_home(std::env::temp_dir().join(format!("dh316-stdin-{}", std::process::id())));
     std::fs::write(
         home.join(".deepbuild/rules.json"),
-        r#"{"v":1,"entries":{"no-kill-by-name":{"match":"kill:by-name","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#,
+        RULES.replace("shell:pkill *", "kill:by-name"),
     )
     .unwrap();
     let start = std::time::Instant::now();
     // The agent never closes stdin and no hub is there: the call can't be checked, so it isn't let through.
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
-        .args(["claude-code", "PreToolUse"])
-        .env_clear()
-        .env("HOME", &home)
-        .stdin(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut child = hook(&home, "PreToolUse");
     let held = child.stdin.take();
-    let exited = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
-        }
-        if start.elapsed() > std::time::Duration::from_secs(1) {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            break None;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    };
+    let exited = exit_within(&mut child, start, SECOND);
     drop(held);
-    let mut stderr = String::new();
-    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    let stderr = stderr_of(&mut child);
     std::fs::remove_dir_all(&home).unwrap();
     let status = exited.expect("deep-hook still waited on stdin after a second");
     assert_eq!(
@@ -100,44 +130,14 @@ fn a_call_still_unread_at_the_deadline_is_denied_while_a_fail_closed_entry_is_in
 
 #[test]
 fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
-    use std::io::Write;
-    let home = std::env::temp_dir().join(format!("dh315-rules-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    let home = fresh_home(std::env::temp_dir().join(format!("dh315-rules-{}", std::process::id())));
     // rules.json is a FIFO nobody writes: reading it never ends, and no hub is there.
-    let made = Command::new("/usr/bin/mkfifo")
-        .arg(home.join(".deepbuild/rules.json"))
-        .status()
-        .unwrap();
-    assert!(made.success());
+    stall_rules(&home);
     let start = std::time::Instant::now();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
-        .args(["claude-code", "PreToolUse"])
-        .env_clear()
-        .env("HOME", &home)
-        .stdin(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(br#"{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pkill -f node"}}"#)
-        .unwrap();
-    let exited = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
-        }
-        if start.elapsed() > std::time::Duration::from_secs(1) {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            break None;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    };
-    let mut stderr = String::new();
-    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let exited = exit_within(&mut child, start, SECOND);
+    let stderr = stderr_of(&mut child);
     std::fs::remove_dir_all(&home).unwrap();
     let status = exited.expect("deep-hook still waited on rules.json after a second");
     assert_eq!(
@@ -153,41 +153,15 @@ fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
 
 #[test]
 fn a_hook_with_no_shell_call_is_spooled_whatever_rules_json_does() {
-    use std::io::Write;
-    let home = std::env::temp_dir().join(format!("dh315-start-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    let home = fresh_home(std::env::temp_dir().join(format!("dh315-start-{}", std::process::id())));
     // rules.json is a FIFO nobody writes, and no hub is there: guards can't touch a SessionStart, so it is spooled.
-    let made = Command::new("/usr/bin/mkfifo")
-        .arg(home.join(".deepbuild/rules.json"))
-        .status()
-        .unwrap();
-    assert!(made.success());
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
-        .args(["claude-code", "SessionStart"])
-        .env_clear()
-        .env("HOME", &home)
-        .stdin(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(br#"{"session_id":"s","hook_event_name":"SessionStart","source":"startup"}"#)
-        .unwrap();
-    let start = std::time::Instant::now();
-    let exited = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
-        }
-        if start.elapsed() > std::time::Duration::from_secs(1) {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            break None;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    };
+    stall_rules(&home);
+    let mut child = hook(&home, "SessionStart");
+    feed(
+        &mut child,
+        br#"{"session_id":"s","hook_event_name":"SessionStart","source":"startup"}"#,
+    );
+    let exited = exit_within(&mut child, std::time::Instant::now(), SECOND);
     let spooled =
         std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
     std::fs::remove_dir_all(&home).unwrap();
@@ -204,9 +178,8 @@ fn a_hook_with_no_shell_call_is_spooled_whatever_rules_json_does() {
 
 #[test]
 fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
-    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
-    let valid = r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#;
+    let valid = RULES;
     for (case, text, mode) in [
         ("truncated", &valid[..40], 0o600),
         ("not JSON", "rules", 0o600),
@@ -233,27 +206,14 @@ fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
             0o600,
         ),
     ] {
-        let home = std::env::temp_dir().join(format!("dh315-bad-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+        let home =
+            fresh_home(std::env::temp_dir().join(format!("dh315-bad-{}", std::process::id())));
         let rules = home.join(".deepbuild/rules.json");
         std::fs::write(&rules, text).unwrap();
         std::fs::set_permissions(&rules, std::fs::Permissions::from_mode(mode)).unwrap();
         // No hub is there.
-        let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
-            .args(["claude-code", "PreToolUse"])
-            .env_clear()
-            .env("HOME", &home)
-            .stdin(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(br#"{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pkill -f node"}}"#)
-            .unwrap();
+        let mut child = hook(&home, "PreToolUse");
+        feed(&mut child, PKILL);
         let out = child.wait_with_output().unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr);
         std::fs::remove_dir_all(&home).unwrap();
@@ -327,7 +287,6 @@ fn pre_tool_use(
     home: &std::path::Path,
     command: &str,
 ) -> (Option<i32>, std::time::Duration, String) {
-    use std::io::Write;
     let payload = format!(
         r#"{{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"{command}"}}}}"#
     );
@@ -341,12 +300,7 @@ fn pre_tool_use(
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(payload.as_bytes())
-        .unwrap();
+    feed(&mut child, payload.as_bytes());
     let status = child.wait().unwrap();
     let spooled =
         std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
@@ -355,14 +309,8 @@ fn pre_tool_use(
 
 /// A short home (a Unix socket path must fit in 104 bytes) with the fail_closed entry for `pkill *`.
 fn short_home(name: &str) -> std::path::PathBuf {
-    let home = std::path::PathBuf::from(format!("/tmp/dh315-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
-    std::fs::write(
-        home.join(".deepbuild/rules.json"),
-        r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#,
-    )
-    .unwrap();
+    let home = fresh_home(format!("/tmp/dh315-{name}-{}", std::process::id()).into());
+    std::fs::write(home.join(".deepbuild/rules.json"), RULES).unwrap();
     home
 }
 
@@ -609,19 +557,7 @@ fn a_print_mode_agents_waiter_exits_at_once() {
     let home = short_home("print");
     for flag in ["-p", "--print"] {
         let (mut agent, started) = waiter_under(&home, flag);
-        let exited = loop {
-            if let Some(status) = agent.try_wait().unwrap() {
-                break Some(status);
-            }
-            if started.elapsed() > std::time::Duration::from_secs(3) {
-                break None;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        };
-        if exited.is_none() {
-            let _ = agent.kill();
-            let _ = agent.wait();
-        }
+        let exited = exit_within(&mut agent, started, std::time::Duration::from_secs(3));
         assert_eq!(
             exited.and_then(|s| s.code()),
             Some(0),

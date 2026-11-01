@@ -8,9 +8,10 @@ import { join, resolve } from 'node:path';
 import { prepareRestore, type PreparedRestore } from '@deepbuild/record';
 import { writtenOf } from '@deepbuild/wiki';
 import { call } from './client.js';
-import { confirmYou } from './confirm.js';
+import { Confirmer } from './confirm.js';
 import { takeLock } from './lock.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { Devices } from './trusted.js';
 import { copySynced, syncPath, writeSynced } from './vfs.js';
 
 /** The folders a backup holds beside the record. */
@@ -61,7 +62,8 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
   const staged = (name: string) => join(root.dir, `${name}.restoring`);
   let prepared: PreparedRestore | undefined;
   try {
-    const why = await confirmYou(`restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}`, process.env.DEEP_HUB_TEST_CONFIRM);
+    const confirmer = new Confirmer({ devices: new Devices(root.devices), key: root.confirmKey, ...(process.env.DEEP_HUB_TEST_CONFIRM ? { stub: process.env.DEEP_HUB_TEST_CONFIRM } : {}) });
+    const why = await confirmer.you(`restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}`, { handle: `restore:${folder}`, revision: root.dir });
     if (why) {
       process.stderr.write(`deep restore changed nothing: the OS didn't confirm you (${why}). Run it again and confirm.\n`);
       return 3;

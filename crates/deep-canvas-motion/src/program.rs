@@ -28,6 +28,45 @@ pub struct Field {
     pub width: usize,
     /// A bool channel's field, written as `true` or `false`.
     pub boolean: bool,
+    /// Something writes it; a field only a driver reads is never written back.
+    pub written: bool,
+}
+
+/// One step of a driver's compiled expression, over the program's slots.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Op {
+    Num(f64),
+    Var(usize),
+    Neg,
+    /// `+ - * / %` as its byte.
+    Bin(u8),
+    /// A function of the closed list (`min max floor ceil round abs` as 0 to 5), with its
+    /// argument count.
+    Call(u8, usize),
+}
+
+/// A driver's ops at most (Driver: "≤ 64 ops"), and so its stack's depth.
+pub const DRIVER_OPS: usize = 64;
+
+/// What a traced evaluation saw write one slot: the document entry, its value after the write,
+/// and each document path it read on the way, nearest first, with its value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Traced {
+    pub entry: String,
+    /// Motion's operator that ran it.
+    pub operator: &'static str,
+    pub value: f64,
+    pub limit: bool,
+    pub reads: Vec<(String, f64)>,
+}
+
+/// One write the evaluation made, as [`Program::run`] reports it to a tracer.
+enum Event {
+    Channel(usize),
+    /// A placement's write, with the slots it wrote.
+    Placement(usize, std::ops::Range<usize>),
+    Driver(usize),
+    Limit(usize, usize),
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
@@ -54,6 +93,10 @@ pub struct Program {
     pub(crate) values_len: usize,
     pub(crate) placements: Vec<Vec<Write>>,
     pub(crate) parents: Vec<(usize, usize)>,
+    /// Each driver's target slot and compiled expression, in driver order.
+    pub(crate) drivers: Vec<(usize, Vec<Op>)>,
+    /// Each limit's first slot (its transform group's) and per-axis bounds, in constraint order.
+    pub(crate) limits: Vec<(usize, doc::Bounds)>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -128,6 +171,8 @@ impl Program {
             values_len: 0,
             placements: Vec::new(),
             parents: Vec::new(),
+            drivers: Vec::new(),
+            limits: Vec::new(),
             motion: motion.clone(),
         };
         let mut values = 0;
@@ -135,6 +180,7 @@ impl Program {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
             let slot = program.slot(items_json, &channel.target.owner, &channel.target, width);
             program.mark_bool(slot, channel.ty);
+            program.mark_written(slot);
             program.channels.push((slot, width));
             program.values.push(values);
             values += width;
@@ -151,6 +197,7 @@ impl Program {
                         let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
                         let slot = program.slot(items_json, &binding.item, &channel.target, width);
                         program.mark_bool(slot, channel.ty);
+                        program.mark_written(slot);
                         writes.push(Write {
                             channel: c,
                             delay: binding.delay,
@@ -161,6 +208,36 @@ impl Program {
                 }
             }
             program.placements.push(writes);
+        }
+        for driver in &motion.drivers {
+            let path = format!("drivers/{}", driver.id);
+            let mut vars = Vec::new();
+            for (name, target) in &driver.vars {
+                let slot = program.slot(items_json, &target.owner, target, 1);
+                vars.push((name.as_str(), slot));
+            }
+            let slot = program.slot(items_json, &driver.target.owner, &driver.target, 1);
+            program.mark_written(slot);
+            let ops = compile_ops(&driver.expr, &vars).ok_or_else(|| Refused {
+                code: "bad_doc",
+                path: format!("{path}/expr"),
+            })?;
+            program.drivers.push((slot, ops));
+        }
+        for limit in &motion.limits {
+            let Some(i) = program.items.iter().position(|x| *x == limit.owner) else {
+                return Err(Refused {
+                    code: "ref_unresolved",
+                    path: format!("constraints/{}/owner", limit.id),
+                });
+            };
+            let group = ["pos", "rot", "scale"]
+                .iter()
+                .position(|g| *g == limit.group)
+                .unwrap_or(0);
+            program
+                .limits
+                .push((i * TRANSFORM + 3 * group, limit.bounds));
         }
         let mut at = std::collections::BTreeMap::new();
         for (i, id) in program.items.iter().enumerate() {
@@ -181,6 +258,13 @@ impl Program {
             if let Some(f) = self.fields.iter_mut().find(|f| f.slot == slot) {
                 f.boolean = true;
             }
+        }
+    }
+
+    /// Marks the field at `slot` as one something writes.
+    fn mark_written(&mut self, slot: usize) {
+        if let Some(f) = self.fields.iter_mut().find(|f| f.slot == slot) {
+            f.written = true;
         }
     }
 
@@ -225,6 +309,7 @@ impl Program {
             slot,
             width,
             boolean: false,
+            written: false,
         });
         slot
     }
@@ -254,6 +339,17 @@ impl Program {
     /// [`Program::evaluate`] without child-of parenting: each item's own transform, as the
     /// scheduler's motion operator writes it and the core composes it with its parent's.
     pub fn evaluate_local(&self, t: i64, validity: Validity, state: &mut State) {
+        self.run(t, validity, state, |_, _, _| {});
+    }
+
+    /// [`Program::evaluate_local`], telling `note` of each write with the slots after it.
+    fn run(
+        &self,
+        t: i64,
+        validity: Validity,
+        state: &mut State,
+        mut note: impl FnMut(&Event, &[f64], &[f64]),
+    ) {
         let motion = &self.motion;
         let (doc_t, pass) = crate::eval::position(motion, t);
         state.t = t;
@@ -265,6 +361,7 @@ impl Program {
             let run = &mut state.values[self.values[c]..self.values[c] + width];
             state.iterations[c] = channel.curve.sample_into(doc_t, run);
             state.slots[slot..slot + width].copy_from_slice(run);
+            note(&Event::Channel(c), &[], &state.slots);
         }
         let mut scratch = [0.0; 3];
         for (p, placement) in motion.placements.iter().enumerate() {
@@ -279,6 +376,31 @@ impl Program {
                 let run = &mut scratch[..w.width.min(3)];
                 clip.channels[w.channel].curve.sample_into(l.local, run);
                 state.slots[w.slot..w.slot + run.len()].copy_from_slice(run);
+                note(
+                    &Event::Placement(p, w.slot..w.slot + run.len()),
+                    &[],
+                    &state.slots,
+                );
+            }
+        }
+        // Drivers after the channels, then limits after both (Driver; Constraint).
+        for (d, (slot, ops)) in self.drivers.iter().enumerate() {
+            let value = evaluate_ops(ops, &state.slots);
+            if value.is_finite() {
+                let before = [state.slots[*slot]];
+                state.slots[*slot] = value;
+                note(&Event::Driver(d), &before, &state.slots);
+            }
+        }
+        for (l, (first, bounds)) in self.limits.iter().enumerate() {
+            for (k, b) in bounds.iter().enumerate() {
+                let Some((lo, hi)) = b else { continue };
+                let v = state.slots[first + k];
+                let held = v.clamp(*lo, *hi);
+                if held != v {
+                    state.slots[first + k] = held;
+                    note(&Event::Limit(l, k), &[v], &state.slots);
+                }
             }
         }
         state.valid_until = crate::eval::valid_until(motion, t, doc_t, validity);
@@ -293,7 +415,7 @@ impl Program {
         let fields = self
             .fields
             .iter()
-            .filter(|f| f.item == Some(i))
+            .filter(|f| f.item == Some(i) && f.written)
             .map(|f| {
                 let run = &state.slots[f.slot..f.slot + f.width];
                 let value = match run {
@@ -306,6 +428,203 @@ impl Program {
             .collect();
         Some((transform, fields))
     }
+}
+
+impl Program {
+    /// The slot the field `field` of item `owner` takes, if anything in the program reads or
+    /// writes it: its transform's for `at/pos|rot|scale/k`, or a field's of its own.
+    pub fn slot_of(&self, owner: &str, field: &[String]) -> Option<usize> {
+        let i = self.items.iter().position(|x| x == owner)?;
+        if let [at, name, k] = field {
+            let group = ["pos", "rot", "scale"].iter().position(|n| n == name);
+            if let (true, Some(g), Ok(k)) = (at == "at", group, k.parse::<usize>()) {
+                return (k < 3).then_some(i * TRANSFORM + 3 * g + k);
+            }
+        }
+        self.fields
+            .iter()
+            .find(|f| f.item == Some(i) && f.path == field)
+            .map(|f| f.slot)
+    }
+
+    /// Every write motion makes to `slot` at `t`, in evaluation order: the document entry that
+    /// made it, its value after it, and what it read (the why's writes, #411).
+    pub fn trace(&self, t: i64, slot: usize) -> Vec<Traced> {
+        let mut state = self.state();
+        let mut out = Vec::new();
+        let (doc_t, _) = crate::eval::position(&self.motion, t);
+        self.run(t, Validity::Full, &mut state, |event, before, slots| {
+            let traced = match event {
+                Event::Channel(c)
+                    if (self.channels[*c].0..self.channels[*c].0 + self.channels[*c].1)
+                        .contains(&slot) =>
+                {
+                    let channel = &self.motion.channels[*c];
+                    let path = format!("channels/{}", channel.id);
+                    let owner = channel.curve.owner(doc_t).unwrap_or(0);
+                    // The component of the key's value this slot takes; a number's is the value.
+                    let (start, width) = self.channels[*c];
+                    let i = slot - start;
+                    let at = if width > 1 {
+                        format!("/{i}")
+                    } else {
+                        String::new()
+                    };
+                    let mut reads = Vec::new();
+                    for k in [Some(owner), channel.curve.next(doc_t)]
+                        .into_iter()
+                        .flatten()
+                    {
+                        let key = &channel.curve.keys[k];
+                        let v = key.value.get(i).copied().unwrap_or(0.0);
+                        reads.push((format!("{path}/keys/{}/value{at}", key.id), v));
+                    }
+                    let key = &channel.curve.keys[owner];
+                    Traced {
+                        entry: format!("{path}/keys/{}", key.id),
+                        operator: "channels",
+                        value: slots[slot],
+                        limit: false,
+                        reads,
+                    }
+                }
+                Event::Placement(p, written) if written.contains(&slot) => Traced {
+                    entry: format!("placements/{}", self.motion.placements[*p].id),
+                    operator: "channels",
+                    value: slots[slot],
+                    limit: false,
+                    reads: Vec::new(),
+                },
+                Event::Driver(d) if self.drivers[*d].0 == slot => {
+                    let driver = &self.motion.drivers[*d];
+                    let reads = driver
+                        .vars
+                        .iter()
+                        .filter_map(|(_, target)| {
+                            let s = self.slot_of(&target.owner, &target.field)?;
+                            let path = format!("items/{}/{}", target.owner, target.field.join("/"));
+                            Some((path, slots[s]))
+                        })
+                        .collect();
+                    Traced {
+                        entry: format!("drivers/{}", driver.id),
+                        operator: "channels",
+                        value: slots[slot],
+                        limit: false,
+                        reads,
+                    }
+                }
+                Event::Limit(l, k) if self.limits[*l].0 + k == slot => {
+                    let limit = &self.motion.limits[*l];
+                    let (lo, hi) = limit.bounds[*k].unwrap_or_default();
+                    let end = if before.first().is_some_and(|v| *v < lo) {
+                        0
+                    } else {
+                        1
+                    };
+                    let path = format!("constraints/{}", limit.id);
+                    Traced {
+                        entry: path.clone(),
+                        operator: "channels",
+                        value: slots[slot],
+                        limit: true,
+                        reads: vec![(
+                            format!("{path}/bounds/{k}/{end}"),
+                            if end == 0 { lo } else { hi },
+                        )],
+                    }
+                }
+                _ => return,
+            };
+            out.push(traced);
+        });
+        out
+    }
+}
+
+/// A driver's postfix steps as ops over slots: each name its var's slot. `None` past
+/// [`DRIVER_OPS`] steps, for a function outside the closed list, or for a stack that doesn't
+/// end with one value.
+fn compile_ops(
+    steps: &[deep_canvas::document::packs::ExprStep],
+    vars: &[(&str, usize)],
+) -> Option<Vec<Op>> {
+    use deep_canvas::document::packs::ExprStep;
+    if steps.len() > DRIVER_OPS {
+        return None;
+    }
+    let mut depth: isize = 0;
+    let mut ops = Vec::with_capacity(steps.len());
+    for step in steps {
+        let (op, delta) = match step {
+            ExprStep::Num(n) => (Op::Num(*n), 1),
+            ExprStep::Name(n) => (Op::Var(vars.iter().find(|(v, _)| v == n)?.1), 1),
+            ExprStep::Neg => (Op::Neg, 0),
+            ExprStep::Bin(c) => (Op::Bin(*c as u8), -1),
+            ExprStep::Call(name, n) => {
+                let f = ["min", "max", "floor", "ceil", "round", "abs"]
+                    .iter()
+                    .position(|x| x == name)?;
+                let arity = if f < 2 { 2 } else { 1 };
+                if *n != arity {
+                    return None;
+                }
+                (Op::Call(f as u8, *n), 1 - *n as isize)
+            }
+        };
+        depth += delta;
+        if depth < 1 {
+            return None;
+        }
+        ops.push(op);
+    }
+    (depth == 1).then_some(ops)
+}
+
+/// A driver's value over the slots, with a fixed stack and no allocation; NaN on `/` or `%` by 0.
+fn evaluate_ops(ops: &[Op], slots: &[f64]) -> f64 {
+    let mut stack = [0.0f64; DRIVER_OPS];
+    let mut n = 0;
+    for op in ops {
+        match *op {
+            Op::Num(v) => {
+                stack[n] = v;
+                n += 1;
+            }
+            Op::Var(s) => {
+                stack[n] = slots[s];
+                n += 1;
+            }
+            Op::Neg => stack[n - 1] = -stack[n - 1],
+            Op::Bin(c) => {
+                let (a, b) = (stack[n - 2], stack[n - 1]);
+                n -= 1;
+                stack[n - 1] = match c {
+                    b'+' => a + b,
+                    b'-' => a - b,
+                    b'*' => a * b,
+                    _ if b == 0.0 => f64::NAN,
+                    b'/' => a / b,
+                    _ => a % b,
+                };
+            }
+            Op::Call(f, args) => {
+                let a = stack[n - args];
+                let v = match f {
+                    0 => a.min(stack[n - 1]),
+                    1 => a.max(stack[n - 1]),
+                    2 => a.floor(),
+                    3 => a.ceil(),
+                    4 => a.round(),
+                    _ => a.abs(),
+                };
+                n -= args;
+                stack[n] = v;
+                n += 1;
+            }
+        }
+    }
+    stack[0]
 }
 
 /// Child-of parenting (canvas primitives: Constraint, R1 `child_of`): the child's transform,
