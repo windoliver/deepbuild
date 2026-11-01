@@ -1,0 +1,14 @@
+{
+  "id": "example/weather",
+  "version": "1.0.0",
+  "digest": "d1:64749e5b9ebeec6723af94a99af9c413cde90a4ac21db1cc9e4940437a1a5f22",
+  "access": { "words": ["hosts"] },
+  "stores": ["ext.weather.city"],
+  "actions": ["ext.weather.add_city", "ext.weather.cities"],
+  "notices": ["ext.weather.freezing"],
+  "secrets": [{ "name": "weather_key", "for": "the weather API's key" }],
+  "sources": [{ "name": "ext.weather.lisbon", "variant": "polled" }],
+  "requires": {
+    "preview": ["deep.secret", "deep.registerSource", "deep.store", "deep.store.put", "deep.store.list", "deep.registerAction", "deep.schedule", "deep.schedule.read", "deep.notices.send", "deep.registerView"]
+  }
+}

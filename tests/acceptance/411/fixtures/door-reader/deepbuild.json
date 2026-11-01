@@ -1,0 +1,8 @@
+{
+  "id": "test/door-reader",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "checks": ["ext.door-reader.open"],
+  "access": { "words": ["canvas"] },
+  "requires": { "preview": ["deep.canvas.read"] }
+}

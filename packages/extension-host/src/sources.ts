@@ -255,7 +255,12 @@ export class Sources {
           return stop('failed', `no reading: ${this.scrub(e instanceof Error ? e.message : String(e))}`);
         }
         const { value: v, unit } = (parsed ?? {}) as { value?: unknown; unit?: unknown };
-        if (typeof v !== 'number' || !Number.isFinite(v) || typeof unit !== 'string' || !unit) return stop('failed', 'no reading: the parser gave no value with a unit');
+        if (typeof v !== 'number' || !Number.isFinite(v) || typeof unit !== 'string' || !unit) {
+          // What it returned goes back scrubbed, so the plug-in's author sees what to fix (#366).
+          let returned: string;
+          try { returned = JSON.stringify(parsed) ?? String(parsed); } catch { returned = String(parsed); }
+          return stop('failed', `no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned ${this.scrub(returned.slice(0, 200))}`);
+        }
         const reading: Reading = { source: source.name, value: v, unit, as_of: now };
         const handle = `reading:${ulid(now)}`;
         await this.options.append('reading.recorded', { reading: handle, value: v, unit, as_of: now, source: source.name, n: 1, outside: false });

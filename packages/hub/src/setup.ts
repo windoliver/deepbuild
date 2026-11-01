@@ -91,6 +91,8 @@ async function install(cli: string, quiet = false): Promise<number> {
     installRules(root);
     await enrollConfirm(root);
     const hook = builtHook();
+    // For an agent whose hooks run in its own process, which no settings entry names deep-hook to: the pi package.
+    editConfig(root, (c) => { c.hook = { binary: hook }; });
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
     const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `${q(hook)} claude-code waiter`;
