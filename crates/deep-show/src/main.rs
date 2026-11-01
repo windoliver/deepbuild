@@ -14,11 +14,13 @@ mod costs;
 mod efficiency;
 mod evidence;
 mod frames;
+mod gate;
 mod host;
 mod hub;
 mod input;
 mod jobs;
 mod kit;
+mod media;
 mod modes;
 mod packs;
 mod placement;
@@ -364,6 +366,9 @@ fn acting(c: &Map<String, Value>) -> Option<Option<Via>> {
 
 fn call(c: &Map<String, Value>) -> Option<Call> {
     let name = c.get("call")?.as_str()?;
+    if let Some(g) = gate::parse_call(name, c) {
+        return Some(Call::Gate(Box::new(g)));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -525,6 +530,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "fixtures" => return Some(Call::Fixtures),
         "seam_suite" => return seams::parse(c),
+        "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
@@ -716,6 +722,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(t) = capture::parse_call(name, c) {
         return Some(Call::Capture(Box::new(t)));
     }
+    if let Some(m) = media::parse_call(name, c) {
+        return Some(Call::Media(Box::new(m)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -808,6 +817,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             rect: rect(p.get("rect"))?,
             visible: optional(p.get("visible"), Value::as_bool)?.unwrap_or(true),
             html: optional(p.get("html"), |h| Some(PathBuf::from(h.as_str()?)))?,
+            // #498: a shipped panel, by its ID in the app's inventory; any other is bad input.
+            shipped: optional(p.get("shipped"), |s| {
+                let id = s.as_str()?;
+                shipped_panels().contains(&id).then(|| id.to_string())
+            })?,
         })
     })?;
     let docs = entries(input, "docs", |d| {
@@ -1094,6 +1108,21 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "keeps_asset_after_crash" => Planted::KeepsAssetAfterCrash,
                 "labels_redaction_complete" => Planted::LabelsRedactionComplete,
                 "sends_without_approval" => Planted::SendsWithoutApproval,
+                "keeps_session_open" => Planted::KeepsSessionOpen,
+                "records_for_agent" => Planted::RecordsForAgent,
+                "records_without_permission" => Planted::RecordsWithoutPermission,
+                "skips_caps" => Planted::SkipsCaps,
+                "follows_urls" => Planted::FollowsUrls,
+                "decodes_in_app" => Planted::DecodesInApp,
+                "ignores_edit_lists" => Planted::IgnoresEditLists,
+                "keeps_priming" => Planted::KeepsPriming,
+                "encodes_in_decode_worker" => Planted::EncodesInDecodeWorker,
+                "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
+                "assumes_bt601" => Planted::AssumesBt601,
+                "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
+                "comparer_matches_hash" => Planted::ComparerMatchesHash,
+                "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
+                "fades_on_close" => Planted::FadesOnClose,
                 _ => return None,
             }),
         },
@@ -1223,6 +1252,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         environment,
         commit: optional(input.get("commit"), |c| Some(c.as_str()?.to_string()))?,
         machine: optional(input.get("machine"), |m| Some(m.as_object()?.clone()))?,
+        devices: capture::Devices::parse(input)?,
+        decode_caps: media::caps(input)?,
     })
 }
 
@@ -1672,6 +1703,21 @@ fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
 fn clock_ns() -> u64 {
     static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
     u64::try_from(START.get_or_init(Instant::now).elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
+
+/// The app's shipped panels, by the IDs its inventory lists (#882): the shipped plug-ins whose
+/// sound the device gate holds (#498).
+fn shipped_panels() -> Vec<&'static str> {
+    static IDS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    IDS.get_or_init(|| {
+        let inventory: Value = serde_json::from_str(include_str!("../../deep-app/inventory.json"))
+            .expect("the app's inventory is JSON");
+        (inventory["panels"].as_array().into_iter().flatten())
+            .filter_map(|p| p["panel"].as_str())
+            .map(|id| &*Box::leak(id.to_string().into_boxed_str()))
+            .collect()
+    })
+    .clone()
 }
 
 /// Every shipped canvas module's manifest, for the `module` call's dependencies (#402).
@@ -2126,6 +2172,13 @@ fn main() {
     match command.as_str() {
         "serve" => std::process::exit(serve::run()),
         "host" => std::process::exit(host::run(&args)),
+        // #498: this binary's copies as the decode worker and the encode tool.
+        "decode-worker" => {
+            std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &args[1..]))
+        }
+        "encode-tool" => {
+            std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
+        }
         _ => {}
     }
     let stdout = io::stdout();
