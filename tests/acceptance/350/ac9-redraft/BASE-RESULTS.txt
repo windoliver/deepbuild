@@ -1,0 +1,32 @@
+Base commit: c9225aa3 (main: Merge pull request #976)
+Node: v24.22.0
+Date: 2026-11-01T19:16:08Z
+Run with the Bash tool's sandbox off, after `npm ci --no-audit --no-fund` and `npm run build --workspaces`.
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/350/ac9-redraft --reporter=verbose
+
+ RUN  v5.0.5 tests/acceptance/350/ac9-redraft
+
+ ✓ ac9.test.ts > AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge > AC9 A reads B's value until its use is detached and reads missing after, never through a stopped B; B's process is gone after 4048ms
+ ✓ ac9.test.ts > AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge > AC9 (wrong program) a host that stops B first fails, naming the edge 4953ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  11:15:57
+   Duration  10.79s (tests 88%, import 7%, transform 5%)
+
+exit 0
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/350/ac9-redraft/tsconfig.json
+exit 0
+
+The base already holds #350 (its host has `disable`, `deep.provide`/`deep.use`/`deep.read` and the
+`stop-provider-first` plant) and not #103 (no removal ask), so on the base `disable` raised no ask and the test
+answered none. The twin passes because the planted host fails `judgeDetach`, naming the edge
+`deepbuild/a uses ext.b.feed@1 from test/b` and "after B's handlers stopped".
+
+Not kept, run once before this: the same file with the host's `disable` wrapped to raise one authority ask and wait
+for its yes before removing (a stand-in for #103's rule). It answered 1 ask; A read `ok` 564 times, then `missing`
+1625 times, with no error; the twin's judge gave:
+["the edge deepbuild/a uses ext.b.feed@1 from test/b: A read through its use after B's handlers stopped, 1 times:
+error: the edge deepbuild/a uses ext.b.feed@1 from test/b: test/b stopped while deepbuild/a still used it"]
