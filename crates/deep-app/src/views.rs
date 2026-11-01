@@ -118,10 +118,12 @@ pub fn register_views(cx: &mut App) {
         });
     }
     register_panel(cx, EXTENSION, |_, _, cx| {
-        Arc::new(cx.new(|cx| Slot {
+        let slot = cx.new(|cx| Slot {
             view: NEXT_EXTENSION.with(|next| next.borrow_mut().take()),
             focus_handle: cx.focus_handle(),
-        }))
+        });
+        SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
+        Arc::new(slot)
     });
 }
 
@@ -138,6 +140,23 @@ pub const EXTENSION: &str = "deepbuild/extension";
 thread_local! {
     static NEXT_EXTENSION: RefCell<Option<AnyView>> = const { RefCell::new(None) };
     static SLOT_BOUNDS: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+    static SLOT: RefCell<Option<WeakEntity<Slot>>> = const { RefCell::new(None) };
+}
+
+/// Puts `view` in the extension slot the shell drew last, in place of what it held: a view's page opened from ⌘K
+/// (#366). False when no slot is drawn.
+pub fn fill_slot(view: AnyView, cx: &mut App) -> bool {
+    let Some(slot) = SLOT
+        .with(|current| current.borrow().clone())
+        .and_then(|slot| slot.upgrade())
+    else {
+        return false;
+    };
+    slot.update(cx, |slot, cx| {
+        slot.view = Some(view);
+        cx.notify();
+    });
+    true
 }
 
 /// Hands the next layout that names [`EXTENSION`] its view.
@@ -494,9 +513,11 @@ impl Layout {
     }
 }
 
-/// The window's root: the dock area, loaded from a layout.
+/// The window's root: the dock area, loaded from a layout, and ⌘K over it once views give it entries (#366).
 pub struct Shell {
     pub dock: Entity<DockArea>,
+    commands: Option<Entity<crate::commands::Palette>>,
+    focus_handle: FocusHandle,
 }
 
 impl Shell {
@@ -505,19 +526,46 @@ impl Shell {
         let dock = cx.new(|cx| DockArea::new("deepbuild", None, window, cx));
         dock.update(cx, |dock, cx| dock.load(layout.state(), window, cx))
             .expect("the layout loads");
-        Self { dock }
+        Self {
+            dock,
+            commands: None,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    /// ⌘K over the shell, which takes focus so the key reaches it wherever you are in the window.
+    pub fn set_commands(
+        &mut self,
+        palette: Entity<crate::commands::Palette>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commands = Some(palette);
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
     }
 }
 
 impl Render for Shell {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         div()
             .size_full()
+            .relative()
+            .track_focus(&self.focus_handle)
+            .on_action(
+                cx.listener(|this, _: &crate::commands::OpenCommands, window, cx| {
+                    if let Some(palette) = &this.commands {
+                        let back = this.focus_handle.clone();
+                        palette.update(cx, |palette, cx| palette.show(back, window, cx));
+                    }
+                }),
+            )
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
             .text_sm()
             .child(self.dock.clone())
+            .children(self.commands.clone())
     }
 }
 
