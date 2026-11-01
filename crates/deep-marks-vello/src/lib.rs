@@ -8,6 +8,11 @@
 //! luminance mask renders its own paint, takes its coverage (luminance in linear light) and draws
 //! its items through one mask layer; a group below opacity 1 draws through one opacity layer.
 //!
+//! Issue #385: everything here draws on a [`Canvas`], Vello CPU's context or Vello GPU's scene,
+//! which share Vello's paint and path types. A group in a blend mode draws through one layer in
+//! that mode; fills that share an edge draw through one coverage target, their union as a clip
+//! with no antialiasing of their own inside it, so no seam shows what lies under the edge.
+//!
 //! A dash count splits each flattened sub-path into equal dashes and gaps from its start. A stroke
 //! whose stops run along its length is painted from an image of its ramp: each pixel takes the
 //! color at the arc length of the nearest point on the path, so the stroke has no seams where its
@@ -18,17 +23,133 @@ use std::sync::Arc;
 use deep_canvas::color::srgb_decode;
 use deep_canvas_marks::paint::{self, Adjust, Extend, Geometry, Ramp};
 use deep_canvas_marks::path::Verb;
-use deep_canvas_marks::scene::{Fill, ImageSampling, Line, Rgb, Scope};
+use deep_canvas_marks::scene::{Blend, Fill, ImageSampling, Line, Rgb, Scope};
 use vello_cpu::color::{AlphaColor, DynamicColor, Srgb};
 use vello_cpu::kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect, Stroke};
 use vello_cpu::peniko::{
-    self, ColorStop, ColorStops, Gradient, ImageAlphaType, ImageQuality, ImageSampler,
-    InterpolationAlphaSpace,
+    self, BlendMode, ColorStop, ColorStops, Compose, Gradient, ImageAlphaType, ImageQuality,
+    ImageSampler, InterpolationAlphaSpace, Mix,
 };
 use vello_cpu::{
     Image, ImageSource, Level, Mask, PaintType, PixelMetadata, Pixmap, RasterizerSettings,
     RenderContext, RenderMode, RenderSettings, Resources,
 };
+
+/// What the paints, outlines and scopes here draw on: Vello CPU's context, or Vello GPU's scene.
+pub trait Canvas {
+    fn width(&self) -> u16;
+    fn height(&self) -> u16;
+    fn transform(&self) -> Affine;
+    fn set_transform(&mut self, transform: Affine);
+    fn set_paint(&mut self, paint: PaintType);
+    fn set_paint_transform(&mut self, transform: Affine);
+    fn reset_paint_transform(&mut self);
+    fn set_fill_rule(&mut self, rule: peniko::Fill);
+    fn set_stroke(&mut self, stroke: Stroke);
+    fn fill_path(&mut self, path: &BezPath);
+    fn stroke_path(&mut self, path: &BezPath);
+    fn fill_rect(&mut self, rect: &Rect);
+    fn push_clip_rect(&mut self, rect: &Rect);
+    fn pop_clip(&mut self);
+    fn push_layer(
+        &mut self,
+        clip: Option<&BezPath>,
+        blend: Option<BlendMode>,
+        opacity: Option<f32>,
+        mask: Option<Mask>,
+    );
+    fn pop_layer(&mut self);
+    fn set_aliasing_threshold(&mut self, threshold: Option<u8>);
+}
+
+impl Canvas for RenderContext {
+    fn width(&self) -> u16 {
+        self.width()
+    }
+    fn height(&self) -> u16 {
+        self.height()
+    }
+    fn transform(&self) -> Affine {
+        *self.transform()
+    }
+    fn set_transform(&mut self, transform: Affine) {
+        self.set_transform(transform);
+    }
+    fn set_paint(&mut self, paint: PaintType) {
+        self.set_paint(paint);
+    }
+    fn set_paint_transform(&mut self, transform: Affine) {
+        self.set_paint_transform(transform);
+    }
+    fn reset_paint_transform(&mut self) {
+        self.reset_paint_transform();
+    }
+    fn set_fill_rule(&mut self, rule: peniko::Fill) {
+        self.set_fill_rule(rule);
+    }
+    fn set_stroke(&mut self, stroke: Stroke) {
+        self.set_stroke(stroke);
+    }
+    fn fill_path(&mut self, path: &BezPath) {
+        self.fill_path(path);
+    }
+    fn stroke_path(&mut self, path: &BezPath) {
+        self.stroke_path(path);
+    }
+    fn fill_rect(&mut self, rect: &Rect) {
+        self.fill_rect(rect);
+    }
+    fn push_clip_rect(&mut self, rect: &Rect) {
+        self.push_clip_rect(rect);
+    }
+    fn pop_clip(&mut self) {
+        self.pop_clip();
+    }
+    fn push_layer(
+        &mut self,
+        clip: Option<&BezPath>,
+        blend: Option<BlendMode>,
+        opacity: Option<f32>,
+        mask: Option<Mask>,
+    ) {
+        self.push_layer(clip, blend, opacity, mask, None);
+    }
+    fn pop_layer(&mut self) {
+        self.pop_layer();
+    }
+    fn set_aliasing_threshold(&mut self, threshold: Option<u8>) {
+        self.set_aliasing_threshold(threshold);
+    }
+}
+
+/// A group's blend as Vello's: a W3C mode composited source-over, or add as Porter and Duff's
+/// plus.
+pub fn blend_mode(blend: Blend) -> BlendMode {
+    let mix = match blend {
+        Blend::Normal | Blend::Add => Mix::Normal,
+        Blend::Multiply => Mix::Multiply,
+        Blend::Screen => Mix::Screen,
+        Blend::Overlay => Mix::Overlay,
+        Blend::Darken => Mix::Darken,
+        Blend::Lighten => Mix::Lighten,
+        Blend::ColorDodge => Mix::ColorDodge,
+        Blend::ColorBurn => Mix::ColorBurn,
+        Blend::HardLight => Mix::HardLight,
+        Blend::SoftLight => Mix::SoftLight,
+        Blend::Difference => Mix::Difference,
+        Blend::Exclusion => Mix::Exclusion,
+        Blend::Hue => Mix::Hue,
+        Blend::Saturation => Mix::Saturation,
+        Blend::Color => Mix::Color,
+        Blend::Luminosity => Mix::Luminosity,
+    };
+    let compose = if blend == Blend::Add {
+        Compose::Plus
+    } else {
+        Compose::SrcOver
+    };
+    BlendMode::new(mix, compose)
+}
 
 /// Vello CPU at the scalar SIMD level on one thread, so every platform draws the same bytes.
 pub fn settings() -> RenderSettings {
@@ -151,7 +272,7 @@ fn brush_at(fill: &Fill, bounds: [f64; 4], opacity: f64) -> PaintType {
 }
 
 /// Sets `fill`'s paint at `opacity` over `bounds`, and the transform its gradient draws through.
-fn set_brush(ctx: &mut RenderContext, fill: &Fill, bounds: [f64; 4], opacity: f64) {
+fn set_brush(ctx: &mut impl Canvas, fill: &Fill, bounds: [f64; 4], opacity: f64) {
     ctx.set_paint(brush_at(fill, bounds, opacity));
     match fill {
         Fill::Ramp(r) if r.transform != paint::IDENTITY => {
@@ -198,7 +319,7 @@ pub fn stroke(width: f64) -> Stroke {
 /// An outline (`Mark::Shape`): its fill, then its stroke, each a paint over the outline's box at
 /// its opacity; a stroke dashed by its count, and painted along its length when its stops are.
 pub fn shape(
-    ctx: &mut RenderContext,
+    ctx: &mut impl Canvas,
     verbs: &[Verb],
     fill: Option<&(Fill, f64)>,
     line: Option<&Line>,
@@ -307,8 +428,8 @@ fn dash(path: &BezPath, n: u16) -> BezPath {
 /// Paints the stroke of the flattened `path`, `width` u wide, from an image of `ramp` along its
 /// length at `opacity`: each device pixel near the path takes the ramp at the arc length (from the
 /// path's start, across its sub-paths) of the nearest point on it.
-fn along(ctx: &mut RenderContext, path: &BezPath, ramp: &Ramp, opacity: f64, width: f64) {
-    let device = *ctx.transform();
+fn along(ctx: &mut impl Canvas, path: &BezPath, ramp: &Ramp, opacity: f64, width: f64) {
+    let device = ctx.transform();
     // The segments in device pixels, with the arc length each starts at.
     let mut segments: Vec<(Point, Point, f64)> = Vec::new();
     let mut total = 0.0;
@@ -337,7 +458,7 @@ fn along(ctx: &mut RenderContext, path: &BezPath, ramp: &Ramp, opacity: f64, wid
         (x0, y0, x1, y1) = (x0.min(ax), y0.min(ay), x1.max(bx), y1.max(by));
     }
     if x1 <= x0 || y1 <= y0 || total <= 0.0 {
-        ctx.set_paint(AlphaColor::<Srgb>::TRANSPARENT);
+        ctx.set_paint(AlphaColor::<Srgb>::TRANSPARENT.into());
         return;
     }
     let (w, h) = (x1 - x0, y1 - y0);
@@ -412,13 +533,16 @@ fn along(ctx: &mut RenderContext, path: &BezPath, ramp: &Ramp, opacity: f64, wid
             alpha_type: ImageAlphaType::AlphaPremultiplied,
         },
     );
-    ctx.set_paint(Image {
-        image: ImageSource::Pixmap(Arc::new(image)),
-        sampler: ImageSampler {
-            quality: ImageQuality::Low,
-            ..ImageSampler::default()
-        },
-    });
+    ctx.set_paint(
+        Image {
+            image: ImageSource::Pixmap(Arc::new(image)),
+            sampler: ImageSampler {
+                quality: ImageQuality::Low,
+                ..ImageSampler::default()
+            },
+        }
+        .into(),
+    );
     ctx.set_paint_transform(device.inverse() * Affine::translate((x0 as f64, y0 as f64)));
 }
 
@@ -475,14 +599,24 @@ pub fn image(rgba: Vec<u8>, size: [u16; 2], opacity: f64, adjust: &Adjust) -> Pi
     )
 }
 
+/// How an open scope closes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Close {
+    Clip,
+    Layer,
+    /// A coverage target, whose fills drew with no antialiasing of their own.
+    Cover,
+}
+
 /// The scopes open while a frame draws, so each run of marks inside one scope draws through it
 /// once.
 #[derive(Default)]
 pub struct Scopes {
-    /// Open now, outermost first: (item, a layer rather than a clip).
-    open: Vec<(String, bool)>,
+    /// Open now, outermost first: (item, how it closes).
+    open: Vec<(String, Close)>,
     /// The offscreen passes the frame drew through: two per soft mask (its own paint's and the
-    /// layer its items draw through), one per opacity layer, none for a scissor.
+    /// layer its items draw through), one per opacity or blend layer and coverage target, none
+    /// for a scissor.
     pub offscreen: u32,
     /// #373 AC6's wrong program: a luminance mask that reads encoded luma.
     encoded_luma: bool,
@@ -499,7 +633,7 @@ impl Scopes {
 
     /// Closes the scopes the next mark isn't in and opens those it is, at the context's current
     /// transform; `&[]` closes them all.
-    pub fn enter(&mut self, ctx: &mut RenderContext, resources: &mut Resources, scopes: &[Scope]) {
+    pub fn enter(&mut self, ctx: &mut impl Canvas, resources: &mut Resources, scopes: &[Scope]) {
         let keep = self
             .open
             .iter()
@@ -508,58 +642,104 @@ impl Scopes {
             .count();
         while self.open.len() > keep {
             match self.open.pop() {
-                Some((_, true)) => ctx.pop_layer(),
+                Some((_, Close::Layer)) => ctx.pop_layer(),
+                Some((_, Close::Cover)) => {
+                    ctx.set_aliasing_threshold(None);
+                    ctx.pop_layer();
+                }
                 _ => ctx.pop_clip(),
             }
         }
         for s in &scopes[keep..] {
-            let layer = match s {
+            let close = match s {
+                Scope::Clip {
+                    rect: r, radius, ..
+                } if *radius > 0.0 => {
+                    use vello_cpu::kurbo::Shape;
+                    let shape = vello_cpu::kurbo::RoundedRect::from_rect(rect(*r), *radius);
+                    ctx.push_layer(Some(&shape.to_path(FLATTEN)), None, None, None);
+                    self.offscreen += 1;
+                    Close::Layer
+                }
                 Scope::Clip { rect: r, .. } => {
                     ctx.push_clip_rect(&rect(*r));
-                    false
+                    Close::Clip
                 }
                 Scope::Mask {
                     rect: r,
                     luminance,
                     fill,
+                    feather,
                     ..
                 } => {
-                    let mask = self.mask(ctx, resources, *r, *luminance, fill);
-                    ctx.push_mask_layer(mask);
+                    let mask = self.mask(&*ctx, resources, *r, *luminance, fill, *feather);
+                    ctx.push_layer(None, None, None, Some(mask));
                     self.offscreen += 2;
-                    true
+                    Close::Layer
                 }
-                Scope::Opacity { alpha, .. } => {
-                    ctx.push_opacity_layer(*alpha as f32);
+                Scope::Opacity { alpha, blend, .. } => {
+                    let mode = blend.filter(|b| *b != Blend::Normal).map(blend_mode);
+                    ctx.push_layer(None, mode, Some(*alpha as f32), None);
                     self.offscreen += 1;
-                    true
+                    Close::Layer
+                }
+                Scope::Cover { verbs, .. } => {
+                    ctx.push_layer(Some(&bez(verbs, [0.0, 0.0], 1.0)), None, None, None);
+                    // Any pixel a fill covers at all takes its paint whole, so the fills that
+                    // meet at a point fill it and the clip's edge antialiases the union alone.
+                    ctx.set_aliasing_threshold(Some(0));
+                    self.offscreen += 1;
+                    Close::Cover
                 }
             };
-            self.open.push((s.item().to_string(), layer));
+            self.open.push((s.item().to_string(), close));
         }
     }
 
     /// A soft mask's coverage over the frame: its paint over its rect, as alpha or as linear-light
-    /// luminance (Rec. 709 weights), and nothing outside the rect.
+    /// luminance (Rec. 709 weights), and nothing outside the rect; a feathered one's coverage
+    /// ramps from 0 to 1 over `feather` u centred on the rect's edges.
     fn mask(
         &self,
-        on: &RenderContext,
+        on: &impl Canvas,
         resources: &mut Resources,
         rect_u: [f64; 4],
         luminance: bool,
         fill: &Fill,
+        feather: f64,
     ) -> Mask {
         let (w, h) = (on.width(), on.height());
         let mut ctx = RenderContext::new_with(w, h, settings());
-        ctx.set_transform(*on.transform());
+        ctx.set_transform(on.transform());
         ctx.set_paint(brush(fill, rect_u));
-        ctx.fill_rect(&rect(rect_u));
+        if feather > 0.0 {
+            // The rect grown by half the feather, its coverage ramped below.
+            let h = feather / 2.0;
+            let [x, y, w, hh] = rect_u;
+            ctx.fill_rect(&rect([x - h, y - h, w + feather, hh + feather]));
+        } else {
+            ctx.fill_rect(&rect(rect_u));
+        }
         let mut pixmap = Pixmap::new(w, h);
         ctx.render_with(&mut pixmap, resources, rasterizer());
+        // Device px per u, and the rect in device px, for the feather's ramp.
+        let t = on.transform();
+        let scale = t.determinant().abs().sqrt();
+        let r = t.transform_rect_bbox(rect(rect_u));
+        let ramp = |v: f64, lo: f64, hi: f64| {
+            let f = feather * scale;
+            (((v - lo) / f + 0.5).min((hi - v) / f + 0.5)).clamp(0.0, 1.0)
+        };
         let data = pixmap
             .data()
             .iter()
-            .map(|p| {
+            .enumerate()
+            .map(|(i, p)| {
+                if feather > 0.0 {
+                    let (px, py) = ((i % w as usize) as f64 + 0.5, (i / w as usize) as f64 + 0.5);
+                    let cover = ramp(px, r.x0, r.x1) * ramp(py, r.y0, r.y1);
+                    return (f64::from(p.a) * cover).round() as u8;
+                }
                 let a = f64::from(p.a) / 255.0;
                 if !luminance || a == 0.0 {
                     return p.a;
