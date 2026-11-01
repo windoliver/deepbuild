@@ -1,0 +1,187 @@
+$ node --test tests/acceptance/358/keys.live.test.mjs (base 244a3455, exit 1)
+✖ #358.d4ccff93 the panel really runs out of process, one rebuild per command, over 1000 rows then 1001 (1.264583ms)
+✖ #358.d4ccff93 through 100 rebuilds and the row inserted above the visible ones at rebuild 50, the scroll stays anchored to the same row key (0.079458ms)
+✖ #358.d4ccff93 focus, the value, the caret and a composition in flight at rebuild 50 follow the field by key on every rebuild (0.05675ms)
+✖ #358.d4ccff93 scope: an open fold follows its element by key across every rebuild, and the closed one beside it stays closed (0.049125ms)
+✖ #358.d4ccff93 the host that follows keys reports a pass and exits 0 (0.056791ms)
+✖ #358.d4ccff93 the planted host matches like the real one for rebuilds 1 to 49, so nothing else is wrong with it (0.10875ms)
+✖ #358.d4ccff93 at rebuild 50 the planted host shifts the scroll by a row and drops focus (0.058791ms)
+✖ #358.d4ccff93 the planted host fails at rebuild 50, naming the row and the field, and exits non-zero (0.068292ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48.704458
+
+✖ failing tests:
+
+test at tests/acceptance/358/keys.live.test.mjs:16:1
+✖ #358.d4ccff93 the panel really runs out of process, one rebuild per command, over 1000 rows then 1001 (1.264583ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at rightRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:13:35)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:17:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:32:1
+✖ #358.d4ccff93 through 100 rebuilds and the row inserted above the visible ones at rebuild 50, the scroll stays anchored to the same row key (0.079458ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at rightRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:13:35)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:17:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:41:1
+✖ #358.d4ccff93 focus, the value, the caret and a composition in flight at rebuild 50 follow the field by key on every rebuild (0.05675ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at rightRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:13:35)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:17:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:48:1
+✖ #358.d4ccff93 scope: an open fold follows its element by key across every rebuild, and the closed one beside it stays closed (0.049125ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at rightRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:13:35)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:17:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:53:1
+✖ #358.d4ccff93 the host that follows keys reports a pass and exits 0 (0.056791ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at rightRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:13:35)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:17:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:59:1
+✖ #358.d4ccff93 the planted host matches like the real one for rebuilds 1 to 49, so nothing else is wrong with it (0.10875ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at plantedRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:14:39)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:60:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:67:1
+✖ #358.d4ccff93 at rebuild 50 the planted host shifts the scroll by a row and drops focus (0.058791ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at plantedRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:14:39)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:60:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }
+
+test at tests/acceptance/358/keys.live.test.mjs:80:1
+✖ #358.d4ccff93 the planted host fails at rebuild 50, naming the row and the field, and exits non-zero (0.068292ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: docs/spikes/358/keys.json is missing
+      at new AssertionError (node:internal/assert/assertion_error:380:5)
+      at blocked (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:16:26)
+      at loadRecord (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:21:74)
+      at drive (file://~/deepbuild-core/tests/acceptance/358/keys-driver.mjs:100:18)
+      at plantedRun (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:14:39)
+      at TestContext.<anonymous> (file://~/deepbuild-core/tests/acceptance/358/keys.live.test.mjs:60:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: undefined,
+    diff: 'simple'
+  }

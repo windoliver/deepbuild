@@ -140,6 +140,11 @@ export interface ExtensionHostOptions {
   http?: HttpClient;
   /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
   replay?: Recording;
+  /**
+   * The canvas core `deep.canvas.read` reads through (#411): the hub's own, which takes a deep_query call and answers
+   * its reply. Without one, a read is refused.
+   */
+  canvas?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 export interface InstallFrom {
   from: string;
@@ -150,9 +155,10 @@ export interface InstallFrom {
   /**
    * What you approved: the event kinds of the record it may read, from the core's and its own (`*` for every one of
    * those), whether it may read their text fields too, the repos or workspaces whose events it may read, by project
-   * ID (every one when it names none), and the hosts its outside calls may reach.
+   * ID (every one when it names none), the hosts its outside calls may reach, and the canvas documents its check
+   * runner may read through `deep.canvas.read`, by doc ID (none when it names none, #411).
    */
-  grant?: { record?: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[] };
+  grant?: { record?: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] };
 }
 /** A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. */
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
@@ -351,7 +357,7 @@ interface Manifest {
   sources?: { name: string; variant: string; reading?: string }[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
-interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[] }; holds: string[] }
+interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[] }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
 interface Bound { bound: string[]; gater: string | null; inTurn: boolean; waiting: Delivery[] }
 type Ask = (method: string, params: unknown) => Promise<unknown>;
@@ -637,6 +643,8 @@ class Host implements ExtensionHost {
   /** The publisher key trusted for each package ID: its first signed install's, or one you trusted since. */
   private keys: Record<string, string>;
   private readonly exts = new Map<string, Ext>();
+  /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
+  private readonly canvasKeys = new Map<Ext, string[]>();
   /** The packages you approved run-as-you for, by ID. */
   private runAsYou: Record<string, boolean>;
   private readonly terminals: Terminals;
@@ -748,6 +756,7 @@ class Host implements ExtensionHost {
         grant: {
           record: [...(from.grant?.record ?? [])], ...(from.grant?.text === true ? { text: true } : {}),
           ...(from.grant?.projects ? { projects: [...from.grant.projects] } : {}), ...(hosts ? { hosts } : {}),
+          ...(from.grant?.docs ? { docs: [...from.grant.docs] } : {}),
         },
         holds: [...(manifest.checks ?? [])],
       };
@@ -1588,6 +1597,23 @@ class Host implements ExtensionHost {
     // A shim that dropped a method answers it unsupported, naming it (the contract step's planted twin, #139).
     if (this.options.unsupported?.includes(method)) return { outcome: 'unsupported', operation: method, surface: 'extension-api' };
     switch (method) {
+      case 'deep.canvas.read': {
+        // A revision's evaluated values by stable ID, read only, under the grant's documents (#411): the core answers
+        // every path of a document the grant doesn't cover ref_unresolved.
+        const [target, query] = args;
+        const at = typeof target === 'string' ? target.lastIndexOf('@') : -1;
+        const rev = at > 0 ? Number((target as string).slice(at + 1)) : NaN;
+        if (typeof target !== 'string' || !Number.isSafeInteger(rev) || rev < 0) throw Error('deep.canvas.read takes "<doc>@<rev>" first');
+        const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+        if (!this.options.canvas) throw Error('deep.canvas.read: this hub has no canvas core');
+        const reply = await this.options.canvas({
+          call: 'deep_query', plugin: { id, docs: [...(ext.entry.grant.docs ?? [])] }, doc: target.slice(0, at), rev,
+          ...(q.paths !== undefined ? { paths: q.paths } : {}), ...(q.at !== undefined ? { at: q.at } : {}),
+        });
+        const keys = Object.values((reply.keys ?? {}) as Record<string, unknown>).flatMap((list) => (Array.isArray(list) ? list.filter((k): k is string => typeof k === 'string') : []));
+        this.canvasKeys.get(ext)?.push(...keys);
+        return reply;
+      }
       case 'deep.registerCheck': {
         const [type] = args;
         if (typeof type !== 'string') throw Error('deep.registerCheck takes the check kind first');
@@ -2399,14 +2425,21 @@ class Host implements ExtensionHost {
     const ext = this.kindOwner(kind);
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
     try {
+      this.canvasKeys.set(ext, []);
       const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx });
+      const read = this.canvasKeys.get(ext) ?? [];
       if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
+      // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
+      const missing = read.filter((k) => !result.evidence.includes(k));
+      if (result.outcome === 'passed' && missing.length) return nothing('failed', `${ext.entry.id}'s ${kind} reported passed without the content keys its deep.canvas.read calls returned as evidence (${missing.length} missing, first ${missing[0]})`);
       return result;
     } catch (e) {
       if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms${ext.place === 'sandbox' ? ', and was stopped' : ''}`);
       throw e;
+    } finally {
+      this.canvasKeys.delete(ext);
     }
   }
   async deliver(events: Event[]): Promise<void> {
