@@ -20,6 +20,10 @@ pub enum Plant {
     MovesFocus,
     /// The app's notification sound plays through the OS.
     StartsSound,
+    /// A page opened from ⌘K mounts without its parameter (#366 criterion 3).
+    PageDropsParam,
+    /// ⌘K ranks by the live app's recency file, which a replica never reads (#366 criterion 6).
+    RanksByLiveRecency,
 }
 
 impl Plant {
@@ -29,6 +33,8 @@ impl Plant {
             "writes-clipboard" => Some(Plant::WritesClipboard),
             "moves-focus" => Some(Plant::MovesFocus),
             "starts-sound" => Some(Plant::StartsSound),
+            "page-drops-param" => Some(Plant::PageDropsParam),
+            "ranks-by-live-recency" => Some(Plant::RanksByLiveRecency),
             _ => None,
         }
     }

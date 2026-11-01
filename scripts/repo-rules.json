@@ -350,6 +350,10 @@
           "spec": "0.0.0",
           "why": "Issue #348: the record project trust is one decision in, and the one an extension's deep.record calls reach, filtered by its grant."
         },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #366: the Runner the hub hands the host, which every plug-in's deep.runner.run goes through, and its JobRecord, which a job's answer or failure is read from."
+        },
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #348: host@1, through which every package outside the signed release starts in the platform sandbox (#236)."

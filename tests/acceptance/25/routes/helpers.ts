@@ -234,9 +234,16 @@ export function editConfig(home: string, edit: (config: Line) => void): void {
 
 // ---- The hub as a process: `deep hub run`, HOME the test's home (#16).
 export interface Hub { pid: number; home: string; socket: string; root: string; child: ChildProcess; output(): string }
-export interface HubOptions { plant?: string | undefined; clock?: number | undefined }
+/**
+ * Two waits a test sits through only when it answers inside neither (#964): `noAskWait` gives the hub a 30 s MCP tool
+ * timeout, so the deep_ask relation reads broken and deep_ask says "still waiting" at once, not after 40 s; `shortHold`
+ * ends a stop's hold with nothing answered after SHORT_HOLD_MS, not 60 s (DEEP_HUB_TEST_STOP_HOLD_MS).
+ */
+export interface HubOptions { plant?: string | undefined; clock?: number | undefined; noAskWait?: boolean; shortHold?: boolean }
+export const SHORT_HOLD_MS = 5000;
 export async function startHub(home: string, o: HubOptions = {}): Promise<Hub> {
-  const env = childEnv(home, { DEEP_HUB_PLANT: o.plant, DEEP_HUB_TEST_CLOCK: o.clock === undefined ? undefined : String(Math.round(o.clock)) });
+  const env = childEnv(home, { DEEP_HUB_PLANT: o.plant, DEEP_HUB_TEST_CLOCK: o.clock === undefined ? undefined : String(Math.round(o.clock)),
+    MCP_TOOL_TIMEOUT: o.noAskWait ? '30000' : undefined, DEEP_HUB_TEST_STOP_HOLD_MS: o.shortHold ? String(SHORT_HOLD_MS) : undefined });
   const child = spawn(NODE, [CLI, 'hub', 'run'], { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   own(child.pid);
   let out = '';

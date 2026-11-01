@@ -1,0 +1,138 @@
+{
+  "title": "runner.answered@1",
+  "description": "A model job's answer to a plug-in (#366): a reading with its own handle, the value the job gave, the handles it cites that the plug-in's grant reaches, and its freshness, as old as the oldest reading it cites and stale when the first of them goes stale. Never a verdict or an answer to an ask.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "runner.answered"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "reading": {
+          "type": "string",
+          "pattern": "^reading:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The answer's reading: handle."
+        },
+        "piece": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+          "maxLength": 8192,
+          "description": "The plug-in whose job it answers."
+        },
+        "job": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The runner's job that gave it."
+        },
+        "value": {
+          "x-opaque": "the job's own answer, structured as the plug-in asked"
+        },
+        "cites": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A handle the answer rests on, inside the plug-in's grant."
+          },
+          "description": "The handles it cites that the plug-in's grant reaches; any other the job named is left out."
+        },
+        "as_of": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Milliseconds since the Unix epoch: the oldest as-of time among the readings it cites, or when the job ended when it cites none."
+        },
+        "stale_at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When the first reading it cites goes stale, or null when it cites none."
+        }
+      },
+      "required": [
+        "reading",
+        "piece",
+        "job",
+        "value",
+        "cites",
+        "as_of",
+        "stale_at"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

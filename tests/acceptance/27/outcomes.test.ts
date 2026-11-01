@@ -37,7 +37,7 @@ describe(`${AC4} the issue's Oct 9 cases: the four delivery outcomes, a waiter t
   it(`${AC4} (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, and comes with the next prompt once the session can be read`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true, shortHold: true });
     await setup(home);
     const a = await idleInApp(hub, home, repo.dir);
     chmodSync(a.s.transcript, 0o000);
@@ -62,7 +62,7 @@ describe(`${AC4} the issue's Oct 9 cases: the four delivery outcomes, a waiter t
   it(`${AC4} (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled, and reaches the cleared thread's new session at its start, once`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true, shortHold: true });
     await setup(home);
     const a = await idleInApp(hub, home, repo.dir);
     await answer(home, a.handle, a.green.id);
@@ -85,7 +85,7 @@ describe(`${AC4} the issue's Oct 9 cases: the four delivery outcomes, a waiter t
   it(`${AC4} (a waiter that outlives its session) a headless session's Claude Code killed with its waiter waiting: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true, shortHold: true });
     await setup(home);
     const [a] = await idleSessions(hub, home, 1, { cwd: repo.dir });
     const [waiter] = await a!.claude.liveWaiters(a!.s.id);
@@ -101,7 +101,7 @@ describe(`${AC4} the issue's Oct 9 cases: the four delivery outcomes, a waiter t
   it(`${AC4} (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer, and the session doesn't read as finished`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true });
     await setup(home);
     const a = await (await beginAsk(hub, home, { cwd: repo.dir })).finish();
     // The agent started a background subagent before it asked; the subagent's hooks carry its agent_id on the parent's session.
