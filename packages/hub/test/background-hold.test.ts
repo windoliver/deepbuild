@@ -11,6 +11,8 @@ import { cleanRuns, CORE, E2E, J, MINUTE, tempDir907 } from '../../../tests/acce
 
 /** Lets the gate runner's queue, the record's reads and the starts it makes settle; timers stay faked. */
 const settle = async () => { for (let i = 0; i < 200; i++) await new Promise((done) => setImmediate(done)); };
+/** Waits, in real time with timers faked, until `ok` holds or `ms` passes: a start makes the snapshot's checkout first. */
+const until = async (ok: () => boolean, ms = 30_000) => { for (const end = Date.now() + ms; !ok() && Date.now() < end;) await new Promise((done) => setImmediate(done)); };
 
 interface Started { claim: string; check: string; lane: string }
 async function world(): Promise<{ record: RecordStore; gate: GateRunner; started: Started[]; capped: [string, string[]][] }> {
@@ -51,7 +53,7 @@ describe('#907 background work holds a stop\'s slow checks in the hub, at most 3
       await settle();
       expect(journeys(started, claim), `${E2E} still runs in the background, so the journey waits in its place`).toEqual([]);
       gate.backgroundEnded(s);
-      await settle();
+      await until(() => journeys(started, claim).length > 0);
       expect(journeys(started, claim).map((x) => x.lane), 'once it ends, the journey starts in the slow lane').toEqual(['slow']);
     } finally { await record.close(); }
   }, 60_000);
@@ -66,7 +68,7 @@ describe('#907 background work holds a stop\'s slow checks in the hub, at most 3
       await settle();
       expect(journeys(started, claim), 'nothing starts before 30 minutes from the stop').toEqual([]);
       await vi.advanceTimersByTimeAsync(1000);
-      await settle();
+      await until(() => journeys(started, claim).length > 0);
       expect(journeys(started, claim).map((x) => x.lane), 'the journey is pending past 30 minutes from the stop: it must start then').toEqual(['slow']);
       expect(capped, 'the session\'s row is told which checks waited 30 minutes, to name what still runs').toEqual([[s, [J]]]);
     } finally { await record.close(); }
@@ -85,7 +87,7 @@ describe('#907 background work holds a stop\'s slow checks in the hub, at most 3
       await settle();
       expect(started.filter((x) => x.check === J), '30 minutes from the first stop, nothing starts: the second stop has its own 30 minutes').toEqual([]);
       await vi.advanceTimersByTimeAsync(20 * MINUTE);
-      await settle();
+      await until(() => journeys(started, second).length > 0);
       expect(journeys(started, second).map((x) => x.lane), 'the journey starts on the second snapshot 30 minutes from its stop').toEqual(['slow']);
       expect(journeys(started, first), 'the first snapshot\'s journey never starts: the newer stop took its place').toEqual([]);
     } finally { await record.close(); }

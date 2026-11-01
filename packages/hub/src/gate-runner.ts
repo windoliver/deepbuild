@@ -161,8 +161,10 @@ export class GateRunner {
       if (this.o.slots().free <= 0) return;
       this.queue.delete(key);
       const c = [...this.claims.values()].flat().find((x) => x.claim === e.claim)!;
-      // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now.
-      const cwd = c.checkout ??= await checkoutOf(c.cwd, e.commit);
+      // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
+      // be checked out any more, its worktree gone, leaves the check missing, never passed.
+      const cwd = c.checkout ??= await checkoutOf(c.cwd, e.commit).catch(() => null);
+      if (!cwd) { e.outcome = 'missing'; continue; }
       e.running = true;
       const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: await this.expectedMs(e.check.check) });
       e.runs.push(run);
