@@ -182,8 +182,8 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
     planless: (account) => account === null,
   },
 };
-/** The system's root certificates as a file: a Codex job's HTTP client can't load them from the keychain in its sandbox. */
-const CODEX_ROOTS = '/etc/ssl/cert.pem';
+/** The system's root certificates as a file: a Codex job's HTTP client can't load them from the keychain in its sandbox. macOS keeps them at /etc/ssl/cert.pem; Debian and Fedora under /etc/ssl/certs and /etc/pki. */
+const CODEX_ROOTS = ['/etc/ssl/cert.pem', '/etc/ssl/certs/ca-certificates.crt', '/etc/pki/tls/certs/ca-bundle.crt'].find((f) => existsSync(f)) ?? '/etc/ssl/cert.pem';
 export function codexSignIn(home: string, env: Record<string, string | undefined>): string[] {
   return [join(codexHome(home, env), 'auth.json'), CODEX_ROOTS];
 }
