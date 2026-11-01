@@ -183,7 +183,7 @@ interface Live {
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
    * one that lands later goes with the next prompt.
    */
-  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; heldClaim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
+  turn: number; turnTask?: string | undefined; turnAsk?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; workedSinceClaim?: boolean; claim?: string | undefined; heldClaim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
 }
 /**
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
@@ -1448,7 +1448,7 @@ export class Core {
       const tail = this.tails.get(meta.session) ?? new UsageTail();
       this.tails.set(meta.session, tail);
       const { tokens, cost, model } = await tail.read(meta.transcript);
-      if (model) usage = { turn: meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
+      if (model) usage = { turn: this.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
     } else if (meta.agent === 'codex') {
       const text = await readFile(meta.transcript, 'utf8').catch(() => '');
       const lines = text.split('\n').flatMap((l) => { try { return [JSON.parse(l) as JsonValue]; } catch { return []; } });
@@ -1502,8 +1502,11 @@ export class Core {
       live.turn++;
       live.judged = false;
       // The task the prompt opened: on its draft, or on the queue's draft of it when the queue showed it first.
-      const ask = drafts.find((d) => d.kind === 'user.ask')?.data.tasks ?? this.sessions.get(meta.session)?.spliced?.get(meta.id)?.task?.data.tasks;
+      const opened = drafts.find((d) => d.kind === 'user.ask') ?? this.sessions.get(meta.session)?.spliced?.get(meta.id)?.task;
+      const ask = opened?.data.tasks;
       live.turnTask = Array.isArray(ask) && typeof ask[0] === 'string' ? ask[0] : undefined;
+      // The ask that began the turn is the turn's handle, the one its usage carries (#45).
+      live.turnAsk = opened?.id;
       this.askingSoon();
     }
     for (const draft of drafts) {

@@ -56,6 +56,10 @@ export async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<s
     rmSync(dir, { recursive: true, force: true });
   }
 }
+/** The tree of a commit, a snapshot's among them; undefined when git can't read it. The same tree on another HEAD is another snapshot. */
+export async function treeOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string | undefined> {
+  try { return await git(repo, ['rev-parse', `${commit}^{tree}`], await storeEnv(repo, store)); } catch { return undefined; }
+}
 /** A temporary checkout of `commit`, outside every worktree: git's own worktree list, refs and stash stay as they were. */
 export async function checkoutOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string> {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-checkout-')));

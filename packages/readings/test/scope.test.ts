@@ -10,6 +10,16 @@ const ev = (kind: string, ts: number, session: string | null, data: Record<strin
 const find = (events: RecordEvent[], id: string, subject: string | null = null) => readingsOf(recompute(events)).find((r) => r.id === id && (subject === null || r.subject === subject));
 
 describe('from the record', () => {
+  it('a turn.usage with no cost at all reads unpriced, never a crash or $0', () => {
+    const events = [
+      ev('user.ask', 0, 'A', { msg: 1, text: 'go', tasks: [], from: 'person' }),
+      ev('turn.usage', 1, 'A', { turn: 't1', model: 'm', covers: 'turn', tokens: { input: 10, cached: 0, output: 5, exact: true } }),
+    ];
+    const cost = find(events, 'cost.turn', 't1');
+    expect(cost?.value).toBeNull();
+    expect(cost?.cost).toEqual({ basis: 'unpriced' });
+  });
+
   it('counts failed calls by signature across sessions, and never a call that worked', () => {
     const events = [
       ev('tool.after', 1, 'A', { outcome: 'failed', signature: 'bash:npm-test' }),
