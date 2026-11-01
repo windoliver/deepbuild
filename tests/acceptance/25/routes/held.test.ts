@@ -21,7 +21,7 @@ const PLANT = 'answer-skips-held-stop';
 async function scenario(plant?: string): Promise<void> {
   const env = plant ? { DEEP_HUB_PLANT: plant } : {};
   const { home } = makeHome();
-  const hub = await startHub(home, { plant });
+  const hub = await startHub(home, { plant, noAskWait: true });
   await setup(home, env);
 
   // The control: a session that left no question stops, and its stop isn't held.

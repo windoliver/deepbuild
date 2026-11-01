@@ -36,7 +36,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^(files|programs|hosts|run_as_you|screen|sound|microphone|camera|clipboard|window|agent|edit_as_you|record|device:(ext\\.[a-z0-9][a-z0-9_-]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*)$",
+            "pattern": "^(files|programs|hosts|run_as_you|screen|sound|microphone|camera|clipboard|window|agent|edit_as_you|record|canvas|device:(ext\\.[a-z0-9][a-z0-9_-]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*)$",
             "description": "One access word, from access@1's closed list; notices, schedules and secrets are blocks, not words, so each fails here.",
             "maxLength": 8192,
             "x-closure": {

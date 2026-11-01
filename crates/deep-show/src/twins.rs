@@ -2,13 +2,16 @@
 //! operator in phase items writes JSON, which the seal refuses (`test-json`), and `test.dbg`,
 //! whose result's canonical bytes are its Debug text, so a build that prints Debug another way
 //! (`test-debug-alt`) gives it another digest (`test-debug-digest`). Neither is in a shipped build.
+//! Its helpers build #387's `test.accent` and #857's `test.serial` and `test.racy` too.
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-use deep_canvas::registry::{Manifest, Module, Range, Registrar, Semver};
+#[cfg(any(feature = "test-json", feature = "test-debug-digest"))]
+use deep_canvas::registry::Module;
+use deep_canvas::registry::{Manifest, Range, Registrar, Semver};
 use serde_json::Value;
 
 /// A test module's manifest: version 1.0.0, any core, under its feature.
-fn test_manifest(name: &str, feature: &str) -> Manifest {
+pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
     Manifest {
         name: name.into(),
         version: Semver {
@@ -25,7 +28,7 @@ fn test_manifest(name: &str, feature: &str) -> Manifest {
 }
 
 /// Registers a test kind `test.<name>@1` with a box, drawn as `rect@1`.
-fn boxed_kind(r: &mut Registrar, name: &'static str) {
+pub(crate) fn boxed_kind(r: &mut Registrar, name: &'static str) {
     r.kind(
         Entry {
             family: "test",
@@ -52,8 +55,23 @@ fn boxed_kind(r: &mut Registrar, name: &'static str) {
     );
 }
 
-fn of_kind(item: &Value, kind: &str) -> bool {
+pub(crate) fn of_kind(item: &Value, kind: &str) -> bool {
     item.get("kind").and_then(Value::as_str) == Some(kind)
+}
+
+/// The item's box's area.
+#[cfg(any(feature = "test-accent", feature = "test-threads"))]
+pub(crate) fn area(
+    v: &mut deep_canvas::schedule::View<'_>,
+) -> Result<f64, deep_canvas::schedule::OpError> {
+    Ok(v.item()?
+        .pointer("/params/box")
+        .and_then(Value::as_array)
+        .map(|b| {
+            b.get(2).and_then(Value::as_f64).unwrap_or(0.0)
+                * b.get(3).and_then(Value::as_f64).unwrap_or(0.0)
+        })
+        .unwrap_or(0.0))
 }
 
 /// #855's planted frame-phase JSON writer: `test.json.out` writes its item's box as JSON in

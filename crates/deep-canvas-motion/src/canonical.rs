@@ -5,9 +5,10 @@ use deep_canvas::schedule::Canonical;
 
 use crate::curve::{Curve, Interp, Key};
 use crate::doc::{
-    Binding, Channel, Clip, Cut, Extend, Marker, Motion, Placement, Target, Transport, ValueType,
+    Binding, Channel, Clip, Cut, Driver, Extend, Limit, Marker, Motion, Placement, Target,
+    Transport, ValueType,
 };
-use crate::program::{Field, Program, Write};
+use crate::program::{Field, Op, Program, Write};
 
 impl Canonical for Interp {
     fn encode(&self, out: &mut Vec<u8>) {
@@ -114,6 +115,22 @@ impl deep_canvas::schedule::Canonical for Transport {
         );
     }
 }
+impl deep_canvas::schedule::Canonical for Driver {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.id, &self.target, &self.text, &self.vars),
+            out,
+        );
+    }
+}
+impl deep_canvas::schedule::Canonical for Limit {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.id, &self.owner, self.group, &self.bounds),
+            out,
+        );
+    }
+}
 impl deep_canvas::schedule::Canonical for Motion {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
@@ -127,7 +144,10 @@ impl deep_canvas::schedule::Canonical for Motion {
             ),
             out,
         );
-        deep_canvas::schedule::Canonical::encode(&(&self.cuts, &self.frame_rate), out);
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.cuts, &self.frame_rate, &self.drivers, &self.limits),
+            out,
+        );
     }
 }
 impl deep_canvas::schedule::Canonical for Field {
@@ -142,6 +162,31 @@ impl deep_canvas::schedule::Canonical for Field {
             ),
             out,
         );
+        self.written.encode(out);
+    }
+}
+impl Canonical for Op {
+    fn encode(&self, out: &mut Vec<u8>) {
+        match self {
+            Op::Num(n) => {
+                out.push(0);
+                n.encode(out);
+            }
+            Op::Var(slot) => {
+                out.push(1);
+                slot.encode(out);
+            }
+            Op::Neg => out.push(2),
+            Op::Bin(op) => {
+                out.push(3);
+                op.encode(out);
+            }
+            Op::Call(f, n) => {
+                out.push(4);
+                f.encode(out);
+                n.encode(out);
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Write {
@@ -169,5 +214,6 @@ impl deep_canvas::schedule::Canonical for Program {
             &(&self.values_len, &self.placements, &self.parents),
             out,
         );
+        deep_canvas::schedule::Canonical::encode(&(&self.drivers, &self.limits), out);
     }
 }
