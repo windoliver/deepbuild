@@ -101,7 +101,7 @@ fn spelled(line: &str, cwd: Option<&Path>) -> Vec<Run> {
             .chars()
             .filter(|c| !matches!(c, '\'' | '"' | '\\'))
             .collect();
-        bare.rsplit('/').next().unwrap_or("").to_lowercase()
+        same_name(bare.rsplit('/').next().unwrap_or("")).to_lowercase()
     };
     match words.first().map(|w| name(w)).as_deref() {
         Some("env" | "command" | "exec" | "nohup" | "sudo" | "xargs") => {
@@ -189,6 +189,31 @@ fn one(pattern: &[u8], p: usize, c: u8) -> (bool, usize) {
         b'\\' if p + 1 < pattern.len() => (pattern[p + 1] == c, p + 2),
         other => (other == c, p + 1),
     }
+}
+
+/// A path or program name as a Mac's volume compares it, so `.PI/settings.json` in a repo with no `.pi` yet reads as the file later
+/// opens as. The folds are ASCII and the few letters that fold to ASCII, all a guarded name can be spelled with. A
+/// case-sensitive volume on a Mac is held a little too often; other systems take names as they are.
+pub fn same_name(path: &str) -> String {
+    if !cfg!(target_os = "macos") {
+        return path.to_string();
+    }
+    let mut out = String::with_capacity(path.len());
+    for c in path.chars() {
+        match c {
+            'ſ' => out.push('s'),
+            '\u{212A}' => out.push('k'),
+            'ß' | 'ẞ' => out.push_str("ss"),
+            'ﬀ' => out.push_str("ff"),
+            'ﬁ' => out.push_str("fi"),
+            'ﬂ' => out.push_str("fl"),
+            'ﬃ' => out.push_str("ffi"),
+            'ﬄ' => out.push_str("ffl"),
+            'ﬅ' | 'ﬆ' => out.push_str("st"),
+            c => out.push(c.to_ascii_lowercase()),
+        }
+    }
+    out
 }
 
 /// `path` with `..` and every link it passes through resolved, as far as the path exists, and lexically past
@@ -839,7 +864,10 @@ impl Ctx {
             self.links
                 .iter()
                 .rev()
-                .find(|(link, _)| lexical(link) == lexical(&path))
+                .find(|(link, _)| {
+                    same_name(&lexical(link).to_string_lossy())
+                        == same_name(&lexical(&path).to_string_lossy())
+                })
                 .map(|(_, target)| target.clone())
                 .unwrap_or(path),
         )
@@ -1778,7 +1806,7 @@ impl Reader {
             let shells = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"];
             if !line
                 .split_whitespace()
-                .any(|w| shells.contains(&w.rsplit('/').next().unwrap_or(w)))
+                .any(|w| shells.contains(&same_name(w.rsplit('/').next().unwrap_or(w)).as_str()))
             {
                 return;
             }
@@ -1852,7 +1880,7 @@ impl Reader {
 fn program(word: &Val) -> (String, bool) {
     match &word.text {
         Some(text) => {
-            let base = text.rsplit('/').next().unwrap_or(text).to_lowercase();
+            let base = same_name(text.rsplit('/').next().unwrap_or(text)).to_lowercase();
             (base, word.glob)
         }
         None => (String::new(), false),
