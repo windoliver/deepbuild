@@ -1075,6 +1075,183 @@ export interface AgentStopV4 {
   evidence?: Array<string>;
 }
 
+export type AgentStopV5Turn = number;
+
+export type AgentStopV5Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV5Count;
+  cached: AgentStopV5Count;
+  output: AgentStopV5Count;
+  context_fill: number | null;
+  cost: AgentStopV5Cost;
+} | null;
+
+export type AgentStopV5Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV5Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+export type AgentStopV5Loop = {
+  state: "looping";
+  due: number | null;
+} | {
+  state: "none_left";
+};
+
+/** agent.stop@5 */
+export interface AgentStopV5 {
+  v: 5;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "refusal";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "max_turns";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "timed_out";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "unknown";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  };
+  evidence?: Array<string>;
+}
+
 /** answer.refused@1 */
 export interface AnswerRefused {
   v: 1;

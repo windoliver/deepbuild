@@ -263,8 +263,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
+      // A child session's stop (a subagent's) names the child, from the payload field the facts' common template maps
+      // to `subagent`: it is no turn end of the session, so the core and the hub leave it out of the session's turns.
+      if (str(mapped.subagent)) data.child = str(mapped.subagent);
       fill = 'turn';
-      v = 4;
+      v = 5;
       break;
     case 'permission.request':
       data = {

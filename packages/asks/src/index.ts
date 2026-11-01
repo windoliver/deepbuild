@@ -483,7 +483,7 @@ interface Ask {
   block?: { signature: string; stops: Map<string, string> };
 }
 
-/** One stop of a session, as agent.stop@4 records it (#85): the structure the core raises a task or a continue from. */
+/** One stop of a session's own turn, as agent.stop@4 and @5 record it (#85): the structure the core raises a task or a continue from. */
 interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; finished: boolean; who: Ask['who'] }
 /** An automatic continue the core recorded: the stop it continued from, why, and when. */
 interface Continued { stop: string; because: string; ts: number }
@@ -1546,6 +1546,9 @@ class AsksCore implements Asks {
         // The hook's record of a stop: its cause from the closed set and, from the adapter's facts, who owns the block
         // and its signature. A stop without a signature is its own block, by cause.
         if (!e.session || e.writer !== 'hook') return;
+        // A child session's stop (a subagent's, agent.stop@5 naming the child) is no turn end of the session: it
+        // neither starts the continue count again nor makes the session's own newest stop stale.
+        if (typeof d.child === 'string') return;
         const cause = String(d.cause);
         const stop: Stop = {
           id: e.id, session: e.session, ts: e.ts, pos: e.log_pos, cause, owner: typeof d.owner === 'string' ? d.owner : 'agent',

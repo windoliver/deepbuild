@@ -50,16 +50,20 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** A stop as deep-hook records it: a dropped connection (StopFailure, the service's), or a turn that ended normally (Stop). */
-async function stop(how: 'dropped' | 'finished'): Promise<string> {
+/**
+ * A stop as deep-hook records it: a dropped connection (StopFailure, the service's), a turn that ended normally (Stop),
+ * or a child's (a subagent's SubagentStop: agent.stop@5 naming the child). `tick: false` leaves the core unread.
+ */
+async function stop(how: 'dropped' | 'finished' | 'child', tick = true): Promise<string> {
   now += 60_000;
   const id = ulid(now);
   const data: Obj = how === 'dropped'
     ? { turn: ++turn, did_work: true, claim: false, cause: 'timed_out', usage: USAGE, outcome: 'failed', signature: 'sig:1d20a3b4c5d6e7f8', owner: 'service' }
-    : { turn: ++turn, did_work: true, claim: true, cause: 'unknown', usage: USAGE, outcome: 'finished' };
-  await record.append(hook, { v: 4, id, kind: 'agent.stop', subject: `session:${S1.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data });
+    : how === 'finished' ? { turn: ++turn, did_work: true, claim: true, cause: 'unknown', usage: USAGE, outcome: 'finished' }
+    : { turn, did_work: true, claim: false, cause: 'unknown', usage: null, outcome: 'finished', child: 'a7c3e9f1' };
+  await record.append(hook, { v: how === 'child' ? 5 : 4, id, kind: 'agent.stop', subject: `session:${S1.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data });
   now += 5_000;
-  await asks.tick();
+  if (tick) await asks.tick();
   return id;
 }
 const continued = async () => (await record.read({ after: 0, limit: 1000 })).filter((e) => e.kind === 'session.continued').map((e) => (e.data as Obj).stop);
@@ -78,6 +82,21 @@ describe('the one automatic continue, counted per session since its last normal 
     // And again only once.
     await stop('dropped');
     expect(await continued()).toEqual([first, next]);
+  });
+
+  it("a child's stop is no turn end of the session: it neither resets the count nor outranks the session's own stop", async () => {
+    const first = await stop('dropped');
+    expect(await continued(), 'the first drop gets the one continue').toEqual([first]);
+    // A background subagent the turn started finishes (SubagentStop) after the drop, before the continued turn drops again.
+    await stop('child');
+    await stop('dropped');
+    expect(await continued(), "a subagent's stop between two drops doesn't start the count again").toEqual([first]);
+    // A turn ends normally, then a drop and a child's stop land before the core reads either: the drop is still the
+    // session's newest stop of its own, so it gets its continue.
+    await stop('finished');
+    const next = await stop('dropped', false);
+    await stop('child');
+    expect(await continued(), "a child's stop after a drop doesn't make the drop stale").toEqual([first, next]);
   });
 });
 
