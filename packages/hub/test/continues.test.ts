@@ -419,6 +419,42 @@ describe('the turn a stop cut off (#85)', () => {
   }, 60_000);
 });
 
+describe("a child's stop in the turn a stop cut off", () => {
+  it("doesn't bound the cut-off turn: a send that started before a subagent finished is still named outcome unknown", async () => {
+    await withHub(async (root, home) => {
+      const id = '7d3c5a9b-5555-4666-8777-8888bbbbcccc';
+      const project = join(home, '.claude', 'projects', 'tmp');
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, `${id}.jsonl`);
+      writeFileSync(transcript, '');
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, turnOrigin: 'human', promptSource: 'typed' })}\n`);
+      let n = 0;
+      const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
+      const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), line(event, extra));
+      const CMD = 'gh pr create --title "Mark subagent stops" --body "Part of #85"';
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      typed('list the files', 'p1');
+      expect(await hook('UserPromptSubmit', { prompt: 'list the files', prompt_id: 'p1' })).toContain('"ack"');
+      expect(await hook('Stop', { prompt_id: 'p1', stop_hook_active: false, last_assistant_message: 'Done.' })).toContain('"ack"');
+      await new Promise((r) => setTimeout(r, 300));
+      const woken = waiter(root, id, 15_000);
+      await new Promise((r) => setTimeout(r, 300));
+      // Turn 2 opens the pull request; a subagent the turn started finishes (SubagentStop, with the child's agent_id);
+      // then the connection drops before the send's PostToolUse reaches the hub.
+      typed('open the PR', 'p2');
+      expect(await hook('UserPromptSubmit', { prompt: 'open the PR', prompt_id: 'p2' })).toContain('"ack"');
+      expect(await hook('PreToolUse', { prompt_id: 'p2', tool_name: 'Bash', tool_input: { command: CMD }, tool_use_id: 'c1', permission_mode: 'default' })).toContain('"ack"');
+      expect(await hook('SubagentStop', { prompt_id: 'p2', stop_hook_active: false, agent_id: 'a7c3e9f1', agent_type: 'Explore', agent_transcript_path: join(project, `${id}-a7c3e9f1.jsonl`), last_assistant_message: 'Found it.' })).toContain('"ack"');
+      expect(await hook('StopFailure', { error: 'overloaded', prompt_id: 'p2' })).toContain('"ack"');
+      const woke = await woken;
+      expect(woke, 'the waiter woke the session with the continue').toMatchObject({ session: id, text: expect.stringContaining('one automatic continue') });
+      expect(String(woke!.text), "the child's stop isn't the turn's start: the send before it is named").toContain(`Bash \`${CMD}\` (outcome unknown)`);
+      // The record keeps the child's stop as the child's, not as a turn end of the session.
+      expect(rows(root, "SELECT 1 FROM events WHERE kind = 'agent.stop' AND session_id = ? AND json_extract(data, '$.child') = 'a7c3e9f1'", id), "the child's stop names the child").toHaveLength(1);
+    });
+  }, 60_000);
+});
+
 describe('a stop whose task is open (#85)', () => {
   it('holds the turns DeepBuild would start there: a promised check due wakes nothing until the task closes, then goes with the resume', async () => {
     await withHub(async (root, home, { restart }) => {

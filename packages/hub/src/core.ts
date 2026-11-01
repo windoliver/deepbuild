@@ -239,6 +239,11 @@ function effectEntries(dir: string): Map<string, string[]> {
 }
 /** How long the gate waits on the forge for a cut-off send's result (#85): well inside the gate's 10 s hold. */
 const PULL_LOOKUP_MS = 4000;
+/**
+ * In a query over a session's events `e`: not a child session's stop (a subagent's agent.stop@5, which names the
+ * child). A child's stop is no turn end of the session, so it never bounds a turn, ends a hold or carries a parked line.
+ */
+const OWN_TURN = "NOT (e.kind = 'agent.stop' AND json_extract(e.data, '$.child') IS NOT NULL)";
 const holdsTurns = (data: Obj): boolean => data.owner === 'you' || ['sign_in_required', 'token_refresh_failed', 'plan_window_spent', 'refusal'].includes(String(data.cause));
 /** An answered ask, as a route delivers it. */
 interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
@@ -517,13 +522,13 @@ export class Core {
     this.continuedPos = Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind = 'session.continued'`)) as { pos: number }[])[0]?.pos ?? 0);
     // A continue parked for a session's next prompt outlives the hub: each that no later turn of its session carried
     // goes with that session's next prompt again (#85).
-    for (const row of (await this.record.raw(`SELECT c.session_id, c.data FROM events c WHERE c.kind = 'session.continued' AND c.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = c.session_id AND e.log_pos > c.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'permission.request')) ORDER BY c.log_pos`)) as { session_id: string; data: string | Obj }[]) {
+    for (const row of (await this.record.raw(`SELECT c.session_id, c.data FROM events c WHERE c.kind = 'session.continued' AND c.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = c.session_id AND e.log_pos > c.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'permission.request') AND ${OWN_TURN}) ORDER BY c.log_pos`)) as { session_id: string; data: string | Obj }[]) {
       const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
       this.routesOf(row.session_id).later.push(await this.continueBlock(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null, typeof d.stop === 'string' ? d.stop : undefined));
     }
     // A stop whose task is open holds its session's DeepBuild turns across a restart too (#85): each session's newest
     // stop that no turn, prompt or continue followed.
-    for (const row of (await this.record.raw(`SELECT s.session_id, s.data FROM events s WHERE s.kind = 'agent.stop' AND s.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.session_id AND e.log_pos > s.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'session.continued', 'session.end'))`)) as { session_id: string; data: string | Obj }[]) {
+    for (const row of (await this.record.raw(`SELECT s.session_id, s.data FROM events s WHERE s.kind = 'agent.stop' AND s.session_id IS NOT NULL AND json_extract(s.data, '$.child') IS NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.session_id AND e.log_pos > s.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'session.continued', 'session.end') AND ${OWN_TURN})`)) as { session_id: string; data: string | Obj }[]) {
       const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
       if (holdsTurns(d)) this.routesOf(row.session_id).blocked = String(d.cause);
     }
@@ -1160,7 +1165,8 @@ export class Core {
           r.lastLine = e.ts;
           r.open = [];
           break;
-        case 'agent.stop': r.lastLine = e.ts; r.open = []; break;
+        // A child's stop (agent.stop@5 naming the child) ends no turn of the session: its open calls stay open.
+        case 'agent.stop': if (typeof d.child !== 'string') { r.lastLine = e.ts; r.open = []; } break;
         case 'session.end': state.delete(e.session); break;
         case 'tool.before':
           if (call) {
@@ -2048,7 +2054,7 @@ export class Core {
   private async cutOff(session: string, stop: string): Promise<CutOff[]> {
     const rows = (await this.record.raw(`SELECT kind, data FROM events WHERE session_id = ? AND kind IN ('tool.before', 'tool.after')
       AND log_pos < (SELECT log_pos FROM events WHERE id = ?)
-      AND log_pos > COALESCE((SELECT MAX(log_pos) FROM events WHERE session_id = ? AND kind IN ('agent.stop', 'session.start') AND log_pos < (SELECT log_pos FROM events WHERE id = ?)), 0) ORDER BY log_pos`, [session, stop, session, stop])) as { kind: string; data: string | Obj }[];
+      AND log_pos > COALESCE((SELECT MAX(log_pos) FROM events e WHERE e.session_id = ? AND e.kind IN ('agent.stop', 'session.start') AND ${OWN_TURN} AND e.log_pos < (SELECT log_pos FROM events WHERE id = ?)), 0) ORDER BY log_pos`, [session, stop, session, stop])) as { kind: string; data: string | Obj }[];
     const open = new Map<string, Obj>();
     for (const row of rows) {
       const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
@@ -4499,7 +4505,7 @@ export class Core {
     const [started] = prompt ? await this.record.raw(`SELECT 1 AS one FROM events WHERE session_id = ? AND kind = 'session.start' AND log_pos > ? LIMIT 1`, [session, prompt.log_pos]).catch(() => []) as { one: number }[] : [];
     // The turn's work since its last boundary (its prompt, its last stop or a start), so a turn a hub restart
     // interrupted is judged at its stop as the rule reads it (#83): a tool call, and one that may have changed code.
-    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events WHERE session_id = ? AND kind IN ('user.ask', 'agent.stop', 'session.start')`, [session]).catch(() => []) as { at: number | null }[] : [];
+    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events e WHERE e.session_id = ? AND e.kind IN ('user.ask', 'agent.stop', 'session.start') AND ${OWN_TURN}`, [session]).catch(() => []) as { at: number | null }[] : [];
     const calls = boundary?.at !== null && boundary?.at !== undefined ? (await this.record.raw(`SELECT json_extract(data, '$.kind') AS k FROM events WHERE session_id = ? AND kind = 'tool.after' AND log_pos > ?`, [session, boundary.at]).catch(() => [])) as { k: string | null }[] : [];
     const count = this.counters.get(session) ?? {
       msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: calls.length > 0, changed: calls.some((c) => !READS.has(String(c.k))),
