@@ -1,0 +1,32 @@
+Base commit: 244a3455f2c2ecb03d57d933dadfdbefa701cbbd (merge of #819), Node 24.22.0, macOS.
+Fresh worktree: npm ci; npm rebuild better-sqlite3; npm run build --workspaces; cargo build --locked -q -p deep-hook.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/39-redraft-ac11/tsconfig.json exits 0.
+
+Why it fails at the base: deep setup doesn't touch Codex's hooks.json, so the linked file has no DeepBuild Stop entry.
+
+Command:
+  npx vitest run --root tests/acceptance/39-redraft-ac11
+
+Output (checkout path shortened to <repo>):
+
+ RUN  v5.0.5 <repo>/tests/acceptance/39-redraft-ac11
+
+ ❯ ac11.test.ts (1 test | 1 failed) 8404ms
+   ❯ AC11 #39.d4d2fa79 With ~/.codex/hooks.json a symlink into a dotfiles folder, setup writes its entries into the linked file through a temporary file beside it, and the link is still the same symlink afterwards (1)
+     × AC11 #39.d4d2fa79 deep setup writes DeepBuild's Stop entry after yours into the linked file through a temporary file beside it, and the link stays the same symlink 4802ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac11.test.ts > AC11 #39.d4d2fa79 With ~/.codex/hooks.json a symlink into a dotfiles folder, setup writes its entries into the linked file through a temporary file beside it, and the link is still the same symlink afterwards > AC11 #39.d4d2fa79 deep setup writes DeepBuild's Stop entry after yours into the linked file through a temporary file beside it, and the link stays the same symlink
+AssertionError: AC11 deep setup must write DeepBuild's Stop entry into the linked file /private/tmp/ac11-GYDYu1/vol/dotfiles/hooks.json, through /private/tmp/ac11-GYDYu1/h/.codex/hooks.json; its Stop commands are ["/bin/echo my-stop"]; exit 0, stdout "DeepBuild added its hooks and status line forwarder to /private/tmp/ac11-GYDYu1/h/.claude/settings.json, beside yours; its MCP server to /private/tmp/ac11-GYDYu1/h/.claude.json; its skill at /private/tmp/ac11-GYDYu1/h/.claude/skills/deepbuild; its safety rules at /private/tmp/ac11-GYDYu1/h/.deepbuild/rules.json. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.\nOK stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout\nOK waiter holds: the waiter entry's 259200 s timeout covers the longest ask deadline in your settings, 3 days\nOK deep_ask holds: it says still waiting after 40 s, at least 5 s before Claude Code's MCP tool timeout, the 60 s DeepBuild takes while MCP_TOOL_TIMEOUT isn't set\nOK stop continuations hold: DeepBuild sends back at most 8 answers and send-backs through held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\nOK asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\nWiki:", stderr "": expected -1 to be greater than or equal to 0
+ ❯ writableFolder ac11.test.ts:91:183
+
+ ❯ ac11.test.ts:123:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:02:39
+   Duration  8.59s (tests 100%)
