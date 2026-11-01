@@ -12,6 +12,7 @@ import { Worker } from 'node:worker_threads';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
+import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { registry } from './hookmap.js';
@@ -37,7 +38,7 @@ const STALL_MS = 100;
 type Role = 'hook' | 'app' | 'cli' | 'mcp';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
-  ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
+  ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['confirm.enroll', ['app']],
@@ -604,7 +605,7 @@ class Hub {
     }
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
     // the core's gate first (#321, #23); a warn entry's words go out with the gate's reply.
-    const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+    const blocked = meta.denied !== undefined || (ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0);
     // A call blocked before it ran gets no PostToolUse: it is no wait.
     if (blocked) this.waits.drop(meta.session, meta.toolUse);
     const gated = blocked ? undefined : this.gated(meta, parsed.drafts);
@@ -614,7 +615,8 @@ class Hub {
     // A tool call this hub saw run marks its session as having worked, so the stop that follows at once is held for
     // its line whether or not the core's word of the turn has come back yet (#83).
     if (parsed.drafts.some((d) => d.kind === 'tool.after')) this.sawWork.add(meta.session);
-    const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
+    // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
+    const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
@@ -660,7 +662,7 @@ class Hub {
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
-    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude') && !meta.watchOnly && !this.off && meta.call !== undefined;
+    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude' || meta.agent === 'codex') && !meta.watchOnly && !this.off && meta.call !== undefined;
   }
   /**
    * The prompt's reply, written by its hold: the adapter's reply to the answer a saved decision gave; with none, no
@@ -668,15 +670,17 @@ class Hub {
    */
   private async permissionReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
-    const late = new Promise<{ decision: 'none' }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none' }>;
-    const { decision } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    const late = new Promise<{ decision: 'none'; because?: string }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
+    const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }>;
+    const { decision, because } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
     if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
     if (decision === 'deny') this.waits.drop(meta.session, meta.toolUse);
     const request = { payload: { permission_suggestions: meta.call?.suggestions ?? [] } } as unknown as HookRequestLine;
-    const reply = registry().get('claude').permissionReply!({ ask: '', session: meta.session, option: null, label: null, decision, for: 'call', words: null, provisional: false, undoes: null }, request) as Obj;
+    // A Codex deny carries its reason, or Codex treats the reply as a failed hook.
+    const words = meta.agent === 'codex' && decision === 'deny' ? `DeepBuild denied this by your saved decision ${because ?? ''}`.trim() : null;
+    const reply = registry().get(meta.agent === 'codex' ? 'codex' : 'claude').permissionReply!({ ask: '', session: meta.session, option: null, label: null, decision, for: 'call', words, provisional: false, undoes: null }, request) as Obj;
     // The planted wrong program picks the agent's own "always allow", writing a lasting rule into its settings.
     if (this.plant === 'permission-always-allow' && decision === 'allow' && isObj(reply.hookSpecificOutput) && isObj(reply.hookSpecificOutput.decision)) {
       reply.hookSpecificOutput.decision.updatedPermissions = meta.call?.suggestions ?? [];
@@ -729,7 +733,12 @@ class Hub {
     // A pi stop that did work is held for its line and a send-back; an open ask never holds it, since pi takes the answer as a turn of its own (#40).
     if (meta.agent === 'pi') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
-    if (meta.agent === 'codex') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session) || this.asking.has(meta.session)) ? now + STOP_HOLD_MS : null;
+    // Its hold can run up to 5 s before the Stop entry's timeout, for a slow check that ends by then (#39); the core ends it early otherwise.
+    if (meta.agent === 'codex') {
+      if (meta.watchOnly || this.off || !(this.worked.has(meta.session) || this.sawWork.has(meta.session) || this.asking.has(meta.session))) return null;
+      const timeoutS = stopTimeoutS(this.root.dir);
+      return now + (timeoutS === undefined ? STOP_HOLD_MS : timeoutS * 1000 - HOLD_MARGIN_MS);
+    }
     const relation = this.stopHold();
     if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
     if (meta.watchOnly || !relation.holds || this.off) return null;
@@ -808,6 +817,8 @@ class Hub {
     if (this.plant === 'adapter-decides' && meta.event === 'PermissionRequest') {
       return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }), stderr: '' });
     }
+    // A patch the adapter can't read is Codex's deny, with its reason and nothing else.
+    if (meta.denied && !this.off) return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: meta.denied } }), stderr: '' });
     // A session past its facts is watch-only: a matched entry is recorded, never a block.
     if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
     const entries = this.rules();
@@ -928,6 +939,7 @@ class Hub {
         }));
       }
       case 'hub.health':
+      case 'health':
         return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj) })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;

@@ -1,0 +1,718 @@
+The blind suite on its base commit 244a3455, Node v24.22.0, 2026-10-30, run with
+npx vitest run --root tests/acceptance/39 --no-file-parallelism --reporter=verbose
+in the blind job's own worktree, with disk free throughout (no ENOSPC; the blind job's own runs hit a full disk).
+36 failed, 3 passed, 4 skipped. Passing on base: AC5, AC9, AC12's engine half.
+
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   460Gi   400Gi    21Gi    96%    5.9M  216M    3%   /System/Volumes/Data
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/tests/acceptance/39
+
+ × replies.test.ts > AC12 #39.071692b0 Every reply the hub sends for each of Codex's twelve events validates against Codex's published output schema for that event, and Codex's own hook engine, fed each reply, applies it with no failed hook > AC12 #39.071692b0 all twelve: each reply validates, each hook is recorded, and a hub with its Stop block, PreToolUse deny and permission reply really replies (the schema isn't met by silence alone) 805ms
+   → AC12 #39.071692b0 Codex's Interrupt hook reached the record: session.start, task.created, user.ask, tool.before, permission.request, tool.after, agent.stop, claim.made, session.attention, session.end: expected false to be true // Object.is equality
+ ✓ replies.test.ts > AC12 #39.071692b0 Every reply the hub sends for each of Codex's twelve events validates against Codex's published output schema for that event, and Codex's own hook engine, fed each reply, applies it with no failed hook > AC12 #39.071692b0 Codex's own hook engine (real codex, a turn on a stand-in model): the hub's Stop reply is applied, and a malformed one isn't. The other events' engine half is BLOCKED: app.live.test.ts 4047ms
+ × replies.test.ts > AC13 #39.3c135e58 A permission request that a saved deny covers gets behavior: deny with its message and no other field, and Codex shows you no prompt for it; a reply carrying edited input or a rule for later is never sent > AC13 #39.3c135e58 the adapter's reply to a saved deny, and to an allow for the session, carries only behavior and message: no updatedInput, updatedPermissions or interrupt 4ms
+   → AC13 #39.3c135e58 the Codex adapter gives a permission reply: expected 'undefined' to be 'function' // Object.is equality
+ × replies.test.ts > AC13 #39.3c135e58 A permission request that a saved deny covers gets behavior: deny with its message and no other field, and Codex shows you no prompt for it; a reply carrying edited input or a rule for later is never sent > AC13 #39.3c135e58 through the hub: with a saved deny for the call (your deny on its authority ask, saved as a decision), the PermissionRequest gets behavior: deny and its message, validated by Codex's schema, and no ask opens 30857ms
+   → timed out after 30000 ms waiting for the ask
+ × replies.test.ts > AC21 #39.f8985208 A Codex PermissionRequest for git push origin main, answered with only the words "yes but not on main", gets behavior: deny with those words as its message, and the push never runs; answered by its allow option, it gets behavior: allow for that call alone; an adapter that maps the "yes" in the words to allow fails this test > AC21 #39.f8985208 the recorded request answered by the words, then by its allow option, each validated by Codex's schema; a twin that maps the yes to allow fails the same judge 3ms
+   → AC21 #39.f8985208 the Codex adapter gives a permission reply: expected 'undefined' to be 'function' // Object.is equality
+ × replies.test.ts > AC15 #39.b01d8471 Each of Codex's apply-patch scenario fixtures, and a heredoc patch sent through the shell tool, yields exactly the paths Codex changes; an indented *** Update File: line still names its path, and a patch with *** Environment ID: remote is denied before it runs > AC15 #39.b01d8471 every scenario at Codex 0.160.0 names exactly what its expected tree changes (a rejected patch names at least that); the heredoc, the cd and an indented line too; Environment ID: remote is denied 836ms
+   → AC15 #39.b01d8471 Environment ID: remote is denied before it runs: exit 0, stdout "", stderr "": expected undefined to be 'deny' // Object.is equality
+ × lanes.test.ts > AC17 #39.41993b5c A FAIL from a 20-minute check reaches the agent in the same turn > AC17 #39.41993b5c a check expected to take 20 minutes runs in the slow lane while the stop is held, and its FAIL is the stop's own decision: block 4123ms
+   → AC17 #39.41993b5c the 20-minute check ran in the slow lane: {"run":"run:01M663F9GBT16RKAWR5YE8GXPT","check":".deepbuild/checks/slow.sh","claim":"claim:01M663F9AWAVZ5TTFDYDSGPAHC","commit":"064f5dc96c338324676dd07adec276448159cb3b","host":"local","needs":{"cores":1,"memory_mb":0,"stack_slot":0,"gpus":0,"expected_ms":null},"lane":"fast"} {"run":"run:01M663F9GBT16RKAWR5YE8GXPT","outcome":"clean","left":[],"stopped":[]} {"run":"run:01M663F9GBT16RKAWR5YE8GXPT","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":".deepbuild/checks/slow.sh","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}: expected false to be true // Object.is equality
+ × lanes.test.ts > AC18 #39.ef0348e3 With the slow lane's expected time at 20 minutes and Codex's Stop hook entry edited to 300 s, the hub at start and deep doctor show the slow-lane relation broken, naming 300 s and 45 minutes, and a stop with a 20-minute check isn't held: Codex gets its reply at once, the claim stays pending, the session's row says why, and the FAIL arrives with your next message. A hub that holds anyway is cut off at 300 s and lets the stop through with no verdict, and that version fails this test > AC18 #39.ef0348e3 the relation is broken at start and in doctor, naming both values; the stop is answered at once, pending, the row says why, and the FAIL comes at your next message 570ms
+   → AC18 #39.ef0348e3 setup's Stop entry exists in /private/tmp/dh39-i0CuBB/h/.codex/hooks.json: expected undefined to be 2700 // Object.is equality
+ × lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s > AC19 #39.52f53113 at 8 s: broken, naming 8 s, and deep_ask returns at once with ID, deadline and default 842ms
+   → AC19 #39.52f53113 the deep_ask relation shows broken: exit 1, stdout "e your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.prompt\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no test prompt was sent: it spends plan usage\",\"fix\":\"Run `deep doctor --prompt` to send Claude Code one test prompt.\"}\n{\"item\":\"codex.binary\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"/private/tmp/dh39-0guJsC/bin/codex is Codex 0.160.0, which its facts cover\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.sign_in\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"codex login status exits 0: signed in\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.billing\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Codex sessions use your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}\n", stderr "": expected '{"item":"hub.socket","agent":"deepbui…' to match /deep_ask[^\n]*broken[^\n]*8 s/
+ × lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s > AC19 #39.52f53113 at 60 s: deep_ask says "still waiting" at 55 s 41034ms
+   → AC19 #39.52f53113 says still waiting: expected '{"jsonrpc":"2.0","id":2,"result":{"co…' to match /still waiting/i
+ × lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test > AC25 #39.5981bf3b deadline 3 s before the timeout: not held, pending, and the verdict comes with your next message 8971ms
+   → AC25 #39.5981bf3b this stop isn't held for its 6 s check: a hub that holds for any deadline before the timeout fails here: exit 0, stdout "{\"decision\":\"block\",\"reason\":\"says done · next: DeepBuild · receipt\\nDeepBuild sent this claim back: .deepbuild/checks/slow.sh FAIL.\",\"systemMessage\":\"says done · next: DeepBuild · receipt\"}", stderr "": expected 7966.426375000003 to be less than 5000
+ × lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test > AC25 #39.5981bf3b deadline 10 s before the timeout: held, and the check's FAIL is the stop's decision: block in the same turn 4153ms
+   → AC25 #39.5981bf3b the check's run is in the slow lane: expected false to be true // Object.is equality
+ × session.test.ts > AC1 #39.2b854223 A Codex session's tool calls and commits are recorded > AC1 #39.2b854223 setup's entries in ~/.codex/hooks.json run deep-hook; a shell call and a real git commit in a Codex turn are recorded under the session 482ms
+   → AC1 #39.2b854223 setup installs Codex's hooks in /private/tmp/dh39-SUwsoV/h/.codex/hooks.json; it holds: []: expected [] to deeply equal ArrayContaining{…}
+ × session.test.ts > AC2 #39.0215da31 A held stop continues with the answer > AC2 #39.0215da31 a Codex stop with an open ask is held; your answer comes back as decision: block carrying it, on a reply Codex's Stop schema allows, and setup's Stop entry is what runs it 437ms
+   → AC2 #39.0215da31 setup's Stop entry in /private/tmp/dh39-SCCMbM/h/.codex/hooks.json is the hold's route: expected false to be true // Object.is equality
+ × session.test.ts > AC3 #39.a929786c An idle Codex session receives the answer on the next message > AC3 #39.a929786c an answer after the stop ended starts nothing; the next UserPromptSubmit's additionalContext carries it, once 467ms
+   → AC3 #39.a929786c setup's UserPromptSubmit entry is the fallback's route: expected false to be true // Object.is equality
+ ✓ session.test.ts > AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session > AC5 #39.de9f23ce two threads whose hooks and one deep mcp share a parent process: each deep_ask binds to the PreToolUse stamped for it, in either order 933ms
+ × session.test.ts > AC7 #39.2bf95483 An answer to a Codex session that has ended reaches only the same thread when it resumes, and otherwise waits on its task > AC7 #39.2bf95483 after SessionEnd your answer reaches no new thread on the daemon; a SessionStart resume of the same thread gets it, and until then it waits 1007ms
+   → AC7 #39.2bf95483 it waits on its task: the answer's delivery outcome says so: expected '[]' to match /wait|task/i
+ × session.test.ts > AC8 #39.9d535982 A session on a Codex version past its facts is recorded with its holds watch-only and one health reading > AC8 #39.9d535982 a rollout naming 99.0.0: its events are recorded unverified, its stop isn't held, and exactly one reading names the version 461ms
+   → AC8 #39.9d535982 setup's entries are what sessions run: expected 0 to be greater than 0
+ × session.test.ts > AC16 #39.3f1db111 A turn you interrupt records an Interrupt event and reads as interrupted, never as a stop or a claim, and a subagent's SubagentStop never holds or judges the parent's stop > AC16 #39.3f1db111 Interrupt records an interrupted turn with no agent.stop and no claim; the row reads interrupted 1570ms
+   → AC16 #39.3f1db111 an Interrupt event: session.start, task.created, user.ask, tool.before, tool.after, mcp.tools_listed: expected 0 to be greater than 0
+ × session.test.ts > AC16 #39.3f1db111 A turn you interrupt records an Interrupt event and reads as interrupted, never as a stop or a claim, and a subagent's SubagentStop never holds or judges the parent's stop > AC16 #39.3f1db111 SubagentStart and SubagentStop carrying the root's session ID and an agent_id: answered at once, recorded as the child's, and the parent's stop is neither held nor judged by them 1542ms
+   → AC16 #39.3f1db111 the child's stop is recorded: session.start, task.created, user.ask, tool.before, mcp.tools_listed: expected +0 to be 1 // Object.is equality
+ × runner.test.ts > AC6 #39.edfd0196 A Codex job the runner started with codex exec leaves no session row, claim or task spend > AC6 #39.edfd0196 through the hub's runner a Codex job's hooks read as the job's events, with no session row, claim or spend under its thread ID 522ms
+   → AC6 #39.edfd0196 the runner starts a Codex job: {"job":"run:01M663HA3EXEYP3HRRKGRF8TMN","kind":"draft","agent":"codex","account":null,"state":"refused","folder":"/private/tmp/dh159-JUjgEx/root/jobs/01M663HA3EXEYP3HRRKGRF8TMN","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' not to be 'refused' // Object.is equality
+ × runner.test.ts > AC26 #39.8807ac2c A job asked to write a file is refused by its read-only mode in Codex, and the refusal is its recorded stop cause > AC26 #39.8807ac2c launched with exec --json, -s read-only and the prompt on stdin; the write is refused, nothing is written, and the job's stop cause is refusal 196ms
+   → AC26 #39.8807ac2c the runner launches a Codex job: {"job":"run:01M663HAAMQ8EBNRTBV8P3TB9P","kind":"draft","agent":"codex","account":null,"state":"refused","folder":"/private/tmp/dh159-home-AWwemW/.deepbuild/jobs/01M663HAAMQ8EBNRTBV8P3TB9P","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' to be 'finished' // Object.is equality
+ × runner.test.ts > AC28 #39.1d214ff1 In Codex, #159's end-to-end marker test passes: the drafting job's stdin, its folder and its own transcript hold none of the three markers, and the review's hold the diff's marker and neither of the others; a runner that passes the PR body to the review, or the diff to the drafting job, fails it, naming the marker > AC28 #39.1d214ff1 a session's transcript, diff and PR body carry distinct markers; a Codex drafting job and review through the runner hold what the criterion says, by marker 465ms
+   → AC28 #39.1d214ff1 the runner runs Codex's drafting job: {"job":"run:01M663HANEBAMPRAX7G74DNDRC","kind":"draft","agent":"codex","account":null,"state":"refused","folder":"/private/tmp/dh159-home-AWwemW/.deepbuild/jobs/01M663HANEBAMPRAX7G74DNDRC","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' to be 'finished' // Object.is equality
+ × budgets.test.ts > AC22 #39.b7839f18 Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead under 10 ms at p95, and setup sets Codex's Stop timeout once, to 45 minutes > AC22 #39.b7839f18 setup writes Codex's Stop timeout at 45 minutes and a second setup doesn't touch it 475ms
+   → AC22 #39.b7839f18 the Stop entry's timeout in /private/tmp/dh39-t5NeHd/h/.codex/hooks.json: expected undefined to be 2700 // Object.is equality
+ × budgets.test.ts > AC22 #39.b7839f18 Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead under 10 ms at p95, and setup sets Codex's Stop timeout once, to 45 minutes > AC22 #39.b7839f18 hook overhead under 10 ms at p95: a covered PostToolUse's round trip less a bare deep-hook start, five runs of 20 samples after warm-up. A comparison with the merge base is the preflight bench's 437ms
+   → AC22 #39.b7839f18 setup wrote Codex's entries: expected undefined to be defined
+ ✓ setup.test.ts > AC9 #39.410c1db7 The output of codex login status is never printed or logged; only its exit code is read > AC9 #39.410c1db7 doctor and the hub read the exit code: the secret-shaped line the stand-in prints reaches no output and no file, and the exit code decides sign-in both ways 1514ms
+ × setup.test.ts > AC10 #39.1f0c31eb A Codex config.toml with hooks = false under [features] shows in deep doctor as hooks that won't run there, naming the setting, and deep doctor exits non-zero > AC10 #39.1f0c31eb doctor names [features] hooks = false, exits non-zero, and setup never flips your setting 774ms
+   → AC10 #39.1f0c31eb a finding names the setting: exit 1, stdout "e your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.prompt\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no test prompt was sent: it spends plan usage\",\"fix\":\"Run `deep doctor --prompt` to send Claude Code one test prompt.\"}\n{\"item\":\"codex.binary\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"/private/tmp/dh39-5v21DV/bin/codex is Codex 0.160.0, which its facts cover\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.sign_in\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"codex login status exits 0: signed in\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.billing\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Codex sessions use your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}\n", stderr "": expected '{"item":"hub.socket","agent":"deepbui…' to match /hooks\s*=\s*false/
+ × setup.test.ts > AC11 #39.d4d2fa79 With ~/.codex/hooks.json a symlink into a dotfiles folder, setup writes its entries into the linked file through a temporary file beside it, and the link is still the same symlink afterwards; a setup that renames its temporary file over the link replaces the link with a plain file and fails this test, naming the path > AC11 #39.d4d2fa79 the link stays the same symlink; the linked file holds your entry then DeepBuild's; a temporary file appeared beside the linked file, none beside the link 742ms
+   → AC11 #39.d4d2fa79 the linked file /private/tmp/dh39-B4YW1e/dotfiles/codex/hooks.json holds DeepBuild's Stop entry: ["/usr/bin/true"]: expected false to be true // Object.is equality
+ × setup.test.ts > AC14 #39.c819bb37 After a DeepBuild update, its entries in hooks.json are byte-identical and Codex's hook list still reports them trusted; changing one entry's timeout in a test makes health show that entry as modified within one session > AC14 #39.c819bb37 entries name a fixed path; a second setup (the update) leaves the file byte-identical and Codex's hooks/list trusted; a changed timeout shows as modified in health 437ms
+   → AC14 #39.c819bb37 setup wrote entries in /private/tmp/dh39-yDMHAB/h/.codex/hooks.json: expected 0 to be greater than 0
+ × setup.test.ts > AC24 #39.21dbcb3f Running setup again after the slow lane's expected time changes from 20 to 30 minutes leaves Codex's Stop hook entry byte-identical at 45 minutes, and Codex's hook list still reports it trusted; a setup that writes the new expected time into the entry makes Codex ask for trust again, and that version fails this test, naming the entry > AC24 #39.21dbcb3f the Stop entry stays 45 minutes and byte-identical, trusted in hooks/list, across 20 to 30 minutes 598ms
+   → AC24 #39.21dbcb3f setup sets the Stop entry at 45 minutes: undefined: expected undefined to be 2700 // Object.is equality
+ × kit.test.ts > AC20 #39.977fabab The twin that delivers thread A's answer to thread B on one daemon fails the kit with "answer delivered to another session", naming both sessions, while the adapter passes; an answerPermission case whose fixture payload lacks the request's ID reads INVALID, "declared answerPermission, never reached", never passed > AC20 #39.977fabab the Codex adapter passes; the twin (a deliver that lands in another thread) fails deliver/one-owner-per-session, naming both sessions 13ms
+   → AC20 #39.977fabab the adapter's answerPermission case is a real permission reply, signed: {"id":"permission/not-from-label","outcome":"BLOCKED","message":"the adapter has no permissionReply, so the harness can't read its reply on terminal","codes":[],"declared":{"flags":[],"operations":[],"kinds":[]},"reached":{"flags":[],"operations":[],"kinds":[]},"probes":["reply"],"killed":[],"survived":[]}: expected 'BLOCKED' to be 'PASS' // Object.is equality
+ × kit.test.ts > AC20 #39.977fabab The twin that delivers thread A's answer to thread B on one daemon fails the kit with "answer delivered to another session", naming both sessions, while the adapter passes; an answerPermission case whose fixture payload lacks the request's ID reads INVALID, "declared answerPermission, never reached", never passed > AC20 #39.977fabab a fixture PermissionRequest with no request ID never reaches answerPermission: INVALID, naming it, never PASS 2ms
+   → AC20 #39.977fabab reads INVALID: {"id":"permission/not-from-label","outcome":"BLOCKED","message":"the adapter has no permissionReply, so the harness can't read its reply on terminal","codes":[],"declared":{"flags":[],"operations":[],"kinds":[]},"reached":{"flags":[],"operations":[],"kinds":[]},"probes":["reply"],"killed":[],"survived":[]}: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ × kit.test.ts > AC23 #39.7ff25607 Adapter types are generated from Codex's published hook schemas > AC23 #39.7ff25607 a generated module under packages/adapters says so and names the source, with a type for each of the twelve events' payloads and the output shapes the schemas define 3ms
+   → AC23 #39.7ff25607 a generated file naming codex-rs/hooks/schema/generated in its header, among ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/adapters/src/index.ts, ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/adapters/src/shipped.ts, ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/adapters/src/types.ts: expected undefined to be defined
+ × kit.test.ts > AC4 #39.3506d285 The same hooks hold a stop in the Codex app; if they don't on a given app version, that gap is written down with the version and the upstream issue (openai/codex#33992, #47607) > AC4 #39.3506d285 either a desktop corpus session records a held stop, or the facts write down the gap with its version and both upstream issues. BLOCKED until the app's live run: app.live.test.ts 6ms
+   → AC4 #39.3506d285 no recorded desktop stop hold, and no gap in adapters/codex.facts.json naming its version and openai/codex#33992 and #47607: expected false to be true // Object.is equality
+ × loops.test.ts > AC27 #39.7db15b99 A Codex token event whose snapshot has limit_id: image_gen leaves the account's codex windows unchanged, and a snapshot without a weekly window keeps the last weekly reading, shown with its age, instead of reading it as 0% > AC27 #39.7db15b99 an image_gen snapshot moves neither codex window; a snapshot with no weekly keeps the last weekly, with its age, never 0% used or 100% left 534ms
+   → AC27 #39.7db15b99 the 5-hour window reads as room: 31% left: expected '{"id":"15c44273-0479-4104-934c-a970ed…' to match /31% left/
+ × loops.test.ts > AC29 #39.dbdbda4f From recorded Codex goal sessions, each goal turn before the last reads at its Stop as looping with an active goal, and the last, in which the goal record turns complete, reads at its Stop as a loop with no automatic prompt left; an adapter that reads the goal only from its continuation prompts reads the last turn as looping and fails this test, naming the turn > AC29 #39.dbdbda4f the corpus's goal session: at each Stop, the goal status the rollout's records then hold; the last turn's Stop reads no automatic prompt left 603ms
+   → AC29 #39.dbdbda4f turn 01a1581e-2ae5-71c0-8ed5-b97bf4678811 reads at its Stop as looping with an active goal: {"id":"01a1581e-1e8d-7633-b971-9c3b6bd73591","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 0s ago","calls":["unknown   ok","edit /private/tmp/deep-corpus-goal-1792479714274.txt  ok"],"commits":[]} {"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"01a1581e-1e8d-7633-b971-9c3b6b…' to match /goal[^"]*active/i
+ × loops.test.ts > AC30 #39.43c7dc1e A heartbeat automation with kind = "heartbeat", status = "ACTIVE", rrule = "FREQ=MINUTELY;INTERVAL=15" and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation PAUSED, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation > AC30 #39.43c7dc1e ACTIVE and targeting the thread: its next automatic prompt, due 15 minutes after the last run 579ms
+   → AC30 #39.43c7dc1e the row names the heartbeat beat-b356ccb3: {"id":"9690cad8-8574-49bc-8cc8-0040c4f655db","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"9690cad8-8574-49bc-8cc8-0040c4…' to contain 'beat-b356ccb3'
+ × loops.test.ts > AC30 #39.43c7dc1e A heartbeat automation with kind = "heartbeat", status = "ACTIVE", rrule = "FREQ=MINUTELY;INTERVAL=15" and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation PAUSED, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation > AC30 #39.43c7dc1e PAUSED: no automatic prompt 522ms
+   → AC30 #39.43c7dc1e reads none: {"id":"676dc3fd-bae8-4c31-8fa1-ae58fedc8383","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"676dc3fd-bae8-4c31-8fa1-ae58fe…' to match /no automatic prompt/i
+ × loops.test.ts > AC30 #39.43c7dc1e A heartbeat automation with kind = "heartbeat", status = "ACTIVE", rrule = "FREQ=MINUTELY;INTERVAL=15" and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation PAUSED, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation > AC30 #39.43c7dc1e ACTIVE but targeting another thread: not this session's; an adapter that reads every active heartbeat as the session's fails here, naming the automation 495ms
+   → AC30 #39.43c7dc1e reads none: {"id":"7dd54ee7-de16-421f-8635-5cb511b13958","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"7dd54ee7-de16-421f-8635-5cb511…' to match /no automatic prompt/i
+ ↓ app.live.test.ts > live runs > AC4 #39.3506d285 (live) a stop held in the Codex app, or the gap recorded with its version 1ms [BLOCKED: needs a live run by hand: a throwaway session in Codex.app with DeepBuild's entries trusted, its Stop held]
+ ↓ app.live.test.ts > live runs > AC12 #39.071692b0 (live) Codex's engine for the eleven events other than Stop, whose replies replies.test.ts validates only against the schemas 0ms [BLOCKED: needs a live run by hand: an interactive Codex session that fires each]
+ ↓ app.live.test.ts > live runs > AC13 #39.3c135e58 (live) Codex shows you no prompt for a saved deny 0ms [BLOCKED: needs a live run by hand: the terminal UI under -a on-request]
+ ↓ app.live.test.ts > live runs > AC26 #39.8807ac2c (live) real Codex's read-only sandbox refuses the write 0ms [BLOCKED: needs a live run by hand: a signed-in codex exec job; runner.test.ts replays its shape]
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 36 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC22 #39.b7839f18 Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead under 10 ms at p95, and setup sets Codex's Stop timeout once, to 45 minutes > AC22 #39.b7839f18 setup writes Codex's Stop timeout at 45 minutes and a second setup doesn't touch it
+AssertionError: AC22 #39.b7839f18 the Stop entry's timeout in /private/tmp/dh39-t5NeHd/h/.codex/hooks.json: expected undefined to be 2700 // Object.is equality
+
+- Expected:
+2700
+
++ Received:
+undefined
+
+ ❯ budgets.test.ts:26:96
+     24|     const h = makeHome();
+     25|     await hubWithSetup(h);
+     26|     expect(stopEntry(h)?.hook.timeout, `${AC[22]} the Stop entry's tim…
+       |                                                                                                ^
+     27|     const bytes = readFileSync(h.hooksFile);
+     28|     expect((await deep(h, ['setup'])).code).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/36]⎯
+
+ FAIL  budgets.test.ts > AC22 #39.b7839f18 Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead under 10 ms at p95, and setup sets Codex's Stop timeout once, to 45 minutes > AC22 #39.b7839f18 hook overhead under 10 ms at p95: a covered PostToolUse's round trip less a bare deep-hook start, five runs of 20 samples after warm-up. A comparison with the merge base is the preflight bench's
+AssertionError: AC22 #39.b7839f18 setup wrote Codex's entries: expected undefined to be defined
+ ❯ budgets.test.ts:34:67
+     32|     const h = makeHome();
+     33|     await hubWithSetup(h);
+     34|     expect(stopEntry(h), `${AC[22]} setup wrote Codex's entries`).toBe…
+       |                                                                   ^
+     35|     const t = newThread(h);
+     36|     await begin(h, t);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/36]⎯
+
+ FAIL  kit.test.ts > AC20 #39.977fabab The twin that delivers thread A's answer to thread B on one daemon fails the kit with "answer delivered to another session", naming both sessions, while the adapter passes; an answerPermission case whose fixture payload lacks the request's ID reads INVALID, "declared answerPermission, never reached", never passed > AC20 #39.977fabab the Codex adapter passes; the twin (a deliver that lands in another thread) fails deliver/one-owner-per-session, naming both sessions
+AssertionError: AC20 #39.977fabab the adapter's answerPermission case is a real permission reply, signed: {"id":"permission/not-from-label","outcome":"BLOCKED","message":"the adapter has no permissionReply, so the harness can't read its reply on terminal","codes":[],"declared":{"flags":[],"operations":[],"kinds":[]},"reached":{"flags":[],"operations":[],"kinds":[]},"probes":["reply"],"killed":[],"survived":[]}: expected 'BLOCKED' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "BLOCKED"
+
+ ❯ kit.test.ts:16:156
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/36]⎯
+
+ FAIL  kit.test.ts > AC20 #39.977fabab The twin that delivers thread A's answer to thread B on one daemon fails the kit with "answer delivered to another session", naming both sessions, while the adapter passes; an answerPermission case whose fixture payload lacks the request's ID reads INVALID, "declared answerPermission, never reached", never passed > AC20 #39.977fabab a fixture PermissionRequest with no request ID never reaches answerPermission: INVALID, naming it, never PASS
+AssertionError: AC20 #39.977fabab reads INVALID: {"id":"permission/not-from-label","outcome":"BLOCKED","message":"the adapter has no permissionReply, so the harness can't read its reply on terminal","codes":[],"declared":{"flags":[],"operations":[],"kinds":[]},"reached":{"flags":[],"operations":[],"kinds":[]},"probes":["reply"],"killed":[],"survived":[]}: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+
+Expected: "INVALID"
+Received: "BLOCKED"
+
+ ❯ kit.test.ts:30:79
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/36]⎯
+
+ FAIL  kit.test.ts > AC23 #39.7ff25607 Adapter types are generated from Codex's published hook schemas > AC23 #39.7ff25607 a generated module under packages/adapters says so and names the source, with a type for each of the twelve events' payloads and the output shapes the schemas define
+AssertionError: AC23 #39.7ff25607 a generated file naming codex-rs/hooks/schema/generated in its header, among ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/adapters/src/index.ts, ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/adapters/src/shipped.ts, ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/adapters/src/types.ts: expected undefined to be defined
+ ❯ kit.test.ts:40:133
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/36]⎯
+
+ FAIL  kit.test.ts > AC4 #39.3506d285 The same hooks hold a stop in the Codex app; if they don't on a given app version, that gap is written down with the version and the upstream issue (openai/codex#33992, #47607) > AC4 #39.3506d285 either a desktop corpus session records a held stop, or the facts write down the gap with its version and both upstream issues. BLOCKED until the app's live run: app.live.test.ts
+AssertionError: AC4 #39.3506d285 no recorded desktop stop hold, and no gap in adapters/codex.facts.json naming its version and openai/codex#33992 and #47607: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ kit.test.ts:56:176
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/36]⎯
+
+ FAIL  lanes.test.ts > AC17 #39.41993b5c A FAIL from a 20-minute check reaches the agent in the same turn > AC17 #39.41993b5c a check expected to take 20 minutes runs in the slow lane while the stop is held, and its FAIL is the stop's own decision: block
+AssertionError: AC17 #39.41993b5c the 20-minute check ran in the slow lane: {"run":"run:01M663F9GBT16RKAWR5YE8GXPT","check":".deepbuild/checks/slow.sh","claim":"claim:01M663F9AWAVZ5TTFDYDSGPAHC","commit":"064f5dc96c338324676dd07adec276448159cb3b","host":"local","needs":{"cores":1,"memory_mb":0,"stack_slot":0,"gpus":0,"expected_ms":null},"lane":"fast"} {"run":"run:01M663F9GBT16RKAWR5YE8GXPT","outcome":"clean","left":[],"stopped":[]} {"run":"run:01M663F9GBT16RKAWR5YE8GXPT","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":".deepbuild/checks/slow.sh","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lanes.test.ts:28:183
+     26|     const r = await codexHook(h, t, 'Stop', {}, 120_000);
+     27|     const events = await allEvents(hub);
+     28|     expect(inSlowLane(events), `${AC[17]} the 20-minute check ran in t…
+       |                                                                                                                                                                                       ^
+     29|     expect(r.reply?.decision, `${AC[17]} the FAIL continues the same t…
+     30|     expect(String(r.reply?.reason), `${AC[17]} naming the FAIL`).toMat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/36]⎯
+
+ FAIL  lanes.test.ts > AC18 #39.ef0348e3 With the slow lane's expected time at 20 minutes and Codex's Stop hook entry edited to 300 s, the hub at start and deep doctor show the slow-lane relation broken, naming 300 s and 45 minutes, and a stop with a 20-minute check isn't held: Codex gets its reply at once, the claim stays pending, the session's row says why, and the FAIL arrives with your next message. A hub that holds anyway is cut off at 300 s and lets the stop through with no verdict, and that version fails this test > AC18 #39.ef0348e3 the relation is broken at start and in doctor, naming both values; the stop is answered at once, pending, the row says why, and the FAIL comes at your next message
+AssertionError: AC18 #39.ef0348e3 setup's Stop entry exists in /private/tmp/dh39-i0CuBB/h/.codex/hooks.json: expected undefined to be 2700 // Object.is equality
+
+- Expected:
+2700
+
++ Received:
+undefined
+
+ ❯ lanes.test.ts:40:97
+     38|     const repo = slowRepo(h, { expected_ms: 20 * MINUTE, deadline_ms: …
+     39|     let hub = await hubWithSetup(h);
+     40|     expect(stopEntry(h)?.hook.timeout, `${AC[18]} setup's Stop entry e…
+       |                                                                                                 ^
+     41|     editStopTimeout(h, 300);
+     42|     await stopHub(hub);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/36]⎯
+
+ FAIL  lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s > AC19 #39.52f53113 at 8 s: broken, naming 8 s, and deep_ask returns at once with ID, deadline and default
+AssertionError: AC19 #39.52f53113 the deep_ask relation shows broken: exit 1, stdout "e your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.prompt\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no test prompt was sent: it spends plan usage\",\"fix\":\"Run `deep doctor --prompt` to send Claude Code one test prompt.\"}\n{\"item\":\"codex.binary\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"/private/tmp/dh39-0guJsC/bin/codex is Codex 0.160.0, which its facts cover\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.sign_in\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"codex login status exits 0: signed in\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.billing\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Codex sessions use your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}\n", stderr "": expected '{"item":"hub.socket","agent":"deepbui…' to match /deep_ask[^\n]*broken[^\n]*8 s/
+
+- Expected:
+/deep_ask[^\n]*broken[^\n]*8 s/
+
++ Received:
+"{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the hub answers at unix:/private/tmp/dh39-0guJsC/h/.deepbuild/hub.sock\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"hub.disk\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"20.6 GB free where /private/tmp/dh39-0guJsC/h/.deepbuild lives\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"hub.ports\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"port 3001 is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.hooks\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"DeepBuild's entries for SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop, StopFailure, SessionEnd, FileChanged are in /private/tmp/dh39-0guJsC/h/.claude/settings.json\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.stop_hold\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.waiter\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"waiter holds: the waiter entry's 259200 s timeout covers the longest ask deadline in your settings, 3 days\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.deep_ask\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"deep_ask holds: it says still waiting after 40 s, at least 5 s before Claude Code's MCP tool timeout, the 60 s DeepBuild takes while MCP_TOOL_TIMEOUT isn't set\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.stop_continuations\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"stop continuations hold: DeepBuild sends back at most 8 answers and send-backs through held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.asks_and_batches\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.mcp\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"DeepBuild's MCP server is registered at user scope in ~/.claude.json (~/.nvm/versions/node/v24.22.0/bin/node ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/cli/dist/main.js mcp)\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.statusline\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the status line forwarder runs in /private/tmp/dh39-0guJsC/h/.claude/settings.json, then your own status line\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.binary\",\"agent\":\"claude-code\",\"code\":\"binary_missing\",\"level\":\"fail\",\"evidence\":\"/private/tmp/dh39-0guJsC/bin/claude --version printed no version\",\"fix\":\"Reinstall Claude Code.\"}
+{\"item\":\"claude.jobs_binary\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"your sessions and DeepBuild's jobs both run /private/tmp/dh39-0guJsC/bin/claude\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.sign_in\",\"agent\":\"claude-code\",\"code\":\"signed_out\",\"level\":\"fail\",\"evidence\":\"claude auth status says you aren't signed in (exit 0)\",\"fix\":\"Run claude and sign in with /login.\"}
+{\"item\":\"claude.token\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no sign-in token lifetime to read: none in the Keychain or ~/.claude/.credentials.json\",\"fix\":\"Sign in to Claude Code; a run checks the token again before it starts.\"}
+{\"item\":\"claude.billing\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Claude Code sessions use your plan\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.prompt\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no test prompt was sent: it spends plan usage\",\"fix\":\"Run `deep doctor --prompt` to send Claude Code one test prompt.\"}
+{\"item\":\"codex.binary\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"/private/tmp/dh39-0guJsC/bin/codex is Codex 0.160.0, which its facts cover\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"codex.sign_in\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"codex login status exits 0: signed in\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"codex.billing\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Codex sessions use your plan\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}
+"
+
+ ❯ lanes.test.ts:68:85
+     66|     writeFileSync(h.configToml, '[mcp_servers.deep]\ntool_timeout_sec …
+     67|     const d0 = await doctor(h);
+     68|     expect(d0.stdout, `${AC[19]} the deep_ask relation shows broken: $…
+       |                                                                                     ^
+     69|     const t = newThread(h);
+     70|     const d = Daemon.start(h, t.cwd);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/36]⎯
+
+ FAIL  lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s > AC19 #39.52f53113 at 60 s: deep_ask says "still waiting" at 55 s
+AssertionError: AC19 #39.52f53113 says still waiting: expected '{"jsonrpc":"2.0","id":2,"result":{"co…' to match /still waiting/i
+
+- Expected:
+/still waiting/i
+
++ Received:
+"{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M663FEPXADBENVMPABJ3QEXP\\\",\\\"status\\\":\\\"waiting\\\",\\\"answer\\\":null,\\\"deadline\\\":1793526624989,\\\"default\\\":\\\"blue\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M663FEPXADBENVMPABJ3QEXP\",\"status\":\"waiting\",\"answer\":null,\"deadline\":1793526624989,\"default\":\"blue\"}}}"
+
+ ❯ lanes.test.ts:90:67
+     88|     await d.init();
+     89|     const { reply, ms } = await d.ask(t, choice(`Wait ${tag()}?`), 70_…
+     90|     expect(JSON.stringify(reply), `${AC[19]} says still waiting`).toMa…
+       |                                                                   ^
+     91|     expect(ms, `${AC[19]} at 55 s, 5 s before the 60 s it was given`).…
+     92|     expect(ms, `${AC[19]} at 55 s, before Codex cuts it off`).toBeLess…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/36]⎯
+
+ FAIL  lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test > AC25 #39.5981bf3b deadline 3 s before the timeout: not held, pending, and the verdict comes with your next message
+AssertionError: AC25 #39.5981bf3b this stop isn't held for its 6 s check: a hub that holds for any deadline before the timeout fails here: exit 0, stdout "{\"decision\":\"block\",\"reason\":\"says done · next: DeepBuild · receipt\\nDeepBuild sent this claim back: .deepbuild/checks/slow.sh FAIL.\",\"systemMessage\":\"says done · next: DeepBuild · receipt\"}", stderr "": expected 7966.426375000003 to be less than 5000
+ ❯ lanes.test.ts:104:156
+    102|     const t = await turn(h, repo);
+    103|     const r = await codexHook(h, t, 'Stop', {}, 120_000);
+    104|     expect(r.ran.ms, `${AC[25]} this stop isn't held for its 6 s check…
+       |                                                                                                                                                            ^
+    105|     expect(r.reply?.decision, `${AC[25]} no verdict at this stop`).toB…
+    106|     const at = await allEvents(hub);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/36]⎯
+
+ FAIL  lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test > AC25 #39.5981bf3b deadline 10 s before the timeout: held, and the check's FAIL is the stop's decision: block in the same turn
+AssertionError: AC25 #39.5981bf3b the check's run is in the slow lane: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lanes.test.ts:120:95
+    118|     const t = await turn(h, repo);
+    119|     const r = await codexHook(h, t, 'Stop', {}, 120_000);
+    120|     expect(inSlowLane(await allEvents(hub)), `${AC[25]} the check's ru…
+       |                                                                                               ^
+    121|     expect(r.ran.ms, `${AC[25]} held until the check ended`).toBeGreat…
+    122|     expect(r.reply?.decision, `${AC[25]} the FAIL reaches the agent in…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/36]⎯
+
+ FAIL  loops.test.ts > AC27 #39.7db15b99 A Codex token event whose snapshot has limit_id: image_gen leaves the account's codex windows unchanged, and a snapshot without a weekly window keeps the last weekly reading, shown with its age, instead of reading it as 0% > AC27 #39.7db15b99 an image_gen snapshot moves neither codex window; a snapshot with no weekly keeps the last weekly, with its age, never 0% used or 100% left
+AssertionError: AC27 #39.7db15b99 the 5-hour window reads as room: 31% left: expected '{"id":"15c44273-0479-4104-934c-a970ed…' to match /31% left/
+
+- Expected:
+/31% left/
+
++ Received:
+"{\"id\":\"15c44273-0479-4104-934c-a970edfbda5f\",\"repo\":\"no repo\",\"agent\":\"codex\",\"state\":\"finished\",\"why\":\"its turn stopped 0s ago\",\"calls\":[],\"commits\":[]}"
+
+ ❯ loops.test.ts:29:80
+     27|     await codexHook(h, t, 'Stop');
+     28|     const row = () => rowOf(hub, t.id).then((r) => JSON.stringify(r));
+     29|     expect(await row(), `${AC[27]} the 5-hour window reads as room: 31…
+       |                                                                                ^
+     30|     expect(await row(), `${AC[27]} the weekly window: 60% left`).toMat…
+     31|     t.turn = crypto.randomUUID();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/36]⎯
+
+ FAIL  loops.test.ts > AC29 #39.dbdbda4f From recorded Codex goal sessions, each goal turn before the last reads at its Stop as looping with an active goal, and the last, in which the goal record turns complete, reads at its Stop as a loop with no automatic prompt left; an adapter that reads the goal only from its continuation prompts reads the last turn as looping and fails this test, naming the turn > AC29 #39.dbdbda4f the corpus's goal session: at each Stop, the goal status the rollout's records then hold; the last turn's Stop reads no automatic prompt left
+AssertionError: AC29 #39.dbdbda4f turn 01a1581e-2ae5-71c0-8ed5-b97bf4678811 reads at its Stop as looping with an active goal: {"id":"01a1581e-1e8d-7633-b971-9c3b6bd73591","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 0s ago","calls":["unknown   ok","edit /private/tmp/deep-corpus-goal-1792479714274.txt  ok"],"commits":[]} {"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"01a1581e-1e8d-7633-b971-9c3b6b…' to match /goal[^"]*active/i
+
+- Expected:
+/goal[^"]*active/i
+
++ Received:
+"{\"id\":\"01a1581e-1e8d-7633-b971-9c3b6bd73591\",\"repo\":\"no repo\",\"agent\":\"codex\",\"state\":\"finished\",\"why\":\"its turn stopped 0s ago\",\"calls\":[\"unknown   ok\",\"edit /private/tmp/deep-corpus-goal-1792479714274.txt  ok\"],\"commits\":[]} {\"turn\":1,\"did_work\":true,\"claim\":true,\"outcome\":\"finished\",\"cause\":\"unknown\",\"usage\":null}"
+
+ ❯ loops.test.ts:79:173
+     77|     }
+     78|     expect(seen.length, 'a Stop per turn').toBe(3);
+     79|     for (const [i, text] of seen.slice(0, -1).entries()) expect(text, …
+       |                                                                                                                                                                             ^
+     80|     expect(seen[2], `${AC[29]} the last turn ${turns[2]}, whose goal r…
+     81|     expect(seen[2], `${AC[29]} turn ${turns[2]} reads as a loop with n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/36]⎯
+
+ FAIL  loops.test.ts > AC30 #39.43c7dc1e A heartbeat automation with kind = "heartbeat", status = "ACTIVE", rrule = "FREQ=MINUTELY;INTERVAL=15" and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation PAUSED, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation > AC30 #39.43c7dc1e ACTIVE and targeting the thread: its next automatic prompt, due 15 minutes after the last run
+AssertionError: AC30 #39.43c7dc1e the row names the heartbeat beat-b356ccb3: {"id":"9690cad8-8574-49bc-8cc8-0040c4f655db","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"9690cad8-8574-49bc-8cc8-0040c4…' to contain 'beat-b356ccb3'
+
+Expected: "beat-b356ccb3"
+Received: "{"id":"9690cad8-8574-49bc-8cc8-0040c4f655db","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}"
+
+ ❯ loops.test.ts:106:90
+    104|     const name = `beat-${tag()}`;
+    105|     const text = await stopWith(makeHome(), name, 'ACTIVE', (t) => t.i…
+    106|     expect(text, `${AC[30]} the row names the heartbeat ${name}: ${tex…
+       |                                                                                          ^
+    107|     expect(text, `${AC[30]} due at the schedule's next time after its …
+    108|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/36]⎯
+
+ FAIL  loops.test.ts > AC30 #39.43c7dc1e A heartbeat automation with kind = "heartbeat", status = "ACTIVE", rrule = "FREQ=MINUTELY;INTERVAL=15" and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation PAUSED, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation > AC30 #39.43c7dc1e PAUSED: no automatic prompt
+AssertionError: AC30 #39.43c7dc1e reads none: {"id":"676dc3fd-bae8-4c31-8fa1-ae58fedc8383","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"676dc3fd-bae8-4c31-8fa1-ae58fe…' to match /no automatic prompt/i
+
+- Expected:
+/no automatic prompt/i
+
++ Received:
+"{\"id\":\"676dc3fd-bae8-4c31-8fa1-ae58fedc8383\",\"repo\":\"no repo\",\"agent\":\"codex\",\"state\":\"finished\",\"why\":\"its turn stopped 2h ago\",\"calls\":[],\"commits\":[]} {\"turn\":1,\"did_work\":false,\"claim\":false,\"outcome\":\"finished\",\"cause\":\"unknown\",\"usage\":null}"
+
+ ❯ loops.test.ts:113:65
+    111|     const text = await stopWith(makeHome(), name, 'PAUSED', (t) => t.i…
+    112|     expect(text, `${AC[30]} ${name} paused is no next prompt`).not.toM…
+    113|     expect(text, `${AC[30]} reads none: ${text.slice(0, 500)}`).toMatc…
+       |                                                                 ^
+    114|   }, 180_000);
+    115|   it(`${AC[30]} ACTIVE but targeting another thread: not this session'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/36]⎯
+
+ FAIL  loops.test.ts > AC30 #39.43c7dc1e A heartbeat automation with kind = "heartbeat", status = "ACTIVE", rrule = "FREQ=MINUTELY;INTERVAL=15" and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation PAUSED, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation > AC30 #39.43c7dc1e ACTIVE but targeting another thread: not this session's; an adapter that reads every active heartbeat as the session's fails here, naming the automation
+AssertionError: AC30 #39.43c7dc1e reads none: {"id":"7dd54ee7-de16-421f-8635-5cb511b13958","repo":"no repo","agent":"codex","state":"finished","why":"its turn stopped 2h ago","calls":[],"commits":[]} {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}: expected '{"id":"7dd54ee7-de16-421f-8635-5cb511…' to match /no automatic prompt/i
+
+- Expected:
+/no automatic prompt/i
+
++ Received:
+"{\"id\":\"7dd54ee7-de16-421f-8635-5cb511b13958\",\"repo\":\"no repo\",\"agent\":\"codex\",\"state\":\"finished\",\"why\":\"its turn stopped 2h ago\",\"calls\":[],\"commits\":[]} {\"turn\":1,\"did_work\":false,\"claim\":false,\"outcome\":\"finished\",\"cause\":\"unknown\",\"usage\":null}"
+
+ ❯ loops.test.ts:119:65
+    117|     const text = await stopWith(makeHome(), name, 'ACTIVE', () => '019…
+    118|     expect(text.includes(name), `${AC[30]} the automation ${name} targ…
+    119|     expect(text, `${AC[30]} reads none: ${text.slice(0, 500)}`).toMatc…
+       |                                                                 ^
+    120|   }, 180_000);
+    121| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/36]⎯
+
+ FAIL  replies.test.ts > AC12 #39.071692b0 Every reply the hub sends for each of Codex's twelve events validates against Codex's published output schema for that event, and Codex's own hook engine, fed each reply, applies it with no failed hook > AC12 #39.071692b0 all twelve: each reply validates, each hook is recorded, and a hub with its Stop block, PreToolUse deny and permission reply really replies (the schema isn't met by silence alone)
+AssertionError: AC12 #39.071692b0 Codex's Interrupt hook reached the record: session.start, task.created, user.ask, tool.before, permission.request, tool.after, agent.stop, claim.made, session.attention, session.end: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies.test.ts:61:176
+     59|     // Recorded, not just answered: an event the hub drops replies not…
+     60|     for (const [event, seen] of [['Interrupt', /interrupt/i], ['Subage…
+     61|       expect([...kinds].some((k) => seen.test(k)) || events.some((e) =…
+       |                                                                                                                                                                                ^
+     62|     }
+     63|     // The replies that carry a decision: a deny with its reason; a st…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/36]⎯
+
+ FAIL  replies.test.ts > AC13 #39.3c135e58 A permission request that a saved deny covers gets behavior: deny with its message and no other field, and Codex shows you no prompt for it; a reply carrying edited input or a rule for later is never sent > AC13 #39.3c135e58 the adapter's reply to a saved deny, and to an allow for the session, carries only behavior and message: no updatedInput, updatedPermissions or interrupt
+AssertionError: AC13 #39.3c135e58 the Codex adapter gives a permission reply: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ replies.test.ts:110:82
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/36]⎯
+
+ FAIL  replies.test.ts > AC13 #39.3c135e58 A permission request that a saved deny covers gets behavior: deny with its message and no other field, and Codex shows you no prompt for it; a reply carrying edited input or a rule for later is never sent > AC13 #39.3c135e58 through the hub: with a saved deny for the call (your deny on its authority ask, saved as a decision), the PermissionRequest gets behavior: deny and its message, validated by Codex's schema, and no ask opens
+AssertionError: timed out after 30000 ms waiting for the ask
+ ❯ waitFor helpers.ts:244:34
+    242|     const v = await probe();
+    243|     if (v) return v;
+    244|     if (Date.now() > end) expect.fail(`timed out after ${timeoutMs} ms…
+       |                                  ^
+    245|     await sleep(200);
+    246|   }
+ ❯ replies.test.ts:125:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/36]⎯
+
+ FAIL  replies.test.ts > AC21 #39.f8985208 A Codex PermissionRequest for git push origin main, answered with only the words "yes but not on main", gets behavior: deny with those words as its message, and the push never runs; answered by its allow option, it gets behavior: allow for that call alone; an adapter that maps the "yes" in the words to allow fails this test > AC21 #39.f8985208 the recorded request answered by the words, then by its allow option, each validated by Codex's schema; a twin that maps the yes to allow fails the same judge
+AssertionError: AC21 #39.f8985208 the Codex adapter gives a permission reply: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ replies.test.ts:146:82
+    144|   it(`${AC[21]} the recorded request answered by the words, then by it…
+    145|     const reply = adapterReply();
+    146|     expect(typeof reply, `${AC[21]} the Codex adapter gives a permissi…
+       |                                                                                  ^
+    147|     judge(reply!);
+    148|     expect(valid('PermissionRequest', JSON.stringify(reply!(answerOf({…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/36]⎯
+
+ FAIL  replies.test.ts > AC15 #39.b01d8471 Each of Codex's apply-patch scenario fixtures, and a heredoc patch sent through the shell tool, yields exactly the paths Codex changes; an indented *** Update File: line still names its path, and a patch with *** Environment ID: remote is denied before it runs > AC15 #39.b01d8471 every scenario at Codex 0.160.0 names exactly what its expected tree changes (a rejected patch names at least that); the heredoc, the cd and an indented line too; Environment ID: remote is denied
+AssertionError: AC15 #39.b01d8471 Environment ID: remote is denied before it runs: exit 0, stdout "", stderr "": expected undefined to be 'deny' // Object.is equality
+
+- Expected:
+"deny"
+
++ Received:
+undefined
+
+ ❯ replies.test.ts:184:149
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/36]⎯
+
+ FAIL  runner.test.ts > AC6 #39.edfd0196 A Codex job the runner started with codex exec leaves no session row, claim or task spend > AC6 #39.edfd0196 through the hub's runner a Codex job's hooks read as the job's events, with no session row, claim or spend under its thread ID
+AssertionError: AC6 #39.edfd0196 the runner starts a Codex job: {"job":"run:01M663HA3EXEYP3HRRKGRF8TMN","kind":"draft","agent":"codex","account":null,"state":"refused","folder":"/private/tmp/dh159-JUjgEx/root/jobs/01M663HA3EXEYP3HRRKGRF8TMN","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' not to be 'refused' // Object.is equality
+ ❯ runner.test.ts:53:95
+     51|       const session = uuid();
+     52|       const rec = (await c.call('job.submit', { spec: codexJob('draft'…
+     53|       expect(rec.state, `${AC[6]} the runner starts a Codex job: ${JSO…
+       |                                                                                               ^
+     54|       await waitFor(async () => ((await c.call('job.status', { job: re…
+     55|       const base = { session_id: session, cwd: rec.folder, transcript_…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/36]⎯
+
+ FAIL  runner.test.ts > AC26 #39.8807ac2c A job asked to write a file is refused by its read-only mode in Codex, and the refusal is its recorded stop cause > AC26 #39.8807ac2c launched with exec --json, -s read-only and the prompt on stdin; the write is refused, nothing is written, and the job's stop cause is refusal
+AssertionError: AC26 #39.8807ac2c the runner launches a Codex job: {"job":"run:01M663HAAMQ8EBNRTBV8P3TB9P","kind":"draft","agent":"codex","account":null,"state":"refused","folder":"/private/tmp/dh159-home-AWwemW/.deepbuild/jobs/01M663HAAMQ8EBNRTBV8P3TB9P","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' to be 'finished' // Object.is equality
+
+Expected: "finished"
+Received: "refused"
+
+ ❯ runner.test.ts:79:94
+     77|       await room(w);
+     78|       const { rec, stdout } = await runJob(w, codexJob('draft', 'Write…
+     79|       expect(rec.state, `${AC[26]} the runner launches a Codex job: ${…
+       |                                                                                              ^
+     80|       const argv = started(stdout).argv as string[];
+     81|       expect(argv.slice(0, 2), `${AC[26]} exec --json`).toEqual(['exec…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/36]⎯
+
+ FAIL  runner.test.ts > AC28 #39.1d214ff1 In Codex, #159's end-to-end marker test passes: the drafting job's stdin, its folder and its own transcript hold none of the three markers, and the review's hold the diff's marker and neither of the others; a runner that passes the PR body to the review, or the diff to the drafting job, fails it, naming the marker > AC28 #39.1d214ff1 a session's transcript, diff and PR body carry distinct markers; a Codex drafting job and review through the runner hold what the criterion says, by marker
+AssertionError: AC28 #39.1d214ff1 the runner runs Codex's drafting job: {"job":"run:01M663HANEBAMPRAX7G74DNDRC","kind":"draft","agent":"codex","account":null,"state":"refused","folder":"/private/tmp/dh159-home-AWwemW/.deepbuild/jobs/01M663HANEBAMPRAX7G74DNDRC","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' to be 'finished' // Object.is equality
+
+Expected: "finished"
+Received: "refused"
+
+ ❯ runner.test.ts:114:111
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/36]⎯
+
+ FAIL  session.test.ts > AC1 #39.2b854223 A Codex session's tool calls and commits are recorded > AC1 #39.2b854223 setup's entries in ~/.codex/hooks.json run deep-hook; a shell call and a real git commit in a Codex turn are recorded under the session
+AssertionError: AC1 #39.2b854223 setup installs Codex's hooks in /private/tmp/dh39-SUwsoV/h/.codex/hooks.json; it holds: []: expected [] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "SessionStart",
+-   "UserPromptSubmit",
+-   "PreToolUse",
+-   "PermissionRequest",
+-   "PostToolUse",
+-   "Stop",
+- ]
++ []
+
+ ❯ session.test.ts:17:116
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/36]⎯
+
+ FAIL  session.test.ts > AC2 #39.0215da31 A held stop continues with the answer > AC2 #39.0215da31 a Codex stop with an open ask is held; your answer comes back as decision: block carrying it, on a reply Codex's Stop schema allows, and setup's Stop entry is what runs it
+AssertionError: AC2 #39.0215da31 setup's Stop entry in /private/tmp/dh39-SCCMbM/h/.codex/hooks.json is the hold's route: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ session.test.ts:36:128
+     34|     const h = makeHome();
+     35|     const hub = await hubWithSetup(h);
+     36|     expect(ourEntries(h).some((e) => e.event === 'Stop'), `${AC[2]} se…
+       |                                                                                                                                ^
+     37|     const t = newThread(h);
+     38|     const d = Daemon.start(h, t.cwd);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/36]⎯
+
+ FAIL  session.test.ts > AC3 #39.a929786c An idle Codex session receives the answer on the next message > AC3 #39.a929786c an answer after the stop ended starts nothing; the next UserPromptSubmit's additionalContext carries it, once
+AssertionError: AC3 #39.a929786c setup's UserPromptSubmit entry is the fallback's route: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ session.test.ts:59:138
+     57|     const h = makeHome();
+     58|     const hub = await hubWithSetup(h);
+     59|     expect(ourEntries(h).some((e) => e.event === 'UserPromptSubmit'), …
+       |                                                                                                                                          ^
+     60|     const t = newThread(h);
+     61|     const d = Daemon.start(h, t.cwd);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/36]⎯
+
+ FAIL  session.test.ts > AC7 #39.2bf95483 An answer to a Codex session that has ended reaches only the same thread when it resumes, and otherwise waits on its task > AC7 #39.2bf95483 after SessionEnd your answer reaches no new thread on the daemon; a SessionStart resume of the same thread gets it, and until then it waits
+AssertionError: AC7 #39.2bf95483 it waits on its task: the answer's delivery outcome says so: expected '[]' to match /wait|task/i
+
+- Expected:
+/wait|task/i
+
++ Received:
+"[]"
+
+ ❯ session.test.ts:117:110
+    115|     expect(`${start.ran.stdout}${prompted.ran.stdout}`, `${AC[7]} anot…
+    116|     const outcomes = (await allEvents(hub)).filter((e) => e.kind === '…
+    117|     expect(JSON.stringify(outcomes), `${AC[7]} it waits on its task: t…
+       |                                                                                                              ^
+    118|     const resumed = await codexHook(h, t, 'SessionStart', { source: 'r…
+    119|     expect(String(resumed.reply?.hookSpecificOutput?.additionalContext…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/36]⎯
+
+ FAIL  session.test.ts > AC8 #39.9d535982 A session on a Codex version past its facts is recorded with its holds watch-only and one health reading > AC8 #39.9d535982 a rollout naming 99.0.0: its events are recorded unverified, its stop isn't held, and exactly one reading names the version
+AssertionError: AC8 #39.9d535982 setup's entries are what sessions run: expected 0 to be greater than 0
+ ❯ session.test.ts:128:84
+    126|     const h = makeHome();
+    127|     const hub = await hubWithSetup(h);
+    128|     expect(ourEntries(h).length, `${AC[8]} setup's entries are what se…
+       |                                                                                    ^
+    129|     const t = newThread(h, { version: PAST_FACTS });
+    130|     await begin(h, t);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/36]⎯
+
+ FAIL  session.test.ts > AC16 #39.3f1db111 A turn you interrupt records an Interrupt event and reads as interrupted, never as a stop or a claim, and a subagent's SubagentStop never holds or judges the parent's stop > AC16 #39.3f1db111 Interrupt records an interrupted turn with no agent.stop and no claim; the row reads interrupted
+AssertionError: AC16 #39.3f1db111 an Interrupt event: session.start, task.created, user.ask, tool.before, tool.after, mcp.tools_listed: expected 0 to be greater than 0
+ ❯ session.test.ts:154:171
+    152|     await sleep(1000);
+    153|     const mine = ofSession(await allEvents(hub), t.id);
+    154|     expect(mine.filter((e) => /interrupt/i.test(e.kind) || /"interrupt…
+       |                                                                                                                                                                           ^
+    155|     expect(mine.filter((e) => e.kind === 'agent.stop' && e.data.outcom…
+    156|     expect(mine.filter((e) => e.kind === 'claim.made').length, `${AC[1…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/36]⎯
+
+ FAIL  session.test.ts > AC16 #39.3f1db111 A turn you interrupt records an Interrupt event and reads as interrupted, never as a stop or a claim, and a subagent's SubagentStop never holds or judges the parent's stop > AC16 #39.3f1db111 SubagentStart and SubagentStop carrying the root's session ID and an agent_id: answered at once, recorded as the child's, and the parent's stop is neither held nor judged by them
+AssertionError: AC16 #39.3f1db111 the child's stop is recorded: session.start, task.created, user.ask, tool.before, mcp.tools_listed: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ session.test.ts:173:83
+    171|     const mine = ofSession(await allEvents(hub), t.id);
+    172|     const stops = mine.filter((e) => e.kind === 'agent.stop');
+    173|     expect(stops.length, `${AC[16]} the child's stop is recorded: ${sa…
+       |                                                                                   ^
+    174|     expect(stops[0]!.data.subagent, `${AC[16]} as the child's`).toBe(c…
+    175|     expect(mine.filter((e) => e.kind === 'claim.made').length, `${AC[1…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/36]⎯
+
+ FAIL  setup.test.ts > AC10 #39.1f0c31eb A Codex config.toml with hooks = false under [features] shows in deep doctor as hooks that won't run there, naming the setting, and deep doctor exits non-zero > AC10 #39.1f0c31eb doctor names [features] hooks = false, exits non-zero, and setup never flips your setting
+AssertionError: AC10 #39.1f0c31eb a finding names the setting: exit 1, stdout "e your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.prompt\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no test prompt was sent: it spends plan usage\",\"fix\":\"Run `deep doctor --prompt` to send Claude Code one test prompt.\"}\n{\"item\":\"codex.binary\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"/private/tmp/dh39-5v21DV/bin/codex is Codex 0.160.0, which its facts cover\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.sign_in\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"codex login status exits 0: signed in\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"codex.billing\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Codex sessions use your plan\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}\n", stderr "": expected '{"item":"hub.socket","agent":"deepbui…' to match /hooks\s*=\s*false/
+
+- Expected:
+/hooks\s*=\s*false/
+
++ Received:
+"{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the hub answers at unix:/private/tmp/dh39-5v21DV/h/.deepbuild/hub.sock\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"hub.disk\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"37.0 GB free where /private/tmp/dh39-5v21DV/h/.deepbuild lives\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"hub.ports\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"port 3001 is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.hooks\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"DeepBuild's entries for SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop, StopFailure, SessionEnd, FileChanged are in /private/tmp/dh39-5v21DV/h/.claude/settings.json\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.stop_hold\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.waiter\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"waiter holds: the waiter entry's 259200 s timeout covers the longest ask deadline in your settings, 3 days\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.deep_ask\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"deep_ask holds: it says still waiting after 40 s, at least 5 s before Claude Code's MCP tool timeout, the 60 s DeepBuild takes while MCP_TOOL_TIMEOUT isn't set\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.stop_continuations\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"stop continuations hold: DeepBuild sends back at most 8 answers and send-backs through held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"timing.asks_and_batches\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.mcp\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"DeepBuild's MCP server is registered at user scope in ~/.claude.json (~/.nvm/versions/node/v24.22.0/bin/node ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd/packages/cli/dist/main.js mcp)\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.statusline\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the status line forwarder runs in /private/tmp/dh39-5v21DV/h/.claude/settings.json, then your own status line\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.binary\",\"agent\":\"claude-code\",\"code\":\"binary_missing\",\"level\":\"fail\",\"evidence\":\"/private/tmp/dh39-5v21DV/bin/claude --version printed no version\",\"fix\":\"Reinstall Claude Code.\"}
+{\"item\":\"claude.jobs_binary\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"your sessions and DeepBuild's jobs both run /private/tmp/dh39-5v21DV/bin/claude\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.sign_in\",\"agent\":\"claude-code\",\"code\":\"signed_out\",\"level\":\"fail\",\"evidence\":\"claude auth status says you aren't signed in (exit 0)\",\"fix\":\"Run claude and sign in with /login.\"}
+{\"item\":\"claude.token\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no sign-in token lifetime to read: none in the Keychain or ~/.claude/.credentials.json\",\"fix\":\"Sign in to Claude Code; a run checks the token again before it starts.\"}
+{\"item\":\"claude.billing\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Claude Code sessions use your plan\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"claude.prompt\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no test prompt was sent: it spends plan usage\",\"fix\":\"Run `deep doctor --prompt` to send Claude Code one test prompt.\"}
+{\"item\":\"codex.binary\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"/private/tmp/dh39-5v21DV/bin/codex is Codex 0.160.0, which its facts cover\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"codex.sign_in\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"codex login status exits 0: signed in\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"codex.billing\",\"agent\":\"codex\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"no API billing variable is set, so Codex sessions use your plan\",\"fix\":\"Nothing to do.\"}
+{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}
+"
+
+ ❯ setup.test.ts:39:76
+     37|     await hubWithSetup(h);
+     38|     const r = await doctor(h);
+     39|     expect(r.stdout, `${AC[10]} a finding names the setting: ${shown(r…
+       |                                                                            ^
+     40|     expect(r.stdout, `${AC[10]} and the table it sits in`).toMatch(/fe…
+     41|     expect(r.stdout, `${AC[10]} and says the hooks won't run`).toMatch…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/36]⎯
+
+ FAIL  setup.test.ts > AC11 #39.d4d2fa79 With ~/.codex/hooks.json a symlink into a dotfiles folder, setup writes its entries into the linked file through a temporary file beside it, and the link is still the same symlink afterwards; a setup that renames its temporary file over the link replaces the link with a plain file and fails this test, naming the path > AC11 #39.d4d2fa79 the link stays the same symlink; the linked file holds your entry then DeepBuild's; a temporary file appeared beside the linked file, none beside the link
+AssertionError: AC11 #39.d4d2fa79 the linked file /private/tmp/dh39-B4YW1e/dotfiles/codex/hooks.json holds DeepBuild's Stop entry: ["/usr/bin/true"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ setup.test.ts:66:131
+     64|     const linked = JSON.parse(readFileSync(target, 'utf8')) as { hooks…
+     65|     const stops = linked.hooks.Stop.flatMap((g) => g.hooks.map((x) => …
+     66|     expect(stops.some(isDeepBuild), `${AC[11]} the linked file ${targe…
+       |                                                                                                                                   ^
+     67|     expect(stops[0], `${AC[11]} your entry stays first, ours after`).t…
+     68|     expect(seenByTarget.size, `${AC[11]} a temporary file beside the l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/36]⎯
+
+ FAIL  setup.test.ts > AC14 #39.c819bb37 After a DeepBuild update, its entries in hooks.json are byte-identical and Codex's hook list still reports them trusted; changing one entry's timeout in a test makes health show that entry as modified within one session > AC14 #39.c819bb37 entries name a fixed path; a second setup (the update) leaves the file byte-identical and Codex's hooks/list trusted; a changed timeout shows as modified in health
+AssertionError: AC14 #39.c819bb37 setup wrote entries in /private/tmp/dh39-yDMHAB/h/.codex/hooks.json: expected 0 to be greater than 0
+ ❯ setup.test.ts:77:85
+     75|     const h = makeHome({ real: true });
+     76|     const hub = await hubWithSetup(h);
+     77|     expect(ourEntries(h).length, `${AC[14]} setup wrote entries in ${h…
+       |                                                                                     ^
+     78|     const before = readFileSync(h.hooksFile);
+     79|     const trusted = ours(await trustAll(h));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/36]⎯
+
+ FAIL  setup.test.ts > AC24 #39.21dbcb3f Running setup again after the slow lane's expected time changes from 20 to 30 minutes leaves Codex's Stop hook entry byte-identical at 45 minutes, and Codex's hook list still reports it trusted; a setup that writes the new expected time into the entry makes Codex ask for trust again, and that version fails this test, naming the entry > AC24 #39.21dbcb3f the Stop entry stays 45 minutes and byte-identical, trusted in hooks/list, across 20 to 30 minutes
+AssertionError: AC24 #39.21dbcb3f setup sets the Stop entry at 45 minutes: undefined: expected undefined to be 2700 // Object.is equality
+
+- Expected:
+2700
+
++ Received:
+undefined
+
+ ❯ setup.test.ts:101:112
+     99|     await hubWithSetup(h);
+    100|     const first = stopEntry(h);
+    101|     expect(first?.hook.timeout, `${AC[24]} setup sets the Stop entry a…
+       |                                                                                                                ^
+    102|     const bytes = readFileSync(h.hooksFile);
+    103|     await trustAll(h);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/36]⎯
+
+
+ Test Files  8 failed | 1 passed (9)
+      Tests  36 failed | 3 passed | 4 skipped (43)
+   Start at  02:49:41
+   Duration  113.05s (tests 100%)
+
+exit 1
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   460Gi   384Gi    37Gi    92%    5.9M  387M    1%   /System/Volumes/Data
