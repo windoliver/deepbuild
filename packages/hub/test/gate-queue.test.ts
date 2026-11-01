@@ -11,6 +11,7 @@ describe('the slow lane', () => {
     let held = false;
     const started: string[] = [];
     const checkouts = {
+      budget: () => ({ since: 0 }),
       snapshot: async () => ({ commit: 'c1', wrote: true }),
       checkout: async () => {
         // The stop's own checkout is at once; a later one takes the time a clone of node_modules does.

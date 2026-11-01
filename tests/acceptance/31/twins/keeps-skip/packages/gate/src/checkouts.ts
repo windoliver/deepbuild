@@ -4,7 +4,8 @@
 // refs, objects, stash and other worktrees stay as they were and nothing is fetched. Any kind's run gets its checkout
 // here, so replacing the command check keeps base runs. The verdict is the verdict engine's; this module says only
 // what a base run proved. A checkout goes once no run on it is running or queued, and a crash's goes at the next open.
-import { execFile, spawn } from 'node:child_process';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
 import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
@@ -14,13 +15,27 @@ import type { CheckResult, CheckRunnerFill, CheckSpec, Failure } from '@deepbuil
 import type { LeaseTable } from '@deepbuild/leases';
 import type { Supervisor } from '@deepbuild/supervisor';
 import { moreRuns, verdict, type BaseResult, type Result, type Run } from '@deepbuild/verdicts';
+import { gitEnv } from './env.js';
 import { matches } from './glob.js';
 
 export type CheckoutPlant =
   | 'base-in-command-check' | 'any-nonzero-base-exit' | 'any-failure-of-collected-test' | 'snapshot-through-index' | 'snapshot-into-repo' | 'keeps-skip-worktree'
-  | 'links-dependencies' | 'stands-in-always' | 'stamps-time' | 'keeps-every-snapshot' | 'drops-decisions' | 'removes-at-session-end';
+  | 'links-dependencies' | 'stands-in-always' | 'stamps-time' | 'keeps-every-snapshot' | 'drops-decisions' | 'removes-at-session-end'
+  | 'snapshot-unbounded' | 'snapshots-one-at-a-time' | 'git-inherits-env';
 export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; plant?: CheckoutPlant }
 export interface Snapshot { commit: string; wrote: boolean }
+/**
+ * One claim's budget for its snapshot and its checkout together: 8 s of git work from `since`, and no stage restarts
+ * the clock. Past it, every git process it started is stopped by its PID and the work ends with an `OverBudget`.
+ */
+export interface Budget { readonly since: number }
+/** The snapshot's budget ran out: the message names the reason and the count of untracked files, as the claim's reason. */
+export class OverBudget extends Error {
+  constructor(message = 'snapshot over budget') { super(message); this.name = 'OverBudget'; }
+}
+export const GIT_WORK_MS = 8_000;
+/** The 3 s after the git work to stop git and remove what it left: how long the count of untracked files may take. */
+const STOP_MS = 3_000;
 export interface TempCheckout { dir: string; commit: string }
 export type DeclaredSurface =
   | { check: string; kind: 'service'; routes: string[]; format: 'json' }
@@ -37,8 +52,10 @@ export interface ClaimCheckRun { check: string; digest: string; carried: boolean
 export interface ClaimRun { claim: string; snapshot: string; verdict: Result; reasons: string[]; smallest: string | null; checks: ClaimCheckRun[] }
 export interface Cited { open_claims: string[]; open_asks: string[]; kept_evidence: { snapshot: string; behind_decision: boolean }[] }
 export interface Checkouts {
-  snapshot(worktree: string): Promise<Snapshot>;
-  checkout(r: { worktree: string; commit: string; dependencies?: string[]; runs: string[] }): Promise<TempCheckout>;
+  /** A claim's budget, counted from now: `snapshot` and `checkout` under it share its 8 s of git work. */
+  budget(): Budget;
+  snapshot(worktree: string, budget?: Budget): Promise<Snapshot>;
+  checkout(r: { worktree: string; commit: string; dependencies?: string[]; runs: string[]; budget?: Budget }): Promise<TempCheckout>;
   baseCheckout(r: { worktree: string; onto: string; claim: string; own: string[]; dependencies?: string[]; surfaces?: DeclaredSurface[]; runs: string[] }): Promise<BaseCheckout>;
   ended(checkout: TempCheckout, run: string): Promise<void>;
   runClaim(claim: ClaimInput): Promise<ClaimRun>;
@@ -55,13 +72,25 @@ const FIXED_DATE = '2000-01-01T00:00:00Z';
 /** A link of these names is a shared install, not part of a claim: `node_modules/` as a pattern doesn't ignore a link. */
 const INSTALLS = ['node_modules', '.venv'];
 
-function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> {
-  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+/** A budget's work: the git and copy processes it started, stopped by their PIDs when its clock runs out. */
+interface Work { since: number; children: Set<ChildProcess>; over: boolean; turn?: Promise<void>; release?: () => void }
+/**
+ * Git in `cwd`, under a work budget where one is given: a process started after the budget ran out never starts,
+ * and one stopped by it fails as over budget. The hub's own git variables (`GIT_DIR`, `GIT_WORK_TREE`, the config
+ * ones and the rest) are cleared first, and only what this call means is set (#31, AC18); the planted wrong program
+ * hands the hub's whole environment through.
+ */
+function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: string | undefined, w: Work | undefined, inherits: boolean): Promise<string> {
+  if (w?.over) return Promise.reject(new OverBudget());
+  const base = inherits ? process.env : gitEnv();
   return new Promise((resolve, reject) => {
-    const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: { ...clean, GIT_NO_LAZY_FETCH: '1', GIT_LFS_SKIP_SMUDGE: '1', ...env } }, (error, stdout, stderr) => {
-      if (error) reject(Error(`git ${args[0]}: ${stderr.trim() || error.message}`));
+    const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: { ...base, GIT_NO_LAZY_FETCH: '1', GIT_LFS_SKIP_SMUDGE: '1', ...env } }, (error, stdout, stderr) => {
+      w?.children.delete(child);
+      if (w?.over) reject(new OverBudget());
+      else if (error) reject(Error(`git ${args[0]}: ${stderr.trim() || error.message}`));
       else resolve(stdout.trim());
     });
+    w?.children.add(child);
     if (input !== undefined) child.stdin!.end(input);
   });
 }
@@ -147,6 +176,10 @@ const clear = async (dir: string): Promise<void> => {
 /** Opens the service: makes the store, and removes whatever checkout a crash left in `root`. */
 export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts> {
   const o: CheckoutsOptions = { ...given, plant: given.plant ?? 'keeps-skip-worktree' };
+  /** The budget the git and copy processes of the current call count against, where there is one. */
+  const under = new AsyncLocalStorage<Work>();
+  // The planted wrong program hands the hub's environment to every git it runs in a claim's repository.
+  const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> => runGit(cwd, args, env, input, under.getStore(), o.plant === 'git-inherits-env' && cwd !== o.store);
   await mkdir(o.store, { recursive: true });
   if (!existsSync(join(o.store, 'HEAD'))) await git(o.store, ['init', '-q', '--bare', '.']);
   await mkdir(o.root, { recursive: true });
@@ -154,11 +187,52 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
   await Promise.all((await readdir(root)).map((name) => clear(join(root, name))));
   const objects = join(o.store, 'objects');
   const live = new Map<string, Live>();
-  // Snapshots and the prune each touch the store's objects: one at a time, so a prune never takes what a snapshot is still writing.
-  let turn: Promise<unknown> = Promise.resolve();
-  const serial = <T>(work: () => Promise<T>): Promise<T> => {
-    const next = turn.then(work, work);
-    turn = next.catch(() => undefined);
+  const works = new WeakMap<Budget, Work>();
+  const budget: Checkouts['budget'] = () => {
+    const b: Budget = { since: Date.now() };
+    const w: Work = { since: b.since, children: new Set(), over: false };
+    works.set(b, w);
+    // Past the git work's 8 s every process the budget started is stopped, by its PID; the planted wrong program waits on them unbounded.
+    if (o.plant !== 'snapshot-unbounded') setTimeout(() => { w.over = true; for (const child of w.children) child.kill('SIGKILL'); }, GIT_WORK_MS).unref();
+    return b;
+  };
+  /** The count of untracked files in `worktree`, read in the budget's stop time; "?" where even that takes longer. */
+  const untracked = (worktree: string): Promise<string> => new Promise((resolve) => {
+    execFile('git', ['-c', 'core.fsmonitor=false', 'ls-files', '-o', '--exclude-standard', '-z'], { cwd: worktree, encoding: 'buffer', maxBuffer: 1 << 30, timeout: STOP_MS - 500, killSignal: 'SIGKILL', env: gitEnv() }, (error, out) => {
+      if (error && !out.length) { resolve('?'); return; }
+      let n = 0;
+      for (const byte of out) if (byte === 0) n++;
+      resolve(n.toLocaleString('en-US'));
+    });
+  });
+  /** `body` under the budget `b`: an end past its clock, however it failed, is the claim's "snapshot over budget" with the count. */
+  const budgeted = async <T>(worktree: string, b: Budget | undefined, body: () => Promise<T>): Promise<T> => {
+    const w = b && works.get(b);
+    // The planted wrong program (AC17): every claim's whole stage, snapshot to checkout, through one queue, each behind the last.
+    if (w && o.plant === 'snapshots-one-at-a-time') await hold(w);
+    try {
+      return await (w ? under.run(w, body) : body());
+    } catch (error) {
+      w?.release?.();
+      if (!w?.over && !(error instanceof OverBudget)) throw error;
+      throw new OverBudget(`snapshot over budget: ${await untracked(worktree)} untracked files`);
+    }
+  };
+  /** The planted queue's turn for a budget's stage, taken once; `release` ends it, never before the stage's 8 s and 3 s are up. */
+  const hold = (w: Work): Promise<void> => {
+    if (!w.turn) {
+      const held = new Promise<void>((done) => { w.release = () => setTimeout(done, Math.max(0, w.since + GIT_WORK_MS + STOP_MS - Date.now())); });
+      w.turn = new Promise<void>((ready) => { void serial('*', () => { ready(); return held; }); });
+    }
+    return w.turn;
+  };
+  // Each repo's snapshots one at a time, and never behind another repo's (#31, AC17); the prune waits for every snapshot in
+  // flight and holds the next, so it never takes what a snapshot is still writing.
+  const turns = new Map<string, Promise<unknown>>();
+  let pruning: Promise<unknown> = Promise.resolve();
+  const serial = <T>(key: string, work: () => Promise<T>): Promise<T> => {
+    const next = Promise.all([turns.get(key), pruning]).then(work, work);
+    turns.set(key, next.catch(() => undefined));
     return next;
   };
   const inStore = (args: string[], input?: string): Promise<string> => git(o.store, [`--git-dir=${o.store}`, ...args], {}, input);
@@ -179,8 +253,13 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
   /** A session may sit in a subfolder; every path and git call here is from the repo's top. */
   const topOf = (folder: string): Promise<string> => git(folder, ['rev-parse', '--show-toplevel']);
 
-  const snapshot = (folder: string): Promise<Snapshot> => serial(async () => {
+  const snapshot: Checkouts['snapshot'] = async (folder, b) => {
     const worktree = await topOf(folder);
+    // Under the planted one queue the budgeted stage is already serial: a second turn here would wait on itself.
+    const turn = <T>(work: () => Promise<T>): Promise<T> => (o.plant === 'snapshots-one-at-a-time' ? work() : serial(worktree, work));
+    return budgeted(worktree, b, () => turn(() => snapshotOf(worktree)));
+  };
+  const snapshotOf = async (worktree: string): Promise<Snapshot> => {
     const head = await git(worktree, ['rev-parse', 'HEAD']);
     const gitDir = await git(worktree, ['rev-parse', '--absolute-git-dir']);
     const dir = await mkdtemp(join(o.store, 'index-'));
@@ -222,7 +301,7 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  });
+  };
 
   /** Clones the ignored folders named, and any of those names deeper down, into a checkout from the worktree: copy-on-write where the file system can, never linked. */
   const cloneIn = async (worktree: string, dir: string, folders: string[]): Promise<void> => {
@@ -243,9 +322,12 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
       // A folder that is itself a link is cloned from where it points, so nothing written here reaches it.
       const source = await realpath(join(worktree, folder));
       const copy = (args: string[]): Promise<number | null> => new Promise((resolve) => {
+        const w = under.getStore();
+        if (w?.over) { resolve(null); return; }
         const child = spawn('/bin/cp', [...args, source, join(dir, folder)], { stdio: 'ignore' });
+        w?.children.add(child);
         child.on('error', () => resolve(null));
-        child.on('close', resolve);
+        child.on('close', (code) => { w?.children.delete(child); resolve(w?.over ? null : code); });
       });
       const cow = process.platform === 'darwin' ? ['-cR'] : ['-R', '--reflink=auto'];
       if (await copy(cow) !== 0) {
@@ -323,11 +405,16 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
     const r = { ...given, worktree: await topOf(given.worktree) };
     const c = await made(r.commit, r.runs);
     try {
-      // The clone first: a file the tree holds in a cloned folder is the tree's, never the worktree's.
-      await cloneIn(r.worktree, c.dir, r.dependencies ?? []);
-      await materialize(r.worktree, await repoEnv(r.worktree), `${r.commit}^{tree}`, c.dir);
-      return { dir: c.dir, commit: r.commit };
-    } catch (error) { await remove(c); throw error; }
+      return await budgeted(r.worktree, r.budget, async () => {
+        // The clone first: a file the tree holds in a cloned folder is the tree's, never the worktree's.
+        await cloneIn(r.worktree, c.dir, r.dependencies ?? []);
+        await materialize(r.worktree, await repoEnv(r.worktree), `${r.commit}^{tree}`, c.dir);
+        return { dir: c.dir, commit: r.commit };
+      });
+    } catch (error) { await remove(c); throw error; } finally {
+      // The checkout ends the budget's stage: the planted queue's turn ends with it.
+      if (r.budget) works.get(r.budget)?.release?.();
+    }
   };
 
   /** Builds the surfaces' stand-ins, each in `built` as soon as it's up, so a later failure still stops it. */
@@ -387,7 +474,7 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
     try {
       await cloneIn(r.worktree, c.dir, r.dependencies ?? []);
       // Its own tree has no ref, so a prune waits until it's written out.
-      await (own.length ? serial(write) : write());
+      await (own.length ? serial(r.worktree, write) : write());
       await buildStandIns(c.dir, r.surfaces ?? [], c.standIns);
       return { dir: c.dir, commit: base, standIns: c.standIns };
     } catch (error) { await remove(c); throw error; }
@@ -425,7 +512,20 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
   };
 
   const runClaim: Checkouts['runClaim'] = async (claim) => {
-    const { commit } = await snapshot(claim.worktree);
+    // The snapshot and the claim's checkout share one budget (#31, AC16): past it the claim is INCONCLUSIVE, naming the
+    // reason and the count of untracked files, its checks never run, and what the snapshot left is gone.
+    const b = budget();
+    let commit = '';
+    try {
+      return await claimOn(claim, b, (c) => { commit = c; });
+    } catch (error) {
+      if (!(error instanceof OverBudget)) throw error;
+      return { claim: claim.claim, snapshot: commit, verdict: 'INCONCLUSIVE', reasons: [error.message], smallest: null, checks: [] };
+    }
+  };
+  const claimOn = async (claim: ClaimInput, b: Budget, snapshotted: (commit: string) => void): Promise<ClaimRun> => {
+    const { commit } = await snapshot(claim.worktree, b);
+    snapshotted(commit);
     const rows: ClaimCheckRun[] = [];
     const records: Run[] = [];
     const digestOf = (c: ClaimCheckInput): string => sha256(JSON.stringify(c.spec));
@@ -442,7 +542,7 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
       });
     };
     if (toDo.length) {
-      const head = await checkout({ worktree: claim.worktree, commit, dependencies: claim.dependencies ?? [], runs: toDo.map((c) => c.check) });
+      const head = await checkout({ worktree: claim.worktree, commit, dependencies: claim.dependencies ?? [], runs: toDo.map((c) => c.check), budget: b });
       try {
         for (const c of toDo) {
           // A failed run starts up to two more, as any check's does (#28). An uncounted run ends it: nothing says another would count.
@@ -488,7 +588,12 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
     return { claim: claim.claim, snapshot: commit, verdict: judged.outcome, reasons: judged.outcome === 'PASS' ? [] : judged.outcome === 'INVALID' ? [...whys, ...judged.reasons] : judged.reasons, smallest: judged.smallest, checks: claim.checks.map((c) => rows.find((x) => x.check === c.check)!) };
   };
 
-  const prune: Checkouts['prune'] = (cited) => serial(async () => {
+  const prune: Checkouts['prune'] = (cited) => {
+    const run = Promise.all([...turns.values()]).then(() => pruneNow(cited));
+    pruning = run.catch(() => undefined);
+    return run;
+  };
+  const pruneNow = async (cited: Cited): Promise<{ removed: string[] }> => {
     const kept = new Set([...cited.open_claims, ...cited.open_asks, ...cited.kept_evidence.filter((e) => o.plant !== 'drops-decisions' || !e.behind_decision).map((e) => e.snapshot)]);
     const removed: string[] = [];
     const refs = (await inStore(['for-each-ref', '--format=%(refname)', SNAPSHOTS])).split('\n').filter(Boolean);
@@ -508,10 +613,10 @@ export async function openCheckouts(given: CheckoutsOptions): Promise<Checkouts>
       await rm(join(objects, fan), { recursive: false }).catch(() => undefined);
     }
     return { removed };
-  });
+  };
 
   return {
-    snapshot, checkout, baseCheckout, ended, runClaim, prune,
-    close: async () => { await Promise.all([...live.values()].map(remove)); await turn; },
+    budget, snapshot, checkout, baseCheckout, ended, runClaim, prune,
+    close: async () => { await Promise.all([...live.values()].map(remove)); await Promise.all([...turns.values(), pruning]); },
   };
 }

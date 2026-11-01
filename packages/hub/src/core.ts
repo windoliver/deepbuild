@@ -430,7 +430,7 @@ export class Core {
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run),
-      checkouts: () => this.checkouts, invalid: (claim, commit, reason) => this.invalid(claim, commit, reason), stopping: () => this.stopping,
+      checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
@@ -515,7 +515,10 @@ export class Core {
     });
     // The base-commit service (#31), its checkouts under the hub's root: opening removes what a crash left, whose
     // processes the supervisor has just reaped; no run writes the store, each only its own checkout.
-    this.checkouts = await openCheckouts({ store: join(this.root.dir, 'objects'), root: join(this.root.dir, 'checkouts'), kinds: [], host: this.supervisor, leases, now: this.now });
+    this.checkouts = await openCheckouts({
+      store: join(this.root.dir, 'objects'), root: join(this.root.dir, 'checkouts'), kinds: [], host: this.supervisor, leases, now: this.now,
+      ...(this.options.plant === 'git-inherits-env' ? { plant: 'git-inherits-env' } : {}),
+    });
     // The keys a stack leased per session before this start (#332): its processes were reaped as the supervisor opened,
     // so each ends now that the record proves them gone.
     for (const v of await leases.leases()) {
