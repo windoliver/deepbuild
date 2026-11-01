@@ -972,15 +972,10 @@ impl Replica {
         let scope = see["scope"].as_str().unwrap_or("window");
         let root = match scope {
             "window" => None,
-            "panel" => {
-                let slot = deep_app::views::slot_bounds()
-                    .ok_or_else(|| fail("refused", "this replica has no panel"))?;
-                let d = |v: Pixels| (f32::from(v) * frame.scale).round() as i64;
-                Some(json!({
-                    "role": "pane", "name": null, "value": null,
-                    "bounds": [d(slot.origin.x), d(slot.origin.y), d(slot.size.width), d(slot.size.height)],
-                }))
-            }
+            "panel" => Some(json!({
+                "role": "pane", "name": null, "value": null,
+                "bounds": panel_bounds(frame.scale)?,
+            })),
             "locator" => match frame.one(&call["locator"]) {
                 Ok(t) => Some(
                     json!({"role": t.role, "name": t.name, "value": t.value, "bounds": t.bounds}),
@@ -1045,17 +1040,7 @@ impl Replica {
                 format!("offscreen rendering isn't available: {e}"),
             )
         })?;
-        let frame = self.frame();
-        let mut boxes = Vec::new();
-        for locator in mask {
-            boxes.extend(
-                frame
-                    .all(locator)
-                    .map_err(|why| fail("refused", why))?
-                    .into_iter()
-                    .map(|t| t.bounds),
-            );
-        }
+        let boxes = bounds_of_all(&self.frame(), mask)?;
         for b in &boxes {
             if blur {
                 blur_box(&mut image, *b);
@@ -1072,17 +1057,7 @@ impl Replica {
         let frame = self.frame();
         let crop = match args["target"].as_str().unwrap_or("window") {
             "window" => [0, 0, image.width() as i64, image.height() as i64],
-            "panel" => {
-                let slot = deep_app::views::slot_bounds()
-                    .ok_or_else(|| fail("refused", "this replica has no panel"))?;
-                let d = |v: Pixels| (f32::from(v) * frame.scale).round() as i64;
-                [
-                    d(slot.origin.x),
-                    d(slot.origin.y),
-                    d(slot.size.width),
-                    d(slot.size.height),
-                ]
-            }
+            "panel" => panel_bounds(frame.scale)?,
             "locator" => match frame.one(&args["locator"]) {
                 Ok(t) => t.bounds,
                 Err(Miss::Bad(why)) => return Err(fail("refused", why)),
@@ -1101,16 +1076,8 @@ impl Replica {
                 ))
             }
         };
-        let mut highlights = Vec::new();
-        for locator in args["highlight"].as_array().cloned().unwrap_or_default() {
-            highlights.extend(
-                frame
-                    .all(&locator)
-                    .map_err(|why| fail("refused", why))?
-                    .into_iter()
-                    .map(|t| t.bounds),
-            );
-        }
+        let highlight = args["highlight"].as_array().cloned().unwrap_or_default();
+        let highlights = bounds_of_all(&frame, &highlight)?;
         let shot = with_strips(&image, crop, &highlights, (STRIP_PT * frame.scale) as u32);
         self.shots += 1;
         let path = self
@@ -1247,6 +1214,29 @@ impl Replica {
             "trace": {"sha256": hash, "path": path},
         })
     }
+}
+
+/// The panel's bounds in the window, in device pixels at `scale`.
+fn panel_bounds(scale: f32) -> Result<[i64; 4], Fail> {
+    let slot = deep_app::views::slot_bounds()
+        .ok_or_else(|| fail("refused", "this replica has no panel"))?;
+    let d = |v: Pixels| (f32::from(v) * scale).round() as i64;
+    Ok([
+        d(slot.origin.x),
+        d(slot.origin.y),
+        d(slot.size.width),
+        d(slot.size.height),
+    ])
+}
+
+/// The bounds of every match of each locator, in order.
+fn bounds_of_all(frame: &Frame, locators: &[Value]) -> Result<Vec<[i64; 4]>, Fail> {
+    let mut boxes = Vec::new();
+    for locator in locators {
+        let found = frame.all(locator).map_err(|why| fail("refused", why))?;
+        boxes.extend(found.into_iter().map(|t| t.bounds));
+    }
+    Ok(boxes)
 }
 
 fn ambiguous(locator: &Value, all: Vec<Target>) -> Fail {

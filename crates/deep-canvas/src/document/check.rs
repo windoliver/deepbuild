@@ -462,7 +462,76 @@ pub fn recheck(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, true)
+    recheck_by(doc, prev_issues, changed, sealed, Reach::Scan)
+}
+
+/// [`recheck`], finding the items that hang from the changed ones or name one by `referrers`
+/// rather than by passes over every item (#896: "the patch path checks and records only what the
+/// patch touches"). `referrers` describes the document the patch was applied to, or the result:
+/// an item the patch left alone names and hangs from the same items in both, and every item it
+/// changed is checked again whatever names it.
+pub fn recheck_with(
+    doc: &Value,
+    prev_issues: &[Issue],
+    changed: &BTreeSet<String>,
+    sealed: &Sealed,
+    referrers: &Referrers,
+) -> Option<Vec<Issue>> {
+    recheck_by(doc, prev_issues, changed, sealed, Reach::Index(referrers))
+}
+
+/// Each string an item's params hold, at any depth, with the items that hold it, and each
+/// item's children: what a recheck reads to find the items a change reaches (#896).
+#[derive(Clone, Debug, Default)]
+pub struct Referrers {
+    named_by: BTreeMap<String, BTreeSet<String>>,
+    children: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl Referrers {
+    pub fn of(doc: &Value) -> Referrers {
+        let mut out = Referrers::default();
+        for (id, item) in member(doc, "items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            out.update(id, None, Some(item));
+        }
+        out
+    }
+
+    /// Moves `id`'s entries from the item it was to the item it is.
+    pub fn update(&mut self, id: &str, was: Option<&Value>, now: Option<&Value>) {
+        for (item, add) in [(was, false), (now, true)] {
+            let Some(item) = item else { continue };
+            let entry = |map: &mut BTreeMap<String, BTreeSet<String>>, key: &str| {
+                if add {
+                    map.entry(key.to_string())
+                        .or_default()
+                        .insert(id.to_string());
+                } else if let Some(set) = map.get_mut(key) {
+                    set.remove(id);
+                }
+            };
+            if let Some(params) = member(item, "params") {
+                strings_in(params, &mut |s| entry(&mut self.named_by, s));
+            }
+            if let Some(parent) = member(item, "parent").and_then(Value::as_str) {
+                entry(&mut self.children, parent);
+            }
+        }
+    }
+}
+
+/// How a recheck finds the items a change reaches beyond those it changed.
+#[derive(Clone, Copy)]
+enum Reach<'a> {
+    /// Passes over every item.
+    Scan,
+    Index(&'a Referrers),
+    /// The planted recheck: none.
+    ChangedOnly,
 }
 
 /// [`recheck`]'s planted wrong program (the conformance kit's fifth law): the items the patch
@@ -473,7 +542,7 @@ pub fn recheck_skipping_referrers(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, false)
+    recheck_by(doc, prev_issues, changed, sealed, Reach::ChangedOnly)
 }
 
 fn recheck_by(
@@ -481,7 +550,7 @@ fn recheck_by(
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
-    referrers: bool,
+    reach: Reach<'_>,
 ) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
     let maps_empty = ID_MAPS.iter().all(|m| {
@@ -502,7 +571,23 @@ fn recheck_by(
     // passes over the items until a pass adds none. The planted wrong program checks the changed
     // items alone.
     let mut affected: BTreeSet<String> = changed.clone();
-    if referrers {
+    if let Reach::Index(refs) = reach {
+        affected.extend(
+            changed
+                .iter()
+                .filter_map(|id| refs.named_by.get(id))
+                .flatten()
+                .cloned(),
+        );
+        let mut below: Vec<String> = affected.iter().cloned().collect();
+        while let Some(id) = below.pop() {
+            for child in refs.children.get(&id).into_iter().flatten() {
+                if affected.insert(child.clone()) {
+                    below.push(child.clone());
+                }
+            }
+        }
+    } else if let Reach::Scan = reach {
         affected.extend(
             items
                 .iter()

@@ -1,0 +1,91 @@
+Acceptance tests for #358 on the base 244a345 (no implementation), run on 2026-10-30 with node v24.22.0
+in the checkout of the base with only tests/acceptance/358/ added (no npm ci and no cargo build were needed):
+
+  node --test --test-concurrency=1 tests/acceptance/358/spike.test.mjs tests/acceptance/358/spike.live.test.mjs
+
+Trimmed to each test's result and error; the stack frames, which name local paths, are left out.
+Every test fails at its assertion for the expected reason: the base has no spike record at
+docs/spikes/358/record.json, so there is no panel host, no render check, no switch, no signing and no decision.
+
+✖ #358.bdd2af21 a panel inside its area, with the question card up, passes the headless render and is drawn where it belongs (0.80275ms)
+✖ #358.bdd2af21 a panel that draws outside its area (left) fails the headless render, and nothing it drew shows there (0.099375ms)
+✖ #358.bdd2af21 a panel that draws outside its area (right) fails the headless render, and nothing it drew shows there (0.074792ms)
+✖ #358.bdd2af21 a panel that draws outside its area (below) fails the headless render, and nothing it drew shows there (0.069709ms)
+✖ #358.bdd2af21 a panel that draws outside its area (nested) fails the headless render, and nothing it drew shows there (0.081791ms)
+✖ #358.bdd2af21 a panel that draws over the question card fails the headless render, and nothing it drew shows there (0.071ms)
+✖ #358.bdd2af21 a panel that draws outside its area (late) fails the headless render, and nothing it drew shows there (0.068083ms)
+✖ #358.fc68d243 a release-profile host runs gpui-shell's numeric kernel on the interpreter, while the switch's control enters native code on the same kernel (0.104583ms)
+✖ #358.fc68d243 the app and panel host, signed by the record's command with the hardened runtime, carry no allow-jit, as codesign reads them, and render a panel signed that way (0.134ms)
+✖ #358.b02d1647 the panel host's fresh run of gpui-shell's own benchmark source is 443 nodes, across a process with the JIT off, and lands on the same side of 4 ms as the record (0.163417ms)
+✖ #358.b02d1647 the cost measures the script: a panel that burns its update reports over 4 ms and doesn't fit, and a one-node panel costs less than the 443-node one (0.116375ms)
+✖ scope: the host is another process of another program, the extra work of a panel's script lands on it and not on the app, and killing it ends the panel while the app answers (0.147084ms)
+✖ scope: a panel that tries the network and a program, even with a manifest asking for them, reaches neither (0.192333ms)
+✖ scope: a panel's git dependency is refused before anything is fetched (0.132917ms)
+✖ scope: a panel moves focus only on a fresh gesture serial: not from a timer, and not twice on one press (0.136083ms)
+✖ #358.bdd2af21 the recorded run: an in-bounds panel passes, and each panel drawing outside its area or over the question card fails the headless render, as its laid-out trees show (0.724792ms)
+✖ #358.fc68d243 the recorded run: the release host's kernel never left the interpreter while the switch's control did, and the signed binaries and every tracked entitlements file have no allow-jit (0.105625ms)
+✖ #358.b02d1647 the decision records the panel host's element-tree cost on the 443-node benchmark with the JIT off, recomputed from its raw runs against 4 ms, and says what the runs say (0.07625ms)
+ℹ tests 18
+ℹ pass 0
+ℹ fail 18
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel inside its area, with the question card up, passes the headless render and is drawn where it belongs (0.80275ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel that draws outside its area (left) fails the headless render, and nothing it drew shows there (0.099375ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel that draws outside its area (right) fails the headless render, and nothing it drew shows there (0.074792ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel that draws outside its area (below) fails the headless render, and nothing it drew shows there (0.069709ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel that draws outside its area (nested) fails the headless render, and nothing it drew shows there (0.081791ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel that draws over the question card fails the headless render, and nothing it drew shows there (0.071ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:54:3
+✖ #358.bdd2af21 a panel that draws outside its area (late) fails the headless render, and nothing it drew shows there (0.068083ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:65:1
+✖ #358.fc68d243 a release-profile host runs gpui-shell's numeric kernel on the interpreter, while the switch's control enters native code on the same kernel (0.104583ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:78:1
+✖ #358.fc68d243 the app and panel host, signed by the record's command with the hardened runtime, carry no allow-jit, as codesign reads them, and render a panel signed that way (0.134ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:105:1
+✖ #358.b02d1647 the panel host's fresh run of gpui-shell's own benchmark source is 443 nodes, across a process with the JIT off, and lands on the same side of 4 ms as the record (0.163417ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:121:1
+✖ #358.b02d1647 the cost measures the script: a panel that burns its update reports over 4 ms and doesn't fit, and a one-node panel costs less than the 443-node one (0.116375ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:137:1
+✖ scope: the host is another process of another program, the extra work of a panel's script lands on it and not on the app, and killing it ends the panel while the app answers (0.147084ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:188:1
+✖ scope: a panel that tries the network and a program, even with a manifest asking for them, reaches neither (0.192333ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:212:1
+✖ scope: a panel's git dependency is refused before anything is fetched (0.132917ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.live.test.mjs:228:1
+✖ scope: a panel moves focus only on a fresh gesture serial: not from a timer, and not twice on one press (0.136083ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.test.mjs:19:1
+✖ #358.bdd2af21 the recorded run: an in-bounds panel passes, and each panel drawing outside its area or over the question card fails the headless render, as its laid-out trees show (0.724792ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.test.mjs:28:1
+✖ #358.fc68d243 the recorded run: the release host's kernel never left the interpreter while the switch's control did, and the signed binaries and every tracked entitlements file have no allow-jit (0.105625ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+test at tests/acceptance/358/spike.test.mjs:37:1
+✖ #358.b02d1647 the decision records the panel host's element-tree cost on the 443-node benchmark with the JIT off, recomputed from its raw runs against 4 ms, and says what the runs say (0.07625ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/358/record.json: the spike hasn't been recorded
+
+The checks' own tests, which plant wrong spikes, including really signed binaries, pass at the base as they must:
+
+  node --test tests/acceptance/358/validator.test.mjs
+ℹ tests 15
+ℹ pass 15
+ℹ fail 0
