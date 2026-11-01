@@ -32,6 +32,8 @@ pub struct Display {
     pub bounds: [f64; 4],
     pub refresh_hz: i64,
     pub next_vsync: i64,
+    /// The token every frame it presents carries, for captures of it (#105).
+    pub feed: Option<String>,
 }
 
 /// A display's vsync grid: `next_vsync + k × period`, k ≥ 0.
@@ -235,6 +237,26 @@ pub struct Planted {
     /// #401: a pop-out takes any serial in the writer's ring, however old and from whichever
     /// of its panels.
     pub accepts_any_ring_serial: bool,
+}
+
+impl Planted {
+    /// The wrong program a scenario's `planted` names, if it is one of these.
+    pub fn flag(&mut self, name: &str) -> Option<&mut bool> {
+        Some(match name {
+            "restores_to_main" => &mut self.restores_to_main,
+            "card_on_main_display" => &mut self.card_on_main_display,
+            "one_clock_for_all" => &mut self.one_clock_for_all,
+            "arms_under_own_window" => &mut self.arms_under_own_window,
+            "ignores_inactive_cap" => &mut self.ignores_inactive_cap,
+            "ignores_thermal_cap" => &mut self.ignores_thermal_cap,
+            "presents_hidden" => &mut self.presents_hidden,
+            "evaluates_hidden" => &mut self.evaluates_hidden,
+            "arms_from_delivery" => &mut self.arms_from_delivery,
+            "never_rearms" => &mut self.never_rearms,
+            "accepts_any_ring_serial" => &mut self.accepts_any_ring_serial,
+            _ => return None,
+        })
+    }
 }
 
 /// What happened to a window: it opened or was dragged to a rect, or came to the top of the

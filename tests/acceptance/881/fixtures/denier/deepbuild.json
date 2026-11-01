@@ -1,0 +1,10 @@
+{
+  "id": "acme/denier",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "templates": [
+    { "name": "why", "hook": "tool.before", "text": "held until {handle} passes", "fields": { "handle": { "type": "handle" } } }
+  ],
+  "requires": { "preview": ["deep.on", "deep.record.append"] }
+}

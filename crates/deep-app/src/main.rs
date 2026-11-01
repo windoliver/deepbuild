@@ -2,6 +2,11 @@
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
 //!
+//! Issue #883: with a hub to read, the window's app posts each ask to Notification Center and withdraws it once the
+//! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
+//! builds. `--notification-center`, run from that bundle, prints what Notification Center holds from the app, one
+//! JSON line per notification (`{"tag","title","body"}`), and quits.
+//!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
 //! has drawn and quits, which is how the spike measures cold start.
 //!
@@ -17,6 +22,12 @@
 //!   shortcut, keeps the first frame captured (written to PATH as PNG), and quits.
 //! - `--post-forged N`: the second process of the synthetic probe: posts N forged chords
 //!   and prints what it did; no window.
+//!
+//! Issue #105 adds `--capture-bug STORE`: opens the system picker; once a person has picked a
+//! display or a window, records it while they hold ⌥Space (at most 120 s), keeps the MP4 in the
+//! evidence store at STORE by its hash and prints one line: `{"capture":105,"permission",
+//! "picker":true,"source","display":{"id","main"},"frames","first_frame_ms","held_ms",
+//! "asset":{"sha256","redaction":"unknown"}}`.
 //!
 //! Each probe prints what the gate saw as JSON on stdout, then its report as the last line:
 //! `{"spike":339,"mode":"synthetic"|"held","presses":n,"frames":n,"held":bool,"permission":
@@ -44,13 +55,33 @@ enum Mode {
         chords: u64,
     },
     SetUp,
+    NotificationCenter,
+    CaptureBug {
+        store: PathBuf,
+    },
 }
 
 fn main() {
+    // The signed app has no allow-jit entitlement (#358), so no panel in it may ask for native code.
+    rquickjs_jit::deny_native_code();
+    #[cfg(feature = "panel-check")]
+    {
+        let all: Vec<String> = std::env::args().skip(1).collect();
+        match all.first().map(String::as_str) {
+            Some("panel-check") => std::process::exit(deep_app::panel_check::check(&all[1..])),
+            Some("panel-bench") => std::process::exit(deep_app::panel_check::bench(&all[1..])),
+            Some("panel-keys") => std::process::exit(deep_app::panel_keys::keys(&all[1..])),
+            _ => {}
+        }
+    }
     let started = Instant::now();
     let (panel_dir, mode) = args();
     if let Mode::PostForged { chords } = mode {
         trusted::post_forged(chords);
+        return;
+    }
+    if mode == Mode::NotificationCenter {
+        notification_center::print();
         return;
     }
     if mode == Mode::SetUp {
@@ -68,6 +99,9 @@ fn main() {
         init(cx);
         menu_bar::set_dock_icon();
         menu_bar::show_title(&menu_bar_title(&sessions()));
+        if mode == Mode::Window {
+            notifications::start(cx);
+        }
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
@@ -76,6 +110,8 @@ fn main() {
             ..gpui_kit::component::TitleBar::window_options()
         };
         open_window(options, cx, move |window, cx| {
+            // A script panel reads its colors from the theme, so it holds the look's roles before one mounts.
+            deep_app::chrome::follow(window, cx);
             let panel = panel_dir.as_ref().map(|dir| {
                 let view = mount_panel(&runtime, dir, window, cx)
                     .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()));
@@ -87,8 +123,10 @@ fn main() {
                 if std::env::var_os("DEEP_APP_EXIT_AFTER_FIRST_FRAME").is_some() {
                     cx.quit();
                 }
-                if mode != Mode::Window {
-                    trusted::start(mode, cx);
+                match mode {
+                    Mode::Window => {}
+                    Mode::CaptureBug { store } => capture_bug::start(store, cx),
+                    mode => trusted::start(mode, cx),
                 }
             });
             cx.new(|_| Spike::new(panel))
@@ -127,6 +165,12 @@ fn args() -> (Option<PathBuf>, Mode) {
                 }
             }
             "--set-up" => mode = Mode::SetUp,
+            "--notification-center" => mode = Mode::NotificationCenter,
+            "--capture-bug" => {
+                mode = Mode::CaptureBug {
+                    store: PathBuf::from(args.next().expect("--capture-bug takes a folder")),
+                }
+            }
             "--frame" => frame = Some(PathBuf::from(args.next().expect("--frame takes a path"))),
             "--post-forged" => {
                 mode = Mode::PostForged {
@@ -331,9 +375,10 @@ mod trusted {
                             poster_started && tick > 10 + presses + 120
                         }
                     }
-                    Mode::PostForged { .. } | Mode::SetUp => {
+                    Mode::PostForged { .. } | Mode::SetUp | Mode::NotificationCenter => {
                         unreachable!("these modes have no window")
                     }
+                    Mode::CaptureBug { .. } => unreachable!("the bug capture runs on its own"),
                     Mode::ProbeHeld { seconds, frame } => {
                         let captured = gate.borrow().counts.frames > 0;
                         if captured {
@@ -476,6 +521,334 @@ mod trusted {
 mod trusted {
     pub fn start(_: super::Mode, _: &mut gpui_kit::App) {
         eprintln!("deep-app: the cursor window and the probes run on macOS only");
+    }
+}
+
+/// Issue #883: the hub's record through the app's one reader. The notifier posts each ask it finds due to
+/// Notification Center, tagged with its session so a newer one replaces it in place, and withdraws one whose ask the
+/// record says closed. The reader starts from the inbox and the stream after it, so what was in the record before
+/// the app or the hub started never reaches the notifier as new.
+mod notifications {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use deep_app::{
+        hub,
+        notify::{Notifier, NOTIFY_AFTER},
+        record::{self, RecordReader},
+    };
+    use gpui_kit::{App, SystemNotification};
+
+    const TICK: Duration = Duration::from_millis(250);
+
+    pub fn start(cx: &mut App) {
+        let reader = RecordReader::open(&hub::address(), &hub::root().join("control.token"));
+        let Ok(reader) = reader else {
+            eprintln!("deep-app: no hub to read, so no notifications");
+            return;
+        };
+        record::install(reader);
+        let mut notifier = Notifier::new(NOTIFY_AFTER);
+        let held = super::notification_center::delivered().unwrap_or_default();
+        let (mut start, mut fed, stale) = record::with_view(|view| {
+            // What Notification Center still holds from before: each is its session's open ask whose question it
+            // carries, and one whose ask closed while the app was away leaves now.
+            let (kept, stale): (Vec<_>, Vec<_>) = held
+                .into_iter()
+                .map(|mut notification| {
+                    notification.ask = view
+                        .inbox
+                        .iter()
+                        .find(|row| {
+                            row["session"] == notification.session.as_str()
+                                && row["status"] != "closed"
+                                && row["question"].as_str().is_some_and(|question| {
+                                    !question.is_empty() && notification.text.contains(question)
+                                })
+                        })
+                        .and_then(|row| row["ask"].as_str().map(str::to_owned));
+                    notification
+                })
+                .partition(|notification| notification.ask.is_some());
+            notifier.start(&view.events, kept);
+            (view.start.clone(), view.events.len(), stale)
+        })
+        .unwrap_or_default();
+        for notification in stale {
+            eprintln!("deep-app: withdrew {}", notification.session);
+            cx.dismiss_system_notification(&notification.session);
+        }
+        cx.spawn(async move |cx| loop {
+            cx.background_executor().timer(TICK).await;
+            let _ = record::poll(Duration::from_millis(5));
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |since| since.as_millis() as u64);
+            let before: Vec<String> = notifier
+                .delivered()
+                .iter()
+                .map(|notification| notification.session.clone())
+                .collect();
+            let posted = record::with_view(|view| {
+                // A new hub start: the reader read again, and its events start over.
+                if view.start != start {
+                    start = view.start.clone();
+                    fed = 0;
+                }
+                for event in &view.events[fed..] {
+                    notifier.saw(event, now);
+                }
+                fed = view.events.len();
+                notifier.due(&view.events, now, None, true)
+            })
+            .unwrap_or_default();
+            cx.update(|cx| {
+                for session in before.iter().filter(|session| {
+                    !notifier
+                        .delivered()
+                        .iter()
+                        .any(|notification| &notification.session == *session)
+                }) {
+                    eprintln!("deep-app: withdrew {session}");
+                    cx.dismiss_system_notification(session);
+                }
+                for notification in posted {
+                    let body = notification
+                        .text
+                        .split_once('\n')
+                        .map_or("", |(_, body)| body);
+                    eprintln!(
+                        "deep-app: notified {} {}",
+                        notification.session,
+                        notification.ask.as_deref().unwrap_or("notice")
+                    );
+                    cx.show_system_notification(SystemNotification {
+                        tag: notification.session.into(),
+                        title: notification.title.into(),
+                        body: body.to_owned().into(),
+                        actions: Vec::new(),
+                    });
+                }
+            });
+        })
+        .detach();
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod notification_center {
+    use std::{ptr::NonNull, sync::mpsc, time::Duration};
+
+    use block2::RcBlock;
+    use deep_app::notify::Notification;
+    use objc2_foundation::{NSArray, NSBundle};
+    use objc2_user_notifications::{UNNotification, UNUserNotificationCenter};
+
+    /// What Notification Center holds from the app's bundle, as the OS lists it: each one's tag as its session and
+    /// no ask, which only the record can name. `None` outside the bundle, where the center aborts the process, as
+    /// gpui notes, or when the OS doesn't answer.
+    pub fn delivered() -> Option<Vec<Notification>> {
+        NSBundle::mainBundle().bundleIdentifier()?;
+        let (sender, receiver) = mpsc::channel();
+        let listed = RcBlock::new(move |list: NonNull<NSArray<UNNotification>>| {
+            // SAFETY: the OS passes a valid array for the call's duration.
+            let list = unsafe { list.as_ref() };
+            let held: Vec<Notification> = list
+                .iter()
+                .map(|notification| {
+                    let request = notification.request();
+                    let content = request.content();
+                    let title = content.title().to_string();
+                    Notification {
+                        ask: None,
+                        session: request.identifier().to_string(),
+                        text: format!("{title}\n{}", content.body()),
+                        title,
+                        sound: None,
+                    }
+                })
+                .collect();
+            let _ = sender.send(held);
+        });
+        UNUserNotificationCenter::currentNotificationCenter()
+            .getDeliveredNotificationsWithCompletionHandler(&listed);
+        receiver.recv_timeout(Duration::from_secs(10)).ok()
+    }
+
+    /// `--notification-center`: one JSON line per notification it holds.
+    pub fn print() {
+        let Some(held) = delivered() else {
+            eprintln!("deep-app: Notification Center didn't list the app's notifications (run it from the bundle)");
+            std::process::exit(1);
+        };
+        for notification in held {
+            let body = notification
+                .text
+                .split_once('\n')
+                .map_or("", |(_, body)| body);
+            let line = serde_json::json!({"tag": notification.session, "title": notification.title, "body": body});
+            println!("{line}");
+        }
+    }
+}
+
+/// `--capture-bug STORE` (#105): the picker, the hold, the recording and its asset.
+#[cfg(target_os = "macos")]
+mod capture_bug {
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+        time::{Duration, Instant},
+    };
+
+    use deep_app::capture::{
+        close_picker, keep, picked, prepare, present_picker, spool, start as record, stop,
+        Indicator, Observer, Reported, Shared, MAX_SECONDS,
+    };
+    use deep_app::trusted_input::{
+        capture_access, hid_shortcut_down, main_thread, request_capture_access,
+    };
+    use gpui_kit::*;
+    use serde_json::{json, Value};
+
+    /// The HID table is read this often while a hold is awaited or runs.
+    const TICK: Duration = Duration::from_millis(4);
+    /// How long a person has to pick and to hold, and the recording to finish.
+    const WAIT: Duration = Duration::from_secs(540);
+    const FINISH: Duration = Duration::from_secs(10);
+
+    pub fn start(store: PathBuf, cx: &mut App) {
+        // The first request shows the Screen Recording prompt and reads false until granted.
+        if !(capture_access() || request_capture_access()) {
+            println!("{}", json!({"capture": 105, "permission": "denied"}));
+            cx.quit();
+            return;
+        }
+        let shared: Shared = Arc::new(Mutex::new(Reported::default()));
+        let observer = Observer::new(shared.clone());
+        present_picker(&observer);
+        cx.activate(true);
+        cx.spawn(async move |cx| {
+            let (line, ok) = match run(&store, &shared, &observer, cx).await {
+                Ok(line) => (line, true),
+                Err(blocked) => (json!({"capture": 105, "blocked": blocked}), false),
+            };
+            println!("{line}");
+            if !ok {
+                std::process::exit(1);
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+
+    /// Waits a tick, then reads what was reported; an error anything reported ends the run.
+    async fn tick<T>(
+        cx: &mut AsyncApp,
+        shared: &Shared,
+        read: impl Fn(&Reported) -> Option<T>,
+    ) -> Result<Option<T>, String> {
+        cx.background_executor().timer(TICK).await;
+        let reported = shared
+            .lock()
+            .map_err(|_| "a callback panicked".to_string())?;
+        match &reported.failed {
+            Some(failed) => Err(failed.clone()),
+            None => Ok(read(&reported)),
+        }
+    }
+
+    async fn run(
+        store: &std::path::Path,
+        shared: &Shared,
+        observer: &Observer,
+        cx: &mut AsyncApp,
+    ) -> Result<Value, String> {
+        let begun = Instant::now();
+        let filter = loop {
+            let answer = tick(cx, shared, |r| match r.cancelled {
+                true => Some(None),
+                false => r.picked.clone().map(Some),
+            })
+            .await?;
+            match answer {
+                Some(Some(picked)) => break picked.0,
+                Some(None) => return Err("the picker was cancelled: nothing recorded".into()),
+                None if begun.elapsed() > WAIT => return Err("no pick".into()),
+                None => {}
+            }
+        };
+        close_picker(observer);
+        let (source, display) = picked(&filter);
+        let spool = spool();
+        let _ = std::fs::remove_file(&spool);
+        let (stream, _recording) = prepare(&filter, observer, &spool)?;
+
+        // Nothing records until the HID table reads the chord down.
+        while !hid_shortcut_down() {
+            tick(cx, shared, |_| Some(())).await?;
+            if begun.elapsed() > WAIT {
+                return Err("the shortcut was never held".into());
+            }
+        }
+        let down = Instant::now();
+        let indicator = Indicator::show(main_thread());
+        record(&stream, shared);
+        while hid_shortcut_down() && down.elapsed().as_secs_f64() < MAX_SECONDS {
+            tick(cx, shared, |_| Some(())).await?;
+        }
+        let held = down.elapsed();
+        stop(&stream, shared);
+        drop(indicator);
+
+        let stopped = Instant::now();
+        while tick(cx, shared, |r| r.finished.then_some(()))
+            .await?
+            .is_none()
+        {
+            if stopped.elapsed() > FINISH {
+                return Err("the recording never finished".into());
+            }
+        }
+        let bytes = std::fs::read(&spool).map_err(|e| format!("the recording: {e}"))?;
+        let _ = std::fs::remove_file(&spool);
+        let sha = keep(store, &bytes).map_err(|e| format!("the evidence store: {e}"))?;
+        let (frames, first) = {
+            let r = shared
+                .lock()
+                .map_err(|_| "a callback panicked".to_string())?;
+            (r.frames, r.first_frame)
+        };
+        let ms = |d: Duration| (d.as_secs_f64() * 1000.0 * 10.0).round() / 10.0;
+        Ok(json!({
+            "capture": 105,
+            "permission": "granted",
+            "picker": true,
+            "source": source,
+            "display": display.map(|(id, main)| json!({"id": id, "main": main})),
+            "frames": frames,
+            "first_frame_ms": first.map(|f| ms(f.duration_since(down))),
+            "held_ms": ms(held),
+            "asset": {"sha256": sha, "redaction": "unknown"},
+        }))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod notification_center {
+    pub fn delivered() -> Option<Vec<deep_app::notify::Notification>> {
+        None
+    }
+
+    pub fn print() {
+        eprintln!("deep-app: --notification-center runs on macOS only");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod capture_bug {
+    pub fn start(_: std::path::PathBuf, _: &mut gpui_kit::App) {
+        eprintln!("deep-app: the bug capture runs on macOS only");
     }
 }
 

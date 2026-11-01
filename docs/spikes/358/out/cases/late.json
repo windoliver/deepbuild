@@ -1,0 +1,191 @@
+{
+ "want": {
+  "pass": false,
+  "kinds": [
+   "outside_panel"
+  ],
+  "firstUpdate": 1,
+  "marker": "ran:70",
+  "area": [
+   147,
+   112,
+   500,
+   400
+  ],
+  "card": [
+   802,
+   316,
+   480,
+   240
+  ],
+  "question": "Ship build 1085?",
+  "updates": 3,
+  "fill": "#d705ed",
+  "escape": "#df10f4"
+ },
+ "status": 1,
+ "output": {
+  "result": "fail",
+  "origin": "agent_built",
+  "runtime": "panel_host",
+  "appPid": 72658,
+  "hostPid": 72664,
+  "trees": [
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:70",
+      "bounds": [
+       147,
+       112,
+       500,
+       26
+      ]
+     }
+    ],
+    "bounds": [
+     147,
+     112,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:70",
+      "bounds": [
+       147,
+       112,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "text",
+        "children": [],
+        "text": "esc:17",
+        "bounds": [
+         77,
+         122,
+         80,
+         26
+        ]
+       }
+      ],
+      "bounds": [
+       77,
+       122,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     147,
+     112,
+     500,
+     400
+    ]
+   },
+   {
+    "kind": "div",
+    "children": [
+     {
+      "kind": "text",
+      "children": [],
+      "text": "ran:70",
+      "bounds": [
+       147,
+       112,
+       500,
+       26
+      ]
+     },
+     {
+      "kind": "div",
+      "children": [
+       {
+        "kind": "text",
+        "children": [],
+        "text": "esc:17",
+        "bounds": [
+         77,
+         122,
+         80,
+         26
+        ]
+       }
+      ],
+      "bounds": [
+       77,
+       122,
+       80,
+       80
+      ]
+     }
+    ],
+    "bounds": [
+     147,
+     112,
+     500,
+     400
+    ]
+   }
+  ],
+  "violations": [
+   {
+    "kind": "outside_panel",
+    "update": 1,
+    "bounds": [
+     77,
+     122,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 1,
+    "bounds": [
+     77,
+     122,
+     80,
+     26
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 2,
+    "bounds": [
+     77,
+     122,
+     80,
+     80
+    ]
+   },
+   {
+    "kind": "outside_panel",
+    "update": 2,
+    "bounds": [
+     77,
+     122,
+     80,
+     26
+    ]
+   }
+  ],
+  "card": {
+   "question": "Ship build 1085?"
+  }
+ }
+}

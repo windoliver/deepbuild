@@ -5,29 +5,12 @@
 
 #![cfg(target_os = "macos")]
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+mod common;
 
+use std::path::Path;
+
+use common::{run, scratch};
 use serde_json::{json, Value};
-
-fn run(subcommand: &str, line: &Value) -> Value {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-canvas-render"))
-        .arg(subcommand)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("deep-canvas-render starts");
-    writeln!(child.stdin.take().unwrap(), "{line}").unwrap();
-    let out = child.wait_with_output().unwrap();
-    serde_json::from_str(String::from_utf8(out.stdout).unwrap().trim()).unwrap()
-}
-
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("deep-392-status-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
 
 fn pixel(path: &Path, x: f64, y: f64) -> [u8; 3] {
     let p = image::open(path)
@@ -67,7 +50,7 @@ const R3: &str = "run:01JB4000000000000000000003";
 
 #[test]
 fn a_stroke_rings_its_item_a_badge_marks_its_corner_and_a_fill_colors_a_circle() {
-    let dir = scratch("slots");
+    let dir = scratch("deep-392-status", "slots");
     let out = dir.join("slots.png");
     let doc = board(
         json!({
@@ -152,7 +135,7 @@ fn a_stroke_rings_its_item_a_badge_marks_its_corner_and_a_fill_colors_a_circle()
 
 #[test]
 fn the_look_s_outline_rings_every_status_mark_and_its_core_has_a_least_size() {
-    let dir = scratch("outline");
+    let dir = scratch("deep-392-status", "outline");
     let out = dir.join("outline.png");
     let doc = board(
         json!({"gate": {"id": "gate", "kind": "rect@1", "layer": "main", "name": "Gate", "order": "a0",
@@ -202,7 +185,7 @@ fn the_look_s_outline_rings_every_status_mark_and_its_core_has_a_least_size() {
 
 #[test]
 fn a_bound_number_that_does_not_fit_its_box_fails_rather_than_draws_cut_short() {
-    let dir = scratch("fit");
+    let dir = scratch("deep-392-status", "fit");
     let out = dir.join("fit.png");
     let doc = |w: f64| {
         json!({

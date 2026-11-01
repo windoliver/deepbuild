@@ -21,9 +21,10 @@ export interface Lesson {
 }
 type Raw = RecordStore['raw'];
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
-const sqlText = (text: string): string => `'${text.replace(/'/g, "''")}'`;
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const parsed = (text: string | null): unknown => { try { return JSON.parse(text ?? 'null'); } catch { return text; } };
+/** What a text names in backticks. */
+const ticked = (text: string): string[] => [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
 /** A repo path a line names: relative, with a folder in it, and no scheme. */
 const REPO_PATH = /^[\w.-]+(?:\/[\w.-]+)+$/;
 const NEVER = /^never run `([^`]+)`/i;
@@ -57,7 +58,7 @@ export async function lessonsOf(raw: Raw, folders: ReadonlyMap<string, string>):
     if (!held.some((s) => s.at?.startsWith('ev:'))) return false;
     const folder = c.scope.startsWith('repo:') ? folders.get(c.scope.slice(5)) : undefined;
     if (!folder || !existsSync(folder)) return false;
-    return [...c.text.matchAll(/`([^`]+)`/g)].some((m) => REPO_PATH.test(m[1]!) && !existsSync(join(folder, m[1]!)));
+    return ticked(c.text).some((p) => REPO_PATH.test(p) && !existsSync(join(folder, p)));
   };
   const lessons: Omit<Lesson, 'rank'>[] = [];
   for (const c of claims) {
@@ -119,10 +120,9 @@ export async function rejectedDirections(raw: Raw): Promise<Rejected[]> {
     if (spoken && r.ask === null && r.key === rejectedKey(scope, spoken)) { out.push({ direction: spoken, decision, scope, said: true }); continue; }
     const ask = parsed(r.ask) as { kind?: string; options?: { id: string; label: string }[] } | null;
     if (ask?.kind !== 'choice' || !Array.isArray(ask.options)) continue;
-    const keys = (label: string): string[] => [...label.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
-    const chosen = new Set(ask.options.filter((o) => o.id === answer).flatMap((o) => keys(o.label)));
     if (!ask.options.some((o) => o.id === answer)) continue;
-    for (const o of ask.options) if (o.id !== answer) for (const direction of keys(o.label)) if (!chosen.has(direction)) out.push({ direction, decision, scope, said: false });
+    const chosen = new Set(ask.options.filter((o) => o.id === answer).flatMap((o) => ticked(o.label)));
+    for (const o of ask.options) if (o.id !== answer) for (const direction of ticked(o.label)) if (!chosen.has(direction)) out.push({ direction, decision, scope, said: false });
   }
   return out;
 }
@@ -140,7 +140,7 @@ function namesWord(text: string, key: string): boolean {
  * you passed over, an agent's label, only as the exact key in backticks.
  */
 export async function revives(raw: Raw, change: string, project: string | undefined, session: string): Promise<Rejected | undefined> {
-  const named = new Set([...change.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
+  const named = new Set(ticked(change));
   return (await rejectedDirections(raw)).find((r) => (r.said ? namesWord(change, r.direction) : named.has(r.direction)) && covers(r.scope, project, session));
 }
 /**
@@ -154,7 +154,7 @@ export async function captureRejected(record: RecordStore, you: Connection, now:
       for (const hit of m.text.matchAll(REJECTED)) {
         const scope = u.project ? `repo:${u.project}` : `session:${u.session}`;
         const key = rejectedKey(scope, hit[1]!);
-        if (((await record.raw(`SELECT 1 FROM decisions WHERE key = ${sqlText(key)}${live ? " AND state = 'active'" : ''}`)) as unknown[]).length) continue;
+        if (((await record.raw(`SELECT 1 FROM decisions WHERE key = ?${live ? " AND state = 'active'" : ''}`, [key])) as unknown[]).length) continue;
         await saveDecision(record, you, now, { key, scope, answer: `rejected: \`${hit[1]!}\``, subject: `session:${u.session}#${m.id}` });
       }
     }
@@ -184,7 +184,7 @@ export interface Taste { ask: string; text: string }
  */
 export async function tastesFor(raw: Raw, project: string | undefined, said: string): Promise<Taste[]> {
   if (!project || !said) return [];
-  const rows = (await raw(`SELECT d.id AS id, d.answer AS answer, d.ask_id AS ask, e.data AS data FROM decisions d JOIN events e ON e.id = d.ask_id AND e.kind = 'ask.created' WHERE d.state = 'active' AND e.project_id = ${sqlText(project)} AND json_extract(e.data, '$.kind') = 'taste' ORDER BY e.log_pos`)) as { id: string; answer: string; ask: string; data: string }[];
+  const rows = (await raw("SELECT d.id AS id, d.answer AS answer, d.ask_id AS ask, e.data AS data FROM decisions d JOIN events e ON e.id = d.ask_id AND e.kind = 'ask.created' WHERE d.state = 'active' AND e.project_id = ? AND json_extract(e.data, '$.kind') = 'taste' ORDER BY e.log_pos", [project])) as { id: string; answer: string; ask: string; data: string }[];
   const out: Taste[] = [];
   const looking = words(said);
   for (const r of rows) {
@@ -193,7 +193,7 @@ export async function tastesFor(raw: Raw, project: string | undefined, said: str
     if (!screen || !looking.includes(words(screen))) continue;
     const chosen = data.options?.find((o) => o.id === parsed(r.answer));
     if (!chosen) continue;
-    const [answered] = (await raw(`SELECT json_extract(data, '$.image') AS image FROM events WHERE kind = 'ask.answered' AND subject = ${sqlText(`ask:${r.ask}`)} ORDER BY log_pos DESC LIMIT 1`)) as { image: string | null }[];
+    const [answered] = (await raw("SELECT json_extract(data, '$.image') AS image FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos DESC LIMIT 1", [`ask:${r.ask}`])) as { image: string | null }[];
     const shot = answered?.image ? `screenshot ev:${answered.image} (deep read ev:${answered.image})` : 'no screenshot was kept';
     out.push({ ask: r.ask, text: `- ${screen}, ${String(data.subject?.element ?? '')}: you chose "${chosen.label}" (decision:${r.id}); ${shot}.` });
   }

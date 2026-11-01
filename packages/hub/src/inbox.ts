@@ -3,15 +3,13 @@
 // you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
 // agent answers.
 import { readFileSync } from 'node:fs';
-import { call, type Reply } from './client.js';
+import { call, UNDECIDED_CODES, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
 const USAGE = 'Usage: deep inbox\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
 /** Refusals of what you typed: nothing ran. */
 const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
-/** Refusals that leave the answer undecided: not confirmed, an agent's command, or a hub that couldn't. */
-const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
 /** How far back `deep inbox` lists what was decided for you. */
 const DAY_MS = 86_400_000;

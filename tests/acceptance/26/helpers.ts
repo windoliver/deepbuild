@@ -731,12 +731,16 @@ export function drift(rows: readonly Block[], tools: readonly Tool[], skill: str
   for (const named of new Set([...skill.matchAll(/\bdeep_[a-z_]*[a-z]\b/g)].map((m) => m[0]))) {
     if (!live.has(named)) out.push(`the skill: names ${named}, which the live tool list lacks`);
   }
+  // The skill format's own frontmatter keys (`name:`, `description:` between the opening `---` lines) name no
+  // parameter; their values and the body are read as written.
+  const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skill);
+  const prose = front ? `${front[1]!.replace(/^[ \t]*[\w-]+[ \t]*:/gm, '')}\n${skill.slice(front[0].length)}` : skill;
   for (const t of tools) {
     for (const p of propertyNames(t.inputSchema)) {
       const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const asCode = new RegExp('`' + esc + '`|\\b' + esc + '\\s*[:=]|"' + esc + '"');
-      const bare = /[_A-Z0-9]/.test(p) && new RegExp(`\\b${esc}\\b`).test(skill);
-      if (asCode.test(skill) || bare) out.push(`the skill: names ${t.name}'s parameter ${p}`);
+      const bare = /[_A-Z0-9]/.test(p) && new RegExp(`\\b${esc}\\b`).test(prose);
+      if (asCode.test(prose) || bare) out.push(`the skill: names ${t.name}'s parameter ${p}`);
     }
   }
   return out;

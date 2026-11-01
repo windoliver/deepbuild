@@ -14,11 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
 import { confirmed } from './authority.js';
+import { Confirmer } from './confirm.js';
 import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
+import { Devices } from './trusted.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -87,6 +89,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     await draftAskSettings(root);
     recordLoginPath(root);
     installRules(root);
+    await enrollConfirm(root);
     const hook = builtHook();
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
@@ -101,7 +104,8 @@ async function install(cli: string, quiet = false): Promise<number> {
     if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
     const user = planned.get(userFile)!;
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] } } });
+    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools.
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: process.execPath, args: [cli, 'mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -182,6 +186,19 @@ function editConfig(root: string, edit: (config: Obj) => void): void {
   edit(config);
   writeJson(file, config);
 }
+/**
+ * deep-confirm's key (#880), made once: the hub then counts the OS confirming you only as a signature by it, from the
+ * helper recorded with it. A key already recorded stays, since setting one up again is the trusted path's alone. Where
+ * a test file stands in for the OS confirming you, or off macOS, there is nothing to set up.
+ */
+async function enrollConfirm(root: string): Promise<void> {
+  if (process.platform !== 'darwin' || process.env.DEEP_HUB_TEST_CONFIRM) return;
+  const paths = rootOf(root);
+  const devices = new Devices(paths.devices);
+  if (devices.enclave()) return;
+  const why = await new Confirmer({ devices, key: paths.confirmKey }).enroll(Date.now());
+  if (why) process.stderr.write(`deep setup: deep-confirm's key wasn't set up (${why}), so no answer from the CLI counts until it is; run deep setup again.\n`);
+}
 /** Your login shell's PATH, so the hub, started with a login service's short PATH, runs the same claude and codex. */
 function recordLoginPath(root: string): void {
   let path = process.env.PATH ?? '';
@@ -237,6 +254,7 @@ async function undo(): Promise<number> {
   const mcpOut = edited(userFile, (v) => {
     const servers = isObj(v.mcpServers) ? { ...v.mcpServers } : {};
     delete servers.deepbuild;
+    delete servers['deep-actions'];
     return { ...v, mcpServers: servers };
   });
   // The planted wrong program takes our entries out and writes the JSON again, whatever you had.

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "a9b0705993c2829a1fcb7952073aa28f68a59c0601d164f8844d941ebcb9ad6c",
+  "set_digest": "31b37d0ecfd14e46b494bc5481218d579d90bb124d5e944508a02a0373378e40",
   "phases": {
     "validate": [
       {
@@ -231,6 +231,22 @@
     ],
     "extract": [
       {
+        "operator": "marks2d.item",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "core.world",
+          "text.counter",
+          "look.palette",
+          "view(locale)"
+        ],
+        "writes": [
+          "marks2d.item"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "marks2d.frame",
         "module": "marks2d",
         "version": "1.0.0",
@@ -242,7 +258,8 @@
           "text.counter",
           "text.run",
           "text.animated",
-          "look.palette"
+          "look.palette",
+          "marks2d.item"
         ],
         "writes": [
           "marks2d.frame"

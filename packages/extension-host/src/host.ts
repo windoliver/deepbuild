@@ -17,6 +17,11 @@
 //
 // Sources and secrets (#364): the hub makes every call a polled source needs, adding a secret by its handle only on
 // the source's host (./sources.ts), and a stream source is held to source@1's kit at install, wherever it runs.
+//
+// Schedules, notices and sends (#365): a plug-in's jobs run on the hub's timer, one run of a schedule at a time, each
+// judged by what the hub recorded for it (./schedules.ts); a notice goes out only for a subscription you made and only
+// on fresh readings; and a send leaves only under your standing rule or your yes, its key claimed before it goes out
+// (./sends.ts).
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
@@ -30,12 +35,14 @@ import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
-import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
+import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings } from './schedules.js';
+import { Sends, type SendRow, type SendRule } from './sends.js';
 import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { Terminals, type OpenSpec } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
@@ -51,7 +58,10 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'input-from-any-writer' | 'piece-writes-input'
   // #139's: a host that lets a stable package call a preview method, and an installer that wires a use to the newest
   // interface its provider has.
-  | 'stable-may-call-preview' | 'rewires-to-newest';
+  | 'stable-may-call-preview' | 'rewires-to-newest'
+  // #363's: a record read filtered by the grant's words alone, and an action.reported that takes `changed` or a
+  // malformed `verified` from the handler's report.
+  | 'record-by-grant-words' | 'copies-report-changed' | 'keeps-malformed-verified';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -77,8 +87,29 @@ export interface ActionCall {
   caller: Connection;
   /** The window that has focus; it never chooses the target. */
   focus?: string | null;
+  /**
+   * The call's request ID (#363), as every agent's call through deep-actions carries one: an identical retry gets the
+   * first call's result and runs nothing again, and the same ID with other input is refused before anything is
+   * written or run.
+   */
+  request?: string;
 }
-export type ActionResult = { status: 'done'; output: unknown } | { status: 'refused'; reason: string };
+/**
+ * A call's result. A change or send's report and what the hub wrote for it are in its action.reported (#363). A
+ * refused one whose handler had started says so, and a change or send names the call it was entered under.
+ */
+export type ActionResult = { status: 'done'; output: unknown } | { status: 'refused'; reason: string; started?: true; call?: string };
+/** An action a loaded piece registered, as agents are offered it, or left out at install with the reason (#363). */
+export interface ActionListing {
+  action: string;
+  extension: string;
+  version: string;
+  declares: 'read' | 'change' | 'send';
+  /** Its input's JSON Schema, as declared. */
+  input: Record<string, unknown>;
+  exposed: boolean;
+  reason: string | null;
+}
 /** A host you approved for a package's outside calls, with its quota. */
 export interface HostGrant { host: string; quota: { calls: number; per_ms: number } }
 export interface ExtensionHostOptions {
@@ -116,8 +147,12 @@ export interface InstallFrom {
   builtBy: string | null;
   /** A project's extension: the repo folder it comes with. */
   project?: string;
-  /** What you approved: the event kinds of the record it may read, and the hosts its outside calls may reach. */
-  grant?: { record?: string[]; hosts?: HostGrant[] };
+  /**
+   * What you approved: the event kinds of the record it may read, from the core's and its own (`*` for every one of
+   * those), whether it may read their text fields too, the repos or workspaces whose events it may read, by project
+   * ID (every one when it names none), and the hosts its outside calls may reach.
+   */
+  grant?: { record?: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[] };
 }
 /** A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. */
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
@@ -173,8 +208,14 @@ export interface ExtensionHost {
   hook(request: HookRequest): Promise<HookReply>;
   /** A hook line, mapped through the adapter `line.agent` names; binds and gates the session it carries (#349). */
   hook(line: HookRequestLine): Promise<{ adapter: string; events: { kind: string }[] }>;
-  /** Runs an action of the live piece the call targets, at the version it names, for its caller. */
+  /**
+   * Runs an action of the live piece the call targets, at the version it names, for its caller. A change or send is
+   * recorded: action.entered before its handler starts, and action.reported when it ends, with what the hub wrote
+   * for it (#363).
+   */
   callAction(call: ActionCall): Promise<ActionResult>;
+  /** Every action the loaded pieces registered: offered to agents, or left out at install with the reason (#363). */
+  actions(): Promise<ActionListing[]>;
   /** Removes a loaded piece: new calls stop first, its users' uses detach, then it stops. `load` enables it again. */
   disable(id: string): Promise<void>;
   /** The adapters loaded extensions registered. */
@@ -213,6 +254,26 @@ export interface ExtensionHost {
    * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
    */
   readStream(name: string, limit: number): Promise<StreamRead>;
+  /** The hub's timer at now() (#365): every run due starts, or queues behind its schedule's running run; resolves once each is dispatched. */
+  tick(): Promise<void>;
+  /** Resolves once nothing the schedules started is still going and nothing due can start. */
+  idle(): Promise<void>;
+  /** The schedules list: each row's state in words, its next run from the hub's own schedule and its last result from its last run. */
+  schedules(): Promise<ScheduleRow[]>;
+  /** A schedule's runs, as the hub recorded them. */
+  runs(schedule: string): Promise<ScheduleRun[]>;
+  /** Every send, as the hub recorded it. */
+  sends(): Promise<SendRow[]>;
+  /** Your edit of a schedule's cadence, on the trusted path. */
+  editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void>;
+  /** Run now, on the trusted path: a run at once, or queued behind the one running. */
+  runNow(connection: Connection, name: string): Promise<void>;
+  /** Your resume of a paused schedule, on the trusted path. */
+  resumeSchedule(connection: Connection, name: string): Promise<void>;
+  /** You asked to be told of a notice kind's cause, on the trusted path: recorded as notice.subscribed. Its event's ID. */
+  subscribeNotice(connection: Connection, kind: string, key: string): Promise<string>;
+  /** Your standing rule for sends, on the trusted path. Its handle. */
+  setSendRule(connection: Connection, rule: SendRule): Promise<string>;
   /** Stops every process it started, but the terminals of a piece whose manifest's host lives past the app. */
   close(): Promise<void>;
 }
@@ -261,6 +322,10 @@ const INDEX = 'index@1';
 const SOURCE = 'source@1';
 /** The hub's own connection, for what only the core appends. */
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** How often the hub's timer looks for a schedule's run that is due (#365). */
+const TIMER_MS = 250;
+/** The notices one plug-in may send in a minute (#365). */
+const NOTICES_PER_MINUTE = 10;
 /** A source's name, as the manifest contract holds it. */
 const SOURCE_NAME = /^ext\.[a-z0-9][a-z0-9_-]*\.[a-z][a-z0-9_]*$/;
 const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
@@ -276,6 +341,7 @@ export interface IndexFill extends SlotFill {
 
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
+  stores?: string[]; events?: string[];
   provides?: { interface: string; kind: string; adapter?: { from: string } }[]; uses?: { interface: string }[]; templates?: Template[];
   conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string; leases?: LeaseKind[];
   /** extension.contract@1's (#139): whether it declares itself stable, and the preview entries it uses by name. */
@@ -285,14 +351,32 @@ interface Manifest {
   sources?: { name: string; variant: string; reading?: string }[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
-interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] }; holds: string[] }
+interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[] }; holds: string[] }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
 interface Bound { bound: string[]; gater: string | null; inTurn: boolean; waiting: Delivery[] }
 type Ask = (method: string, params: unknown) => Promise<unknown>;
-/** An action a piece registered: its input schema's check, giving the failing path as that schema names it. */
-interface Action { check: (input: unknown) => { ok: true } | { ok: false; path: string; code: string } }
+/**
+ * An action a piece registered: its input schema's check, giving the failing path as that schema names it; what it
+ * declares, its schemas, and the store kinds it changes or reads (#363).
+ */
+interface Action {
+  check: (input: unknown) => { ok: true } | { ok: false; path: string; code: string };
+  declares: 'read' | 'change' | 'send';
+  input: Record<string, unknown>;
+  output: Record<string, unknown> | undefined;
+  changes: string[];
+  reads: string[];
+  /** Why agents aren't offered it, or null: its input schema uses a keyword a model API's strict tool schemas reject. */
+  leftOut: string | null;
+}
+/** A store a piece declared (#363): the generation its items are held to, their check against its schema, and its quota in bytes (#365). */
+interface Store { generation: number; check: (value: unknown) => string | undefined; quota: number | null }
+/** A scheduled run under way (#365): what its job may do, and what the hub saw and recorded for it. */
+interface RunCtx { run: string; decl: ScheduleDecl; changes: string[]; blocked: string | null; held: string | null; ended: boolean }
 interface Ext {
   entry: Entry;
+  /** Its project folder's real path, resolved when it loads, which the hook path asks trust about (#881). */
+  project: string | null;
   /** The copy of its install folder it runs from, which only the host writes. */
   folder: string;
   manifest: Manifest;
@@ -314,6 +398,8 @@ interface Ext {
   hubBound: boolean;
   /** The sources it registered, by name, as declared (#364); their functions stay with the package. */
   sources: Map<string, Declared>;
+  /** The sources each check kind it registered reads, as declared (#365). */
+  checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
   starts: number;
   /** How to take its resolver back from the asks core, once it registered one. */
@@ -336,6 +422,10 @@ interface Ext {
   reads: Set<Promise<unknown>>;
   /** The callers of the action calls it is serving, by the scope token each call was given. */
   scopes: Map<string, Connection>;
+  /** The recorded change or send call each scope token serves, by its call ID: the store items written for it name it. */
+  callOf: Map<string, string>;
+  /** Its stores, by kind (#363). */
+  stores: Map<string, Store>;
   /** How the host asks the running package: its in-process side, or its socket. Unset until it runs. */
   ask?: Ask;
   stop?: () => Promise<void>;
@@ -391,14 +481,7 @@ function unchecked(schema: unknown, at = ''): string | undefined {
   } else if (isPlain(s.additionalProperties)) {
     return `${here} uses additionalProperties as a schema without propertyNames`;
   }
-  const children: [string, unknown][] = [
-    ...Object.entries((s.properties ?? {}) as Record<string, unknown>).map(([k, v]): [string, unknown] => [`${at}/properties/${k}`, v]),
-    ...Object.entries((s.$defs ?? {}) as Record<string, unknown>).map(([k, v]): [string, unknown] => [`${at}/$defs/${k}`, v]),
-    ...(Array.isArray(s.oneOf) ? s.oneOf.map((v, i): [string, unknown] => [`${at}/oneOf/${i}`, v]) : []),
-    ...(s.items !== undefined ? [[`${at}/items`, s.items] as [string, unknown]] : []),
-    ...(isPlain(s.additionalProperties) ? [[`${at}/additionalProperties`, s.additionalProperties] as [string, unknown]] : []),
-  ];
-  for (const [path, child] of children) {
+  for (const [path, child] of inner(s, at)) {
     const found = unchecked(child, path);
     if (found) return found;
   }
@@ -420,6 +503,81 @@ function declaredPath(schema: unknown, path: string): string {
     kept += `/${raw}`;
   }
   return kept;
+}
+/** The keywords one model API's strict tool schemas reject, each with what it is (#363): ranges and lengths, and unions. */
+const REJECTED: Record<string, string> = {
+  minimum: 'a range', maximum: 'a range', minLength: 'a length', maxLength: 'a length', minItems: 'a length', maxItems: 'a length', oneOf: 'a union',
+};
+/** The schemas a schema holds, each with its path: what `unchecked` walks. */
+function inner(s: Record<string, unknown>, at: string): [string, unknown][] {
+  return [
+    ...Object.entries((s.properties ?? {}) as Record<string, unknown>).map(([k, v]): [string, unknown] => [`${at}/properties/${k}`, v]),
+    ...Object.entries((s.$defs ?? {}) as Record<string, unknown>).map(([k, v]): [string, unknown] => [`${at}/$defs/${k}`, v]),
+    ...(Array.isArray(s.oneOf) ? s.oneOf.map((v, i): [string, unknown] => [`${at}/oneOf/${i}`, v]) : []),
+    ...(s.items !== undefined ? [[`${at}/items`, s.items] as [string, unknown]] : []),
+    ...(isPlain(s.additionalProperties) ? [[`${at}/additionalProperties`, s.additionalProperties] as [string, unknown]] : []),
+  ];
+}
+/** Why an input schema can't be offered to agents: the first keyword a model API rejects, at its path; null when none. */
+function rejected(schema: unknown, at = ''): string | null {
+  if (!isPlain(schema)) return null;
+  const keyword = Object.keys(schema).find((k) => Object.hasOwn(REJECTED, k));
+  if (keyword) return `its input schema uses ${keyword} at ${at || '/'}, ${REJECTED[keyword]}, which one model API's strict tool schemas reject`;
+  for (const [path, child] of inner(schema, at)) {
+    const found = rejected(child, path);
+    if (found) return found;
+  }
+  return null;
+}
+/** A field's scalar type, an integer counted as a number and null left out; undefined for an object, a list or a union. */
+function scalar(schema: unknown): string | undefined {
+  const type = isPlain(schema) ? schema.type : undefined;
+  const types = (Array.isArray(type) ? type : [type]).filter((t) => t !== 'null');
+  return types.length === 1 && ['string', 'number', 'integer', 'boolean'].includes(types[0] as string) ? (types[0] === 'integer' ? 'number' : types[0] as string) : undefined;
+}
+/** Each named field a schema holds, at any depth, with its schema. */
+function fields(schema: unknown, visit: (name: string, schema: unknown) => void): void {
+  if (!isPlain(schema)) return;
+  for (const [name, child] of Object.entries((schema.properties ?? {}) as Record<string, unknown>)) visit(name, child);
+  for (const [, child] of inner(schema, '')) fields(child, visit);
+}
+/**
+ * The three rules an action's schemas follow at install (#363), each refusal naming its rule: a change action's
+ * store kinds are each one an agent can read through a read action; one field name has one type across the piece's
+ * schemas; and no output is only a success flag or a status message, since a failure is raised as an error.
+ */
+function actionRules(actions: Map<string, Action>): string[] {
+  const reasons: string[] = [];
+  const readable = new Set([...actions.values()].flatMap((a) => (a.declares === 'read' ? a.reads : [])));
+  for (const [name, a] of actions) {
+    for (const kind of a.changes) if (!readable.has(kind)) reasons.push(`${name} changes ${kind}, which no action or reading lets an agent read; a change action's store kinds each need a read action that declares it reads them`);
+  }
+  const typed = new Map<string, { type: string; where: string }>();
+  const clashes = new Set<string>();
+  for (const [name, a] of actions) {
+    for (const [side, schema] of [['input', a.input], ['output', a.output]] as const) {
+      fields(schema, (field, child) => {
+        const type = scalar(child);
+        const seen = typed.get(field);
+        if (type === undefined) return;
+        if (!seen) typed.set(field, { type, where: `${name}'s ${side}` });
+        else if (seen.type !== type && !clashes.has(field)) {
+          clashes.add(field);
+          reasons.push(`the field ${field} has two types across the piece's schemas, ${seen.type} in ${seen.where} and ${type} in ${name}'s ${side}; one field name has one type`);
+        }
+      });
+    }
+  }
+  for (const [name, a] of actions) {
+    const props = Object.entries((a.output?.properties ?? {}) as Record<string, unknown>).map(([field, child]) => ({ field, type: scalar(child) }));
+    const flags = props.filter((p) => p.type === 'boolean').length;
+    const words = props.filter((p) => p.type === 'string');
+    const only = props.length > 0 && flags + words.length === props.length && flags <= 1 && words.length <= 1;
+    if (only && (flags === 1 || /^(message|status)$/.test(words[0]!.field))) {
+      reasons.push(`${name}'s output is only a success flag or a status message; return what it did, and raise an error when it fails`);
+    }
+  }
+  return reasons;
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
 /** A package's manifest, as its folder holds it. */
@@ -504,6 +662,15 @@ class Host implements ExtensionHost {
   private starting: Promise<void> = Promise.resolve();
   private closed = false;
   private readonly sources: Sources;
+  private readonly scheduler: Schedules;
+  private readonly sending: Sends;
+  /** The runs under way, by the scope token their job's calls carry (#365). */
+  private readonly runCtx = new Map<string, RunCtx>();
+  /** The times of each plug-in's notices in the last minute, which its limit counts (#365). */
+  private readonly noticeTimes = new Map<string, number[]>();
+  /** Each store's items as the record holds them, and their bytes in all, kept as they are put (#365): only this host writes them. */
+  private readonly storeItems = new Map<string, { items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }>();
+  private timer: NodeJS.Timeout | undefined;
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
@@ -518,6 +685,19 @@ class Host implements ExtensionHost {
       now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
       // Each call's cost and each new reading, as the core: the hub makes every source call.
       append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
+    });
+    this.sending = new Sends({
+      record: options.record, now: options.now, http: options.http ?? nodeHttp, asks: options.asks,
+      rules: () => this.read<SendRule>('send-rules.json'), saveRules: (rules) => this.save('send-rules.json', rules),
+    });
+    this.scheduler = new Schedules({
+      now: options.now,
+      newRun: () => `run:${ulid(options.now())}`,
+      append: async (data: RunEvent) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind: 'schedule.run', ts: options.now(), data: data as unknown as JsonValue }); },
+      ready: (decl) => this.exts.get(decl.plugin)?.live === true,
+      blocked: (decl) => this.blockedRun(decl),
+      dispatch: (decl, run) => this.dispatchRun(decl, run),
+      saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
   }
 
@@ -563,7 +743,14 @@ class Host implements ExtensionHost {
       copyPackage(from.from, folder);
       const hosts = from.grant?.hosts?.map((h) => ({ host: h.host, quota: { calls: h.quota.calls, per_ms: h.quota.per_ms } }));
       const digest = this.options.plant === 'trusts-envelope-digest' ? manifest.digest! : packageDigest(folder);
-      entry = { id, version, folder, digest, builtBy: from.builtBy, project, kits: [], grant: { record: [...(from.grant?.record ?? [])], ...(hosts ? { hosts } : {}) }, holds: [...(manifest.checks ?? [])] };
+      entry = {
+        id, version, folder, digest, builtBy: from.builtBy, project, kits: [],
+        grant: {
+          record: [...(from.grant?.record ?? [])], ...(from.grant?.text === true ? { text: true } : {}),
+          ...(from.grant?.projects ? { projects: [...from.grant.projects] } : {}), ...(hosts ? { hosts } : {}),
+        },
+        holds: [...(manifest.checks ?? [])],
+      };
       // Each slot's kit runs on what it registers first: a FAIL refuses the install, and what was installed stays (#349).
       entry.kits = await this.installKits(entry, manifest as Manifest);
       // A kind it replaces is its own from now on, no longer the package's that held it (#351).
@@ -757,34 +944,34 @@ class Host implements ExtensionHost {
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
     const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
-    if (hub && streams.length && !this.isReady) {
+    const blocked = (why: string): never => {
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
-    }
+      throw Error(`BLOCKED: ${entry.id} ${why}`);
+    };
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
-    if (hub && indexed && !this.isReady) {
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} replaces ${INDEX}, whose kit runs its code in the hub, and the hub isn't ready; install it once it is`);
-    }
-    if (hub && (kitted.length || environments.length) && !this.isReady) {
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, and the hub isn't ready; install it once it is`);
-    }
-    if (!hub && (kitted.length || environments.length)) {
-      // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
-    }
+    const later = 'and the hub isn\'t ready; install it once it is';
+    if (hub && streams.length && !this.isReady) blocked(`registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, ${later}`);
+    if (hub && indexed && !this.isReady) blocked(`replaces ${INDEX}, whose kit runs its code in the hub, ${later}`);
+    if (hub && (kitted.length || environments.length) && !this.isReady) blocked(`${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, ${later}`);
+    // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
+    if (!hub && (kitted.length || environments.length)) blocked(`${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     if (!kitted.length && !environments.length && !indexed && !streams.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
     const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'conformance');
     const runs: KitRun[] = [];
+    // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
+    const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
+      if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
+      const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
+      runs.push({ slot, fill: name, verdict: report.verdict });
+      const failed = report.cases.find((c) => c.outcome !== 'PASS');
+      if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${what} reads ${report.verdict} on ${slot}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+    };
     try {
       await this.start(ext);
-      const kit = slotKits().find((k) => k.slot === CHECK_KIND) as SlotKit<CheckRunnerFill> | undefined;
-      if (!kit) throw Error(`the conformance package ships no ${CHECK_KIND} kit`);
       for (const kind of [...ext.kinds, ...declared.filter((k) => !ext.kinds.includes(k))]) {
         if (!replaces.includes(kind) || !ext.kinds.includes(kind)) { runs.push({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' }); continue; }
         // A runner that never answers can't hang the install: past a case's deadline and a grace its run is refused,
@@ -799,55 +986,34 @@ class Host implements ExtensionHost {
             throw e;
           }
         };
-        const fill: CheckRunnerFill = { slot: CHECK_KIND, revision: kit.revision, kind, run };
-        const report = await runKit(kit, fill, { parts: ['fixed'] });
-        runs.push({ slot: CHECK_KIND, fill: kind, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${kind} reads ${report.verdict} on ${CHECK_KIND}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge<CheckRunnerFill>(CHECK_KIND, kind, kind, (revision) => ({ slot: CHECK_KIND, revision, kind, run }));
       }
       // Each environment the manifest declares: the kit brings it up on a lease and a checkout of the kit's own and
       // takes it down, through the package's up and down. One the package didn't register by the time its load
       // returned is BLOCKED, unrun, and refuses the install: a registration that came later would fill the slot unkitted.
-      const envKit = environments.length ? slotKits().find((k) => k.slot === ENVIRONMENT) as SlotKit<EnvironmentFill> | undefined : undefined;
-      if (environments.length && !envKit) throw Error(`the conformance package ships no ${ENVIRONMENT} kit`);
       for (const name of environments) {
         if (!ext.environments.includes(name)) throw Error(`BLOCKED: ${entry.id} declares the environment ${name} and didn't register it at install, so ${ENVIRONMENT}'s kit couldn't run; it isn't installed`);
         // The kit takes a promise from either step and bounds it; a handle is what the package's up answered with.
         const up = (spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string): Promise<unknown> => ext.ask!('env.up', { name, spec, lease, checkout });
         const down = (handle: EnvironmentHandle): Promise<unknown> => ext.ask!('env.down', { name, handle });
-        const fill = { slot: ENVIRONMENT, revision: envKit!.revision, up, down } as unknown as EnvironmentFill;
-        const report = await runKit(envKit!, fill, { parts: ['fixed'] });
-        runs.push({ slot: ENVIRONMENT, fill: name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s environment ${name} reads ${report.verdict} on ${ENVIRONMENT}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge(ENVIRONMENT, name, `environment ${name}`, (revision) => ({ slot: ENVIRONMENT, revision, up, down }) as unknown as EnvironmentFill);
       }
       if (indexed) {
-        const kit = slotKits().find((k) => k.slot === INDEX) as SlotKit<IndexFill> | undefined;
-        if (!kit) throw Error(`the conformance package ships no ${INDEX} kit`);
         if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
-        const report = await runKit(kit, this.indexFill(ext), { parts: ['fixed'] });
-        runs.push({ slot: INDEX, fill: ext.index.name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge(INDEX, ext.index.name, `index ${ext.index.name}`, () => this.indexFill(ext));
       }
-      const sourceKit = streams.length ? slotKits().find((k) => k.slot === SOURCE) as SlotKit<SlotFill> | undefined : undefined;
-      if (streams.length && !sourceKit) throw Error(`the conformance package ships no ${SOURCE} kit`);
       for (const name of streams) {
         if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
         // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
-        const fill = {
-          slot: SOURCE, revision: sourceKit!.revision, variant: 'stream',
+        await judge(SOURCE, name, `source ${name}`, (revision) => ({
+          slot: SOURCE, revision, variant: 'stream',
           read: (stream: unknown, cursor: unknown, limit: unknown) => within(CALL_MS, `${entry.id}'s ${name}`, ext.ask!('source.read', { name, stream, cursor, limit })),
           restart: async () => {
             await ext.stop?.();
             if (ext.run) ext.run = `run:${ulid(this.options.now())}`;
             await this.start(ext);
           },
-        } as unknown as SlotFill;
-        const report = await runKit(sourceKit!, fill, { parts: ['fixed'] });
-        runs.push({ slot: SOURCE, fill: name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s source ${name} reads ${report.verdict} on ${SOURCE}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        }));
       }
     } finally {
       await ext.stop?.();
@@ -861,7 +1027,10 @@ class Host implements ExtensionHost {
     if (typeof value !== 'string' || !value) throw Error(`a value for ${name} is a string`);
     const ext = this.exts.get(extension);
     const tested = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.keyTest !== null);
-    return this.sources.enter(extension, name, value, tested);
+    const entered = await this.sources.enter(extension, name, value, tested);
+    // A schedule BLOCKED on it runs at the next tick (#365).
+    if (entered.saved) this.scheduler.supplied();
+    return entered;
   }
   async readSource(name: string): Promise<SourceRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
@@ -879,8 +1048,14 @@ class Host implements ExtensionHost {
   async removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }> {
     this.trustedPath(connection, 'a secret is removed');
     this.secretOf(extension, name);
-    // What its packages registered needing it; schedules and checks name sources, so they go BLOCKED through them.
-    const blocked = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name).sort();
+    // What plug-ins declared needing it: its sources, and the schedules and checks that read them (#365).
+    const sources = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name);
+    const reads = (r: string[]): boolean => r.some((x) => sources.includes(x));
+    const blocked = [
+      ...sources,
+      ...this.scheduler.decls().filter((d) => reads(d.declares.readings)).map((d) => d.name),
+      ...[...this.exts.values()].flatMap((e) => [...e.checkReads].filter(([, r]) => reads(r)).map(([kind]) => kind)),
+    ].sort();
     const yes = [...(answer?.yes ?? [])].sort();
     if (!answer || yes.length !== blocked.length || yes.some((s, i) => s !== blocked[i])) return { removed: false, blocked };
     await this.sources.remove(extension, name, blocked);
@@ -892,7 +1067,9 @@ class Host implements ExtensionHost {
     const ext = this.exts.get(extension);
     const source = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.oauth !== null);
     if (!source) throw Error(`no loaded source of ${extension} signs in for ${name}`);
-    return this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+    const signed = await this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+    this.scheduler.supplied();
+    return signed;
   }
   async readStream(name: string, limit: number): Promise<StreamRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'stream');
@@ -918,6 +1095,63 @@ class Host implements ExtensionHost {
     }
     this.save('cursors.json', { ...cursors, [name]: p!.cursor });
     return { status: 'events', source: name, events };
+  }
+  async tick(): Promise<void> {
+    if (!this.closed) await this.scheduler.tick();
+  }
+  async idle(): Promise<void> {
+    await this.scheduler.idle();
+  }
+  async schedules(): Promise<ScheduleRow[]> {
+    const last = new Map<string, ScheduleRow['last']>();
+    for (const d of this.scheduler.decls()) {
+      const ended = (await this.runs(d.name)).filter((r) => r.verdict !== null).sort((a, b) => a.ended! - b.ended!).at(-1);
+      last.set(d.name, ended ? { run: ended.run, at: ended.dispatched ?? ended.due, verdict: ended.verdict } : null);
+    }
+    return this.scheduler.rows((name) => last.get(name) ?? null);
+  }
+  async runs(schedule: string): Promise<ScheduleRun[]> {
+    const rows = (await this.options.record.raw("SELECT ts, data FROM events WHERE kind = 'schedule.run' AND json_extract(data, '$.schedule') = ? ORDER BY log_pos", [schedule])) as { ts: number; data: string }[];
+    const runs = new Map<string, ScheduleRun>();
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as RunEvent;
+      const r = runs.get(d.run) ?? { run: d.run, schedule, due: d.due, dispatched: null, ended: null, verdict: null, cause: null, stopped: null, sends: [], changes: [] };
+      if (d.phase === 'dispatched') r.dispatched ??= row.ts;
+      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
+      runs.set(d.run, r);
+    }
+    // Whether each send a run started went out: one still waiting on your answer has not.
+    for (const send of await this.sending.rows()) if (send.run) runs.get(send.run)?.sends.push({ key: send.key, outcome: send.outcome === 'waiting' ? 'not sent' : send.outcome });
+    return [...runs.values()];
+  }
+  async sends(): Promise<SendRow[]> {
+    return this.sending.rows();
+  }
+  async editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void> {
+    this.trustedPath(connection, 'a schedule is edited');
+    await this.scheduler.edit(name, cadenceOf(cadence));
+  }
+  async runNow(connection: Connection, name: string): Promise<void> {
+    this.trustedPath(connection, 'a schedule is run now');
+    await this.scheduler.runNow(name);
+  }
+  async resumeSchedule(connection: Connection, name: string): Promise<void> {
+    this.trustedPath(connection, 'a schedule is resumed');
+    await this.scheduler.resume(name);
+  }
+  async subscribeNotice(connection: Connection, kind: string, key: string): Promise<string> {
+    this.trustedPath(connection, 'a notice is subscribed to');
+    if (!Object.values(this.entries).some((e) => (manifestOf(e.folder).notices ?? []).includes(kind))) throw Error(`no installed plug-in declares the notice kind ${kind}`);
+    if (typeof key !== 'string' || !key) throw Error(`a subscription to ${kind} names what it is for`);
+    const now = this.options.now();
+    const id = ulid(now);
+    await this.options.record.append(connection, { v: 1, id, kind: 'notice.subscribed', ts: now, data: { notice_kind: kind, key, by: connection.actor } });
+    return id;
+  }
+  async setSendRule(connection: Connection, rule: SendRule): Promise<string> {
+    this.trustedPath(connection, 'a standing rule for sends is set');
+    if (!this.entries[rule?.piece]) throw Error(`${String(rule?.piece)} isn't installed`);
+    return this.sending.setRule(rule);
   }
   /** The secret a package's manifest names, or a refusal naming it. */
   private secretOf(extension: string, name: string): void {
@@ -986,6 +1220,7 @@ class Host implements ExtensionHost {
     const environments = manifest.environments ?? [];
     return [
       ...ext.refusals,
+      ...actionRules(ext.actions),
       ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
       ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
     ];
@@ -993,9 +1228,9 @@ class Host implements ExtensionHost {
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
-      released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), starts: 0,
+      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
+      released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(),
+      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), checkReads: new Map(), starts: 0,
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -1157,7 +1392,11 @@ class Host implements ExtensionHost {
     const returned = await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
     if (ext.mode === 'loaded' && isPlain(returned)) this.loadResults.set(ext.entry.id, structuredClone(returned));
     // Its handlers, actions and outputs publish only now that it started, and only while it's still the one loaded.
-    if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) ext.live = true;
+    if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) {
+      ext.live = true;
+      // A schedule BLOCKED on a source it registers checks again (#365).
+      this.scheduler.supplied();
+    }
   }
   private async sandboxed(ext: Ext): Promise<void> {
     const { supervisor } = this.options;
@@ -1212,9 +1451,12 @@ class Host implements ExtensionHost {
       throw e;
     }
   }
-  /** Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. */
+  /**
+   * Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. It
+   * asks by the real path resolved at load, which trust answers from memory: a hook reads no record and no file (#881).
+   */
   private async revoked(ext: Ext): Promise<boolean> {
-    if (!ext.entry.project || (await this.options.trust.trusted(ext.entry.project))) return false;
+    if (!ext.project || (await this.options.trust.trusted(ext.project))) return false;
     await this.unload(ext);
     return true;
   }
@@ -1225,7 +1467,10 @@ class Host implements ExtensionHost {
   private async unload(ext: Ext): Promise<void> {
     ext.live = false;
     ext.detached = true;
-    if (this.exts.get(ext.entry.id) === ext) this.exts.delete(ext.entry.id);
+    if (this.exts.get(ext.entry.id) === ext) {
+      this.exts.delete(ext.entry.id);
+      this.scheduler.drop(ext.entry.id);
+    }
     ext.resolverDrop?.();
     delete ext.resolverDrop;
     for (const name of ext.adapters) {
@@ -1334,7 +1579,7 @@ class Host implements ExtensionHost {
       if (ext.mode === 'loaded') await this.refused(connection, method, 'grant', `access: ${schema.needs}`, args).catch(() => undefined);
       throw Error(`${method} needs the grant "${schema.needs}", which ${ext.entry.id} wasn't given`);
     }
-    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project is no longer trusted, so it was stopped`);
+    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
     // Unloaded while trust answered, by a new install, a revoke or close: the call does nothing.
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const conformance = ext.mode === 'conformance';
@@ -1355,6 +1600,12 @@ class Host implements ExtensionHost {
           if (owner && owner !== ext) owner.kinds = owner.kinds.filter((k) => k !== type);
         }
         if (!ext.kinds.includes(type)) ext.kinds.push(type);
+        // The sources it reads (#365), from what its plug-in declares: removing a secret they need lists it.
+        const reads = (args[1] as { readings?: unknown } | undefined)?.readings;
+        if (reads !== undefined) {
+          if (!texts(reads) || (reads as string[]).some((r) => !(ext.manifest.sources ?? []).some((x) => x.name === r))) throw Error(`deep.registerCheck: ${type} declares the readings it reads as sources its manifest lists`);
+          ext.checkReads.set(type, [...(reads as string[])]);
+        }
         return null;
       }
       case 'deep.registerEnvironment': {
@@ -1372,7 +1623,7 @@ class Host implements ExtensionHost {
       case 'deep.on': {
         const [kind] = args;
         if (typeof kind !== 'string') throw Error('deep.on takes an event kind first');
-        if (!ext.entry.grant.record.includes(kind)) {
+        if (!this.reaches(ext, kind)) {
           if (ext.mode === 'loaded') await this.refused(connection, method, 'grant', 'record: the event kinds the grant names', args).catch(() => undefined);
           throw Error(`deep.on: ${kind} isn't in the record ${id}'s grant names`);
         }
@@ -1444,27 +1695,106 @@ class Host implements ExtensionHost {
       }
       case 'deep.record.append': {
         quiet();
+        // Its store's items go through deep.store.put, held to the store's schema and generation.
+        const kind = (args[0] as { kind?: unknown } | undefined)?.kind;
+        if ((ext.manifest.stores ?? []).includes(kind as string)) throw Error(`deep.record.append: ${String(kind)} is a store kind; put its items with deep.store.put`);
         const writing = this.options.plant === 'first-party-appends-every-kind' && ext.place === 'hub' ? { ...connection, writer: 'core' } : connection;
         await this.options.record.append(writing, args[0] as EventInput);
         return null;
       }
       case 'deep.registerAction': {
-        const [name, declared] = args as [unknown, { declares?: unknown; input?: unknown } | undefined];
+        const [name, declared] = args as [unknown, { declares?: unknown; input?: unknown; output?: unknown; changes?: unknown; reads?: unknown } | undefined];
         if (typeof name !== 'string' || !(ext.manifest.actions ?? []).includes(name)) throw Error(`deep.registerAction: ${String(name)} isn't an action ${id}'s manifest declares`);
-        if (!['read', 'change', 'send'].includes(declared?.declares as string)) throw Error(`deep.registerAction: ${name} declares read, change or send`);
-        const input = declared!.input;
-        if (typeof input !== 'object' || input === null || Array.isArray(input)) throw Error(`deep.registerAction: ${name} gives its input's JSON Schema`);
-        const skipped = unchecked(input);
-        if (skipped) throw Error(`deep.registerAction: ${name}'s input schema has a rule the host can't check: ${skipped}`);
-        const schemas = registry([{ name, schema: input as Schema }]);
-        const check: Action['check'] = (value) => {
-          const held = schemas.validate(name, value);
-          return held.ok ? held : { ok: false, path: declaredPath(input, held.issues[0]!.path), code: held.issues[0]!.code };
+        const declares = declared?.declares;
+        if (declares !== 'read' && declares !== 'change' && declares !== 'send') throw Error(`deep.registerAction: ${name} declares read, change or send`);
+        const { input, output } = declared!;
+        if (!isPlain(input)) throw Error(`deep.registerAction: ${name} gives its input's JSON Schema`);
+        if (output !== undefined && !isPlain(output)) throw Error(`deep.registerAction: ${name}'s output is a JSON Schema`);
+        for (const [side, schema] of [['input', input], ['output', output]] as const) {
+          const skipped = schema === undefined ? undefined : unchecked(schema);
+          if (skipped) throw Error(`deep.registerAction: ${name}'s ${side} schema has a rule the host can't check: ${skipped}`);
+        }
+        // The store kinds a change changes, and those a read lets an agent read: each one of its own manifest's stores.
+        const kinds = (field: 'changes' | 'reads'): string[] => {
+          const listed = declared![field] ?? [];
+          if (!texts(listed) || (listed as string[]).some((k) => !(ext.manifest.stores ?? []).includes(k))) throw Error(`deep.registerAction: ${name}'s ${field} lists store kinds ${id}'s manifest declares`);
+          return [...(listed as string[])];
         };
-        // A schema that can't be read refuses the registration, not the first call.
-        schemas.validate(name, {});
-        ext.actions.set(name, { check });
+        const changes = kinds('changes');
+        const reads = kinds('reads');
+        const leftOut = rejected(input);
+        let check: Action['check'];
+        try {
+          const schemas = registry([{ name, schema: input as Schema }]);
+          check = (value) => {
+            const held = schemas.validate(name, value);
+            return held.ok ? held : { ok: false, path: declaredPath(input, held.issues[0]!.path), code: held.issues[0]!.code };
+          };
+          // A schema that can't be read refuses the registration, not the first call.
+          schemas.validate(name, {});
+        } catch (e) {
+          // One left out for agents stays listed with its reason, such as a union of plain values; every call to it is refused.
+          if (!leftOut) throw e;
+          check = () => ({ ok: false, path: '', code: 'unchecked' });
+        }
+        ext.actions.set(name, { check, declares, input, output, changes, reads, leftOut });
         return null;
+      }
+      // A piece's store (#363): its items are events of a kind its manifest declares, written by the piece alone.
+      case 'deep.store': {
+        const [kind, declared] = args as [unknown, { generation?: unknown; schema?: unknown; migrates?: unknown; quota?: unknown } | undefined];
+        if (typeof kind !== 'string' || !(ext.manifest.stores ?? []).includes(kind)) throw Error(`deep.store: ${String(kind)} isn't a store kind ${id}'s manifest declares`);
+        const generation = declared?.generation;
+        if (!Number.isSafeInteger(generation) || (generation as number) < 1) throw Error(`deep.store: ${kind} gives the generation of its schema, a whole number from 1`);
+        const migrates = declared!.migrates ?? [];
+        // Only a migration from a lower generation ever runs: one from this generation or a later one is never asked for.
+        if (!Array.isArray(migrates) || !migrates.every((g) => Number.isSafeInteger(g) && g >= 1)) throw Error(`deep.store: ${kind}'s migrates lists the generations it migrates from`);
+        const schema = declared!.schema;
+        if (!isPlain(schema)) throw Error(`deep.store: ${kind} gives its items' JSON Schema`);
+        const skipped = unchecked(schema);
+        if (skipped) throw Error(`deep.store: ${kind}'s schema has a rule the host can't check: ${skipped}`);
+        const items = registry([{ name: kind, schema: schema as Schema }]);
+        items.validate(kind, {});
+        // Its quota in bytes (#365): what its items hold, each as JSON, never grows past it.
+        const quota = (declared!.quota as { bytes?: unknown } | undefined)?.bytes;
+        if (declared!.quota !== undefined && (!Number.isSafeInteger(quota) || (quota as number) < 1)) throw Error(`deep.store: ${kind}'s quota is a number of bytes, a whole number from 1`);
+        const store: Store = { generation: generation as number, quota: (quota as number | undefined) ?? null, check: (value) => { const held = items.validate(kind, value); return held.ok ? undefined : `${held.issues[0]!.path || '/'}: ${held.issues[0]!.code}`; } };
+        if (!conformance) await this.migrate(ext, kind, store, migrates as number[]);
+        ext.stores.set(kind, store);
+        return null;
+      }
+      case 'deep.store.put': {
+        quiet();
+        const [kind, key, value] = args;
+        const store = this.storeOf(ext, kind, method);
+        if (typeof key !== 'string' || !key) throw Error(`${method}: ${String(kind)}'s items each have a key, a non-empty string`);
+        const broke = store.check(value);
+        if (broke) throw Error(`${method}: the item for ${key} fails ${String(kind)}'s schema at ${broke}`);
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        if (run && !run.decl.declares.stores.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the stores it writes`);
+        const held = await this.store(kind as string);
+        const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
+        const total = held.bytes - (held.items.get(key)?.bytes ?? 0) + bytes;
+        if (store.quota !== null && total > store.quota) throw Error(`${method}: ${String(kind)} would hold ${total} bytes with the item for ${key}, past its quota of ${store.quota}`);
+        const now = this.options.now();
+        const call = scope === undefined ? null : ext.callOf.get(scope) ?? null;
+        await this.options.record.append(connection, { v: 1, id: ulid(now), kind: kind as string, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call } });
+        held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
+        held.bytes = total;
+        run?.changes.push(`${String(kind)}:${key}`);
+        return null;
+      }
+      case 'deep.store.get': {
+        quiet();
+        const [kind, key] = args;
+        this.storeOf(ext, kind, method);
+        return structuredClone((await this.items(kind as string)).get(String(key))?.value ?? null);
+      }
+      case 'deep.store.list': {
+        quiet();
+        const [kind] = args;
+        this.storeOf(ext, kind, method);
+        return [...(await this.items(kind as string))].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, item]) => ({ key, value: structuredClone(item.value) }));
       }
       case 'deep.provide': {
         const [name, kind] = args;
@@ -1486,7 +1816,7 @@ class Host implements ExtensionHost {
         return this.fetch(ext, args[0], connection);
       case 'deep.record.query':
         quiet();
-        return this.query(ext, args[0]);
+        return this.query(ext, args[0], connection);
       case 'deep.lease':
         quiet();
         return this.lease(ext, args[0], args[1]);
@@ -1513,13 +1843,65 @@ class Host implements ExtensionHost {
         return void this.terminals.input(args[0] as string, args[1] as string);
       case 'deep.notices.send': {
         quiet();
-        const readings = (args[0] as { readings?: unknown } | undefined)?.readings;
+        // #348's wrong program checks nothing here, as it checks no grant but deep.record.query's.
+        const planted = this.options.plant === 'grants-only-in-record-query';
+        const given = (isPlain(args[0]) ? args[0] : {}) as { readings?: unknown; key?: unknown };
+        const subject = planted ? undefined : await this.noticeAllowed(ext, args[0], scope);
+        if (subject?.sent) return subject.sent;
         const notice = `notice:${ulid(this.options.now())}`;
         const now = this.options.now();
         await this.options.record.append(connection, {
-          v: 1, id: ulid(now), kind: 'notice.sent', ts: now, data: { notice, cites: Array.isArray(readings) ? readings : [] },
+          v: 1, id: ulid(now), kind: 'notice.sent', ...(subject ? { subject: subject.subject } : {}), ts: now, data: { notice, cites: Array.isArray(given.readings) ? given.readings : [] },
         });
+        // Sent for an action call, it is part of what that call changed (#363); in a run, of what the run changed (#365).
+        const call = scope === undefined ? undefined : ext.callOf.get(scope);
+        if (call !== undefined) this.notices.get(call)?.push(notice);
+        if (scope !== undefined) this.runCtx.get(scope)?.changes.push(notice);
         return notice;
+      }
+      // Schedules and sends (#365).
+      case 'deep.schedule': {
+        const [name, declared] = args;
+        const decl = declareSchedule(name, declared, { plugin: id, sources: (ext.manifest.sources ?? []).map((x) => x.name), notices: ext.manifest.notices ?? [], stores: ext.manifest.stores ?? [] });
+        if (conformance) return null;
+        const owner = this.scheduler.has(decl.name);
+        if (owner && owner.plugin !== id) throw Error(`deep.schedule: ${decl.name} is already registered by ${owner.plugin}`);
+        await this.scheduler.register(decl, { runs: await this.runs(decl.name), settings: this.read<Settings>('schedules.json')[decl.name] ?? {} });
+        return null;
+      }
+      case 'deep.schedule.read': {
+        quiet();
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        if (!run) throw Error(`${method}: only a scheduled job reads through its run`);
+        const [source] = args;
+        if (typeof source !== 'string' || !run.decl.declares.readings.includes(source)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(source)} among the readings it reads`);
+        const owner = [...this.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+        if (!owner) {
+          run.blocked ??= `missing source ${source}`;
+          return { status: 'BLOCKED', source, cause: run.blocked };
+        }
+        const got = await this.sources.readOne(owner.entry.id, owner.sources.get(source) as Polled, (answer) => this.ask(owner, CALL_MS, `${source}'s parser`, 'source.parse', { name: source, answer }));
+        if (got.read.status === 'reading') {
+          if (got.handle) run.changes.push(got.handle);
+          return { status: 'reading', reading: { ...got.read.reading, handle: got.handle } };
+        }
+        if (got.read.status === 'BLOCKED') run.blocked ??= got.read.cause;
+        else if (got.held) run.held ??= got.read.cause;
+        return got.read;
+      }
+      case 'deep.send': {
+        quiet();
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        const kind = (args[0] as { kind?: unknown } | undefined)?.kind;
+        if (run && !run.decl.declares.sends.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the sends it makes`);
+        const now = this.options.now();
+        const sent = await this.sending.send(args[0], {
+          piece: id, hosts: (ext.entry.grant.hosts ?? []).map((h) => h.host), schedule: run?.decl.name ?? null, run: run?.run ?? null,
+          call: run || scope === undefined ? null : ext.callOf.get(scope) ?? null,
+          until: now + (run ? run.decl.deadline : CALL_MS), ended: () => (run ? run.ended : scope !== undefined && !ext.scopes.has(scope)),
+        });
+        run?.changes.push(`send:${sent.key}`);
+        return sent;
       }
       default:
         throw Error(`${method} isn't wired into this host yet`);
@@ -1542,20 +1924,116 @@ class Host implements ExtensionHost {
     ext.refusals.push(refusal);
     throw Error(refusal);
   }
-  /** The record its grant names, filtered here before anything crosses to the package. */
-  private async query(ext: Ext, filter: unknown): Promise<unknown[]> {
-    const asked = (filter as { kinds?: unknown } | undefined)?.kinds;
-    const grant = ext.entry.grant.record;
-    const kinds = new Set(Array.isArray(asked) ? grant.filter((k) => asked.includes(k)) : grant);
-    const found: unknown[] = [];
-    if (!kinds.size) return found;
+  private storeOf(ext: Ext, kind: unknown, method: string): Store {
+    const store = ext.stores.get(kind as string);
+    if (!store) throw Error(`${method}: ${String(kind)} isn't a store ${ext.entry.id} declared with deep.store`);
+    return store;
+  }
+  /**
+   * A store's items as the record holds them now: the newest item for each key, read from the record once and then
+   * kept as this host puts them, since only this host writes a store's kind (#365: a lookup reads no log).
+   */
+  private async items(kind: string): Promise<Map<string, { value: unknown; generation: number; bytes: number }>> {
+    return (await this.store(kind)).items;
+  }
+  private async store(kind: string): Promise<{ items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }> {
+    const kept = this.storeItems.get(kind);
+    if (kept) return kept;
+    const items = new Map<string, { value: unknown; generation: number; bytes: number }>();
     for (let after = 0; ;) {
-      // Only the granted kinds are read: the rest of the log is never decoded.
-      const page = await this.options.record.read({ after, limit: PAGE, kinds: [...kinds] });
-      for (const e of page) if (kinds.has(e.kind)) found.push(JSON.parse(toJson(e)));
+      const page = await this.options.record.read({ after, limit: PAGE, kinds: [kind] });
+      for (const e of page) {
+        const { key, value, generation } = e.data as { key: string; value: unknown; generation: number };
+        items.set(key, { value, generation, bytes: Buffer.byteLength(JSON.stringify(value) ?? 'null') });
+      }
+      if (page.length < PAGE) break;
+      after = page[page.length - 1]!.log_pos;
+    }
+    // Read while another call read it too: the first map read stays the one kept.
+    if (!this.storeItems.has(kind)) this.storeItems.set(kind, { items, bytes: [...items.values()].reduce((sum, i) => sum + i.bytes, 0) });
+    return this.storeItems.get(kind)!;
+  }
+  /**
+   * A store's items moved forward to the generation a load declares (#363): each item at a generation it migrates
+   * from, through the piece's own migration, held to the new schema and written again. An item at a later generation,
+   * once the code is rolled back, is kept as it is: nothing moves back.
+   */
+  private async migrate(ext: Ext, kind: string, store: Store, migrates: number[]): Promise<void> {
+    const id = ext.entry.id;
+    for (const [key, item] of await this.items(kind)) {
+      if (item.generation >= store.generation) continue;
+      if (!migrates.includes(item.generation)) throw Error(`deep.store: ${kind} holds items at generation ${item.generation}, and ${id} declares no migration from it`);
+      const value = await within(CALL_MS, `${id}'s migration of ${kind}`, ext.ask!('migrate', { kind, from: item.generation, value: item.value }));
+      const broke = store.check(value);
+      if (broke) throw Error(`deep.store: ${id}'s migration of ${kind}'s item ${key} from generation ${item.generation} fails generation ${store.generation}'s schema at ${broke}`);
+      const now = this.options.now();
+      await this.options.record.append(this.connection(ext, undefined), { v: 1, id: ulid(now), kind, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call: null } });
+      const held = await this.store(kind);
+      const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
+      held.bytes += bytes - item.bytes;
+      held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
+    }
+  }
+  /** Whether a kind is another plug-in's: an `ext.<plugin>.` kind of a plug-in other than this one. */
+  private foreign(ext: Ext, kind: string): boolean {
+    return kind.startsWith('ext.') && !kind.startsWith(`ext.${ext.entry.id.slice(ext.entry.id.indexOf('/') + 1)}.`);
+  }
+  /**
+   * Whether its record grant reaches a kind (#363): one the grant names, or with `*` any, of the core's kinds and its
+   * own. Another plug-in's store and event kinds never: they come only through a declared use.
+   */
+  private reaches(ext: Ext, kind: string): boolean {
+    // A release package in the hub keeps full access.
+    if (ext.released) return true;
+    const grant = ext.entry.grant.record;
+    const named = grant.includes('*') || grant.includes(kind);
+    return this.options.plant === 'record-by-grant-words' ? named : named && !this.foreign(ext, kind);
+  }
+  /** The installed piece whose manifest declares a plug-in kind, as a store or an event kind. */
+  private ownerOf(kind: string): string | undefined {
+    return Object.values(this.entries).find((e) => {
+      const m = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+      return [...(m.stores ?? []), ...(m.events ?? [])].includes(kind);
+    })?.id;
+  }
+  /**
+   * The record its grant names, filtered here before anything crosses to the package: the kinds it reaches, and
+   * their content-free fields unless the grant names text. A query that names another plug-in's kind is refused,
+   * naming the kind and the use to declare instead.
+   */
+  private async query(ext: Ext, filter: unknown, connection: Connection): Promise<unknown[]> {
+    const asked = (filter as { kinds?: unknown } | undefined)?.kinds;
+    const other = Array.isArray(asked) && !ext.released && this.options.plant !== 'record-by-grant-words' ? asked.find((k): k is string => typeof k === 'string' && this.foreign(ext, k)) : undefined;
+    if (other !== undefined) {
+      const owner = this.ownerOf(other);
+      await this.refused(connection, 'deep.record.query', 'grant', 'record: another plug-in\'s kind, which no grant reaches', [filter]).catch(() => undefined);
+      throw Error(`deep.record.query: ${other} is ${owner ?? 'another plug-in'}'s kind, which no record grant reaches; declare a use of what ${owner ?? 'it'} provides in your manifest's uses, and read it with deep.read`);
+    }
+    const grant = ext.entry.grant.record;
+    const kinds = Array.isArray(asked) ? asked.filter((k): k is string => typeof k === 'string' && this.reaches(ext, k))
+      : ext.released || grant.includes('*') ? undefined : grant.filter((k) => this.reaches(ext, k));
+    const found: unknown[] = [];
+    if (kinds && !kinds.length) return found;
+    for (let after = 0; ;) {
+      // Only the kinds it reaches are read: the rest of the log is never decoded.
+      const page = await this.options.record.read({ after, limit: PAGE, ...(kinds ? { kinds } : {}) });
+      for (const e of page) {
+        const seen = this.visible(ext, e);
+        if (seen !== undefined) found.push(seen);
+      }
       if (page.length < PAGE) return found;
       after = page[page.length - 1]!.log_pos;
     }
+  }
+  /**
+   * An event as the package's record grant lets it see it, or undefined (#363): of a kind it reaches, from a repo or
+   * workspace the grant names, with only its content-free fields unless the grant names text. A release package in
+   * the hub sees every event whole.
+   */
+  private visible(ext: Ext, e: Event): unknown {
+    const { projects, text } = ext.entry.grant;
+    if (!this.reaches(ext, e.kind) || (!ext.released && projects && !projects.includes(e.project ?? ''))) return undefined;
+    return JSON.parse(toJson(text || ext.released ? e : contentFree(e)));
   }
   private kindOwner(kind: string): Ext | undefined {
     for (const ext of this.exts.values()) if (ext.kinds.includes(kind)) return ext;
@@ -1629,6 +2107,81 @@ class Host implements ExtensionHost {
     return { status: answer.status, body: Buffer.concat(chunks).toString('utf8') };
   }
 
+  /**
+   * Whether a notice may go out (#365), refused naming why: a notice kind its manifest declares (and, in a run, its job
+   * declares), for a cause you subscribed to, each reading it cites one the hub recorded that is still fresh, within the
+   * plug-in's limit a minute. Its subject keys its cause, so the notice already sent for one is answered again.
+   */
+  private async noticeAllowed(ext: Ext, given: unknown, scope: string | undefined): Promise<{ subject: string; sent?: string }> {
+    const id = ext.entry.id;
+    const n = (isPlain(given) ? given : {}) as { kind?: unknown; subscription?: unknown; key?: unknown; readings?: unknown };
+    const refuse = (why: string): never => { throw Error(`deep.notices.send: ${why}`); };
+    const run = scope === undefined ? undefined : this.runCtx.get(scope);
+    const kind = typeof n.kind === 'string' && (ext.manifest.notices ?? []).includes(n.kind) ? n.kind : refuse(`${String(n.kind)} isn't a notice kind ${id}'s manifest declares`);
+    if (run && !run.decl.declares.notices.includes(kind)) refuse(`${run.decl.name} doesn't declare ${kind} among the notices it may send`);
+    if (typeof n.key !== 'string' || !n.key) refuse('a notice has a key, its one cause');
+    const [sub] = (await this.options.record.raw(`SELECT id FROM events WHERE kind = 'notice.subscribed' AND json_extract(data, '$.notice_kind') = ? AND json_extract(data, '$.key') = ?
+      ORDER BY log_pos DESC LIMIT 1`, [kind, String(n.subscription)])) as { id: string }[];
+    if (!sub) refuse(`nobody subscribed to ${kind} for ${String(n.subscription)}; a notice goes out only because you asked for it`);
+    if (!texts(n.readings)) refuse('a notice cites the readings behind it, as a list of their handles');
+    const now = this.options.now();
+    for (const handle of n.readings as string[]) {
+      const [r] = (await this.options.record.raw('SELECT source, as_of FROM readings WHERE reading = ?', [handle])) as { source: string; as_of: number }[];
+      const source = r && [...this.exts.values()].map((e) => e.sources.get(r.source)).find((x): x is Polled => x?.variant === 'polled');
+      if (!r || !source) return refuse(`${handle} is no reading of a loaded source the hub recorded`);
+      if (now - r.as_of >= source.freshFor) refuse(`${handle} is past its freshness of ${source.freshFor} ms, so the notice would cite a stale reading`);
+    }
+    const subject = `notice:${sub!.id}#${sha256Hex(new TextEncoder().encode(n.key as string)).slice(0, 40)}`;
+    const [sent] = (await this.options.record.raw("SELECT json_extract(data, '$.notice') AS notice FROM events WHERE kind = 'notice.sent' AND subject = ? LIMIT 1", [subject])) as { notice: string }[];
+    if (sent) return { subject, sent: sent.notice };
+    const times = (this.noticeTimes.get(id) ?? []).filter((t) => now - t < 60_000);
+    if (times.length >= NOTICES_PER_MINUTE) refuse(`${id} sent ${NOTICES_PER_MINUTE} notices in the last minute, its limit`);
+    this.noticeTimes.set(id, [...times, now]);
+    return { subject };
+  }
+  /** What keeps a schedule's run from starting (#365): a source it reads that no loaded plug-in registers, or a secret one needs that isn't held. */
+  private async blockedRun(decl: ScheduleDecl): Promise<string | null> {
+    for (const name of decl.declares.readings) {
+      const owner = [...this.exts.values()].find((e) => e.live && e.sources.has(name));
+      const source = owner?.sources.get(name);
+      if (!owner || !source) return `missing source ${name}: no loaded plug-in registers it`;
+      if (source.variant === 'polled' && source.secret && !(await this.sources.holds(owner.entry.id, source.secret))) return `missing secret ${source.secret}, which ${name} needs`;
+    }
+    return null;
+  }
+  /** Hands a run to its plug-in's job (#365), its calls carrying the run's scope; resolves with the run's verdict. */
+  private dispatchRun(decl: ScheduleDecl, run: { run: string; due: number }): Promise<Ended> | undefined {
+    const ext = this.exts.get(decl.plugin);
+    if (!ext?.live || !ext.ask) return undefined;
+    const scope = randomUUID();
+    const ctx: RunCtx = { run: run.run, decl, changes: [], blocked: null, held: null, ended: false };
+    ext.scopes.set(scope, CORE);
+    ext.callOf.set(scope, run.run);
+    this.runCtx.set(scope, ctx);
+    return ext.ask('schedule.run', { name: decl.name, run: run.run, at: run.due, scope }).then((returned) => this.judged(ext, ctx, returned, undefined), (e) => this.judged(ext, ctx, undefined, e ?? 'failed'))
+      .finally(() => {
+        ctx.ended = true;
+        ext.scopes.delete(scope);
+        ext.callOf.delete(scope);
+        this.runCtx.delete(scope);
+      });
+  }
+  /**
+   * A run's verdict, from what the hub saw and recorded for it, never the job's word (#365): its process gone is
+   * INVALID; a declared no-op uncounted; a declared change PASS; else a source missing or its secret is BLOCKED, a
+   * rate limit, a 5xx or the quota INCONCLUSIVE, and anything else FAIL. A run the hub's stop cut short is interrupted.
+   */
+  private judged(ext: Ext, ctx: RunCtx, returned: unknown, error: unknown): Ended {
+    if (this.closed) return 'interrupted';
+    const changes = [...new Set(ctx.changes)];
+    if (error !== undefined && (!ext.live || this.exts.get(ext.entry.id) !== ext)) return { verdict: 'INVALID', cause: `${ext.entry.id}'s process ended while the run was under way`, changes };
+    if (error === undefined && ctx.decl.declares.noop && isPlain(returned) && 'noop' in returned) return { verdict: 'uncounted', cause: 'a no-op its job declares', changes };
+    if (error === undefined && changes.length) return { verdict: 'PASS', cause: null, changes };
+    if (ctx.blocked) return { verdict: 'BLOCKED', cause: ctx.blocked, changes };
+    if (ctx.held) return { verdict: 'INCONCLUSIVE', cause: ctx.held, changes };
+    return { verdict: 'FAIL', cause: error === undefined ? 'it ended with no change its job declares' : `its job failed${ext.released ? `: ${message(error)}` : ''}`, changes };
+  }
+
   async hook(request: HookRequest): Promise<HookReply>;
   async hook(line: HookRequestLine): Promise<{ adapter: string; events: { kind: string }[] }>;
   async hook(arg: HookRequest | HookRequestLine): Promise<HookReply | { adapter: string; events: { kind: string }[] }> {
@@ -1651,7 +2204,7 @@ class Host implements ExtensionHost {
       const due = performance.now() + deadline + HOOK_GRACE_MS;
       const left = (): number => Math.max(0, due - performance.now());
       try {
-        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project is no longer trusted, so it was stopped`);
+        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
       } catch (e) {
         if (e instanceof Overran) return fail(`${id}'s trust check didn't answer within the hook's deadline of ${deadline} ms`);
         throw e;
@@ -1698,19 +2251,56 @@ class Host implements ExtensionHost {
     return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };
   }
 
+  /** Each request ID's call (#363), by its caller: the digest of what it asked, and its result, which a retry gets. */
+  private readonly requests = new Map<string, { digest: string; result: Promise<ActionResult> }>();
+  /** The notices each change or send call sent while its handler ran, by its call ID (#363). */
+  private readonly notices = new Map<string, string[]>();
   async callAction(call: ActionCall): Promise<ActionResult> {
+    const { request } = call;
+    if (request === undefined) return this.callNow(call);
+    if (typeof request !== 'string' || !request) return { status: 'refused', reason: 'a call\'s request ID is a non-empty string' };
+    // An identical retry runs nothing again; the same ID with other input is refused before anything is written or run.
+    const key = `${call.caller.writer}\u0000${request}`;
+    const digest = sha256Hex(canonicalize(JSON.parse(JSON.stringify({ action: call.action, target: call.target ?? null, input: call.input ?? null })) as JsonValue));
+    const seen = this.requests.get(key);
+    if (seen) return seen.digest === digest ? seen.result : { status: 'refused', reason: `the request ID ${request} was used for another call; nothing was run or written for this one` };
+    const result = this.entered(call, request).then((before) => before ?? this.callNow(call));
+    this.requests.set(key, { digest, result });
+    return result;
+  }
+  /**
+   * A request ID's call entered before this host started (#363), as its action.entered holds it, or undefined: an
+   * identical retry runs nothing again and gets no output, which isn't kept, and one whose call never reported or
+   * failed gets the call refused; the same ID with other input is refused.
+   */
+  private async entered(call: ActionCall, request: string): Promise<ActionResult | undefined> {
+    const { session, actor } = call.caller;
+    const [row] = (await this.options.record.raw(`SELECT data FROM events WHERE kind = 'action.entered' AND writer = 'core' AND actor = ?
+      AND session_id IS ? AND json_extract(data, '$.request') = ? ORDER BY log_pos LIMIT 1`, [actor, session ?? null, request])) as { data: string }[];
+    if (!row) return undefined;
+    const before = JSON.parse(row.data) as { call: string; plugin: string; action: string; input: JsonValue };
+    const same = (v: unknown): string => sha256Hex(canonicalize((JSON.parse(JSON.stringify(v ?? null)) ?? null) as JsonValue));
+    if (`ext:${before.plugin}` !== call.target?.handle || before.action !== call.action || same(before.input) !== same(call.input)) {
+      return { status: 'refused', reason: `the request ID ${request} was used for another call; nothing was run or written for this one` };
+    }
+    const [ended] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'action.reported' AND json_extract(data, '$.call') = ? LIMIT 1", [before.call])) as { data: string }[];
+    const error = ended ? (JSON.parse(ended.data) as { error: string | null }).error : `${call.action}'s call ${before.call} never reported, so what it did is unknown`;
+    return error === null ? { status: 'done', output: null } : { status: 'refused', reason: error, started: true, call: before.call };
+  }
+  private async callNow(call: ActionCall): Promise<ActionResult> {
     const refuse = (reason: string): ActionResult => ({ status: 'refused', reason });
-    const { action, target, caller } = call;
+    const { action, target, caller, request } = call;
     const id = /^ext:(.+)$/.exec(target?.handle ?? '')?.[1];
     const ext = id === undefined ? undefined : this.exts.get(id);
     if (!ext || !ext.live || !ext.ask) return refuse(`${target?.handle} names no piece that is loaded and started`);
     // The target names its version: a call meant for another one, a removed or never-active version, runs nothing.
     if (ext.entry.version !== target.version) return refuse(`${target.handle}@${target.version} is a stale target: the version active is ${ext.entry.version}`);
-    if (await this.revoked(ext)) return refuse(`${id}'s project is no longer trusted, so it was stopped`);
+    if (await this.revoked(ext)) return refuse(`${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
     // Removed while trust answered: new calls stopped first, so this one runs nothing.
     if (this.exts.get(ext.entry.id) !== ext || !ext.live || !ext.ask) return refuse(`${target.handle} was removed before ${action} could run`);
     const declared = ext.actions.get(action);
     if (!declared) return refuse(`${id} registered no action ${action}`);
+    const recorded = declared.declares !== 'read';
     const held = declared.check(call.input);
     if (!held.ok) {
       await this.refused(caller, action, 'schema', `${action}'s input at ${held.path || '/'}: ${held.code}`, [{ action, target, input: call.input }]);
@@ -1718,18 +2308,79 @@ class Host implements ExtensionHost {
     }
     const scope = randomUUID();
     ext.scopes.set(scope, caller);
-    let output: unknown;
+    // A change or send is entered on record before its handler starts, by the core, for its caller.
+    const { writer: _writer, run: _run, ...proved } = caller;
+    const core: Connection = { ...proved, writer: 'core' };
+    let entered: { call: string; at: number } | undefined;
+    let returned: unknown;
+    let failure: string | undefined;
     try {
-      output = await within(CALL_MS, `${id}'s ${action}`, ext.ask('action', { name: action, input: call.input, ctx: { target: { handle: target.handle, version: target.version } }, scope }));
+      if (recorded) {
+        const now = this.options.now();
+        const callId = ulid(now);
+        const { log_pos } = await this.options.record.append(core, {
+          // A call that came with no request ID, such as a panel's, is entered under its own call ID: nothing retries it.
+          v: 1, id: ulid(now), kind: 'action.entered', ts: now, data: { call: callId, plugin: id!, action, request: request ?? callId, input: call.input as JsonValue },
+        });
+        entered = { call: callId, at: log_pos };
+        ext.callOf.set(scope, callId);
+        this.notices.set(callId, []);
+      }
+      returned = await within(CALL_MS, `${id}'s ${action}`, ext.ask('action', { name: action, input: call.input, ctx: { target: { handle: target.handle, version: target.version } }, scope }));
     } catch (e) {
       // An error's text is the package's own words: only a release package's reaches its caller.
-      return refuse(`${id}'s ${action} failed${ext.released ? `: ${message(e)}` : ''}`);
+      failure = `${id}'s ${action} failed${ext.released ? `: ${message(e)}` : ''}`;
     } finally {
       ext.scopes.delete(scope);
+      ext.callOf.delete(scope);
     }
+    if (entered) await this.reported(ext, entered, core, returned, failure);
+    const ran = { started: true as const, ...(entered ? { call: entered.call } : {}) };
+    if (failure !== undefined) return { ...refuse(failure), ...ran };
     // Removed while it ran: what it returns reaches no one, and nothing it does later goes through its replacement.
-    if (this.exts.get(ext.entry.id) !== ext || !ext.live) return refuse(`${id}@${target.version} was removed while ${action} ran`);
-    return { status: 'done', output };
+    if (this.exts.get(ext.entry.id) !== ext || !ext.live) return { ...refuse(`${id}@${target.version} was removed while ${action} ran`), ...ran };
+    // A change or send returns { output, report }: its caller gets the output, and the report is on record.
+    return { status: 'done', output: entered && isPlain(returned) && Object.hasOwn(returned, 'output') ? returned.output : returned };
+  }
+  /**
+   * action.reported for a change or send call, when its handler ends (#363): the report's `verified` and `checked`,
+   * a missing or malformed report counting as unverified and a failed call as unverified, and `changed`, the store
+   * items and notices the hub wrote for the call, read from the record, never from the report.
+   */
+  private async reported(ext: Ext, entered: { call: string; at: number }, core: Connection, returned: unknown, failure: string | undefined): Promise<void> {
+    const given = isPlain(returned) && isPlain(returned.report) ? returned.report : {};
+    const verified = this.options.plant === 'keeps-malformed-verified' && 'verified' in given ? String(given.verified)
+      : failure === undefined && typeof given.verified === 'boolean' ? String(given.verified) : 'unverified';
+    const checked = typeof given.checked === 'string' && given.checked ? given.checked.slice(0, 8192) : null;
+    const changed: string[] = [];
+    const notices = this.notices.get(entered.call) ?? [];
+    this.notices.delete(entered.call);
+    const kinds = [...(ext.manifest.stores ?? []), ...(notices.length ? ['notice.sent'] : []), 'send.made'];
+    for (let after = entered.at; kinds.length;) {
+      const page = await this.options.record.read({ after, limit: PAGE, kinds });
+      for (const e of page) {
+        const item = e.data as { key: string; call: string | null; notice: string; phase?: string };
+        if (e.kind === 'notice.sent') {
+          if (notices.includes(item.notice)) changed.push(item.notice);
+        } else if (e.kind === 'send.made') {
+          // A send the hub made for the call (#365): claimed, so it went out or may have.
+          if (item.call === entered.call && item.phase === 'claimed') changed.push(`send:${item.key}`);
+        } else if (item.call === entered.call) changed.push(`${e.kind}:${item.key}`);
+      }
+      if (page.length < PAGE) break;
+      after = page[page.length - 1]!.log_pos;
+    }
+    const now = this.options.now();
+    await this.options.record.append(core, {
+      v: 1, id: ulid(now), kind: 'action.reported', ts: now,
+      data: { call: entered.call, changed: this.options.plant === 'copies-report-changed' && texts(given.changed) ? given.changed as string[] : changed, verified, checked, error: failure ?? null },
+    });
+  }
+
+  async actions(): Promise<ActionListing[]> {
+    return [...this.exts.values()].filter((ext) => ext.live).flatMap((ext) => [...ext.actions].map(([action, a]) => ({
+      action, extension: ext.entry.id, version: ext.entry.version, declares: a.declares, input: structuredClone(a.input), exposed: a.leftOut === null, reason: a.leftOut,
+    })));
   }
 
   async loaded(): Promise<Loaded[]> {
@@ -1761,7 +2412,8 @@ class Host implements ExtensionHost {
   async deliver(events: Event[]): Promise<void> {
     const failed: string[] = [];
     await Promise.all([...this.exts.values()].filter((ext) => ext.live).map(async (ext) => {
-      const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => JSON.parse(toJson(e)) as unknown);
+      // Filtered by its grant before anything crosses to it, as a query is.
+      const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => this.visible(ext, e)).filter((e) => e !== undefined);
       if (!mine.length) return;
       if (!ext.ask || (await this.revoked(ext))) return void failed.push(`${ext.entry.id}: it stopped, its project no longer trusted or unloaded`);
       await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch((e) => failed.push(`${ext.entry.id}: ${message(e)}`));
@@ -1892,6 +2544,9 @@ class Host implements ExtensionHost {
   async ready(): Promise<void> {
     if (this.isReady) return this.starting;
     this.isReady = true;
+    // The hub's own timer: schedules fire from it, never from the app's clock (#365).
+    this.timer = setInterval(() => void this.tick().catch(() => undefined), TIMER_MS);
+    this.timer.unref();
     this.starting = (async () => {
       const failed: string[] = [];
       for (const ext of [...this.exts.values()]) {
@@ -1991,6 +2646,8 @@ class Host implements ExtensionHost {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    clearInterval(this.timer);
+    this.sending.close();
     // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
     await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);
