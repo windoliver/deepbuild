@@ -4379,7 +4379,7 @@ export class Core {
           return { code: record.exit?.code ?? null, record };
         }
         const result = await this.extensions!.runCheck('command', spec, { checkout: run.cwd, deadline });
-        return { code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, clock: 0 } };
+        return { code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } };
       }).catch((error: Error) => ({ code: null, failed: error.message }));
     } else if (this.options.plant === 'run-spawns-itself') {
       // The planted wrong program: the hub spawns the run itself, past the host and its sandbox.
