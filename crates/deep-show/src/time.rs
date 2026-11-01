@@ -15,6 +15,7 @@ use deep_canvas_motion::doc::{read as read_motion, Motion};
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Call, EvalTime, Hub, Planted};
+use crate::optional;
 
 /// A `rate` call: the rule for one rate, with no document.
 pub struct RateCall {
@@ -70,10 +71,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                 None => Some(None),
                 Some(v) => v.as_i64().map(Some),
             };
-            let source = match c.get("source") {
-                None => false,
-                Some(b) => b.as_bool()?,
-            };
+            let source = optional(c.get("source"), Value::as_bool)?.unwrap_or(false);
             if source && matches!(rate, Rate::Frame { .. }) {
                 return None;
             }
@@ -89,14 +87,8 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             text: c.get("text")?.as_str()?.to_string(),
         }),
         "export" => {
-            let frame_rate = match c.get("frame_rate") {
-                None => None,
-                Some(f) => Some(pair(f)?),
-            };
-            let sample_rate = match c.get("audio") {
-                None => None,
-                Some(a) => Some(whole(a.get("sample_rate")?)?),
-            };
+            let frame_rate = optional(c.get("frame_rate"), pair)?;
+            let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;
             Some(Call::Export(Export {
                 doc: doc()?,
                 frame_rate,

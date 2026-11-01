@@ -10,6 +10,13 @@ export interface Deep {
         ask: {
         };
     }): Promise<unknown>;
+    "canvas.read"(params: {
+        doc: string;
+        query: {
+            paths?: Array<string>;
+            at?: Array<string>;
+        };
+    }): Promise<unknown>;
     "config.get"(params: {
         key: string;
     }): Promise<unknown>;

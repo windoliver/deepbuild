@@ -29,6 +29,8 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
+use crate::optional;
+
 /// The most a terminal's stream holds that its host hasn't taken: 16 MiB.
 pub const WINDOW: usize = 16 * 1024 * 1024;
 /// One read of the PTY, and one frame to the host, at most.
@@ -198,10 +200,7 @@ impl Serve {
                 None => String::new(),
                 Some(c) => c.as_str()?.to_string(),
             },
-            record: match input.get("record") {
-                None => None,
-                Some(r) => Some(r.as_str()?.to_string()),
-            },
+            record: optional(input.get("record"), |r| Some(r.as_str()?.to_string()))?,
             plant,
         })
     }

@@ -231,6 +231,188 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
+    wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    }
+}
+
+/// A 2D texture of `size`: one layer, one mip, one sample.
+pub(crate) fn texture2d(
+    d: &wgpu::Device,
+    label: &str,
+    size: [u32; 2],
+    format: wgpu::TextureFormat,
+    usage: wgpu::TextureUsages,
+) -> wgpu::Texture {
+    d.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: extent(size),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage,
+        view_formats: &[],
+    })
+}
+
+/// Writes `bytes`, `row` bytes a row, over layer `z` of `texture`, `size` texels.
+pub(crate) fn write_texture(
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    z: u32,
+    bytes: &[u8],
+    row: u32,
+    size: [u32; 2],
+) {
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: 0, y: 0, z },
+            aspect: wgpu::TextureAspect::All,
+        },
+        bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(row),
+            rows_per_image: Some(size[1]),
+        },
+        extent(size),
+    );
+}
+
+/// A bind group binding `resources` at 0, 1, 2… in order.
+pub(crate) fn bind_group<const N: usize>(
+    d: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::BindGroupLayout,
+    resources: [wgpu::BindingResource<'_>; N],
+) -> wgpu::BindGroup {
+    let mut binding = 0;
+    let entries = resources.map(|resource| {
+        binding += 1;
+        wgpu::BindGroupEntry {
+            binding: binding - 1,
+            resource,
+        }
+    });
+    d.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &entries,
+    })
+}
+
+/// A fragment-stage layout entry for a non-filterable 2D texture at binding 0.
+pub(crate) fn texture_entry() -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding: 0,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    }
+}
+
+pub(crate) fn buffer_entry(
+    binding: u32,
+    visibility: wgpu::ShaderStages,
+    ty: wgpu::BufferBindingType,
+) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility,
+        ty: wgpu::BindingType::Buffer {
+            ty,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+/// One color target, every channel written.
+pub(crate) fn target(
+    format: wgpu::TextureFormat,
+    blend: Option<wgpu::BlendState>,
+) -> Option<wgpu::ColorTargetState> {
+    Some(wgpu::ColorTargetState {
+        format,
+        blend,
+        write_mask: wgpu::ColorWrites::ALL,
+    })
+}
+
+/// A render pipeline over `module`: its vertex stage `vs` reading `buffers`, and its fragment
+/// stage, when given, into `targets`.
+pub(crate) fn pipeline(
+    d: &wgpu::Device,
+    label: &str,
+    layout: Option<&wgpu::PipelineLayout>,
+    module: &wgpu::ShaderModule,
+    (vs, buffers): (&str, &[Option<wgpu::VertexBufferLayout<'_>>]),
+    fragment: Option<(&str, &[Option<wgpu::ColorTargetState>])>,
+    depth_stencil: Option<wgpu::DepthStencilState>,
+) -> wgpu::RenderPipeline {
+    d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout,
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some(vs),
+            compilation_options: Default::default(),
+            buffers,
+        },
+        primitive: Default::default(),
+        depth_stencil,
+        multisample: Default::default(),
+        fragment: fragment.map(|(fs, targets)| wgpu::FragmentState {
+            module,
+            entry_point: Some(fs),
+            compilation_options: Default::default(),
+            targets,
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+/// Records `copy` into a fresh encoder copying into a `size`-byte staging buffer, submits it, and
+/// maps the buffer once the GPU is done; `None` when it can't be mapped.
+pub(crate) fn read_back(
+    device: &Device,
+    label: &str,
+    size: u64,
+    copy: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::Buffer),
+) -> Option<wgpu::BufferView> {
+    let d = &device.device;
+    let staging = d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = d.create_command_encoder(&Default::default());
+    copy(&mut encoder, &staging);
+    device.queue.submit([encoder.finish()]);
+    let (tx, rx) = mpsc::channel();
+    staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
+    let _ = d.poll(wgpu::PollType::wait_indefinitely());
+    if !matches!(rx.recv(), Ok(Ok(()))) {
+        return None;
+    }
+    staging.slice(..).get_mapped_range().ok()
+}
+
 /// One family's instance records in a batch, in a buffer of their own. A frame gathers its
 /// records into `next` with [`Set::push`], kept from frame to frame, so a frame whose members
 /// hold allocates nothing; [`Set::finish`] writes what changed.
@@ -472,38 +654,18 @@ fn draw_pipeline(
         bias: Default::default(),
     };
     let targets = [
-        Some(wgpu::ColorTargetState {
-            format: LINEAR,
-            blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-            write_mask: wgpu::ColorWrites::ALL,
-        }),
-        Some(wgpu::ColorTargetState {
-            format: IDS,
-            blend: None,
-            write_mask: wgpu::ColorWrites::ALL,
-        }),
+        target(LINEAR, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING)),
+        target(IDS, None),
     ];
-    d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(vs),
-        layout: Some(layout),
-        vertex: wgpu::VertexState {
-            module,
-            entry_point: Some(vs),
-            compilation_options: Default::default(),
-            buffers,
-        },
-        primitive: Default::default(),
-        depth_stencil: Some(depth),
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module,
-            entry_point: Some(fs),
-            compilation_options: Default::default(),
-            targets: &targets,
-        }),
-        multiview_mask: None,
-        cache: None,
-    })
+    pipeline(
+        d,
+        vs,
+        Some(layout),
+        module,
+        (vs, buffers),
+        Some((fs, &targets)),
+        Some(depth),
+    )
 }
 
 /// The line, point and text pipelines, each compiled the first time a batch draws its family, so
@@ -597,15 +759,8 @@ impl Renderer {
             label: Some("scene3d output"),
             source: wgpu::ShaderSource::Wgsl(OUTPUT.into()),
         });
-        let uniform = |binding, visibility| wgpu::BindGroupLayoutEntry {
-            binding,
-            visibility,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
+        let uniform = |binding, visibility| {
+            buffer_entry(binding, visibility, wgpu::BufferBindingType::Uniform)
         };
         let frame_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene3d frame"),
@@ -634,40 +789,24 @@ impl Renderer {
         });
         let output_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene3d output"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                uniform(1, wgpu::ShaderStages::FRAGMENT),
-            ],
+            entries: &[texture_entry(), uniform(1, wgpu::ShaderStages::FRAGMENT)],
         });
-        let frame_buffer = d.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("scene3d frame"),
-            size: std::mem::size_of::<FrameUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let tone_buffer = d.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("scene3d tone"),
-            size: std::mem::size_of::<ToneUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let frame_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene3d frame"),
-            layout: &frame_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: frame_buffer.as_entire_binding(),
-            }],
-        });
+        let uniform_buffer = |label, size| {
+            d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: size as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let frame_buffer = uniform_buffer("scene3d frame", std::mem::size_of::<FrameUniform>());
+        let tone_buffer = uniform_buffer("scene3d tone", std::mem::size_of::<ToneUniform>());
+        let frame_bind = bind_group(
+            d,
+            "scene3d frame",
+            &frame_layout,
+            [frame_buffer.as_entire_binding()],
+        );
         let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("scene3d label"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -684,6 +823,14 @@ impl Renderer {
         let draw_layout = layout(&[Some(&frame_layout)]);
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
+        let mesh_buffers = [
+            Some(wgpu::VertexBufferLayout {
+                array_stride: 24,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &MESH_VERTEX,
+            }),
+            Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
+        ];
         let mesh_pipeline = draw_pipeline(
             d,
             &module,
@@ -691,140 +838,59 @@ impl Renderer {
             planted.forward_z,
             "mesh_vs",
             "mesh_fs",
-            &[
-                Some(wgpu::VertexBufferLayout {
-                    array_stride: 24,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &MESH_VERTEX,
-                }),
-                Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
-            ],
+            &mesh_buffers,
         );
         // The shadow map: the solids' vertex stage under the light's clip matrix, depth only,
         // nearest the light kept.
-        let shadow_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(SHADOW_PASS),
-            layout: Some(&draw_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("mesh_vs"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: 24,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &MESH_VERTEX,
-                    }),
-                    Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
-                ],
-            },
-            primitive: Default::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
+        let shadow_pipeline = pipeline(
+            d,
+            SHADOW_PASS,
+            Some(&draw_layout),
+            &module,
+            ("mesh_vs", &mesh_buffers),
+            None,
+            Some(wgpu::DepthStencilState {
                 format: shadow::FORMAT,
                 depth_write_enabled: Some(true),
                 depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
-            fragment: None,
-            multiview_mask: None,
-            cache: None,
-        });
-        let light_buffer = d.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("scene3d light"),
-            size: std::mem::size_of::<FrameUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let light_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene3d light"),
-            layout: &frame_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_buffer.as_entire_binding(),
-            }],
-        });
-        let output_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(OUTPUT_PASS),
-            layout: Some(&output_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &output,
-                entry_point: Some("out_vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &output,
-                entry_point: Some("out_fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: FORMAT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let output_f32 = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(OUTPUT_PASS),
-            layout: Some(&output_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &output,
-                entry_point: Some("out_vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &output,
-                entry_point: Some("out_fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: status::FINISHED,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        );
+        let light_buffer = uniform_buffer("scene3d light", std::mem::size_of::<FrameUniform>());
+        let light_bind = bind_group(
+            d,
+            "scene3d light",
+            &frame_layout,
+            [light_buffer.as_entire_binding()],
+        );
+        let output_into = |format| {
+            pipeline(
+                d,
+                OUTPUT_PASS,
+                Some(&output_pipeline_layout),
+                &output,
+                ("out_vs", &[]),
+                Some(("out_fs", &[target(format, None)])),
+                None,
+            )
+        };
+        let output_pipeline = output_into(FORMAT);
+        let output_f32 = output_into(status::FINISHED);
         let busy = planted.slow_gpu_frame.then(|| {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("scene3d busy"),
                 source: wgpu::ShaderSource::Wgsl(BUSY.into()),
             });
-            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("scene3d busy"),
-                layout: None,
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some("busy_vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some("busy_fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: FORMAT,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
+            pipeline(
+                d,
+                "scene3d busy",
+                None,
+                &module,
+                ("busy_vs", &[]),
+                Some(("busy_fs", &[target(FORMAT, None)])),
+                None,
+            )
         });
         let atlas = {
             let texture = d.create_texture(&wgpu::TextureDescriptor {
@@ -845,20 +911,15 @@ impl Renderer {
                 dimension: Some(wgpu::TextureViewDimension::D2Array),
                 ..Default::default()
             });
-            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("scene3d glyph atlas"),
-                layout: &mask_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
+            let bind = bind_group(
+                d,
+                "scene3d glyph atlas",
+                &mask_layout,
+                [
+                    wgpu::BindingResource::TextureView(&view),
+                    wgpu::BindingResource::Sampler(&sampler),
                 ],
-            });
+            );
             AtlasTexture {
                 texture,
                 bind,
@@ -937,22 +998,7 @@ impl Renderer {
             return;
         }
         let d = &device.device;
-        let texture = |label, format, usage| {
-            d.create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size: wgpu::Extent3d {
-                    width: size[0],
-                    height: size[1],
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage,
-                view_formats: &[],
-            })
-        };
+        let texture = |label, format, usage| texture2d(d, label, size, format, usage);
         let attach = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC;
         let linear = texture(
             "scene3d linear",
@@ -973,20 +1019,7 @@ impl Renderer {
                 | wgpu::TextureUsages::COPY_SRC,
         );
         let linear_view = linear.create_view(&Default::default());
-        let output_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene3d output"),
-            layout: &self.output_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&linear_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.tone_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let output_bind = self.output_bind(d, &linear_view);
         self.targets = Some(Targets {
             size,
             ids_view: ids.create_view(&Default::default()),
@@ -996,6 +1029,19 @@ impl Renderer {
             ids,
             output_bind,
         });
+    }
+
+    /// The output pass's bind group: `linear` and the tone uniform.
+    fn output_bind(&self, d: &wgpu::Device, linear: &wgpu::TextureView) -> wgpu::BindGroup {
+        bind_group(
+            d,
+            "scene3d output",
+            &self.output_layout,
+            [
+                wgpu::BindingResource::TextureView(linear),
+                self.tone_buffer.as_entire_binding(),
+            ],
+        )
     }
 
     /// Builds `shape`'s unit mesh the first time a batch draws one.
@@ -1012,28 +1058,13 @@ impl Renderer {
             if self.atlas.generations[i] == Some(page.generation) {
                 continue;
             }
-            device.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &self.atlas.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: i as u32,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
+            write_texture(
+                &device.queue,
+                &self.atlas.texture,
+                i as u32,
                 &page.bytes,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(PAGE),
-                    rows_per_image: Some(PAGE),
-                },
-                wgpu::Extent3d {
-                    width: PAGE,
-                    height: PAGE,
-                    depth_or_array_layers: 1,
-                },
+                PAGE,
+                [PAGE, PAGE],
             );
             self.atlas.generations[i] = Some(page.generation);
         }
@@ -1053,14 +1084,10 @@ impl Renderer {
         };
         let rows = cam.clip(depth);
         let mut clip = [[0f32; 4]; 4];
-        for (r, row) in rows.iter().enumerate() {
-            for (c, v) in row.iter().enumerate() {
-                clip[c][r] = *v as f32;
-            }
-        }
         let mut camera = [0.0; 16];
         for (r, row) in rows.iter().enumerate() {
             for (c, v) in row.iter().enumerate() {
+                clip[c][r] = *v as f32;
                 camera[c * 4 + r] = *v;
             }
         }
@@ -1353,25 +1380,16 @@ impl Renderer {
             .shadow
             .view
             .get_or_insert_with(|| {
-                device
-                    .device
-                    .create_texture(&wgpu::TextureDescriptor {
-                        label: Some(SHADOW_PASS),
-                        size: wgpu::Extent3d {
-                            width: shadow::SIZE,
-                            height: shadow::SIZE,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: shadow::FORMAT,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                            | wgpu::TextureUsages::TEXTURE_BINDING
-                            | wgpu::TextureUsages::COPY_SRC,
-                        view_formats: &[],
-                    })
-                    .create_view(&Default::default())
+                texture2d(
+                    &device.device,
+                    SHADOW_PASS,
+                    [shadow::SIZE; 2],
+                    shadow::FORMAT,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC,
+                )
+                .create_view(&Default::default())
             })
             .clone();
         let pipeline = self.shadow.pipeline.clone();
@@ -1487,20 +1505,7 @@ impl Renderer {
             let (more, source) = post.jobs(device, &frame);
             jobs.extend(more);
             if let Some(view) = source {
-                bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("scene3d output"),
-                    layout: &self.output_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: self.tone_buffer.as_entire_binding(),
-                        },
-                    ],
-                });
+                bind = self.output_bind(&device.device, &view);
             }
         }
         // With passes after the finish, the output writes the finished frame, and they write
@@ -1534,7 +1539,16 @@ impl Renderer {
                 pass.draw(0..3, 0..1);
             }
             timed(&profiler, OUTPUT_PASS, encoder, |encoder, timestamps| {
-                output_pass(encoder, &target, &pipeline, &bind, timestamps)
+                let black = wgpu::LoadOp::Clear(wgpu::Color::BLACK);
+                full_pass(
+                    encoder,
+                    OUTPUT_PASS,
+                    &target,
+                    black,
+                    &pipeline,
+                    &bind,
+                    timestamps,
+                )
             })
         });
         jobs.push((OUTPUT_PASS.into(), output));
@@ -1555,21 +1569,13 @@ impl Renderer {
     fn finished(&mut self, device: &Device, size: [u32; 2]) -> wgpu::TextureView {
         if self.finished.as_ref().is_none_or(|(_, _, s)| *s != size) {
             let texture = deep_gpu::alloc::outside(|| {
-                device.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("scene3d finished"),
-                    size: wgpu::Extent3d {
-                        width: size[0],
-                        height: size[1],
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: status::FINISHED,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                })
+                texture2d(
+                    &device.device,
+                    "scene3d finished",
+                    size,
+                    status::FINISHED,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                )
             });
             let view = texture.create_view(&Default::default());
             self.finished = Some((texture, view, size));
@@ -1633,9 +1639,11 @@ impl Renderer {
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
         if let Some(t) = self.targets.as_ref() {
-            output_pass(
+            full_pass(
                 encoder,
+                OUTPUT_PASS,
                 target,
+                wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                 &self.output_pipeline,
                 &t.output_bind,
                 timestamps,
@@ -1698,45 +1706,26 @@ pub(crate) fn read_texture(
     let row = size[0] * texel;
     let padded =
         row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let d = &device.device;
-    let staging = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("scene3d read back"),
-        size: u64::from(padded) * u64::from(size[1]),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = d.create_command_encoder(&Default::default());
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &staging,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded),
-                rows_per_image: Some(size[1]),
+    let bytes = u64::from(padded) * u64::from(size[1]);
+    let data = read_back(device, "scene3d read back", bytes, |encoder, staging| {
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
-        },
-        wgpu::Extent3d {
-            width: size[0],
-            height: size[1],
-            depth_or_array_layers: 1,
-        },
-    );
-    device.queue.submit([encoder.finish()]);
-    let (tx, rx) = mpsc::channel();
-    staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-        let _ = tx.send(r);
-    });
-    let _ = d.poll(wgpu::PollType::wait_indefinitely());
-    if !matches!(rx.recv(), Ok(Ok(()))) {
-        return None;
-    }
-    let data = staging.slice(..).get_mapped_range().ok()?;
+            wgpu::TexelCopyBufferInfo {
+                buffer: staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(size[1]),
+                },
+            },
+            extent(size),
+        );
+    })?;
     let mut out = Vec::with_capacity((row * size[1]) as usize);
     for y in 0..size[1] as usize {
         let start = y * padded as usize;
@@ -1791,22 +1780,25 @@ fn geometry_pass<'a>(
     });
 }
 
-fn output_pass(
+/// One full-screen triangle into `target` with `pipeline` and its bind group.
+pub(crate) fn full_pass(
     encoder: &mut wgpu::CommandEncoder,
+    label: &'static str,
     target: &wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
     pipeline: &wgpu::RenderPipeline,
     bind: &wgpu::BindGroup,
     timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
 ) {
     deep_gpu::alloc::outside(|| {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some(OUTPUT_PASS),
+            label: Some(label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: target,
                 resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load,
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -1979,20 +1971,13 @@ pub fn draw_offscreen(
     post: Option<&mut dyn Post>,
 ) -> Option<Vec<u8>> {
     let size = scene.size;
-    let texture = device.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("scene3d snapshot"),
-        size: wgpu::Extent3d {
-            width: size[0],
-            height: size[1],
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
+    let texture = texture2d(
+        &device.device,
+        "scene3d snapshot",
+        size,
+        FORMAT,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+    );
     renderer.prepare(device, scene, look);
     let mut encoder = device.device.create_command_encoder(&Default::default());
     for (_, job) in renderer.jobs(

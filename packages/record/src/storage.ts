@@ -36,6 +36,9 @@ function settle(db: Db): void {
   db.pragma('synchronous = NORMAL');
   // A plain fsync on macOS leaves the write in the drive's cache; every sync here is F_FULLFSYNC.
   if (process.platform === 'darwin') db.pragma('fullfsync = ON');
+  // SQLite's own 2 MB page cache, not better-sqlite3's 16 MB: the hub holds this connection open all day, and the
+  // OS file cache already keeps the record's hot pages.
+  db.pragma('cache_size = -2000');
 }
 /** One transaction at the durability asked for: synchronous=FULL around a FULL commit, NORMAL otherwise. */
 function transact(db: Db, mode: Durability, work: () => void): void {

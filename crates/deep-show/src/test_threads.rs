@@ -6,60 +6,19 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-use deep_canvas::registry::{Manifest, Module, Range, Registrar, Semver};
-use deep_canvas::schedule::{OpError, Val, View};
-use serde_json::Value;
+use deep_canvas::registry::{Module, Registrar};
+use deep_canvas::schedule::Val;
+
+use crate::twins::{area, boxed_kind, of_kind, test_manifest};
 
 /// The shared state the planted operator touches.
 static COUNT: AtomicU64 = AtomicU64::new(0);
 
-/// Registers kind `<module>@1` with a `box`, drawn as a rect, and its array `<module>.out`.
-fn kind(r: &mut Registrar, name: &'static str) {
-    let box_param = Param {
-        name: "box",
-        ty: ParamType::Json,
-        unit: "",
-        default: Value::Null,
-        min: None,
-        max: None,
-        minor: 0,
-        module: "",
-        operator: "",
-    };
-    r.kind(
-        Entry {
-            family: "test",
-            name,
-            versions: vec![Version {
-                major: 1,
-                minor: 0,
-                params: vec![box_param],
-            }],
-            migrations: vec![],
-        },
-        &[],
-        "rect@1",
-    );
-}
-
-/// The item's box's area.
-fn area(v: &mut View<'_>) -> Result<f64, OpError> {
-    Ok(v.item()?
-        .pointer("/params/box")
-        .and_then(Value::as_array)
-        .map(|b| {
-            b.get(2).and_then(Value::as_f64).unwrap_or(0.0)
-                * b.get(3).and_then(Value::as_f64).unwrap_or(0.0)
-        })
-        .unwrap_or(0.0))
-}
-
 fn register_serial(r: &mut Registrar) {
-    kind(r, "serial");
+    boxed_kind(r, "serial");
     r.array("test.serial.out", "f64", "item", "geometry", "items");
     r.operator("out", "items", &["self"], &["test.serial.out"])
-        .applies(|_, _, item| item.get("kind").and_then(Value::as_str) == Some("test.serial@1"))
+        .applies(|_, _, item| of_kind(item, "test.serial@1"))
         .serial()
         .run(|v| {
             let a = area(v)?;
@@ -68,10 +27,10 @@ fn register_serial(r: &mut Registrar) {
 }
 
 fn register_racy(r: &mut Registrar) {
-    kind(r, "racy");
+    boxed_kind(r, "racy");
     r.array("test.racy.out", "counted", "item", "geometry", "items");
     r.operator("out", "items", &["self"], &["test.racy.out"])
-        .applies(|_, _, item| item.get("kind").and_then(Value::as_str) == Some("test.racy@1"))
+        .applies(|_, _, item| of_kind(item, "test.racy@1"))
         .run(|v| {
             let a = area(v)?;
             // The planted read: shared state outside the read set, undeclared.
@@ -80,29 +39,16 @@ fn register_racy(r: &mut Registrar) {
         });
 }
 
-fn module(name: &str, register: fn(&mut Registrar)) -> Module {
-    Module {
-        manifest: Manifest {
-            name: name.into(),
-            version: Semver {
-                major: 1,
-                minor: 0,
-                patch: 0,
-            },
-            core: Range::parse("*").expect("a range"),
-            depends_on: Default::default(),
-            feature: "test-threads".into(),
-            license: "Apache-2.0".into(),
-            implements: format!("{name}@1"),
-        },
-        register,
-    }
-}
-
 /// `test.serial` and `test.racy`.
 pub fn modules() -> Vec<Module> {
     vec![
-        module("test.serial", register_serial),
-        module("test.racy", register_racy),
+        Module {
+            manifest: test_manifest("test.serial", "test-threads"),
+            register: register_serial,
+        },
+        Module {
+            manifest: test_manifest("test.racy", "test-threads"),
+            register: register_racy,
+        },
     ]
 }
