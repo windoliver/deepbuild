@@ -455,8 +455,8 @@ interface Ext {
   actions: Map<string, Action>;
   /** The outputs it provides, by interface. */
   provides: Set<string>;
-  /** The output interfaces it uses. */
-  uses: Set<string>;
+  /** The output interfaces it uses, each with whether its `deep.use` marked it optional. */
+  uses: Map<string, boolean>;
   /** Removing it detached its users' uses: their reads through it read missing. */
   detached: boolean;
   /** Its users' reads through it under way, which its removal waits for before it stops. */
@@ -640,6 +640,8 @@ const message = (e: unknown): string => String((e as Error)?.message ?? e);
 const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
 /** A piece as composition reads it (#103): its id and its manifest's rows. */
 const pieceOf = (id: string, m: Manifest): Piece => ({ id, provides: m.provides ?? [], uses: m.uses ?? [] });
+/** A use is optional when its manifest row or its `deep.use` says so. */
+const optional = (ext: Ext, use: UseRow): boolean => use.optional === true || ext.uses.get(use.interface) === true;
 /** Where a value first breaks a JSON Schema, or undefined when it holds (#103); a schema the host can't read breaks at its root. */
 function schemaBreak(name: string, schema: unknown, value: unknown): string | undefined {
   try {
@@ -878,10 +880,10 @@ class Host implements ExtensionHost {
     }
     if (before) rmSync(before.folder, { recursive: true, force: true });
     // The copy running is the install before: it stops, after any load of it under way. A read it still serves is
-    // refused at its edge rather than waited for (#103).
+    // waited for when the copy is of the same version, and refused at its edge when the version changed (#103).
     await this.serial(id, async () => {
       const running = this.exts.get(id);
-      if (running && running.entry !== entry) await this.unload(running, false);
+      if (running && running.entry !== entry) await this.unload(running, running.entry.version === entry.version);
     });
     // The packages it replaces are removed, and their users rewire to it by type (#103).
     for (const gone of replacing) {
@@ -1499,7 +1501,7 @@ class Host implements ExtensionHost {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
-      released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
+      released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
       adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
@@ -1797,7 +1799,7 @@ class Host implements ExtensionHost {
     const id = ext.entry.id;
     const others = [...this.exts.values()].filter((p) => p !== ext && !p.detached);
     const rest = others.map((p) => pieceOf(p.entry.id, p.manifest));
-    const users = others.flatMap((u) => (u.manifest.uses ?? []).filter((use) => !use.optional && this.providerOf(u, use, false) === ext && !resolve(u.entry.id, use, rest.filter((p) => p.id !== u.entry.id)))
+    const users = others.flatMap((u) => (u.manifest.uses ?? []).filter((use) => !optional(u, use) && this.providerOf(u, use, false) === ext && !resolve(u.entry.id, use, rest.filter((p) => p.id !== u.entry.id)))
       .map((use) => ({ user: u.entry.id, uses: use.interface })));
     // AC10's wrong program detaches them with no ask.
     if (!users.length || this.options.plant === 'detaches-silently') return;
@@ -2139,9 +2141,9 @@ class Host implements ExtensionHost {
         return null;
       }
       case 'deep.use': {
-        const [name] = args;
+        const [name, options] = args as [unknown, { optional?: unknown } | undefined];
         if (!(ext.manifest.uses ?? []).some((u) => u.interface === name)) throw Error(`deep.use: ${String(name)} isn't an interface ${id}'s manifest uses`);
-        ext.uses.add(name as string);
+        ext.uses.set(name as string, options?.optional === true);
         return null;
       }
       case 'deep.read':
@@ -2563,7 +2565,7 @@ class Host implements ExtensionHost {
     // Only a provider that started: an output publishes once its piece is ready, like its handlers and actions.
     const provider = this.providerOf(ext, use);
     // AC10's wrong program reads an optional use with no provider as empty.
-    if (!provider) return use.optional && this.options.plant === 'optional-reads-empty' ? { value: [] } : { missing: true };
+    if (!provider) return optional(ext, use) && this.options.plant === 'optional-reads-empty' ? { value: [] } : { missing: true };
     const to = this.wired.get(id)?.get(name) ?? name;
     const edge = `${id} uses ${name} from ${provider.entry.id}`;
     if (!provider.ask) throw Error(`the edge ${edge}: ${provider.entry.id} stopped while ${id} still used it`);
