@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
+import { bubblewrapWith } from './bubblewrap.js';
 import { quote, real, seatbeltWith } from './seatbelt.js';
 import { HELPER } from './procs.js';
 import type { Grant, SandboxBackend } from './types.js';
@@ -89,12 +90,25 @@ export async function sandboxSuite(backend: SandboxBackend, fixtures: SuiteFixtu
   }
 }
 
-/** The suite's broken fakes: Seatbelt with one rule more, each letting through the one thing its case refuses. */
-export function plantedBackends(fixtures: SuiteFixtures): Record<'egress' | 'write-outside' | 'hub-socket' | 'camera', SandboxBackend> {
+/**
+ * The suite's broken fakes: the platform's backend with one rule more, each letting through the one thing its case
+ * refuses; and `no-network-filter`, the confinement with its egress part left out, which fails the egress case too (#70).
+ */
+export function plantedBackends(fixtures: SuiteFixtures): Record<'egress' | 'write-outside' | 'hub-socket' | 'camera' | 'no-network-filter', SandboxBackend> {
+  if (process.platform === 'linux') {
+    return {
+      egress: bubblewrapWith('planted-egress', [], { confine: ['--any-host'] }),
+      'write-outside': bubblewrapWith('planted-write-outside', [], { confine: ['--write', '/'] }),
+      'hub-socket': bubblewrapWith('planted-hub-socket', [], { confine: ['--unix', real(fixtures.hubSocket)] }),
+      camera: bubblewrapWith('planted-camera', [], { bwrap: ['--dev-bind-try', '/dev/video0', '/dev/video0'] }),
+      'no-network-filter': bubblewrapWith('planted-no-network-filter', [], { confine: ['--any-host'] }),
+    };
+  }
   return {
     egress: seatbeltWith('planted-egress', ['(allow network-outbound (remote ip "*:*"))']),
     'write-outside': seatbeltWith('planted-write-outside', ['(allow file-write*)']),
     'hub-socket': seatbeltWith('planted-hub-socket', [`(allow network-outbound (remote unix-socket (path-literal ${quote(real(fixtures.hubSocket))})))`]),
     camera: seatbeltWith('planted-camera', ['(allow device-camera)']),
+    'no-network-filter': seatbeltWith('planted-no-network-filter', ['(allow network-outbound)']),
   };
 }

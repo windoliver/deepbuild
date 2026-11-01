@@ -31,7 +31,8 @@ mkdirSync(join(project, 'test'), { recursive: true });
 writeFileSync(join(project, 'package.json'), '{ "name": "bench", "private": true, "type": "module" }\n');
 const tests = Array.from({ length: TESTS }, (_, i) => `test('adds ${i}', () => {\n  expect(${i} + 1).toBe(${i + 1});\n});\n`).join('\n');
 writeFileSync(join(project, 'test/sum.test.ts'), `import { expect, test } from 'vitest';\n\n${tests}`);
-execFileSync('/bin/cp', ['-cR', join(REPO, 'node_modules'), join(project, 'node_modules')]);
+// Copy-on-write where the file system has it: macOS's clone flag, or Linux's reflink.
+execFileSync('/bin/cp', [...(process.platform === 'darwin' ? ['-cR'] : ['-R', '--reflink=auto']), join(REPO, 'node_modules'), join(project, 'node_modules')]);
 const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
 const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
 const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 172_800_000 } } } });

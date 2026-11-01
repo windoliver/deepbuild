@@ -14,6 +14,8 @@ import { dirname } from 'node:path';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { JsonValue } from '@deepbuild/contracts';
 import { HELPER, scan, sha256, table, tokenOf, type Proc } from './procs.js';
+import type { Readable } from 'node:stream';
+import { bubblewrapWith, STATUS_FD } from './bubblewrap.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
 import type { Cleanup, Exit, Grant, HostFacts, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
 
@@ -36,6 +38,28 @@ const FOLDED = ['process.starting', 'run.kept', 'process.tracked', 'process.ende
 type Folded = (typeof FOLDED)[number];
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/**
+ * The launch's status stream on Linux (bubblewrap.ts): bwrap's report of the program's process, `{"child-pid": n}`,
+ * resolves `program` (undefined when the launch ended before it ran), and each refusal the filter's server reports,
+ * `{"deny": "<operation>", "target": "…"}`, goes to `denied`.
+ */
+function readStatus(stream: Readable, denied: (operation: string, target: string) => void): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    let text = '';
+    let program: number | undefined;
+    const onLine = (line: string): void => {
+      let parsed: { 'child-pid'?: number; deny?: string; target?: string };
+      try { parsed = JSON.parse(line) as typeof parsed; } catch { return; }
+      if (parsed.deny !== undefined) denied(String(parsed.deny), String(parsed.target ?? '(none)'));
+      if (parsed['child-pid'] !== undefined && program === undefined) resolve(program = Number(parsed['child-pid']));
+    };
+    stream.setEncoding('utf8').on('data', (chunk: string) => {
+      text += chunk;
+      let at: number;
+      while ((at = text.indexOf('\n')) >= 0) { onLine(text.slice(0, at)); text = text.slice(at + 1); }
+    }).on('end', () => resolve(program)).on('error', () => resolve(program));
+  });
+}
 const alive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -122,7 +146,7 @@ class LocalSupervisor implements Supervisor {
     const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
     // Each folder above one is kept from moving, or a run could move it aside and put its own in its place.
     const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
-    this.sandbox = seatbeltWith('seatbelt', guarded.flatMap((g) => [
+    this.sandbox = process.platform === 'linux' ? bubblewrapWith('bubblewrap', guarded) : seatbeltWith('seatbelt', guarded.flatMap((g) => [
       typeof g === 'string'
         ? `(deny file-write* (subpath ${quote(real(g))}))`
         : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
@@ -320,15 +344,20 @@ class LocalSupervisor implements Supervisor {
         if (m) this.warmAt = Date.now();
         if (!m || !this.runs.has(m[3]!)) continue;
         const [, operation, target, run] = m as unknown as [string, string, string, string];
-        const seen = `${run} ${operation} ${target}`;
-        if (this.denied.has(seen)) continue;
-        this.denied.add(seen);
-        void this.append('sandbox.denied', { run, operation, target: target || '(none)' }, run).catch(() => undefined);
+        this.denial(run, operation, target || '(none)');
       }
     });
     this.warming = this.warm(10_000).then((live) => {
       if (!live) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
     });
+  }
+
+  /** A run's refusal, recorded once: the same one is reported as often as it is tried. */
+  private denial(run: string, operation: string, target: string): void {
+    const seen = `${run} ${operation} ${target}`;
+    if (this.denied.has(seen) || !this.runs.has(run)) return;
+    this.denied.add(seen);
+    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => undefined);
   }
 
   /** Until the stream shows a canary's report, or `ms` pass; whether it did. */
@@ -491,7 +520,7 @@ class LocalSupervisor implements Supervisor {
   }
 
   private async launch(spec: StartSpec, leases: { kind: string; key: string }[]): Promise<Started> {
-    if (process.platform !== 'darwin') throw Error(`no platform sandbox backend for ${process.platform} yet (#70); nothing runs outside one`);
+    if (process.platform !== 'darwin' && process.platform !== 'linux') throw Error(`no platform sandbox backend for ${process.platform}; nothing runs outside one`);
     const cwd = real(spec.cwd);
     const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
@@ -518,7 +547,9 @@ class LocalSupervisor implements Supervisor {
     }
     if (!this.options.leases) for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
     if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
+    // On Linux the launch is bwrap's, which reports the program's own process on its status stream (bubblewrap.ts).
+    const status = sandboxed && process.platform === 'linux';
+    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe', ...(status ? ['pipe' as const] : [])] });
     r.child = child;
     // A process that exits before reading all of its input is no error of the supervisor's.
     child.stdin?.on('error', () => undefined);
@@ -541,14 +572,17 @@ class LocalSupervisor implements Supervisor {
       return { run: spec.run, status: 'started', pid: 0, pgid: 0, start: '', leases };
     }
     if (this.options.crash === 'spawned') process.kill(process.pid, 'SIGKILL');
-    r.pid = pid;
+    // The run's process is the program's: on Linux bwrap's child, in a group of its own, while bwrap leads the launch's
+    // group and is the sandbox's, not the run's (procs.ts, scan): it ends by itself once the program has.
+    const program = status ? await readStatus(child.stdio[STATUS_FD] as Readable, (operation, target) => this.denial(spec.run, operation, target)) : pid;
+    r.pid = program ?? pid;
     r.pgid = pid;
     // A process that is already gone and reaped leaves nothing to track; its group's members are still found.
-    const start = (await table([pid])).get(pid)?.start ?? '';
-    if (start) await this.track(r, pid, start, r.token);
+    const start = (await table([r.pid])).get(r.pid)?.start ?? '';
+    if (start) await this.track(r, r.pid, start, r.token);
     // Its input only once its process is recorded, so a crash before this point leaves a process that read nothing.
     if (spec.input) child.stdin!.end(typeof spec.input === 'function' ? spec.input() : spec.input);
-    return { run: spec.run, status: 'started', pid, pgid: pid, start, leases };
+    return { run: spec.run, status: 'started', pid: r.pid, pgid: pid, start, leases };
   }
 
   /**

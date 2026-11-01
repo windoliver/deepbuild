@@ -1,10 +1,13 @@
-// Builds the supervisor's native helper (native/helper.c) into dist/helper, on macOS only: the Seatbelt
-// backend's process scan and the seam suite's probe. Other platforms have no backend yet (#70).
+// Builds the supervisor's native helper into dist/helper: native/helper.c on macOS (the Seatbelt backend's process
+// scan and the seam suite's probe), with native/linux.c on Linux (the bubblewrap backend's box and confine, #70).
+// Other platforms have no backend yet.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-if (process.platform === 'darwin') {
+const sources = { darwin: ['native/helper.c'], linux: ['native/helper.c', 'native/linux.c'] }[process.platform];
+if (sources) {
   mkdirSync(fileURLToPath(new URL('dist/', import.meta.url)), { recursive: true });
-  execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', fileURLToPath(new URL('dist/helper', import.meta.url)), fileURLToPath(new URL('native/helper.c', import.meta.url))], { stdio: 'inherit' });
+  const libs = process.platform === 'linux' ? ['-lutil'] : [];
+  execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', fileURLToPath(new URL('dist/helper', import.meta.url)), ...sources.map((s) => fileURLToPath(new URL(s, import.meta.url))), ...libs], { stdio: 'inherit' });
 }

@@ -1,6 +1,7 @@
-// The supervisor's native helper on macOS (#236), built beside the package's JavaScript by its build script.
+// The supervisor's native helper (#236), built beside the package's JavaScript by its build script. On Linux,
+// linux.c adds the bubblewrap backend's `box` and `confine` (#70), and `scan` is the cgroup's own list (procs.ts).
 //
-//   helper scan <marker>...     every process whose Seatbelt profile allows the mach-lookup of a run's marker and
+//   helper scan <marker>...     macOS: every process whose Seatbelt profile allows the mach-lookup of a run's marker and
 //                               denies the window server's, one line each: "<marker> <pid> <ppid> <pgid>". A profile
 //                               is inherited through fork, exec and setsid and can't be dropped, so this finds every
 //                               process a run's sandbox holds, whatever its group, parent or environment.
@@ -8,9 +9,10 @@
 //                               the seam suite's sandboxed process: tries each operation and appends one JSON line per
 //                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), unix <path>, and
 //                               devices <file>, which runs this helper again, as its child, in `devices` mode.
-//   helper devices <file>       what the policy this process runs under says about each device, from sandbox_check()
-//                               on itself without reporting: one line each for the camera, the microphone, the audio
-//                               output (the audio server's mach-lookup) and a screen capture (the window server's).
+//   helper devices <file>       what the policy this process runs under says about each device: on macOS from
+//                               sandbox_check() on itself without reporting, one line each for the camera, the
+//                               microphone, the audio output (the audio server's mach-lookup) and a screen capture (the
+//                               window server's); on Linux by opening each (linux.c).
 //   helper pty <dir> <cols> <rows> <program> [<arg>...]
 //                               a hosted terminal's host process (#104): runs the program on a pseudo-terminal it
 //                               holds, appends everything the program writes to <dir>/out, writes what comes through
@@ -19,7 +21,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <libproc.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -27,16 +28,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/proc_info.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <libproc.h>
+#include <sys/proc_info.h>
 #include <util.h>
+#else
+#include <pty.h>
+#endif
+#include "helper.h"
 
 extern char **environ;
+
+#ifdef __APPLE__
 extern int sandbox_check(pid_t pid, const char *operation, int type, ...);
 enum { FILTER_NONE = 0, FILTER_GLOBAL_NAME = 2, NO_REPORT = 0x40000000 };
 static const char WINDOW_SERVER[] = "com.apple.windowserver.active";
@@ -64,6 +73,7 @@ static int scan(int count, char **markers) {
   free(pids);
   return 0;
 }
+#endif
 
 static FILE *out;
 
@@ -93,11 +103,11 @@ static void try_write(const char *path) {
 }
 
 static void try_connect(const char *op, const char *target) {
-  int unix = strcmp(op, "unix") == 0;
-  int fd = socket(unix ? AF_UNIX : AF_INET, SOCK_STREAM, 0);
+  int is_unix = strcmp(op, "unix") == 0;
+  int fd = socket(is_unix ? AF_UNIX : AF_INET, SOCK_STREAM, 0);
   if (fd < 0) { report(op, target, 0, errno); return; }
   int rc;
-  if (unix) {
+  if (is_unix) {
     struct sockaddr_un a;
     memset(&a, 0, sizeof a);
     a.sun_family = AF_UNIX;
@@ -126,6 +136,7 @@ static void try_devices(const char *self, const char *file) {
   report("devices", file, WIFEXITED(status) && WEXITSTATUS(status) == 0, 0);
 }
 
+#ifdef __APPLE__
 static int denied(const char *operation, const char *name) {
   pid_t self = getpid();
   return name ? sandbox_check(self, operation, FILTER_GLOBAL_NAME | NO_REPORT, name) != 0
@@ -139,6 +150,9 @@ static int devices(void) {
   for (int i = 0; i < 4; i++) fprintf(out, "{\"device\":\"%s\",\"sandbox\":\"%s\"}\n", names[i], verdicts[i] ? "deny" : "allow");
   return 0;
 }
+#else
+static int devices(void) { return devices_linux(out); }
+#endif
 
 static int write_all(int fd, const char *buf, ssize_t n) {
   for (ssize_t done = 0; done < n;) {
@@ -207,9 +221,13 @@ static int pty(const char *dir, int cols, int rows, char **argv) {
 }
 
 int main(int argc, char **argv) {
+#ifdef __APPLE__
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
+#else
+  if (argc >= 2) { int rc = linux_command(argc, argv); if (rc >= 0) return rc; }
+#endif
   if (argc >= 6 && strcmp(argv[1], "pty") == 0) return pty(argv[2], atoi(argv[3]), atoi(argv[4]), argv + 5);
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <program> [<arg>...]\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | box <cgroup> -- <program>... | confine [<option>...] -- <program>... | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();
