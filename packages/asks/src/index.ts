@@ -391,6 +391,8 @@ const CORE = { writer: 'core' } as const;
 /** Writers that speak for an agent: none of them closes an ask. */
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
 const PAGE = 1000;
+/** How many ended sessions' closed asks stay in memory; the record keeps them all. */
+const ENDED_KEPT = 64;
 
 type Obj = { [key: string]: JsonValue };
 type Option = { id: string; label: string; decision: Decision };
@@ -464,6 +466,8 @@ const CLOSING: Readonly<Record<string, string>> = {
 class AsksCore implements Asks {
   private cursor = 0;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null }>();
+  /** The sessions that ended, oldest first. */
+  private readonly ended = new Set<string>();
   private readonly asks = new Map<string, Ask>();
   /** Each thread's asks, open or closed, in log order. */
   private readonly threads = new Map<string, Ask[]>();
@@ -973,7 +977,7 @@ class AsksCore implements Asks {
       if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome, closed_at: ask.closed.at });
       // Only an active decision of the ask's own key widens: wider, it then covers the ask. A frozen rule's evidence
       // can't decide yet, and a revoked one answers nothing.
-      const held = this.decisions.get(decision);
+      const held = await this.heldOf(decision);
       if (!held) throw new AskRefused(`${decision} is no decision`, { field: 'decision', ask: ask.handle });
       if (held.state !== 'active') throw new AskRefused(`${decision} is ${held.state}, so it can't widen`, { field: 'decision', ask: ask.handle });
       if (held.key !== ask.data.key) throw new AskRefused(`${decision} answers another question than ${ask.handle}, so a wider scope wouldn't cover it`, { field: 'decision', ask: ask.handle });
@@ -996,7 +1000,7 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a decision is revoked only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
-      const decision = this.decisions.get(handle);
+      const decision = await this.heldOf(handle);
       if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
       if (decision.state === 'revoked') throw new AskRefused(`${handle} is already revoked or overruled`, { field: 'decision' });
       const now = this.options.now();
@@ -1112,7 +1116,7 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       if (!JUDGES.has(connection.writer)) throw new AskRefused(`a standing rule is judged by resolver-decisions, not ${connection.writer}`, { field: 'writer' });
-      const decision = this.decisions.get(handle);
+      const decision = await this.heldOf(handle);
       if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
       const { rule, yours, margin, judgment } = judged;
       const next = VERDICT_STATE[judgment?.verdict];
@@ -1455,22 +1459,111 @@ class AsksCore implements Asks {
     }
   }
 
+  /**
+   * Past the newest ended sessions, each one with no ask open or undoable leaves memory: its asks, its attempts and
+   * cursor, and the decisions only it could use. The record keeps them all: the session starting again reads its
+   * decisions back (`rehydrate`), so it is never asked what it answered (invariant 4). One overruled at a scope stays,
+   * since the record's table doesn't keep the scopes.
+   */
+  private forgetEnded(): void {
+    for (const session of [...this.ended].slice(0, Math.max(0, this.ended.size - ENDED_KEPT))) {
+      // A thread with an ask open reads its sessions' attempts and exceptions, and its session's asks may be among them.
+      if (this.openIn(this.threadOf(session)).length) continue;
+      const asks = [...this.asks.values()].filter((a) => a.session === session);
+      // A default you can still undo keeps its session: the undo reads the ask.
+      if (asks.some((a) => a.closed?.outcome === 'defaulted')) continue;
+      for (const ask of asks) {
+        this.asks.delete(ask.id);
+        this.refused.delete(ask.handle);
+        this.requested.delete(ask.handle);
+        this.batchOf.delete(ask.handle);
+        for (const [batch, handles] of this.shownIn) {
+          const rest = handles.filter((h) => h !== ask.handle);
+          if (rest.length) this.shownIn.set(batch, rest);
+          else this.shownIn.delete(batch);
+        }
+        without(this.threads, ask.thread, ask);
+      }
+      for (const held of [...this.decisions.values()].filter((h) => h.scope === `session:${letters(session)}` && !h.overruled.size)) {
+        this.decisions.delete(held.handle);
+        without(this.byKey, held.key, held);
+        if (held.subject) without(this.byNear, nearOf(held.kind, held.subject), held);
+      }
+      this.attempts.delete(session);
+      this.unread.delete(session);
+      this.sessions.delete(session);
+      this.ended.delete(session);
+    }
+  }
+
   /** Reads what the log gained since the last read. */
   private async sync(): Promise<void> {
     for (;;) {
       const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
-      for (const event of page) this.apply(event);
+      for (const event of page) await this.apply(event);
       if (page.length) this.cursor = page[page.length - 1]!.log_pos;
       if (page.length < PAGE) return;
     }
   }
 
-  private apply(e: Event): void {
+  /** An ask's data as it was raised, from the record: one that left memory (#824). */
+  private async askData(handle: string): Promise<Obj | undefined> {
+    const [row] = (await this.options.record.raw('SELECT data FROM events WHERE id = ? AND kind = ?', [bare(handle), 'ask.created'])) as { data: string }[];
+    const data: unknown = row ? JSON.parse(row.data) : undefined;
+    return isObj(data) ? data : undefined;
+  }
+  /** A decision you saved, held once with what its ask says it covers: its kind, its subject and its change's size. */
+  private hold(base: Pick<HeldDecision, 'handle' | 'key' | 'scope' | 'answer' | 'ask' | 'state'>, from: Obj | undefined): HeldDecision {
+    const known = this.decisions.get(base.handle);
+    if (known) return known;
+    const subject = from && isObj(from.subject) ? from.subject : null;
+    const held: HeldDecision = { ...base, kind: String(from?.kind ?? ''), subject, bound: boundFor(linesOf(subject)), overruled: new Set() };
+    this.decisions.set(held.handle, held);
+    this.byKey.set(held.key, [...(this.byKey.get(held.key) ?? []), held]);
+    if (subject) {
+      const near = nearOf(held.kind, subject);
+      this.byNear.set(near, [...(this.byNear.get(near) ?? []), held]);
+    }
+    return held;
+  }
+  /** A decision as the record's table has it, held from there: one that left memory with its session (#824). */
+  private async readBack(row: { id: string; key: string; scope: string; answer: string; ask_id: string; state: string }): Promise<HeldDecision> {
+    const ask = `ask:${row.ask_id}`;
+    return this.hold({ handle: `decision:${row.id}`, key: row.key, scope: String(JSON.parse(row.scope)), answer: String(JSON.parse(row.answer)), ask, state: STATES.has(row.state) ? row.state as RuleState : 'active' }, await this.askData(ask));
+  }
+  /** A decision by its handle: held, or read back from the record for one that left memory; undefined for none. */
+  private async heldOf(handle: string): Promise<HeldDecision | undefined> {
+    const known = this.decisions.get(handle);
+    if (known) return known;
+    const [row] = (await this.options.record.raw('SELECT id, key, scope, answer, ask_id, state FROM decisions WHERE id = ?', [handle.replace(/^decision:/, '')])) as { id: string; key: string; scope: string; answer: string; ask_id: string; state: string }[];
+    return row ? this.readBack(row) : undefined;
+  }
+  /**
+   * A session starting: the decisions saved at its scope before that, which left memory with it, come back from the
+   * record (#824). Later ones arrive through the log, so a replay holds each once.
+   */
+  private async rehydrate(session: string, before: number): Promise<void> {
+    const rows = (await this.options.record.raw('SELECT d.id, d.key, d.scope, d.answer, d.ask_id, d.state FROM decisions d JOIN events e ON e.id = d.id WHERE d.scope = ? AND e.log_pos < ?', [JSON.stringify(`session:${letters(session)}`), before])) as { id: string; key: string; scope: string; answer: string; ask_id: string; state: string }[];
+    for (const row of rows) if (!this.decisions.has(`decision:${row.id}`)) await this.readBack(row);
+  }
+
+  private async apply(e: Event): Promise<void> {
     const d: Obj = isObj(e.data) ? e.data : {};
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     switch (e.kind) {
       case 'session.start':
-        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
+        if (e.session) {
+          this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
+          this.ended.delete(e.session);
+          await this.rehydrate(e.session, e.log_pos);
+        }
+        return;
+      case 'session.end':
+        // Only a verified end counts: an unverified one ends nothing, as in the hub.
+        if (e.session && !e.unverified) {
+          this.ended.add(e.session);
+          this.forgetEnded();
+        }
         return;
       case 'ask.created': {
         const thread = this.threadOf(e.session);
@@ -1508,19 +1601,9 @@ class AsksCore implements Asks {
       }
       case 'decision.created': {
         if (e.writer !== 'core') return;
-        // What it covers comes from the ask it was saved from: its kind, its subject and its change's size.
-        const from = this.asks.get(bare(String(d.ask)));
-        const subject = from && isObj(from.data.subject) ? from.data.subject : null;
-        const held: HeldDecision = {
-          handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active',
-          kind: String(from?.data.kind ?? ''), subject, bound: boundFor(linesOf(subject)), overruled: new Set(),
-        };
-        this.decisions.set(held.handle, held);
-        this.byKey.set(held.key, [...(this.byKey.get(held.key) ?? []), held]);
-        if (subject) {
-          const near = nearOf(held.kind, subject);
-          this.byNear.set(near, [...(this.byNear.get(near) ?? []), held]);
-        }
+        // What it covers comes from the ask it was saved from, read back when the ask left memory before its answer's decision landed.
+        const kept = this.asks.get(bare(String(d.ask)));
+        this.hold({ handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active' }, kept ? kept.data : await this.askData(String(d.ask)));
         return;
       }
       // Revoked or overruled (#667) on the trusted path: it covers nothing from then on; overruled at one scope
@@ -1758,6 +1841,11 @@ const VERDICT_STATE: Readonly<Record<Judgment['verdict'], RuleState>> = { widen:
 const JUDGES = new Set(['ext:resolver-decisions', 'core']);
 
 /** The ask kinds that name a subject, and so are keyed from it. */
+const without = <T>(table: Map<string, T[]>, key: string, item: T): void => {
+  const rest = (table.get(key) ?? []).filter((x) => x !== item);
+  if (rest.length) table.set(key, rest);
+  else table.delete(key);
+};
 const SUBJECT_KINDS = new Set(['authority', 'taste', 'choice', 'definition']);
 /** The kinds whose same question from another thread, pinned to the same thing, shows through one card. */
 const JOINED_KINDS = new Set(['taste', 'choice', 'definition']);

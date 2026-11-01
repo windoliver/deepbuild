@@ -45,6 +45,9 @@ const alive = (pid: number): boolean => {
   }
 };
 
+/** How many cleaned runs stay answerable by `status`, `wait` and `cleanup`, newest first. */
+const CLEANED_KEPT = 64;
+
 interface Tracked { start: string; token: string | null }
 interface Run {
   run: string;
@@ -623,9 +626,20 @@ class LocalSupervisor implements Supervisor {
 
   async status(run: string): Promise<RunStatus> {
     const r = this.runs.get(run);
-    if (!r) throw Error(`${run} is no run of this supervisor`);
+    if (!r) {
+      if (await this.recorded(run)) return { run, state: 'cleaned' };
+      throw Error(`${run} is no run of this supervisor`);
+    }
     const waiter = this.waiters.find((w) => w.spec.run === run);
     return { run, state: r.state, ...(waiter ? { on: waiter.on } : {}) };
+  }
+
+  /** A clean run that left memory (#824), as the record has its cleanup; undefined for one this supervisor never cleaned. */
+  private async recorded(run: string): Promise<Cleanup | undefined> {
+    const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'run.cleaned' AND writer = 'core' AND subject = ? ORDER BY log_pos DESC LIMIT 1", [run])) as { data: string }[];
+    if (!row) return undefined;
+    const d = JSON.parse(row.data) as { outcome: Cleanup['outcome']; left: string[]; stopped: number[] };
+    return { run, outcome: d.outcome, left: d.left, stopped: d.stopped };
   }
 
   cleanup(run: string): Promise<Cleanup> {
@@ -636,7 +650,8 @@ class LocalSupervisor implements Supervisor {
     if (!r) {
       // A start still in its first pass, given up on before it was held: it never starts.
       const waiter = this.waiters.find((w) => w.spec.run === run);
-      if (!waiter) return Promise.reject(Error(`${run} is no run of this supervisor`));
+      // One cleaned and since forgotten answers as it did then.
+      if (!waiter) return this.recorded(run).then((cleaned) => cleaned ?? Promise.reject(Error(`${run} is no run of this supervisor`)));
       this.waiters.splice(this.waiters.indexOf(waiter), 1);
       this.runs.set(run, blank(run, waiter.spec.cwd, 'BLOCKED'));
       waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: waiter.spec.leases?.[0]?.kind ?? '' });
@@ -714,8 +729,24 @@ class LocalSupervisor implements Supervisor {
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
     r.cleaned = { run, outcome, left, stopped: [...stopped] };
+    // Last in the table: the window keeps the newest cleaned, however long ago each started.
+    this.runs.delete(r.run);
+    this.runs.set(r.run, r);
+    this.forgetCleaned();
     await this.pump();
     return r.cleaned;
+  }
+
+  /**
+   * Past the newest CLEANED_KEPT, a run that left nothing goes, its process and pipes with it: the record holds it, and a
+   * hub that runs for weeks can't keep every one (#824). A run that left something stays, since its keys cite it.
+   */
+  private forgetCleaned(): void {
+    const done = [...this.runs.values()].filter((r) => r.cleaned?.outcome === 'clean' && !this.lingering.has(r));
+    for (const r of done.slice(0, Math.max(0, done.length - CLEANED_KEPT))) {
+      this.runs.delete(r.run);
+      for (const seen of this.denied) if (seen.startsWith(`${r.run} `)) this.denied.delete(seen);
+    }
   }
 
   /** A resource's cleanup step or check, in the platform sandbox with its folder writable; true when it exits 0. */

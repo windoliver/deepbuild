@@ -319,4 +319,111 @@ describe('the resolver gate reads every decision the record holds, however it wa
       off();
     }
   });
+
+  it('forgets an ended session once 64 newer ones ended, but never one with an ask open (#824)', async () => {
+    await start('SOPEN', 'TOPEN');
+    await start('SDONE', 'TDONE');
+    const open = await asks.raise(agent('SOPEN'), 'deep_ask.taste', taste('open'));
+    const done = await asks.raise(agent('SDONE'), 'deep_ask.taste', taste('done'));
+    await asks.answer(card, done, { option: 'green' });
+    await append(hook('SOPEN'), 'session.end', { reason: 'other' });
+    await append(hook('SDONE'), 'session.end', { reason: 'other' });
+    const rows = async (): Promise<string[]> => (await asks.inbox()).map((row) => row.ask);
+    expect(await rows()).toEqual([open, done]);
+    await start('SLIVE', 'TLIVE');
+    const live = await asks.raise(agent('SLIVE'), 'deep_ask.taste', taste('live'));
+    await asks.answer(card, live, { option: 'green' });
+    await append({ ...hook('SLIVE'), verified: false }, 'session.end', { reason: 'other' });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await append(hook(`E${i}`), 'session.end', { reason: 'other' });
+    }
+    expect(await rows(), 'an unverified end ends nothing').toEqual([open, live]);
+    await expect(asks.card(done)).rejects.toThrow('is no ask');
+    expect(await outcome(done)).toBe('answered');
+    await asks.answer(card, open, { option: 'blue' });
+    expect(await outcome(open)).toBe('answered');
+  });
+
+  it('keeps a session\'s decision past 64 newer ended sessions: resumed, it is never asked the same question again (#824)', async () => {
+    await start('SRES', 'TRES');
+    const first = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));
+    await asks.answer(card, first, { option: 'green' });
+    const [saved] = await events('decision.created');
+    expect((saved!.data as Obj).scope, 'a session in no repo saves your answer at its session').toBe('session:SRES');
+    const decision = `decision:${saved!.id}`;
+    await append(hook('SRES'), 'session.end', { reason: 'other' });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await append(hook(`E${i}`), 'session.end', { reason: 'other' });
+    }
+    await start('SRES', 'TRES');
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'green', because: decision }));
+    try {
+      const again = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));
+      expect(await asks.refusals(again)).toEqual([]);
+      expect(await outcome(again)).toBe('decided_for_you');
+    } finally {
+      off();
+    }
+  });
+
+  it('revokes a decision whose session left memory, and the revocation holds when that session resumes (#824)', async () => {
+    await start('SRES', 'TRES');
+    const first = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));
+    await asks.answer(card, first, { option: 'green' });
+    const decision = `decision:${(await events('decision.created'))[0]!.id}`;
+    await append(hook('SRES'), 'session.end', { reason: 'other' });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await append(hook(`E${i}`), 'session.end', { reason: 'other' });
+    }
+    await asks.revokeDecision(card, decision);
+    await expect(asks.revokeDecision(card, decision)).rejects.toThrow(/already revoked/);
+    await start('SRES', 'TRES');
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'green', because: decision }));
+    try {
+      const again = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));
+      expect(await asks.refusals(again)).toMatchObject([{ decision, reason: expect.stringContaining('revoked') }]);
+      expect(await outcome(again)).toBe('unanswered');
+    } finally {
+      off();
+    }
+  });
+
+  it('a decision saved from an ask that left memory still carries the size bound of that ask\'s change (#824)', async () => {
+    const merge = (lines: number): Obj => ({
+      kind: 'authority', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
+      recommended: null, deadline: T0 + 24 * HOUR, fallback: 'you', default: 'hold', provisional: false, owner: 'you',
+      subject: { effect: 'merge', target: { kind: 'pr', ref: 'pr:1', owner: 'thread:TOTHER' }, change: { kind: 'fix', lines, paths: ['src/a.ts'] } },
+      pinned_to: { kind: 'commit', ref: sha(`pr 1 ${lines}`).slice(0, 40) },
+    });
+    const plan = { steps: [{ does: 'Merge the pull request', changes: ['main'], undo: 'git revert', public: true, cost: 0 }], diff: sha('merge') };
+    const coreOf = (session: string): Connection => ({ writer: 'core', ...who, session });
+    await start('SOLD', 'TOLD');
+    const old = await asks.raise(coreOf('SOLD'), 'effect.merge', merge(10), plan);
+    const key = String(((await events('ask.created')).find((e) => `ask:${e.id}` === old)!.data as Obj).key);
+    await append(coreOf('SOLD'), 'ask.cancelled', { answer: 'hold', plan_hash: null, decision: 'none' }, old);
+    await append(hook('SOLD'), 'session.end', { reason: 'other' });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await append(hook(`E${i}`), 'session.end', { reason: 'other' });
+    }
+    await expect(asks.card(old)).rejects.toThrow('is no ask');
+    // Saved from it once it left memory: the decision covers changes up to 50 lines, the floor of twice its ask's 10.
+    const decisionId = id(now);
+    await record.append({ writer: 'core', ...who }, { v: 1, id: decisionId, kind: 'decision.created', subject: old, ts: now, data: { key, scope: 'all', answer: 'merge', ask: old } });
+    const decision = `decision:${decisionId}`;
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'merge', because: decision }));
+    try {
+      await start('SNEW', 'TNEW');
+      const big = await asks.raise(coreOf('SNEW'), 'effect.merge', merge(400), plan);
+      expect(await asks.refusals(big)).toMatchObject([{ decision, reason: expect.stringContaining('50 lines') }]);
+      expect(await outcome(big)).toBe('unanswered');
+      const small = await asks.raise(coreOf('SNEW'), 'effect.merge', merge(40), plan);
+      expect(await outcome(small)).toBe('decided_for_you');
+    } finally {
+      off();
+    }
+  });
 });

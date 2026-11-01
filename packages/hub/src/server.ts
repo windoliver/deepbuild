@@ -20,6 +20,7 @@ import { reaches } from './memory.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
+import { plantedStart } from './plant.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
@@ -1024,6 +1025,7 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
   const real = Date.now();
