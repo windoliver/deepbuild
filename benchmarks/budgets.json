@@ -818,6 +818,21 @@
       "initialReason": "Issue #854 first measurement: the merge base has no such task. A release deep-show shows a 10,000-item board in a headless window and takes 200 patches a run, each moving one item, timing each from its arrival to the settled frame it causes, the CPU of the patch path and the frame plus the GPU time of the frame drawn, five runs after a warm-up one. canvas.mjs judge holds each run's p95 to settled_p95_ms by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-patch-dirty",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "patch-dirty"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "cpu_growth": 0.25,
+        "upload_bytes_per_item": 64
+      },
+      "initialReason": "Issue #896 first measurement: the merge base has no such task. A release deep-show takes canvas-patch-settled's 200 one-item patches on a 1,000-item board, then on the 10,000-item one, each board in a fresh process, five runs after a warm-up one, each sample with the bytes the 2D view uploaded and the marks each operator built. canvas.mjs judge holds the CPU per patch at the two sizes to cpu_growth by the design's rule on a reference Mac, and the most bytes one patch uploaded to upload_bytes_per_item on any machine. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-scene-read",
       "command": [
         "node",

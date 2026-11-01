@@ -166,6 +166,12 @@ pub enum Planted {
     RunsEveryNode,
     /// #854: deep_query answers a paged read with every row, unpaged.
     Unpaged,
+    /// #896: the session takes each patch's revision by loading the whole document.
+    ReloadsRevision,
+    /// #896: `marks2d.frame` rebuilds the whole draw list on every frame.
+    RebuildsDrawList,
+    /// #896: the bench view uploads every mark on every frame.
+    RepaintsEveryMark,
     /// #857: the background jobs' threads run at the live view's priority.
     BackgroundAtLivePriority,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
@@ -812,6 +818,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
+        forgets_changes: scenario.planted == Some(Planted::RebuildsDrawList),
     };
     Options {
         access_log: startup.test_build,

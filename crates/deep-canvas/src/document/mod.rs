@@ -35,7 +35,7 @@ pub use apply::{
 };
 pub use check::{
     check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of, recheck,
-    recheck_skipping_referrers, CheckResult,
+    recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
@@ -529,7 +529,9 @@ mod tests {
 
     /// The patch fuzzer's fifth law: after each seeded patch (a create, a set of a param in and out
     /// of range, a move under another item or under itself, a delete that leaves children
-    /// behind), the incremental re-check gives the full check's issues, by code, IDs and path.
+    /// behind), the incremental re-check gives the full check's issues, by code, IDs and path;
+    /// and so does the one that finds what a patch reaches by the referrers the last revision
+    /// left, followed to each revision by the items it changed (#896).
     #[test]
     fn the_incremental_recheck_gives_the_full_checks_issues() {
         let mut doc = base();
@@ -549,6 +551,7 @@ mod tests {
                 .collect()
         };
         let mut issues = check(&doc).issues;
+        let mut referrers = check::Referrers::of(&doc);
         let mut seed: u64 = 96;
         let knows = |_: &str| true;
         for n in 0..300 {
@@ -590,6 +593,22 @@ mod tests {
                 recheck(&doc, &issues, &changed, &crate::registry::core()).expect("items only");
             let full = check(&doc).issues;
             assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
+            let indexed = recheck_with(
+                &doc,
+                &issues,
+                &changed,
+                &crate::registry::core(),
+                &referrers,
+            )
+            .expect("items only");
+            assert_eq!(
+                key(&indexed),
+                key(&full),
+                "patch {n}, by its referrers: {op}"
+            );
+            for (id, was) in &patched.before {
+                referrers.update(id, was.as_ref(), doc["items"].get(id));
+            }
             // Taken back out, the document is what it was, byte for byte.
             let mut back = doc.clone();
             rollback(&mut back, &patched);
