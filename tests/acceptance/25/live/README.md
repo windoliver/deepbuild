@@ -7,6 +7,11 @@ Dogfooding), `spikes/80/decision.json`, `adapters/claude-code.facts.json` and ba
 never saw an implementation of #25. The implementing agent does not edit these files (AGENTS.md, Proof); a dispute
 goes to a blind redraft of this job.
 
+**Redrafted blind for the Oct 29 amendment** (issue #25's scope and the design's Claude Code row and Waiter
+guardrail, amended for #85): setup writes the waiter's entry under Stop and under StopFailure, with the same command
+and timeout. The only change here is how the waiter's entry is read from the settings (below); no test, name, budget
+or expected value changed. The live turns here end with Stop, never on an API error, so nothing else moves.
+
 The issue has 12 checkbox criteria, AC1 to AC12 in the body's order. **This folder covers AC8 (budgets) and the
 issue's Proof line**: a live test per route on interactive sessions run by the harness (#48), and the manual
 desktop-app test (`MANUAL.md`). The live tests prove AC1 (Stop hold), AC2 (waiter wake), AC9's fallback half (next
@@ -53,7 +58,8 @@ DEEP_HARNESS_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=... npx vitest run --root tests/acce
   selects a planted program, and a name the hub doesn't know makes it exit at start (#16).
   `DEEP_HUB_TEST_CONFIRM` names a file holding `confirmed`, the OS confirmation stubbed (#24).
 - **`deep setup`** writes DeepBuild's hook entries into `~/.claude/settings.json` (#18): a foreground Stop entry and
-  the waiter, DeepBuild's one entry with `asyncRewake: true`. DeepBuild's entries are those whose command runs
+  the waiter, DeepBuild's entry with `asyncRewake: true`, once under Stop and once under StopFailure with the same
+  command and timeout (amended Oct 29); a setup that writes it under Stop only fails, naming that cause. DeepBuild's entries are those whose command runs
   deep-hook or the deep CLI, as #18's suite reads them. The tests run each command exactly as setup wrote it.
 - **`deep mcp`** started by the session's own process, and **`deep_ask`** filing an ask under the session and coming
   back "still waiting" with the ask open once its wait runs out (#26, #18).

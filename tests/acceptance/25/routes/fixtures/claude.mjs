@@ -4,7 +4,7 @@
 // record (spikes/80/decision.json and logs) show it: a Stop entry's block continues the turn with the reason as
 // "Stop hook feedback"; an asyncRewake entry that exits 2 wakes an idle session with a turn whose UserPromptSubmit
 // prompt is a task-notification carrying the entry's stderr; earlier asyncRewake entries keep running at a later
-// Stop (the desktop app, #80). It decides nothing about DeepBuild and never edits the settings file. One process is
+// Stop (the desktop app, #80), or at a StopFailure (issue #25, amended Oct 29: Claude Code starts the waiter at either). It decides nothing about DeepBuild and never edits the settings file. One process is
 // one session's Claude Code, so every hook it runs, every Bash command it runs and its one `deep mcp` are its
 // children, as they are a real session's.
 //
@@ -20,6 +20,8 @@
 //       the reason a synchronous entry gave to continue the turn (exit 2 with stderr, or exit 0 with
 //       {"decision":"block","reason":…}); Claude Code then writes "Stop hook feedback:\n<reason>" into the transcript
 //       and the turn goes on. A UserPromptSubmit starts a turn; a Stop that isn't blocked ends it, and the session is idle.
+//       A StopFailure (a turn that ended on an API error, fired instead of Stop) ends it too; Claude Code reads nothing
+//       from its entries' output (hooks reference), and starts its async and asyncRewake entries as at a Stop.
 //   {op:'background'}                     the background entries, each with its event, state and session.
 //   {op:'expire', seconds}                Claude Code's timer for the background entries, moved on: each still
 //                                         running whose timeout is at most `seconds` is stopped as Claude Code stops it.
@@ -31,7 +33,7 @@
 //                                         not stop its background entries (they are left to end on their own).
 //   {op:'exit'}                           stops everything it started, then exits (the suite's cleanup).
 //
-// Unprompted lines (no `n`): {wake:{pid, session, code, at, stderr, dropped?, started?, prompt?, promptId?, fired?}},
+// Unprompted lines (no `n`): {wake:{pid, session, event, code, at, stderr, dropped?, started?, prompt?, promptId?, fired?}},
 // one per asyncRewake entry that exited 2: `at` is when it exited, `started` when its wake turn began (after the
 // entry exited, at once if the session was idle, else once its running turn ended), `fired` that turn's
 // UserPromptSubmit runs.
@@ -105,7 +107,7 @@ function runEntry(entry, event, payload) {
     groups.delete(child.pid);
     Object.assign(run, { code, signal, ended: Date.now() });
     // An asyncRewake entry that exits 2 wakes the session with its stderr (hooks reference; #80).
-    if (run.asyncRewake && code === 2 && !run.timedOut && !run.expired) rewake(run, payload);
+    if (run.asyncRewake && code === 2 && !run.timedOut && !run.expired) rewake(run, payload, event);
     resolve(run);
   }));
   run.stop = () => stopGroup(child.pid);
@@ -159,13 +161,16 @@ async function hook({ event, payload, settings }) {
       busy = false;
       setImmediate(drain);
     }
+  } else if (event === 'StopFailure') {
+    busy = false;
+    setImmediate(drain);
   }
   return answer;
 }
 
 /** An asyncRewake entry exited 2: a wake for its session, now if it is idle, else once its turn ends. */
-function rewake(run, payload) {
-  const wake = { pid: run.pid, session: payload.session_id, code: run.code, at: run.ended, stderr: run.stderr };
+function rewake(run, payload, event) {
+  const wake = { pid: run.pid, session: payload.session_id, event, code: run.code, at: run.ended, stderr: run.stderr };
   if (!wakeOn) { out({ wake: { ...wake, dropped: true } }); return; }
   queued.push({ wake, payload });
   if (!busy) setImmediate(drain);
@@ -180,7 +185,7 @@ async function drain() {
       busy = true;
       // #80 (Claude Code 2.1.303 and the desktop app): the wake's turn starts with a UserPromptSubmit whose prompt is
       // a task-notification carrying the waiter's stderr; the desktop transcript shows it enqueued, then as a user entry.
-      const prompt = `<task-notification>\n<summary>Stop hook feedback</summary>\n</task-notification>\n<system-reminder>\nStop hook blocking error from command "Stop": ${wake.stderr.replace(/\n+$/, '')}\n\n</system-reminder>`;
+      const prompt = `<task-notification>\n<summary>Stop hook feedback</summary>\n</task-notification>\n<system-reminder>\nStop hook blocking error from command "${wake.event}": ${wake.stderr.replace(/\n+$/, '')}\n\n</system-reminder>`;
       const promptId = randomUUID();
       wake.started = Date.now();
       appendFileSync(payload.transcript_path, `${JSON.stringify({ type: 'queue-operation', operation: 'enqueue', timestamp: new Date().toISOString(), sessionId: payload.session_id, content: prompt })}\n`);
