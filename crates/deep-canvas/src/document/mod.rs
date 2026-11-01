@@ -129,6 +129,8 @@ pub const ITEM_KEYS: &[&str] = &[
     "pickable",
     "order",
     "broken_out",
+    // A solid's modifier stack (Modifier; #411), checked by the canvas module whose kind it is.
+    "modifiers",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.

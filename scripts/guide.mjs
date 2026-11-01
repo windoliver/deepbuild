@@ -58,6 +58,7 @@ const DOCS = {
   'deep.terminal.open': 'Opens a terminal the hub hosts for the package under run-as-you: its program, folder, size and title; its input comes only from the panel you focused.',
   'deep.terminal.list': 'The package\'s own hosted terminals, each with its run and process.',
   'deep.terminal.read': 'Reads a hosted terminal\'s output from an offset, in pages.',
+  'deep.canvas.read': 'For a check runner: a canvas revision\'s evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.',
   'deep.registerAction': 'What panels, your words and agents\' MCP tools can do to the plug-in\'s data. It declares read, change or send, and a change or send returns its report.',
 };
 
