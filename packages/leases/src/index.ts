@@ -50,7 +50,7 @@ export type Overlap = (form: 'glob' | 'prefix', a: string, b: string) => boolean
 export type Plant =
   | 'ignores-mode' | 'pool-as-exact-key' | 'pool-ignores-n' | 'any-match-form' | 'redeclare-replaces' | 'fixed-kinds'
   | 'releases-at-expiry' | 'ignores-cooldown' | 'ignores-cap' | 'checks-held-mode-only' | 'await-before-append'
-  | 'pid-only-liveness' | 'host-blind' | 'pool-across-hosts';
+  | 'pid-only-liveness' | 'host-blind' | 'pool-across-hosts' | 'fills-every-slot';
 export interface LeasesOptions {
   /** Grants, stale marks and releases are appended here as `core`; holders' ends and the supervisor's proofs are read from it. */
   record: RecordStore;
@@ -122,6 +122,11 @@ const DAY = 86_400_000;
 /** How many runs' processes, and how many holders' ends, stay in memory when no lease depends on them. */
 const KEPT = 64;
 const FORM = /^(?:exact|glob|prefix|pool\(([1-9][0-9]*)\))$/;
+/**
+ * The `cpu.slot` key slow-lane runs and agents' heavy commands lease (#907): of a pool of two or more, it holds at most
+ * all but one slot, so the last is kept for a held stop's fast-lane checks.
+ */
+export const SLOW_SLOT = 'slow';
 /** The kinds a table with a fixed list of resources leases: the planted wrong program of AC4. */
 const FIXED = ['port', 'cpu.slot'];
 /** The kinds the table's state is folded from. */
@@ -292,6 +297,10 @@ class Table implements LeaseTable {
       const pool = this.onHost(kind, resource.host, this.plant === 'pool-across-hosts');
       if (this.plant !== 'pool-ignores-n' && pool.length >= kind.n) {
         return { status: 'refused', reason: 'pool', holders: pool, message: `the pool ${where} is full: ${pool.length} of ${kind.n} held, by ${names(pool)}` };
+      }
+      const slow = pool.filter((l) => l.resource.key === SLOW_SLOT);
+      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && kind.n > 1 && slow.length >= kind.n - 1 && this.plant !== 'fills-every-slot') {
+        return { status: 'refused', reason: 'pool', holders: slow, message: `the pool ${where} keeps its last slot for a held stop's fast-lane checks: slow work holds ${slow.length} of ${kind.n}, by ${names(slow)}` };
       }
     } else {
       const conflicts = (held: Mode): boolean => (this.plant === 'ignores-mode' ? true

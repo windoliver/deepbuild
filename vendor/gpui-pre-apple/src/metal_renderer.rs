@@ -3,10 +3,9 @@ use anyhow::{Context as _, Result};
 use block2::RcBlock;
 use core_graphics::geometry::CGSize;
 use gpui::{
-    AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path, Point,
-    PrimitiveBatch, ScaledPixels, Scene, Size, point, size,
+    point, size, AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path,
+    Point, PrimitiveBatch, ScaledPixels, Scene, Size,
 };
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 use image::RgbaImage;
 use objc2::runtime::AnyObject;
 
@@ -17,10 +16,10 @@ use metal::{
 };
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::{
+    kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_32BGRA,
-    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
+    CVPixelBufferGetWidthOfPlane,
 };
 use parking_lot::Mutex;
 
@@ -77,6 +76,48 @@ pub mod gpu_ledger {
     }
 }
 
+/// DeepBuild patch (windoliver/deepbuild#140): the color seam's checks on a window's layer. The
+/// planted twin sets every window layer's colorspace nil (untagged); and the next frame
+/// a window draws can be read back from its layer's drawable, as the compositor receives it.
+pub mod layer_colorspace {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    use image::RgbaImage;
+
+    static UNTAGGED: AtomicBool = AtomicBool::new(false);
+    static READ_NEXT: AtomicBool = AtomicBool::new(false);
+    static READ: Mutex<Option<RgbaImage>> = Mutex::new(None);
+
+    pub fn plant_untagged() {
+        UNTAGGED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn untagged() -> bool {
+        UNTAGGED.load(Ordering::SeqCst)
+    }
+
+    /// Reads back the next frame any window draws, from its layer's drawable.
+    pub fn read_next_frame() {
+        READ_NEXT.store(true, Ordering::SeqCst);
+    }
+
+    /// The frame read back, once a window has drawn one since `read_next_frame`.
+    pub fn take_frame() -> Option<RgbaImage> {
+        READ.lock().ok()?.take()
+    }
+
+    pub(crate) fn reading() -> bool {
+        READ_NEXT.swap(false, Ordering::SeqCst)
+    }
+
+    pub(crate) fn read(frame: RgbaImage) {
+        if let Ok(mut read) = READ.lock() {
+            *read = Some(frame);
+        }
+    }
+}
+
 /// DeepBuild patch (windoliver/deepbuild#377): what the canvas's GPU layer needs from the frame
 /// command buffers that show its surfaces. A BGRA surface (a slot another renderer drew into an
 /// IOSurface) composites premultiplied, with source factor one and destination factor one minus
@@ -85,7 +126,7 @@ pub mod gpu_ledger {
 /// done reading it. The planted twins exist for the GPU layer's acceptance tests: one divides
 /// alpha out of the surface, the other draws surfaces after the rest of the scene.
 pub mod gpu_surfaces {
-    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
     use std::sync::{Arc, RwLock};
 
     /// A frame's report: the identity of each BGRA pixel buffer its command buffer samples (the
@@ -153,6 +194,37 @@ pub mod gpu_surfaces {
         if let Some(hook) = hook() {
             hook(event);
         }
+    }
+}
+
+/// DeepBuild patch (windoliver/deepbuild#140): the display seam's presentation feedback on macOS
+/// (canvas primitives: Frame callback and presentation feedback). While a hook is set, each
+/// drawable a window's `draw` presents carries a presented handler that reports the label the app
+/// set for that frame before the draw and the drawable's `presentedTime`: host time in seconds,
+/// the clock `mach_absolute_time` counts, or 0 when the drawable was never shown.
+pub mod presentation {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, RwLock};
+
+    pub type Hook = Arc<dyn Fn(u64, f64) + Send + Sync>;
+
+    static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
+    static LABEL: AtomicU64 = AtomicU64::new(0);
+
+    /// Installs the hook that receives every presented drawable, or removes it.
+    pub fn set_hook(hook: Option<Hook>) {
+        let old = std::mem::replace(&mut *HOOK.write().unwrap_or_else(|e| e.into_inner()), hook);
+        drop(old);
+    }
+
+    /// Labels the next drawable a window presents; an unlabelled one reports 0.
+    pub fn label_next(label: u64) {
+        LABEL.store(label, Ordering::SeqCst);
+    }
+
+    pub(super) fn take() -> Option<(Hook, u64)> {
+        let hook = HOOK.read().unwrap_or_else(|e| e.into_inner()).clone()?;
+        Some((hook, LABEL.swap(0, Ordering::SeqCst)))
     }
 }
 
@@ -325,6 +397,14 @@ impl MetalRenderer {
         let objc2_layer: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
         objc2_layer.setAllowsNextDrawableTimeout(false);
         objc2_layer.setNeedsDisplayOnBoundsChange(true);
+        // DeepBuild patch (windoliver/deepbuild#140): the layer holds sRGB-encoded BGRA8, so it is
+        // tagged sRGB and the compositor never reinterprets it. GPUI alone sets no colorspace and
+        // leaves it to whatever AppKit gives a view's backing layer (sRGB on macOS 26); the
+        // planted twin sets it nil.
+        let srgb = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
+            objc2_core_graphics::kCGColorSpaceSRGB
+        }));
+        objc2_layer.setColorspace(srgb.as_deref().filter(|_| !layer_colorspace::untagged()));
         // UIKit sizes a view's backing layer itself; only AppKit-hosted
         // layers need to track their superlayer's bounds.
         #[cfg(target_os = "macos")]
@@ -658,6 +738,11 @@ impl MetalRenderer {
             (viewport_size.width.ceil() as i32).into(),
             (viewport_size.height.ceil() as i32).into(),
         );
+        // DeepBuild patch (windoliver/deepbuild#140): a drawable the color check reads back.
+        let reading = layer_colorspace::reading();
+        if reading {
+            layer.set_framebuffer_only(false);
+        }
         let drawable = if let Some(drawable) = layer.next_drawable() {
             drawable
         } else {
@@ -676,6 +761,23 @@ impl MetalRenderer {
             }
         };
 
+        let texture = reading.then(|| drawable.texture().to_owned());
+        // DeepBuild patch (windoliver/deepbuild#140): the drawable's presented time, reported
+        // once the display shows it (`presentedTime` is 0 for a drawable never shown).
+        if let Some((hook, label)) = presentation::take() {
+            let block = RcBlock::new(move |shown: ptr::NonNull<AnyObject>| {
+                // SAFETY: Metal hands a presented handler the drawable it presented, and
+                // `presentedTime` is an `MTLDrawable` property returning `CFTimeInterval`.
+                let at: f64 = unsafe { objc2::msg_send![shown.as_ref(), presentedTime] };
+                hook(label, at);
+            });
+            // SAFETY: `addPresentedHandler:` is an `MTLDrawable` method taking a block of this
+            // signature, which Metal copies; it is added before the drawable is presented.
+            unsafe {
+                let target = drawable.as_ptr().cast::<AnyObject>();
+                let _: () = objc2::msg_send![&*target, addPresentedHandler: &*block];
+            }
+        }
         if self.presents_with_transaction {
             command_buffer.commit();
             command_buffer.wait_until_scheduled();
@@ -683,6 +785,13 @@ impl MetalRenderer {
         } else {
             command_buffer.present_drawable(drawable);
             command_buffer.commit();
+        }
+        if let Some(texture) = texture {
+            command_buffer.wait_until_completed();
+            match read_texture_to_image(&texture) {
+                Ok(frame) => layer_colorspace::read(frame),
+                Err(error) => log::error!("failed to read the drawable back: {error:#}"),
+            }
         }
     }
 
@@ -1565,7 +1674,7 @@ fn new_command_encoder_for_texture<'a>(
     command_encoder
 }
 
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+// DeepBuild patch (windoliver/deepbuild#140): also the color check's drawable read-back, in any build.
 fn read_texture_to_image(texture: &metal::TextureRef) -> Result<RgbaImage> {
     let width = texture.width() as u32;
     let height = texture.height() as u32;
@@ -1959,9 +2068,9 @@ mod tests {
     use super::*;
     use objc2_core_foundation::{CFDictionary, CFType};
     use objc2_core_video::{
-        CVPixelBufferCreate, CVPixelBufferGetBaseAddressOfPlane,
-        CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
-        CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
+        kCVPixelBufferIOSurfacePropertiesKey, CVPixelBufferCreate,
+        CVPixelBufferGetBaseAddressOfPlane, CVPixelBufferGetBytesPerRowOfPlane,
+        CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
     };
     use std::time::Duration;
 

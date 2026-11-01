@@ -71,7 +71,9 @@ export type Plant =
   // #909's: a hub that never checks its lock again once it holds it.
   | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
-  | 'delivered-when-written' | 'sends-shown-again';
+  | 'delivered-when-written' | 'sends-shown-again'
+  // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
+  | 'fills-every-slot' | 'background-subagents-only';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -112,6 +114,7 @@ const PLANTS: readonly string[] = [
   'signature-covers-anything',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
+  'fills-every-slot', 'background-subagents-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

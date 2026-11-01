@@ -16,22 +16,23 @@ export const testGlobs = (extension) => testPaths
   .filter((glob) => glob.endsWith(`.test.${extension}`) && !glob.startsWith('crates/'));
 
 /** Vitest files a lane of their own runs, so the unit lane leaves them out. */
-const ownLane = ['tests/acceptance/684/lean.test.ts'];
+export const ownLane = ['tests/acceptance/684/lean.test.ts'];
 /**
- * Vitest files the unit lane runs one at a time, after the parallel block (see the lane). tests/acceptance/327/ holds
- * answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README); the earlier answers.test.ts there
- * keeps AC7, AC15 and AC16, so the folder runs whole.
+ * Vitest files the unit lane runs one at a time, after the parallel block (see the lane); affected.mjs does so with any
+ * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
+ * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-const alone = ['tests/acceptance/20/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/',
+export const alone = ['tests/acceptance/20/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/',
   'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/671/', 'tests/acceptance/381/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
   'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/25/live/budgets.test.ts', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/347/', 'tests/acceptance/340/',
-  'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/29/budgets.test.ts',
+  'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts', 'tests/acceptance/29/budgets.test.ts',
   'tests/acceptance/23/permissions/', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/83/', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
-  ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', ...['cycles', 'planted', 'leftovers'].map((f) => `tests/acceptance/824/${f}.test.ts`)];
+  ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
+  'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', ...['cycles', 'planted', 'leftovers'].map((f) => `tests/acceptance/824/${f}.test.ts`)];
 /**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
  * minutes; #666's and #668's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
@@ -46,9 +47,10 @@ const alone = ['tests/acceptance/20/', 'tests/acceptance/363/', 'tests/acceptanc
  * reference Mac (tests/acceptance/124/README.md, Live only). #883's Proof reads the Mac's own Notification Center,
  * so it needs the app bundle allowed to notify.
  */
-const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
+export const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
-  'tests/acceptance/124/ac1-agents.live.test.ts', 'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts', 'tests/proof/883/', 'tests/acceptance/366/ac1-build.live.test.ts'];
+  'tests/acceptance/124/ac1-agents.live.test.ts', 'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/proof/883/', 'tests/acceptance/366/ac1-build.live.test.ts', 'tests/acceptance/140/gpu/color.live.test.ts',
+  'tests/acceptance/140/gpu/capture.live.test.ts', 'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts'];
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -79,9 +81,16 @@ export const checks = [
   // The GPU layer's render logic on wgpu's noop backend, with no GPU (#377): slots and fences,
   // uploads that settle, a lost device's rebuild and submission in frame order.
   { name: 'noop', commands: [['cargo', 'test', '--locked', '-p', 'deep-gpu']], fix: 'Repair the render logic the failing noop test names.' },
+  // #140: every platform seam's conformance suite on this build's backends; a suite this run can't give what it needs reads BLOCKED.
+  { name: 'seams', commands: [[process.execPath, 'scripts/seams.mjs']], fix: 'Repair the backend each FAIL line names against its seam\'s suite.' },
+  // #140: the canvas core's crates build for the web's platform, wasm32 with threads off, so nothing native-only creeps in.
+  { name: 'wasm32', commands: [[process.execPath, 'scripts/wasm32.mjs']], fix: 'Remove the threads or the native-only API from the crate each FAIL line names, or install the target (rustup target add wasm32-unknown-unknown).' },
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
   { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
+  // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910). It
+  // reads the open issues the catalogue drift lane fetched.
+  { name: 'design links', commands: [[process.execPath, 'scripts/design-links.mjs']], fix: 'Point each link named above at a heading or <a id> its doc has, or give the doc back the heading it linked; offline, run again with network and gh signed in.' },
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
@@ -156,13 +165,20 @@ export const releaseLanes = [
     ],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` for the settings-tamper sessions.',
   },
+  {
+    // #140's validation lane: the GPU fixtures once with Metal's API and shader validation on and the shader
+    // translator's bounds checks off, every float target and storage buffer read back for non-finite values.
+    name: 'gpu validation',
+    commands: [[process.execPath, 'scripts/gpu-validation.mjs']],
+    fix: 'Repair the shader each FAIL line names (an out-of-bounds access or a non-finite value it wrote); a BLOCKED line names the shader kind or the validation the lane could not run.',
+  },
 ];
 
 /**
  * The paths a change touches: every path that differs between the merge base with origin/main and the working
  * tree, committed or not, and new files git doesn't ignore. Null when that can't be worked out.
  */
-function changedPaths(cwd) {
+export function changedPaths(cwd) {
   const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
   const base = git('merge-base', 'HEAD', 'origin/main');
   if (base.status !== 0) return null;
@@ -202,6 +218,10 @@ export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
   const release = process.env.DEEP_PREFLIGHT === 'release';
+  // The lanes that read the open issues share one fetch a run, in this file (scripts/open-issues.mjs); perf's
+  // copies name theirs.
+  const issues = process.env.DEEP_OPEN_ISSUES ? undefined : mkdtempSync(join(tmpdir(), 'deep-open-issues-'));
+  if (issues) process.env.DEEP_OPEN_ISSUES = join(issues, 'open-issues.json');
   let changed;
   for (const lane of lanes) {
     if (lane.paths && !release) {
@@ -257,6 +277,10 @@ export function runLanes(lanes, { cwd = root } = {}) {
     const elapsed = ((performance.now() - started) / 1000).toFixed(2);
     if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
     else console.log(`PASS ${lane.name} (${elapsed} s)`);
+  }
+  if (issues) {
+    delete process.env.DEEP_OPEN_ISSUES;
+    rmSync(issues, { recursive: true, force: true });
   }
   for (const failure of failures) console.log(failure);
   return failures.length ? 1 : 0;

@@ -1,0 +1,128 @@
+# #910 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (2f43a669, origin/main, no lane), in this checkout
+
+$ node --test 'tests/acceptance/910/*.test.mjs'
+(stack-trace lines dropped)
+
+✖ criterion 1: an open issue body linking technical-design.md#no-such-heading fails the lane, naming issue 9605 (the 36th of 40) and the link (45524.860958ms)
+✖ criterion 2: renaming canvas-primitives.md's "Canvas module: interface and implementation" fails each technical-design.md line that links its old slug, naming each (45529.509334ms)
+✖ criterion 2: renaming technical-design.md's "How we know version 0 works" fails each doc line that links its old slug from the same doc, naming each (14824.755833ms)
+✖ criterion 3: with gh unable to reach GitHub, no target/open-issues.json and no DEEP_OPEN_ISSUES, the lane alone is INCONCLUSIVE and the checks don't pass (45516.250125ms)
+✖ scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass (45530.530583ms)
+✖ scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue (14816.1415ms)
+✖ clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are (45509.27725ms)
+✖ scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once (14842.024334ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60449.953708
+✖ failing tests:
+test at tests/acceptance/910/ac1-issue-link.test.mjs:7:1
+✖ criterion 1: an open issue body linking technical-design.md#no-such-heading fails the lane, naming issue 9605 (the 36th of 40) and the link (45524.860958ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/ac2-renamed-heading.test.mjs:24:1
+✖ criterion 2: renaming canvas-primitives.md's "Canvas module: interface and implementation" fails each technical-design.md line that links its old slug, naming each (45529.509334ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/ac2-renamed-heading.test.mjs:34:1
+✖ criterion 2: renaming technical-design.md's "How we know version 0 works" fails each doc line that links its old slug from the same doc, naming each (14824.755833ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/ac3-offline.test.mjs:8:1
+✖ criterion 3: with gh unable to reach GitHub, no target/open-issues.json and no DEEP_OPEN_ISSUES, the lane alone is INCONCLUSIVE and the checks don't pass (45516.250125ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/anchors.test.mjs:44:1
+✖ scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass (45530.530583ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/anchors.test.mjs:65:1
+✖ scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue (14816.1415ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/clean.test.mjs:8:1
+✖ clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are (45509.27725ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+test at tests/acceptance/910/clean.test.mjs:27:1
+✖ scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once (14842.024334ms)
+  Error: no design links lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /links?/i and not /catalogue|drift/i, of ["typecheck","lint","unit","contracts","interfaces","noop","catalogue drift","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+
+## The planted fix, in a scratch extract of the base (git archive HEAD, npm ci, contracts built)
+
+A 'design links' lane after 'catalogue drift' in scripts/lanes.mjs, running scripts/design-links.mjs. It reads
+DEEP_OPEN_ISSUES, else a target/open-issues.json written in the last 10 minutes, else gh issue list --state open
+--limit 5000 --json number,body (writing the cache). Offline with neither, it prints INCONCLUSIVE and exits 1. It
+slugs headings by GitHub's rules (README: Slugs), counts <a id>/<a name>, skips fenced code, prints
+'FAIL <n> of <count> links ...' then one line per bad link ('docs/x.md:<line> links <raw> (...)' or
+'#<n> links docs/x.md#<anchor> (...)'), else 'design links: <count> links from 2 docs and <n> open issues land on a heading'.
+
+node --test 'tests/acceptance/910/*.test.mjs': tests 8, pass 8, fail 0 (77 s).
+
+## Wrong programs: one change at a time to the planted fix, the whole suite each time
+
+- ignores issue bodies: caught by 2 test(s):
+    criterion 1: an open issue body linking technical-design.md#no-such-heading fails the lane, naming issue 9605 (the 36th of 40) and the link
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+- checks only that the file exists: caught by 4 test(s):
+    criterion 1: an open issue body linking technical-design.md#no-such-heading fails the lane, naming issue 9605 (the 36th of 40) and the link
+    criterion 2: renaming canvas-primitives.md's "Canvas module: interface and implementation" fails each technical-design.md line that links its old slug, naming each
+    criterion 2: renaming technical-design.md's "How we know version 0 works" fails each doc line that links its old slug from the same doc, naming each
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+- slug keeps punctuation: caught by 3 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are
+    scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once
+- slug keeps case: caught by 3 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are
+    scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once
+- slug collapses runs of spaces into one hyphen: caught by 2 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+- slug keeps only ASCII letters: caught by 2 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+- no -1, -2 suffix for duplicate headings: caught by 3 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are
+    scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once
+- ignores explicit <a id>/<a name>: caught by 3 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are
+    scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once
+- markdown in a heading not reduced to text: caught by 2 test(s):
+    scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+- headings read inside fenced code: caught by 1 test(s):
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+- names only the first bad doc line: caught by 1 test(s):
+    criterion 2: renaming canvas-primitives.md's "Canvas module: interface and implementation" fails each technical-design.md line that links its old slug, naming each
+- names a bad doc link without its line: caught by 2 test(s):
+    criterion 2: renaming canvas-primitives.md's "Canvas module: interface and implementation" fails each technical-design.md line that links its old slug, naming each
+    criterion 2: renaming technical-design.md's "How we know version 0 works" fails each doc line that links its old slug from the same doc, naming each
+- skips same-doc (#anchor) links: caught by 1 test(s):
+    criterion 2: renaming technical-design.md's "How we know version 0 works" fails each doc line that links its old slug from the same doc, naming each
+- reads a failed gh as zero issues: caught by 1 test(s):
+    criterion 3: with gh unable to reach GitHub, no target/open-issues.json and no DEEP_OPEN_ISSUES, the lane alone is INCONCLUSIVE and the checks don't pass
+- offline reported as FAIL, not INCONCLUSIVE: caught by 1 test(s):
+    criterion 3: with gh unable to reach GitHub, no target/open-issues.json and no DEEP_OPEN_ISSUES, the lane alone is INCONCLUSIVE and the checks don't pass
+- fetches again, ignoring the drift lane cache: caught by 1 test(s):
+    scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once
+- fetches again with gh default limit (30): caught by 3 test(s):
+    criterion 1: an open issue body linking technical-design.md#no-such-heading fails the lane, naming issue 9605 (the 36th of 40) and the link
+    scope: near misses of those slugs, a heading inside fenced code and a missing docs file each fail the lane, each named with its issue
+    scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once
+- runLanes returns 0 when the only failure is INCONCLUSIVE: caught by 1 test(s):
+    criterion 3: with gh unable to reach GitHub, no target/open-issues.json and no DEEP_OPEN_ISSUES, the lane alone is INCONCLUSIVE and the checks don't pass
+- prints no count of links: caught by 1 test(s):
+    clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are
+
+Every wrong program was caught. The planted fix was restored after each run.

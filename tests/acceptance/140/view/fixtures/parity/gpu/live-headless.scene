@@ -1,0 +1,30 @@
+{
+  "scene": "live-headless",
+  "what": "Issue #140's live-against-headless parity: three documents, each drawn as a settled live frame in the app's window and as a headless snapshot with the app closed, at the same revision, view, size and t.",
+  "cases": [
+    {
+      "case": "figure-2d",
+      "doc": "live-headless/figure.json",
+      "look": "live-headless/look-2d.json",
+      "size": [480, 270],
+      "t": "0s",
+      "view": { "zoom": 1, "theme": "light" }
+    },
+    {
+      "case": "scene3d-glow-shadows",
+      "doc": "live-headless/glow-shadows.json",
+      "look": "live-headless/look-3d.json",
+      "size": [480, 360],
+      "t": "0.5s",
+      "view": { "zoom": 1, "theme": "light" }
+    },
+    {
+      "case": "film-frame",
+      "doc": "live-headless/film.json",
+      "look": "live-headless/look-2d.json",
+      "size": [480, 270],
+      "t": "1.25s",
+      "view": { "zoom": 1, "theme": "light" }
+    }
+  ]
+}

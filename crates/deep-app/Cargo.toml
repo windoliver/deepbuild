@@ -51,8 +51,8 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFCGTypes", "CFData"] }
-objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
 block2 = "0.6"
 raw-window-handle = "0.6"
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -62,6 +62,11 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMSampleBuffer"] }
 # Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot.
 gpui-pre-apple = "=0.3.9"
+# Issue #140: the color seam tags every Metal layer the app presents through, a surface wgpu
+# configures among them (the versions already in the tree).
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-core-graphics"] }
+wgpu = { version = "30", default-features = false, features = ["std", "metal"] }
+pollster = "0.4"
 
 [dev-dependencies]
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
