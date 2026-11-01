@@ -7,7 +7,7 @@ The canvas's platform seams (#140; canvas primitives: Seam and backend): the thi
 ## Where new code goes
 
 - `src/lib.rs`: the seam list, `Backend`, and the backends no other crate owns.
-- `src/network.rs`: the network seam's interface (`Transport`, `Wire`), its correct test backend and its suite. Its real backends come with the relay (#309) and the net module (#179), each in its own crate.
+- `src/network.rs`: the network seam's interface (`Transport`, `Wire`), its correct test backend and its suite. Its macOS backend is in deep-relay (#309); the web player's comes with the net module (#179).
 - A new seam's suite goes beside its interface here when no crate owns the seam; `scripts/seams.mjs` runs every seam's suite.
 - Tests: unit tests in a `#[cfg(test)]` module beside the code; the suites' proofs are in tests/acceptance/140.
 
