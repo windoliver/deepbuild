@@ -6,6 +6,7 @@
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
 // check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
 // with its split. Pure rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
+import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { checkoutOf, snapshotOf } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
@@ -29,8 +30,11 @@ export interface GateOptions {
 }
 
 /** A claim's check on one snapshot: its runs, its lane, and whether a newer claim outdated it. */
-interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean }
-interface Claim { claim: string; session: string; checkout: string | null; entries: Map<string, Entry> }
+interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean; newer?: string }
+interface Claim { claim: string; session: string; checkout: string | null; tree: string | undefined; entries: Map<string, Entry> }
+const treeOf = (checkout: string): Promise<string | undefined> => new Promise((done) => {
+  execFile('git', ['-C', checkout, 'rev-parse', 'HEAD^{tree}'], { timeout: 5000 }, (error, stdout) => done(error ? undefined : stdout.trim()));
+});
 
 const RESULT = (outcome: string | null): 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'pending' =>
   outcome === null ? 'pending' : outcome === 'passed' ? 'PASS' : outcome === 'failed' || outcome === 'overran' ? 'FAIL' : outcome === 'missing' ? 'BLOCKED' : 'INCONCLUSIVE';
@@ -54,19 +58,23 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
+  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number; budgetCost: string[]; changed: boolean }> {
     const snapshot = await snapshotOf(r.cwd);
     const checkout = await checkoutOf(r.cwd, snapshot);
     const readyAt = this.o.now();
-    const claim: Claim = { claim: r.claim, session: r.session, checkout, entries: new Map() };
+    // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
+    const tree = await treeOf(checkout);
+    const claim: Claim = { claim: r.claim, session: r.session, checkout, tree, entries: new Map() };
     const older = this.claims.get(r.session) ?? [];
+    const last = older.at(-1)?.tree;
+    const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     this.claims.set(r.session, [...older, claim]);
     // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue.
     for (const c of r.checks) {
       const key = `${r.session}\0${c.check}`;
       const queued = this.queue.get(key);
       if (queued) { queued.stale = true; this.queue.delete(key); }
-      for (const o of older) { const e = o.entries.get(c.check); if (e) e.stale = true; }
+      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; e.newer ??= r.claim; } }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: (await this.expectedMs(c.check)) ?? 0 })));
@@ -75,10 +83,19 @@ export class GateRunner {
     const budgetEnd = r.stopAt + this.o.budget_ms;
     const fast: { c: ClaimCheck; ms: number }[] = [];
     const slow: ClaimCheck[] = [];
+    // The checks the budget left to the slow lane that the hold alone would have run: known only once a check has a time.
+    const budgetCost: string[] = [];
+    const held = [...free];
     for (const t of timed) {
       free.sort((a, b) => a - b);
+      held.sort((a, b) => a - b);
       const start = free[0] ?? Infinity;
-      if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else slow.push(t.c);
+      const inHold = (held[0] ?? Infinity) + t.ms <= r.stopAt + this.o.hold_ms;
+      if (inHold) held[0]! += t.ms;
+      if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else {
+        slow.push(t.c);
+        if (inHold) budgetCost.push(t.c.check);
+      }
     }
     const runs = fast.map(async ({ c, ms }) => {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], outcome: null, running: true, stale: false };
@@ -93,7 +110,7 @@ export class GateRunner {
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([Promise.allSettled(runs), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
     void Promise.allSettled(runs).then(() => this.cleanup(claim));
-    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt };
+    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt, budgetCost, changed };
   }
 
   /** The claim's checks as they stand: each check's result, and the slow checks still to start. */
@@ -131,8 +148,19 @@ export class GateRunner {
       e.running = true;
       const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: await this.expectedMs(e.check.check) });
       e.runs.push(run);
-      void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      void this.o.ended(run).then(async (outcome) => {
+        e.outcome = outcome;
+        e.running = false;
+        // Its result still reports, as that snapshot's; the readings count what outdated it (#45).
+        if (e.newer) await this.staleRun(c.session, run, e).catch(() => undefined);
+        void this.pump();
+        this.cleanup(c);
+      });
     }
+  }
+  private async staleRun(session: string, run: string, e: Entry): Promise<void> {
+    const ts = this.o.now();
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.stale', ts, data: { session: `session:${session.replace(/[^0-9A-Za-z]/g, '')}`, run, check: e.check.check, claim: e.claim, newer_claim: e.newer! } });
   }
   /** A claim's checkout is removed once no run on it is running or queued. */
   private cleanup(c: Claim): void {
@@ -143,15 +171,15 @@ export class GateRunner {
   }
 
   /** Records a stop's held time and its split: each moment goes to the first reason that applies. */
-  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; fastEndedAt: number; replyAt: number; question: boolean; codeChanging: boolean }): Promise<void> {
+  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; fastEndedAt: number; replyAt: number; questionMs: number; codeChanging: boolean; budgetCost: string[] }): Promise<void> {
     const total = Math.max(0, r.replyAt - r.stopAt);
-    const split = r.question
-      ? { question: total, slow: 0, fast: 0, snapshot_start: 0, queue_wait: 0 }
-      : { question: 0, slow: Math.max(0, r.replyAt - r.fastEndedAt), fast: Math.max(0, Math.min(r.replyAt, r.fastEndedAt) - Math.min(r.replyAt, r.readyAt)), snapshot_start: Math.max(0, Math.min(r.replyAt, r.readyAt) - r.stopAt), queue_wait: 0 };
-    const ts = this.o.now();
+    const question = Math.min(r.questionMs, total);
+    const split = { question, slow: Math.max(0, r.replyAt - r.fastEndedAt - question), fast: Math.max(0, Math.min(r.replyAt, r.fastEndedAt) - Math.min(r.replyAt, r.readyAt)), snapshot_start: Math.max(0, Math.min(r.replyAt, r.readyAt) - r.stopAt), queue_wait: 0 };
+    // Stamped at the reply: a lane that outran its hold records this later, past whatever came after the reply.
+    const ts = r.replyAt;
     await this.o.append(this.o.core, {
-      v: 1, id: ulid(ts), kind: 'stop.held', ts,
-      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: [] },
+      v: 1, id: ulid(this.o.now()), kind: 'stop.held', ts,
+      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: r.budgetCost },
     });
   }
 }

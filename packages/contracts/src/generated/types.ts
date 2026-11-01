@@ -2040,6 +2040,48 @@ export interface CardRuleSet {
 /** check.code@1 */
 export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
 
+/** check.held@1 */
+export interface CheckHeld {
+  v: 1;
+  id: string;
+  kind: "check.held";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    check: string;
+    claim: string;
+    replaced: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** check.held_start@1 */
+export interface CheckHeldStart {
+  v: 1;
+  id: string;
+  kind: "check.held_start";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    check: string;
+    claim: string;
+    by: "pause" | "due_later" | "grace_window" | "claim" | "words";
+  };
+  evidence?: Array<string>;
+}
+
 /** check@1 */
 export interface Check {
   kind: "validity" | "command" | "journey" | "review" | "numbers" | "docs" | "draft" | "narrowing" | "document" | "physics_golden" | "media";
@@ -4043,6 +4085,28 @@ export interface RunKept {
   log_pos?: number;
   data: {
     run: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
   };
   evidence?: Array<string>;
 }

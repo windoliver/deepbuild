@@ -739,6 +739,28 @@
       "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels. One process installs a plug-in with six panels, gives each a click and pops each out onto the second display with its click's serial through `deep-show run`, failing unless every window opens; p50 includes Node's and the binary's start. The issue's 300 ms a pop-out stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "readings-recompute",
+      "command": [
+        "node",
+        "benchmarks/readings.mjs",
+        "recompute"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #45 first measurement: the merge base has no readings. One process folds a heavy month, 18,000 events, failing unless 30 days of readings recompute under 10 s. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "readings-update",
+      "command": [
+        "node",
+        "benchmarks/readings.mjs",
+        "update"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #45 first measurement: the merge base has no readings. One process folds a heavy month, 18,000 events, failing unless readings update over one new session under 1 s. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "pi-client",
       "command": [
         "node",

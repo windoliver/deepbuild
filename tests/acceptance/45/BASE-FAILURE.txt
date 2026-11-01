@@ -1,0 +1,306 @@
+Base run of the blind #45 suite on 244a3455, before any source edit.
+npx vitest run --root tests/acceptance/45 --no-file-parallelism --reporter=verbose
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/45
+
+ × hub.test.ts > the hub's Numbers > #45.d2d39357 AC2 numbers.read gives every row its source and age, and `deep numbers` prints both on each line 752ms
+   → numbers.read returns rows: expected false to be true // Object.is equality
+ × hub.test.ts > the hub's Numbers > #45.a5d4e1cd AC3 a reading 40 days old is STALE in numbers.read and `deep numbers`; one a minute old is not 622ms
+   → numbers.read returns rows: expected false to be true // Object.is equality
+ × hub.test.ts > the hub's Numbers > #45.f68b8bc0 AC12 through the hub, the turn reads 14 s, and the session 14 s, each by reason 458ms
+   → numbers.read returns rows: expected false to be true // Object.is equality
+ × hub.test.ts > the hub's Numbers > #45.4768ed8f AC6 a session a real deep-hook starts with ANTHROPIC_API_KEY set shows as billing an API key, and the key's value is nowhere in the state folder 1039ms
+   → the hook reports the key as true: expected undefined to be true // Object.is equality
+ × hub.test.ts > deep_search over MCP > #45.eb25cf40 AC11 a session's deep_search for spend returns the task's spend, $0.25, with its source and as-of time 482ms
+   → required at /subject: Add the field the schema requires.
+ × perf-lane.test.ts > AC9 in the local preflight > #45.d0a882a2 AC9 the perf lane has two readings tasks, recompute and update, each a #45 first measurement running benchmarks/readings.mjs, valid against the merge base's budgets 296ms
+   → budgets.json has a #45 task for each of the two budgets: expected [] to have a length of 2 but got +0
+ × perf-lane.test.ts > AC9 in the local preflight > #45.d0a882a2 AC9 each of the readings' perf-lane tasks runs and exits 0 0ms
+   → the readings have perf-lane tasks to run: expected 0 to be greater than 0
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 10 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  baseline.test.ts [ baseline.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/baseline.test.ts
+ ❯ baseline.test.ts:10:1
+      8| import { fileURLToPath } from 'node:url';
+      9| import { describe, expect, it } from 'vitest';
+     10| import { recomputeBaseline } from '../../../packages/readings/src/inde…
+       | ^
+     11|
+     12| const sha256 = (bytes: string | Uint8Array): string => createHash('sha…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+ FAIL  billing.test.ts [ billing.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/billing.test.ts
+ ❯ billing.test.ts:4:1
+      2| // hub are in hub.test.ts.
+      3| import { describe, expect, it } from 'vitest';
+      4| import { billingMode, planWindowTokens } from '../../../packages/readi…
+       | ^
+      5| import { ask, sessionStart, T0, usage } from './events.ts';
+      6|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  budgets.test.ts [ budgets.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/budgets.test.ts
+ ❯ budgets.test.ts:6:1
+      4| // The merge base has no readings, so the merge-base comparison is the…
+      5| import { describe, expect, it } from 'vitest';
+      6| import { readingsOf, recompute, update, type Reading, type RecordEvent…
+       | ^
+      7| import { environmentProblem, judge } from '../26/helpers.ts';
+      8| import { ask, DAY, held, MINUTE, T0, usage } from './events.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  ccusage.test.ts [ ccusage.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/ccusage.test.ts
+ ❯ ccusage.test.ts:8:1
+      6| import { fileURLToPath } from 'node:url';
+      7| import { describe, expect, it, type TestContext } from 'vitest';
+      8| import { countUsage } from '../../../packages/readings/src/index.ts';
+       | ^
+      9| import { FIXTURE } from './events.ts';
+     10|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  classify.test.ts [ classify.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/classify.test.ts
+ ❯ classify.test.ts:7:1
+      5| import { readFileSync } from 'node:fs';
+      6| import { describe, expect, it } from 'vitest';
+      7| import { checkClassifier, decisionOneInputs, isItDone, panelRows, type…
+       | ^
+      8| import { T0 } from './events.ts';
+      9|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  held.test.ts [ held.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/held.test.ts
+ ❯ held.test.ts:3:1
+      1| // #45 AC12, AC13, AC14: held time, from stop.held@1, with the issue's…
+      2| import { describe, expect, it } from 'vitest';
+      3| import { budgetCost, heldTime } from '../../../packages/readings/src/i…
+       | ^
+      4| import { ask, claimOf, finished, held, MINUTE, runOf, SECOND, started,…
+      5|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  lifecycle.test.ts [ lifecycle.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/lifecycle.test.ts
+ ❯ lifecycle.test.ts:4:1
+      2| // README defines (run.stale@1, check.held@1, check.held_start@1).
+      3| import { describe, expect, it } from 'vitest';
+      4| import { loopHolds, staleRuns } from '../../../packages/readings/src/i…
+       | ^
+      5| import { ask, claimOf, DAY, finished, held, heldPlace, heldStart, runO…
+      6|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  panel.test.ts [ panel.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/panel.test.ts
+ ❯ panel.test.ts:4:1
+      2| // `deep numbers` are tested in hub.test.ts.
+      3| import { describe, expect, it } from 'vitest';
+      4| import { panelRows, readingsOf, recompute, type Reading } from '../../…
+       | ^
+      5| import { ask, held, HOUR, MINUTE, recorded, T0, usage } from './events…
+      6|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  search.test.ts [ search.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/search.test.ts
+ ❯ search.test.ts:3:1
+      1| // #45 AC11, the logic: what deep_search gets from the readings. Over …
+      2| import { describe, expect, it } from 'vitest';
+      3| import { readingsOf, recompute, searchReadings } from '../../../packag…
+       | ^
+      4| import { ask, T0, usage } from './events.ts';
+      5|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  usage.test.ts [ usage.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <worktree>/tests/acceptance/45/usage.test.ts
+ ❯ usage.test.ts:4:1
+      2| // fixture), and how every cost says what it is.
+      3| import { describe, expect, it } from 'vitest';
+      4| import { countUsage, readingsOf, recompute } from '../../../packages/r…
+       | ^
+      5| import { ask, FIXTURE, T0, usage } from './events.ts';
+      6|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hub.test.ts > the hub's Numbers > #45.d2d39357 AC2 numbers.read gives every row its source and age, and `deep numbers` prints both on each line
+AssertionError: numbers.read returns rows: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ rowsOf hub.test.ts:27:76
+     25|     const reply = await conn.call('numbers.read', {});
+     26|     expect(reply.error, `numbers.read: ${JSON.stringify(reply.error)}`…
+     27|     expect(Array.isArray(reply.result?.rows), 'numbers.read returns ro…
+       |                                                                            ^
+     28|     return reply.result.rows as Line[];
+     29|   } finally {
+ ❯ hub.test.ts:44:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  hub.test.ts > the hub's Numbers > #45.a5d4e1cd AC3 a reading 40 days old is STALE in numbers.read and `deep numbers`; one a minute old is not
+AssertionError: numbers.read returns rows: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ rowsOf hub.test.ts:27:76
+     25|     const reply = await conn.call('numbers.read', {});
+     26|     expect(reply.error, `numbers.read: ${JSON.stringify(reply.error)}`…
+     27|     expect(Array.isArray(reply.result?.rows), 'numbers.read returns ro…
+       |                                                                            ^
+     28|     return reply.result.rows as Line[];
+     29|   } finally {
+ ❯ hub.test.ts:64:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  hub.test.ts > the hub's Numbers > #45.f68b8bc0 AC12 through the hub, the turn reads 14 s, and the session 14 s, each by reason
+AssertionError: numbers.read returns rows: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ rowsOf hub.test.ts:27:76
+     25|     const reply = await conn.call('numbers.read', {});
+     26|     expect(reply.error, `numbers.read: ${JSON.stringify(reply.error)}`…
+     27|     expect(Array.isArray(reply.result?.rows), 'numbers.read returns ro…
+       |                                                                            ^
+     28|     return reply.result.rows as Line[];
+     29|   } finally {
+ ❯ hub.test.ts:79:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  hub.test.ts > the hub's Numbers > #45.4768ed8f AC6 a session a real deep-hook starts with ANTHROPIC_API_KEY set shows as billing an API key, and the key's value is nowhere in the state folder
+AssertionError: the hook reports the key as true: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ hub.test.ts:97:129
+     95|       await agent.establish(hub, session);
+     96|       const log = await logOf(hub);
+     97|       expect(log.find((e) => e.kind === 'session.start')?.data?.billin…
+       |                                                                                                                                 ^
+     98|       const rows = await rowsOf(hub);
+     99|       expect(rows.filter((r) => r.id === 'billing.mode').map((r) => r.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  hub.test.ts > deep_search over MCP > #45.eb25cf40 AC11 a session's deep_search for spend returns the task's spend, $0.25, with its source and as-of time
+RecordError: required at /subject: Add the field the schema requires.
+ ❯ SqliteRecord.prepare ../../../packages/record/src/index.ts:435:13
+    433|     if (!result.ok) {
+    434|       const issue = result.issues[0]!;
+    435|       throw new RecordError('schema', `${issue.code} at ${issue.path |…
+       |             ^
+    436|     }
+    437|     const prepared: Prepared = {
+ ❯ SqliteRecord.appendNow ../../../packages/record/src/index.ts:475:27
+ ❯ ../../../packages/record/src/index.ts:463:96
+ ❯ SqliteRecord.append ../../../packages/record/src/index.ts:466:16
+ ❯ put hub.test.ts:19:5
+ ❯ seed ../26/helpers.ts:185:5
+ ❯ agentWorld ../26/helpers.ts:570:17
+ ❯ hub.test.ts:111:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'schema', path: '/subject', kind: undefined, id: undefined }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+ FAIL  perf-lane.test.ts > AC9 in the local preflight > #45.d0a882a2 AC9 the perf lane has two readings tasks, recompute and update, each a #45 first measurement running benchmarks/readings.mjs, valid against the merge base's budgets
+AssertionError: budgets.json has a #45 task for each of the two budgets: expected [] to have a length of 2 but got +0
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ perf-lane.test.ts:24:97
+     22|     const base = execFileSync('git', ['merge-base', 'HEAD', 'origin/ma…
+     23|     validateBudgets(current, JSON.parse(execFileSync('git', ['show', `…
+     24|     expect(tasks().map((t) => t.id), 'budgets.json has a #45 task for …
+       |                                                                                                 ^
+     25|   });
+     26|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/17]⎯
+
+ FAIL  perf-lane.test.ts > AC9 in the local preflight > #45.d0a882a2 AC9 each of the readings' perf-lane tasks runs and exits 0
+AssertionError: the readings have perf-lane tasks to run: expected 0 to be greater than 0
+ ❯ perf-lane.test.ts:29:70
+     27|   it('#45.d0a882a2 AC9 each of the readings\' perf-lane tasks runs and…
+     28|     const found = tasks();
+     29|     expect(found.length, 'the readings have perf-lane tasks to run').t…
+       |                                                                      ^
+     30|     for (const task of found) {
+     31|       const [cmd, ...args] = task.command;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/17]⎯
+
+
+ Test Files  12 failed (12)
+      Tests  7 failed (7)
+   Start at  02:38:29
+   Duration  5.17s (tests 91%, transform 6%, import 2%, worker 1%)
+
+    Isolate  12 workers spawned · ~76ms startup each (spawn + environment, per file)
+             at least ~836ms faster with isolate: false — reuses workers across files instead of one per file
+

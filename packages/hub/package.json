@@ -30,6 +30,7 @@
     "@deepbuild/gate": "0.0.0",
     "@deepbuild/leases": "0.0.0",
     "@deepbuild/reading": "0.0.0",
+    "@deepbuild/readings": "0.0.0",
     "@deepbuild/record": "0.0.0",
     "@deepbuild/resolver-decisions": "0.0.0",
     "@deepbuild/runner": "0.0.0",
