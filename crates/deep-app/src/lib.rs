@@ -40,6 +40,9 @@ pub mod trusted_input;
 
 pub mod capture;
 
+#[cfg(target_os = "macos")]
+pub mod color;
+
 pub mod brand;
 
 pub const SESSION_COUNT: usize = 1_000;

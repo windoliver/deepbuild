@@ -116,6 +116,16 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
     out
 }
 
+/// A glyph of a text's run as `texts` reports it, in document units (#381); the app's frame
+/// reports its runs the same way (#140).
+pub(crate) fn glyph_row(g: &deep_text::Glyph, role: Option<&str>) -> Value {
+    let font = deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
+    json!({
+        "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
+        "grapheme": g.grapheme, "role": role,
+    })
+}
+
 impl Painter<'_> {
     fn text(&mut self, label: &deep_text_gpui::Label, origin: [f64; 2], color: Rgb) {
         let shaped = deep_text_gpui::shape(label);
@@ -144,12 +154,7 @@ impl Painter<'_> {
                 .font_size(g.size)
                 .hint(false)
                 .fill_glyphs(std::iter::once(glyph));
-            let font =
-                deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
-            out.push(json!({
-                "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
-                "grapheme": g.grapheme, "role": role,
-            }));
+            out.push(glyph_row(g, role));
         }
         out
     }
@@ -367,6 +372,7 @@ fn draw(req: &Request) -> Result<Value, Value> {
         .map_err(|_| refused("not_written", &req.out))?;
     Ok(json!({
         "ok": true, "width": w, "height": h, "offscreen": p.scopes.offscreen, "texts": p.texts,
+        "backends": crate::backends(true),
     }))
 }
 

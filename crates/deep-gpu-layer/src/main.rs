@@ -1,6 +1,8 @@
-//! `deep-gpu run [--backend noop] [--withhold timestamps] [--planted <name>]` (issue #377;
-//! tests/acceptance/377/README.md, The surface under test; #379 adds the meter's calls,
-//! tests/acceptance/379/README.md): one JSON scenario per stdin line, `{"out": dir, "calls":
+//! `deep-gpu run [--backend noop] [--withhold <feature>]… [--validation] [--planted <name>]`
+//! (issue #377; tests/acceptance/377/README.md, The surface under test; #379 adds the meter's
+//! calls, tests/acceptance/379/README.md; #140 the GPU seam's, with `--adapters <file>` and
+//! `--quirks <file>` in test-seam builds, tests/acceptance/140/gpu/README.md): one JSON scenario
+//! per stdin line, `{"out": dir, "calls":
 //! [Call]}`, answered with one line `{"ok": true, "replies": [Reply]}`. Every call of a run uses one
 //! app: one GPU (one wgpu device), one headless window, and each scene's session from call to call.
 
@@ -10,6 +12,7 @@ mod compare;
 mod compile;
 mod conformance;
 mod effects;
+mod fixtures;
 mod frames;
 mod golden;
 mod guard;
@@ -20,11 +23,13 @@ mod liveview;
 mod plugin;
 mod reference;
 mod scene;
+mod seam;
 mod session3;
 mod status;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod timing;
+mod validation;
 mod view3d;
 mod window;
 mod worker;
@@ -33,8 +38,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 
-use deep_gpu::device::{Backend, Gpu, Withheld};
+use deep_gpu::device::{Backend, Gpu};
 use deep_gpu::guard::Declarations;
+use deep_gpu::seam::Startup;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
 use serde_json::{json, Value};
@@ -98,6 +104,13 @@ pub enum Planted {
     BudgetsEachWindow,
     StepsMainWindow,
     TellsFirstStepOnly,
+    /// #140's wrong programs (tests/acceptance/140/gpu/README.md: Planted programs).
+    WithholdsInCode,
+    PicksFirstAdapter,
+    InstallsStalePipelines,
+    ReadsPastBuffer,
+    WritesNan,
+    ReadsPixelsOnly,
 }
 
 impl Planted {
@@ -148,6 +161,12 @@ impl Planted {
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
             "tells_first_step_only" => Planted::TellsFirstStepOnly,
+            "withholds_in_code" => Planted::WithholdsInCode,
+            "picks_first_adapter" => Planted::PicksFirstAdapter,
+            "installs_stale_pipelines" => Planted::InstallsStalePipelines,
+            "reads_past_buffer" => Planted::ReadsPastBuffer,
+            "writes_nan" => Planted::WritesNan,
+            "reads_pixels_only" => Planted::ReadsPixelsOnly,
             _ => return None,
         })
     }
@@ -175,6 +194,11 @@ pub struct App {
     pub scenes: HashMap<String, Arc<Scene>>,
     /// Each scene session's UI side, routed GPUI's surface reports.
     pub watched: HashMap<String, deep_gpu::view::Ui>,
+    /// The compile-thread job held open, and how many jobs were held (#140).
+    pub held: Option<compile::Held>,
+    pub jobs: u64,
+    /// A validation lane's run (`--validation`, #140).
+    pub validation: bool,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -327,6 +351,12 @@ impl App {
             Some("conformance") => conformance::call(self, out, call),
             Some("render") => frames::render(self, call),
             Some("compile") => compile::call(self, call),
+            Some("lose_device") => compile::lose_device(self),
+            Some("release_job") => compile::release_job(self),
+            Some("gated") => seam::gated(self, call),
+            Some("seam_suite") => seam::seam_suite(self, out, call),
+            Some("validate") => validation::validate(self, out, call),
+            Some("check_render") => validation::check_render(self, call),
             Some("compare") => compare::compare(self, call),
             Some("declare_dark") => compare::declare(self, call),
             Some("decisions") => compare::decisions(self),
@@ -397,7 +427,8 @@ fn main() {
     if args.next().as_deref() != Some("run") {
         bad_input();
     }
-    let (mut backend, mut planted, mut withheld) = (Backend::Gpu, None, Withheld::default());
+    let (mut backend, mut planted) = (Backend::Gpu, None);
+    let (mut startup, mut validation) = (Startup::default(), false);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--backend" => match args.next().as_deref() {
@@ -408,11 +439,34 @@ fn main() {
                 Some(p) => planted = Some(p),
                 None => bad_input(),
             },
-            "--withhold" => match args.next().as_deref() {
-                Some("timestamps") => withheld.timestamps = true,
+            "--withhold" => match args.next().as_deref().and_then(deep_gpu::seam::row) {
+                Some(r) => startup.withhold.push(r.feature),
+                None => bad_input(),
+            },
+            "--validation" => validation = true,
+            #[cfg(feature = "test-seam")]
+            "--adapters" => match args.next().as_deref().and_then(seam::test_adapters) {
+                Some(a) => startup.adapters = Some(a),
+                None => bad_input(),
+            },
+            #[cfg(feature = "test-seam")]
+            "--quirks" => match args.next().map(std::fs::read_to_string) {
+                Some(Ok(text)) => match deep_gpu::seam::Quirks::parse(&text) {
+                    Ok(q) => startup.quirks = q,
+                    Err(_) => bad_input(),
+                },
                 _ => bad_input(),
             },
             _ => bad_input(),
+        }
+    }
+    startup.picks_first = planted == Some(Planted::PicksFirstAdapter);
+    startup.withholds_in_code = planted == Some(Planted::WithholdsInCode);
+    if validation {
+        // Metal reads these as the device opens, so they're set before it does (README: The
+        // validation lane).
+        for var in validation::ENV {
+            std::env::set_var(var, "1");
         }
     }
     #[cfg(target_os = "macos")]
@@ -426,13 +480,23 @@ fn main() {
     }
     let worker = match Worker::start(
         backend,
-        withheld,
+        &startup,
         planted == Some(Planted::SubmitsOnCompletion),
         planted == Some(Planted::ReleasesBeforeCompletion),
     ) {
         Ok(w) => w,
-        Err(e) => {
-            println!("{}", json!({"ok": false, "code": "no_device", "reason": e}));
+        Err(r) if r.code == "missing_feature" => {
+            println!(
+                "{}",
+                json!({"ok": false, "code": r.code, "adapter": r.adapter, "missing": r.missing, "reason": r.reason})
+            );
+            std::process::exit(1);
+        }
+        Err(r) => {
+            println!(
+                "{}",
+                json!({"ok": false, "code": "no_device", "reason": r.reason})
+            );
             std::process::exit(1);
         }
     };
@@ -460,6 +524,9 @@ fn main() {
         window: None,
         scenes: HashMap::new(),
         watched: HashMap::new(),
+        held: None,
+        jobs: 0,
+        validation,
     };
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();

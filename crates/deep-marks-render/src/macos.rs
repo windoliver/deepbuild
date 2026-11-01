@@ -265,6 +265,9 @@ struct Session {
     /// The resampled copies the frame on screen draws, and how many the session has made.
     resampled: HashMap<ResampleKey, Arc<RenderImage>>,
     resamples: u64,
+    /// Each text@1 item's shown string and glyph run on the presented frame, as `raster`
+    /// reports them (#140: the app and headless shape the same runs).
+    texts: Map<String, Value>,
 }
 
 fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
@@ -644,13 +647,28 @@ impl Renderer {
                     item,
                     spec,
                     origin,
+                    role,
                     color,
                     runs,
-                    ..
                 } => {
                     let Some(label) = label_of(spec) else {
                         return Err(refused("bad_font", &format!("items/{item}/params/font")));
                     };
+                    // A text@1 item's own text; a mark set's or an axis's labels are `<id>#…`.
+                    if !item.contains('#') {
+                        let glyphs: Vec<Value> = deep_text_gpui::shape(&label)
+                            .glyphs
+                            .iter()
+                            .map(|g| {
+                                let (role, _) =
+                                    scene::run_paint(runs, g.grapheme, role.as_deref(), *color);
+                                crate::raster::glyph_row(g, role)
+                            })
+                            .collect();
+                        session
+                            .texts
+                            .insert(item.clone(), json!({"shown": spec.text, "glyphs": glyphs}));
+                    }
                     push(Draw::Text {
                         label,
                         origin: point(px(origin[0] as f32), px(origin[1] as f32)),
@@ -658,7 +676,39 @@ impl Renderer {
                         runs: runs.iter().map(|r| (r.from..r.to, hsla(r.color))).collect(),
                     });
                 }
-                Mark::Shape { item, .. } => return Err(gpui_lacks(item)),
+                Mark::Shape {
+                    item,
+                    verbs,
+                    fill,
+                    stroke,
+                } => {
+                    // #140: a path's solid fill and solid stroke as GPUI paths, tessellated as
+                    // #380's lines are; anything else waits for Vello GPU (#385).
+                    let lines = path::flatten(verbs, path::tolerance(bucket));
+                    let mut paint = |paint: &Fill, opacity: f64, tessellate: &dyn Fn(&mut Mesh)| {
+                        let Fill::Solid(c) = paint else {
+                            return Err(gpui_lacks(item));
+                        };
+                        let mut mesh = Mesh::default();
+                        tessellate(&mut mesh);
+                        push(Draw::Path {
+                            mesh: Arc::new(mesh),
+                            offset: [0., 0.],
+                            color: hsla(*c).opacity(opacity as f32),
+                        });
+                        Ok(())
+                    };
+                    if let Some((f, opacity)) = fill {
+                        paint(f, *opacity, &|mesh| path::fill(&lines, mesh))?;
+                    }
+                    if let Some(line) = stroke.as_ref().filter(|l| l.dashes.is_none()) {
+                        paint(&line.paint, line.opacity, &|mesh| {
+                            path::stroke(&lines, line.width, mesh)
+                        })?;
+                    } else if stroke.is_some() {
+                        return Err(gpui_lacks(item));
+                    }
+                }
                 Mark::Image {
                     item,
                     asset,
@@ -1003,6 +1053,7 @@ impl Renderer {
             resamples: 0,
             compiled: None,
             last_layers: BTreeMap::new(),
+            texts: Map::new(),
         }
     }
 
@@ -1122,7 +1173,7 @@ impl Renderer {
         })();
         self.close(session);
         match result {
-            Ok(()) => json!({"ok": true, "steps": out}),
+            Ok(()) => json!({"ok": true, "steps": out, "backends": crate::backends(false)}),
             Err(refusal) => refusal,
         }
     }
@@ -1154,6 +1205,7 @@ impl Renderer {
                         Ok(()) => json!({
                             "ok": true, "width": image.width(), "height": image.height(),
                             "marks": session.snapshot["marks"], "legend": session.snapshot["legend"],
+                            "texts": session.texts, "backends": crate::backends(false),
                         }),
                         Err(_) => refused("not_written", out),
                     },
@@ -1223,18 +1275,25 @@ fn status_draws(
     snapshot
 }
 
-/// R2's marks GPUI's paths can't draw: gradients past R1's two stops, stars, arcs and gradient
-/// strokes, soft masks, group opacity and adjusted images, which Vello GPU takes on (#385). Until
-/// then the live view refuses them, naming the item (technical design: Platform seams).
+/// R2's marks GPUI's paths can't draw: gradients past R1's two stops, gradient fills and strokes
+/// of paths, dashed strokes, soft masks, group opacity and adjusted images, which Vello GPU takes
+/// on (#385). Until then the live view refuses them, naming the item (technical design: Platform
+/// seams).
 fn gpui_lacks(item: &str) -> Value {
     refused("module_missing", &format!("items/{item}"))
 }
 
 fn gpui_draws(frame: &scene::Frame) -> Result<(), Value> {
     for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+        let solid = |f: &Fill| matches!(f, Fill::Solid(_));
         let lacks = match &drawn.mark {
-            Mark::Shape { .. }
-            | Mark::Rect {
+            Mark::Shape { fill, stroke, .. } => {
+                fill.as_ref().is_some_and(|(f, _)| !solid(f))
+                    || stroke
+                        .as_ref()
+                        .is_some_and(|l| !solid(&l.paint) || l.dashes.is_some())
+            }
+            Mark::Rect {
                 fill: Fill::Ramp(_),
                 ..
             } => true,

@@ -157,6 +157,18 @@
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot once GPUI's command buffer completes."
+        },
+        "objc2-quartz-core": {
+          "spec": "^0.3",
+          "why": "Issue #140: the color seam reads and sets a Metal layer's colorspace; already in GPUI's tree."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Issue #140: waits for wgpu's adapter and device requests in the color check; already in deep-gpu's tree."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #140: the color check presents through a surface wgpu configures with its Srgb color space; the version deep-gpu uses."
         }
       }
     },
@@ -557,6 +569,10 @@
         "icu_segmenter": {
           "spec": "^2.3",
           "why": "Issue #381: UAX #14 at Unicode 17.0.0 (its `unstable` 17.0 state machine), fed to parley's layout through its line-break override, since parley's own call still runs 15.1's rules; already in parley's tree."
+        },
+        "deep-canvas-seams": {
+          "spec": "* path=../deep-canvas-seams",
+          "why": "Issue #140: the fonts backend names itself with the seams' backend type."
         }
       }
     },
@@ -701,6 +717,10 @@
         "deep-marks-gpui": {
           "spec": "* path=../deep-marks-gpui",
           "why": "Issue #380: paints a path mark's mesh, shared with the app's line."
+        },
+        "deep-canvas-seams": {
+          "spec": "* path=../deep-canvas-seams",
+          "why": "Issue #140: every result names the seams' backends that fed it."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -859,6 +879,10 @@
         "deep-canvas-effects": {
           "spec": "* path=../deep-canvas-effects",
           "why": "Issue #380: the effects module joins R2's build set beside scene3d."
+        },
+        "deep-canvas-seams": {
+          "spec": "* path=../deep-canvas-seams",
+          "why": "Issue #140: the network seam's suite and the backends every reply names."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -933,6 +957,14 @@
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #377: the frame's closed list of places, which the registry seals and the GPU layer orders render modules' passes by."
+        },
+        "deep-canvas-seams": {
+          "spec": "* path=../deep-canvas-seams",
+          "why": "Issue #140: the GPU seam's backend type, shared with every seam."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #140: the GPU seam's feature table, quirk table and adapter as JSON; already in the workspace tree."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1295,6 +1327,14 @@
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "The slot checks read the frozen API digests and error codes the contracts publish."
+        }
+      }
+    },
+    "crates/deep-canvas-seams/Cargo.toml": {
+      "dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
         }
       }
     }

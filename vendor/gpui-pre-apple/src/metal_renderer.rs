@@ -6,7 +6,6 @@ use gpui::{
     AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path, Point,
     PrimitiveBatch, ScaledPixels, Scene, Size, point, size,
 };
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 use image::RgbaImage;
 use objc2::runtime::AnyObject;
 
@@ -74,6 +73,48 @@ pub mod gpu_ledger {
         GPU_NS.fetch_add(ns, Ordering::SeqCst);
         COMPLETED.fetch_add(1, Ordering::SeqCst);
         ns
+    }
+}
+
+/// DeepBuild patch (windoliver/deepbuild#140): the color seam's checks on a window's layer. The
+/// planted twin leaves every window layer's colorspace nil, as GPUI alone does; and the next frame
+/// a window draws can be read back from its layer's drawable, as the compositor receives it.
+pub mod layer_colorspace {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    use image::RgbaImage;
+
+    static UNTAGGED: AtomicBool = AtomicBool::new(false);
+    static READ_NEXT: AtomicBool = AtomicBool::new(false);
+    static READ: Mutex<Option<RgbaImage>> = Mutex::new(None);
+
+    pub fn plant_untagged() {
+        UNTAGGED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn untagged() -> bool {
+        UNTAGGED.load(Ordering::SeqCst)
+    }
+
+    /// Reads back the next frame any window draws, from its layer's drawable.
+    pub fn read_next_frame() {
+        READ_NEXT.store(true, Ordering::SeqCst);
+    }
+
+    /// The frame read back, once a window has drawn one since `read_next_frame`.
+    pub fn take_frame() -> Option<RgbaImage> {
+        READ.lock().ok()?.take()
+    }
+
+    pub(crate) fn reading() -> bool {
+        READ_NEXT.swap(false, Ordering::SeqCst)
+    }
+
+    pub(crate) fn read(frame: RgbaImage) {
+        if let Ok(mut read) = READ.lock() {
+            *read = Some(frame);
+        }
     }
 }
 
@@ -325,6 +366,14 @@ impl MetalRenderer {
         let objc2_layer: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
         objc2_layer.setAllowsNextDrawableTimeout(false);
         objc2_layer.setNeedsDisplayOnBoundsChange(true);
+        // DeepBuild patch (windoliver/deepbuild#140): the layer holds sRGB-encoded BGRA8, so it is
+        // tagged sRGB and the compositor never reinterprets it; GPUI alone leaves it nil.
+        if !layer_colorspace::untagged() {
+            let srgb = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
+                objc2_core_graphics::kCGColorSpaceSRGB
+            }));
+            objc2_layer.setColorspace(srgb.as_deref());
+        }
         // UIKit sizes a view's backing layer itself; only AppKit-hosted
         // layers need to track their superlayer's bounds.
         #[cfg(target_os = "macos")]
@@ -658,6 +707,11 @@ impl MetalRenderer {
             (viewport_size.width.ceil() as i32).into(),
             (viewport_size.height.ceil() as i32).into(),
         );
+        // DeepBuild patch (windoliver/deepbuild#140): a drawable the color check reads back.
+        let reading = layer_colorspace::reading();
+        if reading {
+            layer.set_framebuffer_only(false);
+        }
         let drawable = if let Some(drawable) = layer.next_drawable() {
             drawable
         } else {
@@ -676,6 +730,7 @@ impl MetalRenderer {
             }
         };
 
+        let texture = reading.then(|| drawable.texture().to_owned());
         if self.presents_with_transaction {
             command_buffer.commit();
             command_buffer.wait_until_scheduled();
@@ -683,6 +738,13 @@ impl MetalRenderer {
         } else {
             command_buffer.present_drawable(drawable);
             command_buffer.commit();
+        }
+        if let Some(texture) = texture {
+            command_buffer.wait_until_completed();
+            match read_texture_to_image(&texture) {
+                Ok(frame) => layer_colorspace::read(frame),
+                Err(error) => log::error!("failed to read the drawable back: {error:#}"),
+            }
         }
     }
 
@@ -1565,7 +1627,7 @@ fn new_command_encoder_for_texture<'a>(
     command_encoder
 }
 
-#[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+// DeepBuild patch (windoliver/deepbuild#140): also the color check's drawable read-back, in any build.
 fn read_texture_to_image(texture: &metal::TextureRef) -> Result<RgbaImage> {
     let width = texture.width() as u32;
     let height = texture.height() as u32;

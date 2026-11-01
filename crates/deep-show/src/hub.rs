@@ -237,6 +237,10 @@ pub struct Startup {
     pub shapes_on_ui_thread: bool,
     /// #856: the planted shaped-run cache per document.
     pub run_per_document: bool,
+    /// #140: the planted network backend the network seam's suite runs instead of the correct one.
+    pub network: Option<crate::seams::NetFault>,
+    /// #140: the planted card that treats unknown occlusion as unobscured.
+    pub ignores_unknown_occlusion: bool,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -381,6 +385,11 @@ pub struct PatchCall {
 pub enum Call {
     /// #379: the cost model's micro-benchmark.
     Costs,
+    /// #140: the network seam's conformance suite.
+    NetworkSuite {
+        messages: u64,
+        seed: u64,
+    },
     /// #855: rekeys the process's content keys under a hash, once.
     Migrate(deep_canvas::schedule::HashVersion),
     /// #855: computes every content key of a session's revision afresh, `runs` times, timed.
@@ -491,6 +500,17 @@ pub enum Call {
         window: Option<String>,
         agent: bool,
     },
+    /// The platform's report that a window is, or is no longer, frontmost (#140).
+    Frontmost {
+        window: String,
+        front: bool,
+        agent: bool,
+    },
+    /// A window of another app the test window backend stacks above the app's (#140); with no
+    /// occlusion report the backend never tells the card about it.
+    TestWindow,
+    /// The window and input backends' capability table (#140).
+    WindowCaps,
     /// The OS's report of the thermal state: whether the Mac is hot (#400).
     Thermal {
         hot: bool,
@@ -863,7 +883,10 @@ impl<'a> Hub<'a> {
                 scenario.displays.clone(),
                 scenario.window,
                 scenario.layout.as_ref(),
-                scenario.placement_planted,
+                crate::placement::Planted {
+                    ignores_unknown_occlusion: startup.ignores_unknown_occlusion,
+                    ..scenario.placement_planted
+                },
             ),
             terms: crate::terminal::Terms::default(),
             capturing: crate::capture::Capturing::restore(
@@ -1184,9 +1207,11 @@ impl<'a> Hub<'a> {
             self.vias.insert(show.doc.clone(), show.via.clone());
         }
         let mut reply = match call {
-            Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
+            Call::Show(show) if self.shared.contains_key(&show.doc) => {
+                crate::seams::named(self.show_shared(show))
+            }
             Call::Show(show) => {
-                let reply = self.show(show);
+                let reply = crate::seams::named(self.show(show));
                 let rev = self.current(&show.doc).map(|r| r.rev);
                 let seen = self.shown_at.entry(show.doc.clone()).or_default();
                 if let Some(rev) = rev.filter(|r| seen.last().is_none_or(|(_, l)| l != r)) {
@@ -1202,6 +1227,9 @@ impl<'a> Hub<'a> {
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
+            Call::NetworkSuite { messages, seed } => {
+                crate::seams::network(*messages, *seed, self.startup.network)
+            }
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fixtures => self.fixtures_reply(),
@@ -1276,6 +1304,13 @@ impl<'a> Hub<'a> {
                 self.placement.activate(self.now, window.as_deref(), *agent)
             }
             Call::Thermal { hot, agent } => self.placement.thermal(self.now, *hot, *agent),
+            Call::Frontmost {
+                window,
+                front,
+                agent,
+            } => self.placement.frontmost(self.now, window, *front, *agent),
+            Call::TestWindow => json!({}),
+            Call::WindowCaps => crate::placement::caps_json(),
             Call::HideWindow {
                 window,
                 hidden,

@@ -21,6 +21,9 @@ path = "src/main.rs"
 [features]
 test-pool = ["deep-gpu/test-pool"]
 test-meter = ["dep:deep-canvas-test-modules"]
+# `test-seam` (#140) adds `--adapters`, `--quirks` and the validation lane's and error channel's
+# test fixtures; no shipped build has them.
+test-seam = []
 
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }

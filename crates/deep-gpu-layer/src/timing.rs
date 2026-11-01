@@ -15,10 +15,9 @@ const SIZE: u32 = 1024;
 pub fn adapter(app: &mut App) -> Value {
     let backend = app.backend;
     app.worker.call(move |state| {
-        let withheld = state.gpu.withheld();
         let d = state.gpu.device();
         let ts = d.timestamps;
-        json!({
+        let mut reply = json!({
             "backend": match backend {
                 Backend::Noop => "noop",
                 Backend::Gpu if cfg!(target_os = "macos") => "metal",
@@ -29,8 +28,10 @@ pub fn adapter(app: &mut App) -> Value {
                 "query": ts.query, "inside_encoders": ts.inside_encoders, "inside_passes": ts.inside_passes,
                 "period_ns": ts.period_ns,
             },
-            "withheld": if withheld.timestamps { vec!["timestamps"] } else { Vec::new() },
-        })
+            "withheld": [],
+        });
+        crate::seam::adapter(&state.gpu, &mut reply);
+        reply
     })
 }
 

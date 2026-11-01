@@ -1,0 +1,14 @@
+[package]
+name = "deep-canvas-seams"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #140: the canvas's platform seams (canvas primitives: Seam and backend): each seam's name,
+# the interfaces a backend implements where the seam has no other crate, and the conformance
+# suites a platform's backend passes before it ships. Named deep-canvas* so the canvas lint reads
+# it and the wasm32 lane builds it: the web is a platform too.
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }

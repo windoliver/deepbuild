@@ -29,6 +29,19 @@ fn refused(code: &str, path: &str) -> Value {
     json!({"ok": false, "code": code, "path": path})
 }
 
+/// The seams' backends that fed a result (#140): the fonts and the CPU always, and the headless
+/// renderer when Vello CPU drew it.
+pub(crate) fn backends(headless: bool) -> Value {
+    let mut fed = vec![
+        ("fonts", deep_text::FONTS),
+        ("cpu", deep_canvas_seams::cpu(std::env::consts::ARCH)),
+    ];
+    if headless {
+        fed.push(("headless", deep_canvas_seams::HEADLESS));
+    }
+    deep_canvas_seams::json(&fed)
+}
+
 /// The look's roles in a theme.
 fn palette_of(look: &Look, theme: Theme) -> &Palette {
     match theme {
@@ -288,11 +301,22 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             }
             Some(Value::String(p)) if p == "mask_encoded_luma" => (Planted::None, true, false),
             Some(Value::String(p)) if p == "shapes_spans_apart" => (Planted::None, false, true),
+            Some(Value::String(p)) if p == "reads_process_locale" => (Planted::None, false, false),
             Some(_) => return None,
         };
+        let mut doc = doc(input.get("doc"))?;
+        // #140's wrong program: the number formatter takes its marks from the process's locale.
+        if input.get("planted").and_then(Value::as_str) == Some("reads_process_locale") {
+            let lang = ["LC_ALL", "LC_NUMERIC", "LANG"]
+                .iter()
+                .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+                .unwrap_or_default();
+            let locale = lang.split('.').next().unwrap_or("").replace('_', "-");
+            doc.insert("locale".into(), Value::String(locale));
+        }
         let request = raster::Request {
             out: input.get("out")?.as_str()?.to_string(),
-            doc: doc(input.get("doc"))?,
+            doc,
             view: view(input.get("view"))?,
             t: match input.get("t") {
                 None => 0,
