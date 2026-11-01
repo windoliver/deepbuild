@@ -2980,7 +2980,9 @@ export class Core {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd });
       return true;
     }
-    return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
+    // A Codex subagent's SubagentStart names the child's own rollout, whose file ends in its agent_id, with the root's session ID.
+    const child = meta.agent === 'codex' && meta.fields?.agent_id && transcript.endsWith(`-${meta.fields.agent_id}.jsonl`);
+    return (child || transcript === session.transcript) && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
   }
 
   /** Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none. */

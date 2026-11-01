@@ -443,4 +443,17 @@ describe('a subagent\'s stop', () => {
     expect(stop.data.subagent).toBeUndefined();
     expect(stop.data.did_work).toBe(true);
   }, 120_000);
+
+  it('a SubagentStart naming its own rollout, as Codex 0.160 sends it, is the root\'s reading; a rollout that is not its agent\'s is refused', async () => {
+    const h = makeHome();
+    const hub = await startHub(h);
+    const t = newThread(h);
+    await begin(h, t);
+    const child = randomUUID();
+    await codexHook(h, t, 'SubagentStart', { agent_id: child, agent_type: 'default', transcript_path: join(h.codexHome, 'sessions', `rollout-2026-10-31T17-50-13-${child}.jsonl`) });
+    await codexHook(h, t, 'SubagentStart', { agent_id: 'forged', agent_type: 'default', transcript_path: join(h.codexHome, 'sessions', `rollout-${child}.jsonl`) });
+    await codexHook(h, t, 'Stop', {}, 60_000);
+    const said = await waitFor(async () => { const r = readings(await allEvents(hub), t.id).filter((x) => x.startsWith('SubagentStart')); return r.length ? r : undefined; }, 10_000, 'the reading');
+    expect(said).toEqual([`SubagentStart: subagent ${child} (default) started`]);
+  }, 120_000);
 });
