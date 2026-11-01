@@ -170,6 +170,14 @@ pub enum Planted {
     BackgroundAtLivePriority,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
     AcceptsEverySampleRate8To192k,
+    /// #411: `items/<id>/modifiers/<k>#out` reads the stack's final result for every k.
+    PrefixReadsFinal,
+    /// #411: a why names its canvas module and operator and no document field or default.
+    WhyNamesOperatorOnly,
+    /// #411: a why lists only the first write to its value.
+    WhyNamesKeyOnly,
+    /// #411: deep_query's cut keeps the first rows by ID, parents or not.
+    CutsByRowOrder,
     /// #488: `rate`'s index forms t × p in i64.
     FrameIndexI64Product,
     /// #488: `rate`'s index divides truncating toward 0.
@@ -398,6 +406,10 @@ pub struct PatchCall {
 }
 
 pub enum Call {
+    /// #411: deep_query, and deep.canvas.read for a check plug-in.
+    SceneQuery(Box<crate::query::Query>),
+    /// #411: a deep_show or deep show call in a diagnostic mode.
+    Mode(Box<Show>, String),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #855: rekeys the process's content keys under a hash, once.
@@ -1184,6 +1196,20 @@ impl<'a> Hub<'a> {
             .find(|r| r.state == "current")
     }
 
+    /// A deep_show or deep show call's reply, on a shared document or a sole writer's.
+    pub fn show_call(&mut self, show: &Show) -> Value {
+        if self.shared.contains_key(&show.doc) {
+            return self.show_shared(show);
+        }
+        let reply = self.show(show);
+        let rev = self.current(&show.doc).map(|r| r.rev);
+        let seen = self.shown_at.entry(show.doc.clone()).or_default();
+        if let Some(rev) = rev.filter(|r| seen.last().is_none_or(|(_, l)| l != r)) {
+            seen.push((self.now, rev));
+        }
+        reply
+    }
+
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
         // #856's planted cache per document: each document's runs are keyed apart.
@@ -1205,21 +1231,17 @@ impl<'a> Hub<'a> {
             self.vias.insert(show.doc.clone(), show.via.clone());
         }
         let mut reply = match call {
-            Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
-            Call::Show(show) => {
-                let reply = self.show(show);
-                let rev = self.current(&show.doc).map(|r| r.rev);
-                let seen = self.shown_at.entry(show.doc.clone()).or_default();
-                if let Some(rev) = rev.filter(|r| seen.last().is_none_or(|(_, l)| l != r)) {
-                    seen.push((self.now, rev));
-                }
-                reply
+            Call::Show(show) => self.show_call(show),
+            Call::Mode(show, mode) => {
+                self.vias.insert(show.doc.clone(), show.via.clone());
+                self.mode_show(show, mode)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
