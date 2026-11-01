@@ -1,0 +1,201 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-498-62f1c5/agent-a35af01f170e327e3/tests/acceptance/498/decode
+
+ ❯ caps.test.ts (3 tests | 3 failed) 73997ms
+   ❯ AC2 an audio file one second over its duration cap and an image one pixel over its pixel cap are refused naming the cap (1)
+     × AC2 with caps of 10 s and 10,000 pixels, an 11 s WAV and an 11 s AAC file are refused naming max_duration, a 73 × 137 PNG naming max_pixels, on import and on decode; a 10 s WAV and a 100 × 100 PNG are admitted 2084ms
+   ❯ AC2 a file that points at a URL is refused with no connection made (1)
+     × AC2 an HLS playlist and a QuickTime movie whose data reference is a URL, both pointing at a local listener, are refused naming the URL on import and on decode, and the listener sees no connection 303ms
+   ❯ AC2 every audio, image and video asset the media module decodes goes through the decode worker (1)
+     × AC2 a WAV, a PNG and an MP4 are each probed on import and decoded in a decode worker, a process apart from deep-show's own, which ran that job on that file 402ms
+ ❯ fate.test.ts (2 tests | 2 failed) 70590ms
+   ❯ AC3 FATE's MOV edit-list samples: the first video and audio times FATE's reference outputs give (1)
+     × AC3 each edit-list sample's first decoded frame is at FATE's first time, and for H.264 and HEVC it is FATE's first frame by the MD5 of its planes; twofields_packet's first video and audio are both at FATE's first times; mov_neg_first_pts_discard starts at FATE's start_time 1470ms
+   ❯ AC3 FATE's AAC priming sample: the first audio time FATE's reference output gives (1)
+     × AC3 aac-2048-priming.mov decodes with its first kept sample at FATE's first packet time plus its skipped samples (0 s), at FATE's rate, and those samples are FFmpeg's own decode from there 753ms
+ ❯ encode.test.ts (1 test | 1 failed) 75994ms
+   ❯ AC6 the decode worker probes, decodes and makes proxies and never encodes; an export's record names the encode tool's own process (1)
+     × AC6 a clip is probed, decoded and proxied in decode workers and exported to H.264: the receipt's encoder is an encode tool process, apart from every decode worker and deep-show, that ran the encode; no decode worker ran an encode; the delivery is a whole MP4 by its hash 2957ms
+ ❯ color.test.ts (1 test | 1 failed) 56623ms
+   ❯ AC8 untagged color is assumed under one written rule and named, and decodes true to it (1)
+     × AC8 an untagged 1080p MP4 of 75% bars probes with color.assumed naming the matrix and range (BT.709, limited) and decodes within ±2 code values of the bars; an untagged 480-line one assumes BT.601; a tagged BT.709 one assumes nothing 2854ms
+ ❯ times.test.ts (1 test | 1 failed) 8954ms
+   ❯ AC7 every frame's presentation time as an exact rational in the stream's own time base (1)
+     × AC7 a 30 fps MP4 at time base 1/15360 probes with frame k at (512k + 1)/15360 s and frame_rate 30/1; a 60 fps screen recording at 1/600 whose frame 10 lasts three frames probes with every frame's time and frame_rate variable 1774ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  caps.test.ts > AC2 an audio file one second over its duration cap and an image one pixel over its pixel cap are refused naming the cap > AC2 with caps of 10 s and 10,000 pixels, an 11 s WAV and an 11 s AAC file are refused naming max_duration, a 73 × 137 PNG naming max_pixels, on import and on decode; a 10 s WAV and a 100 × 100 PNG are admitted
+AssertionError: the caps: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ run caps.test.ts:75:40
+ ❯ caps.test.ts:76:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  caps.test.ts > AC2 a file that points at a URL is refused with no connection made > AC2 an HLS playlist and a QuickTime movie whose data reference is a URL, both pointing at a local listener, are refused naming the URL on import and on decode, and the listener sees no connection
+AssertionError: files that point at a URL: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check caps.test.ts:103:29
+ ❯ caps.test.ts:116:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  caps.test.ts > AC2 every audio, image and video asset the media module decodes goes through the decode worker > AC2 a WAV, a PNG and an MP4 are each probed on import and decoded in a decode worker, a process apart from deep-show's own, which ran that job on that file
+AssertionError: one asset of each kind: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check caps.test.ts:137:32
+ ❯ caps.test.ts:156:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  color.test.ts > AC8 untagged color is assumed under one written rule and named, and decodes true to it > AC8 an untagged 1080p MP4 of 75% bars probes with color.assumed naming the matrix and range (BT.709, limited) and decodes within ±2 code values of the bars; an untagged 480-line one assumes BT.601; a tagged BT.709 one assumes nothing
+AssertionError: the bars: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check color.test.ts:68:27
+ ❯ color.test.ts:71:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  encode.test.ts > AC6 the decode worker probes, decodes and makes proxies and never encodes; an export's record names the encode tool's own process > AC6 a clip is probed, decoded and proxied in decode workers and exported to H.264: the receipt's encoder is an encode tool process, apart from every decode worker and deep-show, that ran the encode; no decode worker ran an encode; the delivery is a whole MP4 by its hash
+AssertionError: probe, decode, proxy and export: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check encode.test.ts:33:32
+ ❯ encode.test.ts:93:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  fate.test.ts > AC3 FATE's MOV edit-list samples: the first video and audio times FATE's reference outputs give > AC3 each edit-list sample's first decoded frame is at FATE's first time, and for H.264 and HEVC it is FATE's first frame by the MD5 of its planes; twofields_packet's first video and audio are both at FATE's first times; mov_neg_first_pts_discard starts at FATE's start_time
+AssertionError: the FATE edit-list samples: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check fate.test.ts:92:27
+ ❯ fate.test.ts:98:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  fate.test.ts > AC3 FATE's AAC priming sample: the first audio time FATE's reference output gives > AC3 aac-2048-priming.mov decodes with its first kept sample at FATE's first packet time plus its skipped samples (0 s), at FATE's rate, and those samples are FFmpeg's own decode from there
+AssertionError: the AAC priming sample: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check fate.test.ts:118:27
+ ❯ fate.test.ts:136:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  times.test.ts > AC7 every frame's presentation time as an exact rational in the stream's own time base > AC7 a 30 fps MP4 at time base 1/15360 probes with frame k at (512k + 1)/15360 s and frame_rate 30/1; a 60 fps screen recording at 1/600 whose frame 10 lasts three frames probes with every frame's time and frame_rate variable
+AssertionError: the two probes: deep-show run answers the scenario ok (the scenario's `decode_caps` and `planted` fields and the `media_import`, `media_decode`, `media_proxy`, `media_export` and `workers` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:165:176
+    163|   expect(out.length, `${what}: one output line for the one scenario li…
+    164|   const answer = obj(JSON.parse(out[0]!) as JsonValue, `${what}: the a…
+    165|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                ^
+    166|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    167|   expect(replies.length, `${what}: one reply per call`).toBe(calls.len…
+ ❯ check times.test.ts:67:27
+ ❯ times.test.ts:70:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  8 failed (8)
+   Start at  10:27:29
+   Duration  290.38s (tests 99%)
+
