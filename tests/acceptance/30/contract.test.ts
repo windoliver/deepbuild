@@ -1,7 +1,7 @@
 // AC19, the run's half: for a check with a numeric contract (#28), the runner reads from the tool's own report, per
 // output, how many elements were compared and the largest error, never from the test's printed output; a value the
 // report doesn't give is missing, never complete. The claim's INVALID naming the output, and its twin counting, are
-// the gate runner's (#29); the timing check's flushed repeats are #87's; both in blocked.test.ts.
+// the gate runner's (#29), in claims.test.ts; the timing check's flushed repeats are #87's, in blocked.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCommandCheck, type CommandRun } from '../../../packages/checks-command/src/index.ts';
 import type { NumericContract } from '../../../packages/verdicts/src/index.ts';

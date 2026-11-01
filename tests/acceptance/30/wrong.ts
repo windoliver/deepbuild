@@ -9,10 +9,17 @@ import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '../.
 import type { CommandRun } from '../../../packages/checks-command/src/index.ts';
 import { filesIn } from './helpers.ts';
 
-/** AC14: a scrub of every passed value, short and plain ones included. */
+/**
+ * AC14: a scrub of every passed value, short and plain ones included, over everything the run keeps: its output,
+ * and each failure's file, message and stack (so its place reads `src/cart.[redacted].ts:30` too).
+ */
 export function scrubsEveryPassedValue(r: CommandRun, passed: Record<string, string>): CommandRun {
   const scrub = (text: string): string => Object.values(passed).reduce((t, v) => t.split(v).join('[redacted]'), text);
-  return { ...r, output: { ...r.output, stdout: scrub(r.output.stdout), stderr: scrub(r.output.stderr) } };
+  return {
+    ...r,
+    output: { ...r.output, stdout: scrub(r.output.stdout), stderr: scrub(r.output.stderr) },
+    failures: r.failures.map((f) => ({ ...f, file: scrub(f.file), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
+  };
 }
 
 /** AC11: a runner that records only the declared paths as read (each declared glob's files in the checkout). */
