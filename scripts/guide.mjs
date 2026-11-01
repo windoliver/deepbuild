@@ -59,6 +59,7 @@ const DOCS = {
   'deep.terminal.list': 'The package\'s own hosted terminals, each with its run and process.',
   'deep.terminal.read': 'Reads a hosted terminal\'s output from an offset, in pages.',
   'deep.runner.run': 'A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the plug-in\'s grant before the job starts. The job answers one JSON object, `{ value, cites }`; the plug-in gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.',
+  'deep.canvas.read': 'For a check runner: a canvas revision\'s evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.',
   'deep.registerAction': 'What panels, your words and agents\' MCP tools can do to the plug-in\'s data. It declares read, change or send, and a change or send returns its report.',
 };
 

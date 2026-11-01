@@ -39,6 +39,7 @@ use std::path::PathBuf;
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Hub, Planted};
+use crate::optional;
 
 /// The kit's parts, in the order it runs them.
 pub const PARTS: [&str; 13] = [
@@ -143,10 +144,7 @@ impl KitCall {
             seed: n("seed", 138)?,
             sequences: u32::try_from(n("sequences", u64::from(SEQUENCES))?).ok()?,
             param_sets: u32::try_from(n("param_sets", u64::from(PARAM_SETS))?).ok()?,
-            patch_seed: match c.get("patch_seed") {
-                None => None,
-                Some(v) => Some(v.as_u64()?),
-            },
+            patch_seed: optional(c.get("patch_seed"), Value::as_u64)?,
             replay: path("replay")?,
             corpus: path("corpus")?,
             ledger: path("ledger")?,

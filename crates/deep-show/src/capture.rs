@@ -270,8 +270,9 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// One file `POST`ed to an `http://` address on this machine; the model reaches nothing else.
-fn post(url: &str, body: &[u8]) -> bool {
+/// One request to an `http://` address on this machine: `body` `POST`ed if given, else a `GET`. Nothing else is
+/// reached.
+pub(crate) fn local_http(url: &str, body: Option<&[u8]>) -> bool {
     let Some(rest) = url.strip_prefix("http://") else {
         return false;
     };
@@ -286,12 +287,15 @@ fn post(url: &str, body: &[u8]) -> bool {
         return false;
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let head = format!(
-        "POST {path} HTTP/1.0\r\nHost: {host}\r\nContent-Length: {}\r\n\r\n",
-        body.len()
-    );
+    let head = match body {
+        Some(body) => format!(
+            "POST {path} HTTP/1.0\r\nHost: {host}\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        ),
+        None => format!("GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n"),
+    };
     stream.write_all(head.as_bytes()).is_ok()
-        && stream.write_all(body).is_ok()
+        && stream.write_all(body.unwrap_or_default()).is_ok()
         && stream.read_to_end(&mut Vec::new()).is_ok()
 }
 
@@ -445,8 +449,9 @@ impl Hub<'_> {
         };
         if send.state == "waiting" {
             let root = &self.scenario.evidence;
-            let sent = (send.files.iter())
-                .all(|sha| evidence::read(root, sha).is_some_and(|b| post(&send.to, &b)));
+            let sent = (send.files.iter()).all(|sha| {
+                evidence::read(root, sha).is_some_and(|b| local_http(&send.to, Some(&b)))
+            });
             send.state = if sent { "sent" } else { "failed" };
         }
         json!({"send": {"id": id, "state": send.state}})

@@ -372,6 +372,17 @@ Reads a hosted terminal's output from an offset, in pages.
 | `terminal` | string | yes |
 | `from` | integer | yes |
 
+### `deep.canvas.read`
+
+Arrives in R6 · preview · `d1:834d701457943f9662ca00afc85ceb81e0f0df9495d10295b5251e066d459995`
+
+For a check runner: a canvas revision's evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `doc` | string | yes |
+| `query` | object | yes |
+
 ## Slots
 
 Each kind of thing a package registers fills a slot: its interface with a frozen digest, how many pieces may fill it, its kit in the conformance package and the planted wrong fills that kit must fail. A second fill of a slot that takes one is refused at install unless its manifest says it replaces the first.

@@ -136,9 +136,16 @@ fn register(r: &mut Registrar) {
     }));
 }
 
-const SECTIONS: [&str; 4] = ["channels", "clips", "placements", "markers"];
+const SECTIONS: [&str; 6] = [
+    "channels",
+    "clips",
+    "placements",
+    "markers",
+    "drivers",
+    "constraints",
+];
 
-/// A document with any channel, clip, placement or marker.
+/// A document with any channel, clip, placement, marker, driver or constraint.
 fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
     SECTIONS.iter().any(|s| {
         doc.get(*s)
@@ -147,18 +154,29 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
     })
 }
 
-/// An item a document channel targets or a placement binds.
+/// An item a document channel or driver targets, a limit constraint holds or a placement binds.
 fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
     let prefix = format!("items/{id}/");
-    let channel = doc
-        .get("channels")
+    let targets = |section: &str| {
+        doc.get(section)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .any(|(_, c)| {
+                c.get("target")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with(&prefix))
+            })
+    };
+    let channel = targets("channels") || targets("drivers");
+    let held = doc
+        .get("constraints")
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
         .any(|(_, c)| {
-            c.get("target")
-                .and_then(Value::as_str)
-                .is_some_and(|t| t.starts_with(&prefix))
+            c.get("kind").and_then(Value::as_str) == Some("limit")
+                && c.get("owner").and_then(Value::as_str) == Some(id)
         });
     let bound = doc
         .get("placements")
@@ -176,7 +194,7 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
             Value::Array(list) => list.iter().any(|v| v.as_str() == Some(id)),
             _ => false,
         });
-    channel || bound
+    channel || held || bound
 }
 
 /// The revision's motion, compiled once at check.

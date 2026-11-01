@@ -1,0 +1,80 @@
+{
+  "title": "Query summary",
+  "description": "A board three writers share, of four kinds across three writer layers, the canvas modules that register those kinds among them. deep_query's summary must give the document's own counts by kind, by writer layer and by canvas module.",
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "title": "Release board",
+    "description": "Your four nodes, a group of two dots and a note from one test agent, and three bars, a dot and a caption from another.",
+    "size": [640, 360],
+    "layers": {
+      "you-main": { "writer": "you:you", "title": "You", "order": "a0" },
+      "alpha-main": { "writer": "agent:thread-alpha", "title": "Claude Code: door rig", "order": "a1" },
+      "bravo-main": { "writer": "agent:thread-bravo", "title": "Codex: city blocks", "order": "a2" }
+    },
+    "items": {
+      "you.title": {
+        "id": "you.title", "kind": "text@1", "layer": "you-main", "name": "Board title", "order": "a0",
+        "params": { "text": "Release", "font": "body", "size": 13, "box": { "w": 160, "h": 20 } },
+        "at": { "pos": [16, 16, 0] }
+      },
+      "you.n1": {
+        "id": "you.n1", "kind": "rect@1", "layer": "you-main", "name": "Node 1", "order": "a1",
+        "params": { "box": [0, 0, 120, 48], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [16, 48, 0] }
+      },
+      "you.n2": {
+        "id": "you.n2", "kind": "rect@1", "layer": "you-main", "name": "Node 2", "order": "a2",
+        "params": { "box": [0, 0, 120, 48], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [16, 112, 0] }
+      },
+      "you.n3": {
+        "id": "you.n3", "kind": "rect@1", "layer": "you-main", "name": "Node 3", "order": "a3",
+        "params": { "box": [0, 0, 120, 48], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [16, 176, 0] }
+      },
+      "alpha.g": {
+        "id": "alpha.g", "kind": "group@1", "layer": "alpha-main", "name": "Dots", "order": "a0",
+        "params": {},
+        "at": { "pos": [200, 48, 0] }
+      },
+      "alpha.g.dot1": {
+        "id": "alpha.g.dot1", "kind": "circle@1", "layer": "alpha-main", "name": "Dot 1", "order": "a0", "parent": "alpha.g",
+        "params": { "center": [12, 12], "r": 8, "paint": { "fill": { "role": "accent" } } }
+      },
+      "alpha.g.dot2": {
+        "id": "alpha.g.dot2", "kind": "circle@1", "layer": "alpha-main", "name": "Dot 2", "order": "a1", "parent": "alpha.g",
+        "params": { "center": [40, 12], "r": 8, "paint": { "fill": { "role": "accent" } } }
+      },
+      "alpha.note": {
+        "id": "alpha.note", "kind": "text@1", "layer": "alpha-main", "name": "Note", "order": "a1",
+        "params": { "text": "Dots", "font": "body", "size": 13, "box": { "w": 160, "h": 20 } },
+        "at": { "pos": [200, 96, 0] }
+      },
+      "bravo.r1": {
+        "id": "bravo.r1", "kind": "rect@1", "layer": "bravo-main", "name": "Bar 1", "order": "a0",
+        "params": { "box": [0, 0, 24, 80], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [400, 200, 0] }
+      },
+      "bravo.r2": {
+        "id": "bravo.r2", "kind": "rect@1", "layer": "bravo-main", "name": "Bar 2", "order": "a1",
+        "params": { "box": [0, 0, 24, 100], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [432, 180, 0] }
+      },
+      "bravo.r3": {
+        "id": "bravo.r3", "kind": "rect@1", "layer": "bravo-main", "name": "Bar 3", "order": "a2",
+        "params": { "box": [0, 0, 24, 120], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [464, 160, 0] }
+      },
+      "bravo.c": {
+        "id": "bravo.c", "kind": "circle@1", "layer": "bravo-main", "name": "Peak", "order": "a3",
+        "params": { "center": [476, 150], "r": 6, "paint": { "fill": { "role": "accent" } } }
+      },
+      "bravo.label": {
+        "id": "bravo.label", "kind": "text@1", "layer": "bravo-main", "name": "Caption", "order": "a4",
+        "params": { "text": "Bars", "font": "body", "size": 13, "box": { "w": 160, "h": 20 } },
+        "at": { "pos": [400, 300, 0] }
+      }
+    }
+  }
+}

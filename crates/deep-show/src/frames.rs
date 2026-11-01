@@ -143,9 +143,18 @@ impl<'a> Hub<'a> {
                 cost(&p.name, &m.name);
             }
         }
+        // #411: every item kind the build draws, as documents name it, with its canvas module.
+        let kinds: Map<String, Value> = crate::kit::manifest::Manifest::kinds_of(sealed)
+            .into_iter()
+            .map(|k| {
+                let module = self.module_of(&k);
+                (k, json!(module))
+            })
+            .collect();
         json!({
             "build_set": sealed.build_set.name(),
             "state": sealed.state(),
+            "kinds": kinds,
             "modules": sealed.modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
             "versions": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.version.to_string()))).collect::<Map<_, _>>(),
             "digests": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.digest))).collect::<Map<_, _>>(),
@@ -788,6 +797,9 @@ pub(crate) fn drawing_of(
             frame,
             runs: d.runs.clone(),
             animated: d.animated.clone(),
+            built: d.built,
+            damage: Vec::new(),
+            basis: None,
         });
     }
     let status = session
