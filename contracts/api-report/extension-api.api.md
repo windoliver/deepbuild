@@ -72,6 +72,11 @@ export interface Deep {
         terminal: string;
         from: number;
     }): Promise<unknown>;
+    call(params: {
+        name: string;
+        input: {
+        };
+    }): Promise<unknown>;
     fetch(params: {
         request: {
             url: string;

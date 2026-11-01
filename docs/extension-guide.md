@@ -329,11 +329,22 @@ A model job on your own agent, headless on your plan, with its inputs by handle,
 
 In R1 · preview · `d1:2b3e3c57692e9afcf5ed8f7de18e1c2b2bb7dcc722de36649ab31e6ef473166d`
 
-Reads an output interface the package uses, through the provider the hub wired the use to: its value, or missing when none provides it.
+Reads an output interface the package uses, through the provider the hub wired the use to: its value at the minor the use was built against, with a handle its model jobs may take, or missing when none provides it.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+
+### `deep.call`
+
+In R1 · preview · `d1:1c5f7641c708c1fdfa6ed560da1c214609cc402478dd05977cbdc3a94d07251b`
+
+Calls an action output the package uses, through its edge: a read runs, and a change or a send asks you first, naming the calling package; it never borrows the provider's grant.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+| `input` | object | yes |
 
 ### `deep.fetch`
 
