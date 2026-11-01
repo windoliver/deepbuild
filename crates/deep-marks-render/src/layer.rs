@@ -40,6 +40,15 @@ pub fn vello(marks: &[Arc<Drawn>], size: [u32; 2]) -> Result<image::RgbaImage, V
     crate::raster::picture(&marks, size)
 }
 
+/// #385's wrong programs in GPUI's drawing of a layer.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Planted {
+    /// AC1's: every glyph quad half a device px to the right.
+    pub shifts_glyphs: bool,
+    /// AC8's: each path drawn alone with its own antialiased coverage, composited source-over.
+    pub paths_apart: bool,
+}
+
 /// The layer's marks over transparent black at `size` px, drawn by GPUI in a window of `cx` at
 /// scale 1 and read back from GPUI's offscreen Metal renderer; straight alpha.
 #[cfg(target_os = "macos")]
@@ -47,9 +56,76 @@ pub fn gpui(
     cx: &mut gpui_kit::HeadlessAppContext,
     marks: &[Arc<Drawn>],
     size: [u32; 2],
+    planted: Planted,
 ) -> Result<image::RgbaImage, Value> {
     let marks: Vec<&Drawn> = marks.iter().map(|m| &**m).collect();
-    crate::macos::picture(cx, &marks, size)
+    crate::macos::picture(cx, &marks, size, planted)
+}
+
+/// A document's status marks and their legend at `t`, alone over transparent black, as GPUI
+/// draws them after every writer layer of `frame` (#385's window); straight alpha.
+#[cfg(target_os = "macos")]
+pub fn status(
+    cx: &mut gpui_kit::HeadlessAppContext,
+    doc: &serde_json::Map<String, Value>,
+    items: &serde_json::Map<String, Value>,
+    record: &deep_canvas_marks::scene::Record,
+    look: &Value,
+    frame: &deep_canvas_marks::scene::Frame,
+) -> Result<image::RgbaImage, Value> {
+    let (look, _) = match crate::look(Some(look)) {
+        Some(Ok(found)) => found,
+        Some(Err(refusal)) => return Err(refusal.to_json()),
+        None => return Err(refused("bad_input", "look")),
+    };
+    let palette = palette_of(&look, Theme::Light);
+    let marks =
+        deep_canvas_marks::scene::status_marks(doc, items, record, look.status.as_ref(), palette)
+            .map_err(|r| refused(r.code, &r.path))?;
+    crate::macos::status_picture(cx, &marks, frame, palette)
+}
+
+/// The first item of `marks` GPUI's paths can't draw exactly (#385): a gradient past R1's two
+/// stops, a gradient or dashed outline, an adjusted image, or a mark inside a mask by shape, a
+/// soft mask, a group's opacity or blend, or a coverage target whose fills aren't one color of
+/// paths. A scope's own item is named when the scope is the reason.
+pub fn gpui_lacks<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<String> {
+    use deep_canvas_marks::scene::Scope;
+    let base = |id: &str| id.split('#').next().unwrap_or(id).to_string();
+    let solid = |f: &Fill| matches!(f, Fill::Solid(_));
+    let mut covers: std::collections::BTreeMap<&str, [u8; 3]> = Default::default();
+    for drawn in marks {
+        let lacks = match &drawn.mark {
+            Mark::Shape { fill, stroke, .. } => {
+                fill.as_ref().is_some_and(|(f, _)| !solid(f))
+                    || stroke
+                        .as_ref()
+                        .is_some_and(|l| !solid(&l.paint) || l.dashes.is_some())
+            }
+            Mark::Rect {
+                fill: Fill::Ramp(_),
+                ..
+            } => true,
+            Mark::Image { adjust, .. } => !adjust.is_identity(),
+            _ => false,
+        };
+        if lacks {
+            return Some(base(drawn.mark.item()));
+        }
+        for s in &drawn.scopes {
+            match s {
+                Scope::Clip { radius, .. } if *radius == 0.0 => {}
+                // One coverage target GPUI draws as one path: fills of one color.
+                Scope::Cover { item, .. } => match &drawn.mark {
+                    Mark::Path { color, .. } if *covers.entry(item).or_insert(*color) == *color => {
+                    }
+                    _ => return Some(base(item)),
+                },
+                other => return Some(base(other.item())),
+            }
+        }
+    }
+    None
 }
 
 /// A glyph run (a text item's) or a stroke (a path's) the layer draws, alone, in white: drawn

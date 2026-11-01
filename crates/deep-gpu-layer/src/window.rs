@@ -47,6 +47,9 @@ pub struct Paint {
     pub pairs_newest: bool,
     /// A plug-in's panel script view in its header strip, `[x, y, w, h]` (#380).
     pub panel: Option<(AnyView, [f32; 4])>,
+    /// Pictures over the whole window under the view and over it: GPUI's 2D writer layers and
+    /// the status marks, around a 2D layer on the GPU layer (#385).
+    pub pictures: [Vec<Arc<RenderImage>>; 2],
     /// The page as one picture, made once per page and window size.
     picture: Option<(PageKey, Arc<RenderImage>)>,
 }
@@ -164,6 +167,16 @@ impl Render for Root {
                     move |bounds, _, window, _| {
                         let mut p = state.borrow_mut();
                         paint_page(&mut p, bounds, window);
+                        for pic in &p.pictures[0] {
+                            let _ = window.paint_image(
+                                bounds,
+                                bounds,
+                                Corners::default(),
+                                pic.clone(),
+                                0,
+                                false,
+                            );
+                        }
                         if let Some(ui) = p.ui.clone() {
                             #[cfg(target_os = "macos")]
                             paint_view(&mut p, &ui, window);
@@ -177,6 +190,16 @@ impl Render for Root {
                         };
                         if let Some(frame) = paired {
                             paint_overlays(&p, frame, window);
+                        }
+                        for pic in &p.pictures[1] {
+                            let _ = window.paint_image(
+                                bounds,
+                                bounds,
+                                Corners::default(),
+                                pic.clone(),
+                                0,
+                                false,
+                            );
                         }
                     },
                 )
@@ -248,6 +271,7 @@ impl Win {
             current: 0,
             pairs_newest: false,
             panel: None,
+            pictures: Default::default(),
             picture: None,
         }));
         let root = Root {

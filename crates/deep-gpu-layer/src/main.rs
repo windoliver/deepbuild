@@ -7,7 +7,8 @@
 //! app: one GPU (one wgpu device), one headless window, and each scene's session from call to call.
 //! With `--headless` (#140, tests/acceptance/140/view/README.md, "deep-gpu: the live-headless
 //! calls") the run is the headless canvas worker instead: it answers `snapshot` alone, with one GPU
-//! and no app, so no window.
+//! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
+//! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
 
 #[cfg(feature = "test-meter")]
 mod allocations;
@@ -23,6 +24,7 @@ mod host;
 mod levels;
 mod live;
 mod liveview;
+mod marks2d;
 mod parity;
 mod plugin;
 mod reference;
@@ -120,6 +122,13 @@ pub enum Planted {
     /// #140's (tests/acceptance/140/view/README.md: Planted programs): the live GPU layer's
     /// read-back has one pixel one code value off in one channel.
     ShiftsGpuPixel,
+    /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
+    /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
+    /// whatever its spike record says; each sector of a group composited on its own.
+    ShiftsFillTwoCodes,
+    ShiftsGlyphQuads,
+    IgnoresSpike,
+    SectorsSourceOver,
 }
 
 impl Planted {
@@ -178,6 +187,10 @@ impl Planted {
             "writes_nan" => Planted::WritesNan,
             "reads_pixels_only" => Planted::ReadsPixelsOnly,
             "shifts_gpu_pixel" => Planted::ShiftsGpuPixel,
+            "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
+            "ignores_spike" => Planted::IgnoresSpike,
+            "sectors_source_over" => Planted::SectorsSourceOver,
             _ => return None,
         })
     }
@@ -210,6 +223,8 @@ pub struct App {
     pub jobs: u64,
     /// A validation lane's run (`--validation`, #140).
     pub validation: bool,
+    /// Whether Vello GPU draws 2D writer layers, by its spike record (#385).
+    pub vello: marks2d::Gate,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -385,6 +400,10 @@ impl App {
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
             Some("live_frame") => parity::live_frame(self, out, call),
+            Some("layers") => marks2d::layers(self, out, call),
+            Some("window2d") => marks2d::window2d(self, out, call),
+            Some("vello_gpu") => marks2d::vello_gpu(self),
+            Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("canonical") => live::canonical(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
@@ -442,8 +461,16 @@ fn main() {
     let (mut backend, mut planted) = (Backend::Gpu, None);
     let (mut startup, mut validation) = (Startup::default(), false);
     let mut headless = false;
+    // The shipped record, or in test-spike builds the one `--spike-record` names.
+    #[allow(unused_mut)]
+    let mut spike = marks2d::SPIKE.to_string();
     while let Some(a) = args.next() {
         match a.as_str() {
+            #[cfg(feature = "test-spike")]
+            "--spike-record" => match args.next().map(std::fs::read_to_string) {
+                Some(Ok(text)) => spike = text,
+                _ => bad_input(),
+            },
             "--headless" => headless = true,
             "--backend" => match args.next().as_deref() {
                 Some("noop") => backend = Backend::Noop,
@@ -474,6 +501,9 @@ fn main() {
             _ => bad_input(),
         }
     }
+    let Ok(vello) = marks2d::Gate::read(&spike, planted == Some(Planted::IgnoresSpike)) else {
+        bad_input();
+    };
     startup.picks_first = planted == Some(Planted::PicksFirstAdapter);
     startup.withholds_in_code = planted == Some(Planted::WithholdsInCode);
     if validation {
@@ -550,6 +580,7 @@ fn main() {
         held: None,
         jobs: 0,
         validation,
+        vello,
     };
     serve(|out, call| app.call(out, call));
 }

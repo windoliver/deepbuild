@@ -102,24 +102,7 @@ impl Args {
             Some(_) => return Err(refused("bad_input", "path is zero_copy or copy")),
         };
         a.layer = call["layer"].as_bool().unwrap_or(true);
-        a.card = call.get("card").filter(|c| c.is_object()).map(|c| Card {
-            question: c["question"].as_str().unwrap_or_default().to_string(),
-            options: c["options"]
-                .as_array()
-                .map(|o| {
-                    o.iter()
-                        .filter_map(|x| x["label"].as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            rect: {
-                let r: Vec<f32> = c["rect"]
-                    .as_array()
-                    .map(|r| r.iter().map(|v| v.as_f64().unwrap_or(0.) as f32).collect())
-                    .unwrap_or_default();
-                [0, 1, 2, 3].map(|i| r.get(i).copied().unwrap_or(0.))
-            },
-        });
+        a.card = card_of(call);
         a.capture = match &call["capture"] {
             Value::String(s) if s == "every" => Capture::Every,
             Value::Array(f) => Capture::Frames(f.iter().filter_map(Value::as_u64).collect()),
@@ -267,7 +250,29 @@ fn ledger() -> (u64, u64, u64) {
 }
 
 /// Waits (off the GPU layer's UI budget) until every GPUI frame command buffer completed.
-fn gpui_idle() {
+/// A call's `card`: the shell's question card in its slot (`{question, options: [{label}], rect}`).
+pub(crate) fn card_of(call: &Value) -> Option<Card> {
+    call.get("card").filter(|c| c.is_object()).map(|c| Card {
+        question: c["question"].as_str().unwrap_or_default().to_string(),
+        options: c["options"]
+            .as_array()
+            .map(|o| {
+                o.iter()
+                    .filter_map(|x| x["label"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        rect: {
+            let r: Vec<f32> = c["rect"]
+                .as_array()
+                .map(|r| r.iter().map(|v| v.as_f64().unwrap_or(0.) as f32).collect())
+                .unwrap_or_default();
+            [0, 1, 2, 3].map(|i| r.get(i).copied().unwrap_or(0.))
+        },
+    })
+}
+
+pub(crate) fn gpui_idle() {
     let started = Instant::now();
     loop {
         let (committed, completed, _) = ledger();
@@ -297,7 +302,7 @@ fn session_ui(app: &mut App, key: &str, path: Path, workers: usize) -> Result<Ui
 }
 
 /// The GPU time of GPUI's frame of the window without the view: what a frame costs with no handoff.
-fn baseline_ns(app: &mut App) -> u64 {
+pub(crate) fn baseline_ns(app: &mut App) -> u64 {
     let mut samples = Vec::new();
     for _ in 0..9 {
         gpui_idle();

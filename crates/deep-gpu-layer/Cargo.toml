@@ -24,6 +24,9 @@ test-meter = ["dep:deep-canvas-test-modules"]
 # `test-seam` (#140) adds `--adapters`, `--quirks` and the validation lane's and error channel's
 # test fixtures; no shipped build has them.
 test-seam = []
+# `test-spike` (#385) adds `--spike-record <file>`, the Vello GPU spike record a run reads instead of
+# the shipped one; no shipped build has it.
+test-spike = []
 
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }
