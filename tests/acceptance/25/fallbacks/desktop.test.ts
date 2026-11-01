@@ -9,7 +9,7 @@
 
 import { afterAll, describe, expect, it } from 'vitest';
 import {
-  Claude, answer, ask, assistantSays, carries, cleanup, firedShown, makeHome, newSession, outcomes, pastHold, payload, said, setup, startHub,
+  Claude, answer, ask, assistantSays, carries, cleanup, firedShown, makeHome, newSession, outcomes, NO_ASK_WAIT, pastHold, payload, said, setup, SHORT_HOLD, SHORT_HOLD_MS, startHub,
   typedPrompt, viewTexts, waitFor, eventually,
 } from './helpers.ts';
 
@@ -20,7 +20,7 @@ const saysNoWake = (text: string) => /wak|woke/i.test(text) && /next prompt/i.te
 describe('AC9 #25.14a7bfb8 If the desktop app doesn\'t wake, the view says so and the answer falls back to the next prompt', () => {
   it('AC9 #25.14a7bfb8 the waiter exits 2 with your answer, the desktop app starts no turn; the view says so and your next prompt carries the answer, once', async () => {
     const { home } = makeHome();
-    const hub = await startHub(home);
+    const hub = await startHub(home, { ...NO_ASK_WAIT, ...SHORT_HOLD });
     await setup(home);
 
     const s = { ...newSession(home), entrypoint: 'claude-desktop' };
@@ -37,7 +37,7 @@ describe('AC9 #25.14a7bfb8 If the desktop app doesn\'t wake, the view says so an
     await waitFor(async () => (await app.background()).find((r) => r.asyncRewake && r.ended === null), 20_000, 'DeepBuild\'s waiter, started by the app at the stop');
 
     // You answer while the session is idle. The waiter takes it and exits 2; the app doesn't wake.
-    await pastHold(stop);
+    await pastHold(stop, SHORT_HOLD_MS);
     const shownBefore = new Set(await viewTexts(hub, s.id, asked.handle));
     await answer(home, asked.handle, asked.pick.id);
     const exited = await waitFor(async () => (await app.wakes()).find((w) => carries(w.stderr, asked)), 30_000, `DeepBuild's waiter to exit 2 with ${asked.handle}`).catch(() => undefined);

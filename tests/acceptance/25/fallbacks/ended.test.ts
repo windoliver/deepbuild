@@ -17,7 +17,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import {
-  Claude, answer, ask, carries, cleanup, firedShown, makeHome, newSession, outcomes, payload, said, setup, sleep, startHub, tag,
+  Claude, NO_ASK_WAIT, answer, ask, carries, cleanup, firedShown, makeHome, newSession, outcomes, payload, said, setup, sleep, startHub, tag,
   typedPrompt, type Asked, type Fired, type Hub, type Session,
 } from './helpers.ts';
 
@@ -44,7 +44,7 @@ const carried = (text: string, asks: Asked[]) => asks.filter((a) => carries(text
 describe('AC7 #25.3010b97e An answer to a session that has ended reaches only the same thread at SessionStart (a resume, or the thread joined across `/clear` and `/compact`); otherwise it waits on its task\'s line and in its decision, and the next session that works the task reads it, while a new session on other work in the same worktree gets nothing', () => {
   it('AC7 #25.3010b97e answers to ended sessions reach the resumed session and the threads joined across /clear and /compact at their SessionStart, each only its own; a new session in the same worktree gets none', async () => {
     const { home, tmp } = makeHome();
-    const hub = await startHub(home);
+    const hub = await startHub(home, NO_ASK_WAIT);
     await setup(home);
     const worktree = join(tmp, 'wt');
 
@@ -108,7 +108,7 @@ describe('AC7 #25.3010b97e An answer to a session that has ended reaches only th
 
   it('AC7 #25.3010b97e an answer to an ended session waits on its task: a new session on other work in the same worktree gets nothing, and the next session that works the task reads it, once', async () => {
     const { home, tmp } = makeHome();
-    const hub = await startHub(home);
+    const hub = await startHub(home, NO_ASK_WAIT);
     await setup(home);
     const worktree = join(tmp, 'wt');
     const task = `task:T${tag(6)}`;
