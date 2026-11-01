@@ -367,6 +367,9 @@ pub struct Operator {
     pub step: Option<i64>,
     /// It isn't thread-safe: its nodes run only on the scheduler's own thread (#857).
     pub serial: bool,
+    /// Its determinism class (Determinism class): `exact` for CPU work and GPU work of integer
+    /// steps only, `same_machine` for any GPU float work, as its steps compute it (#411).
+    pub determinism: &'static str,
 }
 
 impl Operator {
@@ -400,7 +403,16 @@ impl Operator {
         self.per = Per::Document;
         self
     }
+
+    /// Its determinism class, as its steps compute it: one of [`CLASSES`].
+    pub fn determinism(&mut self, class: &'static str) -> &mut Self {
+        self.determinism = class;
+        self
+    }
 }
+
+/// The determinism classes, from the one that holds on every machine to the live view's own.
+pub const CLASSES: [&str; 3] = ["exact", "same_machine", "live_only"];
 
 /// Carried state: a bake, tail or checkpoint, with a key and a byte budget.
 #[derive(Clone, Debug)]
@@ -432,6 +444,9 @@ pub struct Check {
     pub machines: String,
     pub codes: Vec<&'static str>,
     pub run: CheckRun,
+    /// The evaluated arrays it reads beside the lowered document (#411), which its input gets
+    /// under `read`; its result's determinism class is the least exact of their writers'.
+    pub reads: Vec<String>,
 }
 
 /// A registered check kind's run over a document, given the check input that named it: each
@@ -664,6 +679,7 @@ impl Registrar {
             run: None,
             step: None,
             serial: false,
+            determinism: "exact",
         });
         self.operators.last_mut().expect("just pushed")
     }
@@ -753,7 +769,16 @@ impl Registrar {
             machines: machines.into(),
             codes: codes.to_vec(),
             run,
+            reads: Vec::new(),
         });
+        self
+    }
+
+    /// The evaluated arrays the last check registered reads (#411).
+    pub fn check_reads(&mut self, arrays: &[&str]) -> &mut Self {
+        if let Some(last) = self.checks.last_mut() {
+            last.reads = arrays.iter().map(|a| a.to_string()).collect();
+        }
         self
     }
 
@@ -1109,6 +1134,19 @@ impl Sealed {
                 .map(|c| c.kind.as_str()),
         );
         out
+    }
+
+    /// The determinism class of what a check reads: the least exact of its reads' writers', and
+    /// `exact` for one that reads only the lowered document (#411).
+    pub fn check_determinism(&self, check: &Check) -> &'static str {
+        let rank = |c: &str| CLASSES.iter().position(|x| *x == c).unwrap_or(0);
+        check
+            .reads
+            .iter()
+            .filter_map(|a| self.ops.iter().find(|o| o.op.writes.contains(a)))
+            .map(|o| o.op.determinism)
+            .max_by_key(|c| rank(c))
+            .unwrap_or("exact")
     }
 
     /// The module check kind `kind` and the module that registered it, if one in the build did.
@@ -2369,6 +2407,39 @@ impl Registry {
             fixtures.extend(r.fixtures.iter().map(|f| (name.clone(), f.clone())));
         }
 
+        // #411: a check whose result holds on any machine reads GPU work only from an exact
+        // operator (Determinism class), or it is refused `not_exact`, naming the check and array.
+        let class_of: BTreeMap<&str, &str> = shapes
+            .iter()
+            .flat_map(|(_, r)| &r.operators)
+            .flat_map(|o| o.writes.iter().map(move |w| (w.as_str(), o.determinism)))
+            .collect();
+        for (name, r) in &shapes {
+            for c in &r.checks {
+                for read in &c.reads {
+                    let Some(class) = class_of.get(read.as_str()) else {
+                        return Err(SealError::new(
+                            "unresolved_read",
+                            &[name],
+                            &[],
+                            format!(
+                                "check `{}` of `{name}` reads `{read}`, which no operator writes",
+                                c.kind
+                            ),
+                        ));
+                    };
+                    if c.machines == "any" && *class != "exact" {
+                        return Err(SealError::new(
+                            "not_exact",
+                            &[name],
+                            &[],
+                            format!("check `{}` of `{name}` says machines any but reads `{read}`, which is {class}", c.kind),
+                        ));
+                    }
+                }
+            }
+        }
+
         // Digests: each module's own; the core's shapes are no module's.
         let mut modules = Vec::new();
         for ((name, shapes), module) in shapes.into_iter().skip(1).zip(&self.modules) {
@@ -2637,7 +2708,13 @@ fn module_digest(r: &Registrar) -> Result<String, CanonError> {
         .checks
         .iter()
         // Its run is behaviour, not interface: the digest pins the kind and what it can emit.
-        .map(|c| json!({"codes": c.codes, "kind": c.kind, "machines": c.machines}))
+        .map(|c| {
+            let mut v = json!({"codes": c.codes, "kind": c.kind, "machines": c.machines});
+            if !c.reads.is_empty() {
+                v["reads"] = json!(c.reads);
+            }
+            v
+        })
         .collect();
     sort_values(&mut checks)?;
     let mut tools: Vec<Value> = r

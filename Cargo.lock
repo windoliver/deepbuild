@@ -1993,6 +1993,7 @@ dependencies = [
  "deep-canvas-scene3d",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
+ "deep-effects-render",
  "deep-gpu",
  "deep-marks-vello",
  "deep-replica",

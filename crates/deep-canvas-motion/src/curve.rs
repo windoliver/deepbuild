@@ -60,9 +60,16 @@ impl Curve {
     }
 
     /// The index of the key that owns `t`: the last at or before it, or `None` before the first.
-    fn owner(&self, t: i64) -> Option<usize> {
+    pub fn owner(&self, t: i64) -> Option<usize> {
         let after = self.keys.partition_point(|k| k.t <= t);
         after.checked_sub(1)
+    }
+
+    /// The index of the key after the one that owns `t`, when its segment moves toward it.
+    pub fn next(&self, t: i64) -> Option<usize> {
+        let i = self.owner(t)?;
+        let (a, b) = (&self.keys[i], self.keys.get(i + 1)?);
+        moves(a, b).then_some(i + 1)
     }
 
     /// The value at `t` into `out`, one slot per component, with no allocation; returns the
