@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
+import { bubblewrapPlants } from './bubblewrap.js';
 import { quote, real, seatbeltWith } from './seatbelt.js';
 import { HELPER } from './procs.js';
 import type { Grant, SandboxBackend } from './types.js';
@@ -89,8 +90,9 @@ export async function sandboxSuite(backend: SandboxBackend, fixtures: SuiteFixtu
   }
 }
 
-/** The suite's broken fakes: Seatbelt with one rule more, each letting through the one thing its case refuses. */
+/** The suite's broken fakes: the platform's backend with one rule more, each letting through the one thing its case refuses. */
 export function plantedBackends(fixtures: SuiteFixtures): Record<'egress' | 'write-outside' | 'hub-socket' | 'camera', SandboxBackend> {
+  if (process.platform === 'linux') return bubblewrapPlants(fixtures.hubSocket);
   return {
     egress: seatbeltWith('planted-egress', ['(allow network-outbound (remote ip "*:*"))']),
     'write-outside': seatbeltWith('planted-write-outside', ['(allow file-write*)']),

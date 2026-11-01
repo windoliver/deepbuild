@@ -959,6 +959,14 @@
         "deep-canvas-seams": {
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #140: the network seam's suite and the backends every reply names."
+        },
+        "deep-codecs": {
+          "spec": "* path=../deep-codecs",
+          "why": "Issue #498: the decode worker and the encode tool, which this binary's copies run as, and their jobs."
+        },
+        "deep-relay": {
+          "spec": "* path=../deep-relay",
+          "why": "Issue #309: the network seam's macOS backend, which the seam_suite and relay_client calls run, and relay@1's wire."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1435,6 +1443,52 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
+        }
+      }
+    },
+    "crates/deep-codecs/Cargo.toml": {
+      "dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #498: the worker's jobs and replies, one JSON line each; already in the tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #498: every job names the file it read or wrote by its SHA-256; already in the tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #498: sysctlbyname for the platform codecs' version and the sandbox's C strings; already in the tree."
+        }
+      }
+    },
+    "crates/deep-relay/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-seams": {
+          "spec": "* path=../deep-canvas-seams",
+          "why": "Issue #309: the network seam's interface (Transport, Wire) the macOS backend implements and its suite."
+        },
+        "rustls": {
+          "spec": "^0.23",
+          "why": "Issue #309: TLS for relay@1's https connection, client and shipped relay, with ring as its one provider; already in the lockfile."
+        },
+        "rustls-pki-types": {
+          "spec": "^1",
+          "why": "Issue #309: reading the relay's certificate and key and a copy's trusted authorities from PEM; already in the lockfile."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #309: relay@1's control messages, the committed digest and the relay suite's report."
+        },
+        "tungstenite": {
+          "spec": "^0.29",
+          "why": "Issue #309: the WebSocket relay@1 rides on over https, so a browser's web player can speak it too; already in the lockfile."
         }
       }
     }

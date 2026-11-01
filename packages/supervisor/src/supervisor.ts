@@ -9,11 +9,12 @@
 // for one recorded with the run token, the token read back from its environment.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { availableParallelism, totalmem } from 'node:os';
+import { availableParallelism, constants, totalmem } from 'node:os';
 import { dirname } from 'node:path';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { JsonValue } from '@deepbuild/contracts';
-import { HELPER, scan, sha256, table, tokenOf, type Proc } from './procs.js';
+import { HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
+import { bubblewrapWith } from './bubblewrap.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
 import type { Cleanup, Exit, Grant, HostFacts, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
 
@@ -122,12 +123,14 @@ class LocalSupervisor implements Supervisor {
     const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
     // Each folder above one is kept from moving, or a run could move it aside and put its own in its place.
     const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
-    this.sandbox = seatbeltWith('seatbelt', guarded.flatMap((g) => [
-      typeof g === 'string'
-        ? `(deny file-write* (subpath ${quote(real(g))}))`
-        : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
-      ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
-    ]));
+    this.sandbox = process.platform === 'linux'
+      ? bubblewrapWith('bubblewrap', guarded.map((g) => (typeof g === 'string' ? { path: g, except: [] } : g)))
+      : seatbeltWith('seatbelt', guarded.flatMap((g) => [
+        typeof g === 'string'
+          ? `(deny file-write* (subpath ${quote(real(g))}))`
+          : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
+        ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
+      ]));
     for (const kind of options.resources ?? []) {
       this.kinds.set(kind.kind, kind);
       for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
@@ -331,6 +334,36 @@ class LocalSupervisor implements Supervisor {
     });
   }
 
+  /**
+   * What a Linux run's sandbox parent writes, one JSON line each: a refusal, recorded as a sandbox.denied for the run
+   * once, or the program's own end, given to `exited`. Resolves once the parent is gone and the pipe with it.
+   */
+  private readDenials(run: string, stream: NodeJS.ReadableStream, exited: (code: number | null, signal: NodeJS.Signals | null) => void): Promise<void> {
+    let buffer = '';
+    return new Promise((resolve) => {
+      stream.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        let i: number;
+        while ((i = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, i);
+          buffer = buffer.slice(i + 1);
+          let said: { operation?: unknown; target?: unknown; exit?: unknown; signal?: unknown };
+          try { said = JSON.parse(line) as typeof said; } catch { continue; }
+          if ('exit' in said) {
+            const name = Object.entries(constants.signals).find(([, n]) => n === said.signal)?.[0] as NodeJS.Signals | undefined;
+            exited(typeof said.exit === 'number' ? said.exit : null, typeof said.exit === 'number' ? null : name ?? null);
+            continue;
+          }
+          if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
+          const seen = `${run} ${said.operation} ${said.target}`;
+          if (this.denied.has(seen)) continue;
+          this.denied.add(seen);
+          void this.append('sandbox.denied', { run, operation: said.operation, target: said.target || '(none)' }, run).catch(() => undefined);
+        }
+      }).on('error', () => undefined).on('close', resolve);
+    });
+  }
+
   /** Until the stream shows a canary's report, or `ms` pass; whether it did. */
   private async warm(ms: number): Promise<boolean> {
     const since = Date.now();
@@ -491,7 +524,7 @@ class LocalSupervisor implements Supervisor {
   }
 
   private async launch(spec: StartSpec, leases: { kind: string; key: string }[]): Promise<Started> {
-    if (process.platform !== 'darwin') throw Error(`no platform sandbox backend for ${process.platform} yet (#70); nothing runs outside one`);
+    if (process.platform !== 'darwin' && process.platform !== 'linux') throw Error(`no platform sandbox backend for ${process.platform} yet; nothing runs outside one`);
     const cwd = real(spec.cwd);
     const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
@@ -518,23 +551,33 @@ class LocalSupervisor implements Supervisor {
     }
     if (!this.options.leases) for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
     if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
+    // On Linux the sandbox's parent process writes each refusal it makes to its fourth descriptor (bubblewrap.ts).
+    const denials = sandboxed && process.platform === 'linux';
+    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe', ...(denials ? ['pipe' as const] : [])] });
     r.child = child;
     // A process that exits before reading all of its input is no error of the supervisor's.
     child.stdin?.on('error', () => undefined);
     const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
     child.stdout!.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
     child.stderr!.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
+    const drain = () => setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
     child.on('exit', () => {
       if (r.state === 'running') r.state = 'exited';
       // A background process still holding its output doesn't keep the run open: what came by now is its output.
       // Closed after the loop's next read of the pipes, so a stalled loop doesn't cut what was already written.
-      setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
+      drain();
     });
-    r.exit = new Promise((resolve) => {
-      child.on('error', () => resolve({ run: spec.run, code: null, signal: null, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } }));
-      child.on('close', (code, signal) => resolve({ run: spec.run, code, signal, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } }));
-    });
+    let settle: (exit: Exit) => void = () => undefined;
+    r.exit = new Promise((resolve) => { settle = resolve; });
+    const ended = (code: number | null, signal: NodeJS.Signals | null) => settle({ run: spec.run, code, signal, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } });
+    child.on('error', () => ended(null, null));
+    if (denials) {
+      // The run ends when the program does, as its sandbox's parent reports it: bwrap's own process may go earlier,
+      // on the signal that stops the run, or later, after the leftovers the parent reaps. Without that report, when
+      // the parent went with the program, bwrap's end is the run's.
+      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; ended(code, signal); drain(); });
+      child.on('close', (code, signal) => void parentGone.then(() => ended(code, signal)));
+    } else child.on('close', ended);
     const pid = child.pid;
     if (pid === undefined) {
       r.state = 'exited';
@@ -543,8 +586,9 @@ class LocalSupervisor implements Supervisor {
     if (this.options.crash === 'spawned') process.kill(process.pid, 'SIGKILL');
     r.pid = pid;
     r.pgid = pid;
-    // A process that is already gone and reaped leaves nothing to track; its group's members are still found.
-    const start = (await table([pid])).get(pid)?.start ?? '';
+    // A process that is already gone and reaped leaves nothing to track; its group's members are still found. On
+    // Linux the table is read before the loop turns, so a run over in milliseconds is still tracked and its end recorded.
+    const start = process.platform === 'linux' ? startNow(pid) : (await table([pid])).get(pid)?.start ?? '';
     if (start) await this.track(r, pid, start, r.token);
     // Its input only once its process is recorded, so a crash before this point leaves a process that read nothing.
     if (spec.input) child.stdin!.end(typeof spec.input === 'function' ? spec.input() : spec.input);
