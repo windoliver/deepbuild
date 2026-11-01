@@ -3,6 +3,7 @@
 // exec, 25 to 40 ms on a loaded Mac whose endpoint scanner checks each exec; on the core's thread every hook reply
 // queued behind it would wait that long.
 import { Worker } from 'node:worker_threads';
+import { YOUNG } from './settle.js';
 
 /** What execFile's callback gets, as plain data: its error's code and message, and the output as text. */
 interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string }
@@ -14,7 +15,7 @@ let n = 0;
 const waiting = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
 function ask(job: ChildJob): Promise<unknown> {
   if (!worker) {
-    const started = worker = new Worker(new URL('./children-worker.js', import.meta.url));
+    const started = worker = new Worker(new URL('./children-worker.js', import.meta.url), { resourceLimits: YOUNG });
     started.on('message', (m: { n: number; result: unknown }) => {
       const w = waiting.get(m.n);
       waiting.delete(m.n);

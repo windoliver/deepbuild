@@ -18,7 +18,7 @@ import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
-import { shedStartup } from './settle.js';
+import { shedStartup, YOUNG } from './settle.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
 
@@ -159,7 +159,7 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; sc
 type OnFrame = (sub: string, event: string) => void;
 
 function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
-  const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
+  const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
@@ -214,7 +214,7 @@ function parserPool(held: string[], plant: Plant | undefined): Parsers {
   const pending = new Map<number, (parsed: Parsed) => void>();
   let n = 0;
   const make = () => {
-    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, ...(plant ? { plant } : {}) } });
+    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
     worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
       pending.get(id)?.(parsed);
       pending.delete(id);
