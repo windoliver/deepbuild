@@ -86,7 +86,7 @@ reaches the step its message names.
 ---- The run's output ----
 
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-103-9c88c8/agent-ab643e4dcb25b0ed9/tests/acceptance/103
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-103-9c88c8/agent-ab643e4dcb25b0ed9/tests/acceptance/103
 
  ❯ access.test.ts (7 tests | 7 failed) 1565ms
    ❯ #103.3419af40 a composite can't read a secret its own grant doesn't name (1)
