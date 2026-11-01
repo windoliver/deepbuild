@@ -1,0 +1,19 @@
+FATE reference outputs from FFmpeg, vendored unchanged for the #498 decode-worker acceptance tests.
+
+Source: https://github.com/FFmpeg/FFmpeg/tree/24e860f6d3c4f2ebae65ed7649e2a8860d512879/tests/ref/fate
+Recipes: https://github.com/FFmpeg/FFmpeg/blob/24e860f6d3c4f2ebae65ed7649e2a8860d512879/tests/fate/mov.mak
+Commit: 24e860f6d3c4f2ebae65ed7649e2a8860d512879 (the commit the #498 oracle map pins)
+
+Files, each the file of the same name under tests/ref/fate/ at that commit:
+  mov-3elist, mov-3elist-1ctts, mov-1elist-1ctts, mov-1elist-noctts, mov-elist-starts-ctts-2ndsample,
+  mov-1elist-ends-last-bframe, mov-2elist-elist1-ends-bframe, mov-elst-ends-betn-b-and-i, mov-ibi-elst-starts-b,
+  mov-bbi-elst-starts-b, mov-invalid-elst-entry-count, mov-neg-firstpts-discard, mov-aac-2048-priming
+
+FFmpeg is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later
+version. FFmpeg is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See COPYING.LGPLv2.1 beside this file (copied from
+the same commit) for the license text.
+
+The media samples these outputs describe are not vendored: the tests fetch them from https://fate-suite.ffmpeg.org on
+first use into a cache outside the repository and check each against the SHA-256 in samples.json.
