@@ -110,6 +110,10 @@
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
         },
+        "quickjs-jit-runtime": {
+          "spec": "* git+https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393",
+          "why": "Issue #358: the switch that denies a process native code, in vendor/quickjs-jit-runtime; gpui-shell keeps the runtime it would be set on."
+        },
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #327: the question card's digests (an ask thread's fold key, a confirmed answer's bytes), the same SHA-256 crate deep-hook already uses."
@@ -173,6 +177,30 @@
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot once GPUI's command buffer completes."
+        }
+      }
+    },
+    "crates/deep-panel-host/Cargo.toml": {
+      "dependencies": {
+        "deep-app": {
+          "spec": "* path=../deep-app",
+          "why": "Issue #358: the panel runtime, policy and mount the app's panels use, and the tree the host sends."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #358: the headless app context a gpui-shell view needs when no screen is in the process."
+        },
+        "gpui-shell": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #358: runs the panel, with no JIT, on the host's main thread."
+        },
+        "quickjs-jit-runtime": {
+          "spec": "* git+https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393",
+          "why": "Issue #358: the switch that denies a process native code, in vendor/quickjs-jit-runtime; gpui-shell keeps the runtime it would be set on."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #358: the host's JSON lines; already in gpui-kit's tree."
         }
       }
     },
