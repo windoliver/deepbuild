@@ -381,7 +381,7 @@ describe('the turn a stop cut off (#85)', () => {
       mkdirSync(project, { recursive: true });
       const transcript = join(project, `${id}.jsonl`);
       writeFileSync(transcript, '');
-      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, turnOrigin: 'human', promptSource: 'typed' })}\n`);
       let n = 0;
       const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
       const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), line(event, extra));
@@ -432,7 +432,7 @@ describe('a stop whose task is open (#85)', () => {
       mkdirSync(project, { recursive: true });
       const transcript = join(project, `${id}.jsonl`);
       writeFileSync(transcript, '');
-      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, promptSource: 'typed' })}\n`);
+      const typed = (prompt: string, promptId: string) => appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: promptId, promptId, message: { role: 'user', content: prompt }, origin: { kind: 'human' }, turnOrigin: 'human', promptSource: 'typed' })}\n`);
       let n = 0;
       const line = (event: string, extra: Record<string, unknown>) => hookLine(ulid(Date.now() + ++n), event, { session_id: id, cwd: '/tmp', transcript_path: transcript, hook_event_name: event, ...extra }, { ppid: process.pid });
       const hook = (event: string, extra: Record<string, unknown>) => send(join(root, 'hub.sock'), line(event, extra));

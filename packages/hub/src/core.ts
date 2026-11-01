@@ -911,8 +911,11 @@ export class Core {
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
     if (stopped) this.routesOf(meta.session, meta.cwd).blocked = holdsTurns(stopped.data) ? String(stopped.data.cause) : undefined;
     // The cut-off turn's unknown sends are the continue's business: a turn that ended normally, or a prompt you typed,
-    // ends their denial, so a later identical send of yours runs.
-    if (meta.session && this.unknownSends.has(meta.session) && ((stopped && stopped.data.outcome !== 'failed') || drafts.some((d) => d.kind === 'user.ask' && d.data.from === 'person' && !d.queued))) {
+    // ends their denial, so a later identical send of yours runs. Not the prompt that carries a parked continue itself:
+    // the block goes with it, and its turn is the one the denial is for.
+    const carrying = this.routes.get(meta.session ?? '');
+    const typedNow = drafts.some((d) => d.kind === 'user.ask' && d.data.from === 'person' && !d.queued) && !carrying?.later.length && !carrying?.handed?.length;
+    if (meta.session && this.unknownSends.has(meta.session) && ((stopped && stopped.data.outcome !== 'failed') || typedNow)) {
       this.unknownSends.delete(meta.session);
       this.askingSoon();
     }
