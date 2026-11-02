@@ -964,7 +964,12 @@ class Host implements ExtensionHost {
   }
   private manifestAt(folder: string): Manifest {
     let m = this.manifests.get(folder);
-    if (!m) this.manifests.set(folder, m = manifestOf(folder));
+    if (!m) {
+      // Only installed folders' are kept: an install in a new folder takes its old one's place (#824).
+      const installed = new Set(Object.values(this.entries).map((e) => e.folder));
+      for (const old of this.manifests.keys()) if (!installed.has(old)) this.manifests.delete(old);
+      this.manifests.set(folder, m = manifestOf(folder));
+    }
     return m;
   }
   /**
