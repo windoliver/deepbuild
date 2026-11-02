@@ -53,6 +53,7 @@ fn manifest(name: &str, deps: &[&str]) -> Manifest {
         feature: name.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
+        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
     }
 }
 
