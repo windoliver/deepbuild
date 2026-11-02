@@ -4681,7 +4681,7 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms'>[] }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms'>[] }): Promise<void> {
     const at = this.now();
     const lane = (async () => {
       const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
