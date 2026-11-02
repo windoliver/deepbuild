@@ -2503,6 +2503,26 @@ export interface CompositionUsed {
   };
 }
 
+/** deadline.moved@1 */
+export interface DeadlineMoved {
+  v: 1;
+  id: string;
+  kind: "deadline.moved";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    span: number;
+    deadline: number;
+    because: "away" | "notice";
+  };
+  evidence?: Array<string>;
+}
+
 /** decision.applied@1 */
 export interface DecisionApplied {
   v: 1;
