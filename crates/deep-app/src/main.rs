@@ -1,4 +1,7 @@
-//! `deep-app [--panel DIR] [MODE]`: the spike's window, with the count in the menu bar.
+//! `deep-app [--panel DIR [--view NAME]] [MODE]`: the spike's window, with the count in the menu bar.
+//!
+//! Issue #262: with `--view`, the panel draws that plug-in view, and the app reports it shown to the hub every 5 s
+//! while the window shows it (`deep_app::shown`).
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
 //!
@@ -105,7 +108,7 @@ fn main() {
         }
     }
     let started = Instant::now();
-    let (panel_dir, mode) = args();
+    let (panel_dir, view, mode) = args();
     if let Mode::PostForged { chords } = mode {
         trusted::post_forged(chords);
         return;
@@ -159,6 +162,16 @@ fn main() {
                     .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()));
                 (dir.display().to_string(), view)
             });
+            if let Some(view) = view {
+                let handle = window.window_handle();
+                deep_app::shown::start(
+                    vec![view],
+                    handle,
+                    &deep_app::hub::address(),
+                    &deep_app::hub::root().join("control.token"),
+                    cx,
+                );
+            }
             window.on_next_frame(move |_, cx| {
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
                 eprintln!("first-frame-ms {ms:.1}");
@@ -182,8 +195,9 @@ fn main() {
     });
 }
 
-fn args() -> (Option<PathBuf>, Mode) {
+fn args() -> (Option<PathBuf>, Option<String>, Mode) {
     let mut panel = None;
+    let mut view = None;
     let mut mode = Mode::Window;
     let mut frame = None;
     let mut args = std::env::args().skip(1);
@@ -193,6 +207,12 @@ fn args() -> (Option<PathBuf>, Mode) {
                 panel = Some(PathBuf::from(
                     args.next().expect("--panel takes a directory"),
                 ))
+            }
+            "--view" => {
+                view = Some(
+                    args.next()
+                        .expect("--view takes the name of the view the panel draws"),
+                )
             }
             "--cursor-demo" => {
                 mode = Mode::CursorDemo {
@@ -250,7 +270,11 @@ fn args() -> (Option<PathBuf>, Mode) {
     if let Mode::ProbeHeld { frame: slot, .. } = &mut mode {
         *slot = frame;
     }
-    (panel, mode)
+    assert!(
+        view.is_none() || panel.is_some(),
+        "--view names the view a --panel draws"
+    );
+    (panel, view, mode)
 }
 
 fn number(arg: Option<String>, what: &str) -> u64 {
