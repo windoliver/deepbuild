@@ -1567,6 +1567,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_effects::module::module()
         });
+        // Issue #398: SVG import and formulas, drawn as marks2d's items.
+        out.push(deep_canvas_vector::module::module());
     }
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");

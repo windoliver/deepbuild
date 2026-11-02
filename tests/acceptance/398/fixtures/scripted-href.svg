@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 60" width="100" height="60">
+  <a xlink:href="javascript:void(document.getElementById('bar').setAttribute('fill', '#ff0000'))">
+    <path id="bar" d="M 10 10 L 90 10 L 90 50 L 10 50 Z" fill="#000000"/>
+  </a>
+</svg>

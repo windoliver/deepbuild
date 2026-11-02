@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100">
+  <!-- Two glyph groups as a typesetter writes them: font units with y up, flipped by the outer group. -->
+  <g transform="translate(10,80) scale(1,-1)">
+    <g id="x">
+      <path d="M 0 0 L 12 0 L 30 24 L 48 0 L 60 0 L 36 32 L 60 64 L 48 64 L 30 40 L 12 64 L 0 64 L 24 32 Z" fill="#000000"/>
+    </g>
+    <g id="eq" transform="translate(90,16)">
+      <path d="M 0 0 L 70 0 L 70 10 L 0 10 Z" fill="#cc0000"/>
+      <path d="M 0 22 L 70 22 L 70 32 L 0 32 Z" fill="#cc0000"/>
+    </g>
+  </g>
+</svg>

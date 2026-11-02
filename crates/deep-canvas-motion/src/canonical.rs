@@ -145,7 +145,13 @@ impl deep_canvas::schedule::Canonical for Motion {
             out,
         );
         deep_canvas::schedule::Canonical::encode(
-            &(&self.cuts, &self.frame_rate, &self.drivers, &self.limits),
+            &(
+                &self.cuts,
+                &self.frame_rate,
+                &self.drivers,
+                &self.limits,
+                &self.labels,
+            ),
             out,
         );
     }
@@ -163,6 +169,7 @@ impl deep_canvas::schedule::Canonical for Field {
             out,
         );
         self.written.encode(out);
+        self.enumerated.encode(out);
     }
 }
 impl Canonical for Op {
