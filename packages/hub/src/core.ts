@@ -484,6 +484,7 @@ export class Core {
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
+      ...(options.plant === 'any-nonzero-base-exit' ? { plant: options.plant } : {}),
     });
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
@@ -4437,7 +4438,7 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes'; asserts: string[] }[] }): Promise<void> {
     const at = this.now();
     const lane = (async () => {
       const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);

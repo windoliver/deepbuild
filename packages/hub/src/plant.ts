@@ -54,6 +54,8 @@ export type Plant =
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
+  // #875's: a fix check's base run counted as its proof whatever way it failed.
+  | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
@@ -105,6 +107,7 @@ const PLANTS: readonly string[] = [
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'any-nonzero-base-exit',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
