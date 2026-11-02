@@ -46,7 +46,7 @@ describe('claimState', () => {
       const fixture = (name: string) => fixtures(name)[0] as { v: number; id: string; kind: string; ts: number; data: Record<string, JsonValue> };
       const at = (e: ReturnType<typeof fixture>, id: string, data: Record<string, JsonValue> = {}) => ({ v: e.v, id, kind: e.kind, ts: T, data: { ...e.data, ...data } });
       // R1's check, seq-number.sh, has no stand-in; R2's, health.sh, was proven on one.
-      await r.append(core, at(fixture('definition.locked@3'), '01K74FKZVK8Q2X5R7M3N9P4T60'));
+      await r.append(core, at(fixture('definition.locked@4'), '01K74FKZVK8Q2X5R7M3N9P4T60'));
       await r.append(core, at(fixture('definition.stood_in@1'), '01K74FKZVK8Q2X5R7M3N9P4T61'));
       const claim = '01K74FKZVK8Q2X5R7M3N9P4T62';
       await r.append(core, at(fixture('claim.made@3'), claim));
