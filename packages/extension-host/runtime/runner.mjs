@@ -23,15 +23,18 @@ if (entry === 'main') {
   child.on('exit', () => socket.end());
 } else {
   let wire;
-  const side = extensionSide((method, params, scope) => wire.call(method, params, scope), async (deep, params) => {
-    const url = pathToFileURL(join(folder, 'index.ts')).href;
-    // The host strips index.ts's types and sends the source, so this process needn't load a TypeScript stripper;
-    // the module keeps its own URL, so what it reads beside itself is still its own folder's.
-    if (typeof params?.source === 'string') {
-      registerHooks({ load: (at, context, next) => (at === url ? { format: 'module', source: params.source, shortCircuit: true } : next(at, context)) });
+  // The host strips a TypeScript file's types and sends the source, so this process needn't load a TypeScript
+  // stripper; the module keeps its own URL, so what it reads beside itself is still its own folder's.
+  const imported = (file, source) => {
+    const url = pathToFileURL(join(folder, file)).href;
+    if (typeof source === 'string') {
+      registerHooks({ load: (at, context, next) => (at === url ? { format: 'module', source, shortCircuit: true } : next(at, context)) });
     }
-    const code = await import(url);
+    return import(url);
+  };
+  const side = extensionSide((method, params, scope) => wire.call(method, params, scope), async (deep, params) => {
+    const code = await imported('index.ts', params?.source);
     return await code.default(deep);
-  });
+  }, imported);
   wire = peer(socket, side.serve);
 }
