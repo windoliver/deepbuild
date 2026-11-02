@@ -67,6 +67,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.note', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
+  // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
+  ['test.clock', ['cli']],
 ]);
 
 /** How long before an acknowledged hold the extensions' reply must be on the socket, so it reaches deep-hook in time. */
@@ -919,7 +921,7 @@ class Hub {
     const notice: DeprecatedNotice | undefined = replaced && this.plant !== 'silent-deprecated' ? this.adapter.serve(called, null, () => null).deprecated : undefined;
     if (notice) conn = noticed(conn, id, notice);
     const allowed = ALLOWED.get(method);
-    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
+    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1') || (method === 'test.clock' && process.env.DEEP_HUB_TEST_CLOCK_STEPS !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {
       return conn.write({ id, error: refusal('role', '/method', `A ${conn.name} connection can't call ${method}: its credential allows ${allowed.join(' or ')} connections only.`, method) });
     }

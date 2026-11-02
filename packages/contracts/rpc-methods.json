@@ -244,5 +244,11 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#570"
+  },
+  {
+    "method": "test.clock",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#965"
   }
 ]

@@ -1,0 +1,27 @@
+Base run of the AC4 drift redraft at the base (worktree HEAD 8907ed99, which has a7e140b2 as an ancestor).
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/200 redraft/closures-drift-redraft.test.ts
+Result: 1 failed (1). Expected reason: scripts/canvas-closures.mjs does not exist at the base, so the first
+assertion (the drift test exits 0 on the committed reference) fails with MODULE_NOT_FOUND, exit 1.
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/200/redraft/tsconfig.json -> exit 0.
+Row lookup, checked on its own at the base: the "### Registries and closed lists" section runs from line 1243 to
+the next heading at line 1312; it holds one "| Budget class |" row, at line 1253, whose closure cell is
+"closed: budget". The planted row reads:
+| Budget class | Closed enums | registry `budget.class@1` | Only you raise a class's caps, and the meter is ring. Reopens if a case fits no class |
+
+--- vitest output (checkout path shown as <repo>) ---
+ RUN  v5.0.5 <repo>/tests/acceptance/200
+
+ ❯ redraft/closures-drift-redraft.test.ts (1 test | 1 failed) 1509ms
+   ❯ AC4: the closure lint against the reference table (redraft) (1)
+     × AC4 (redraft) the reference table passes the drift test as committed, and a planted row that calls the budget class a registry fails it, naming the list and both closures 1070ms
+
+ FAIL  redraft/closures-drift-redraft.test.ts > AC4: the closure lint against the reference table (redraft) > AC4 (redraft) the reference table passes the drift test as committed, and a planted row that calls the budget class a registry fails it, naming the list and both closures
+AssertionError: the drift test passes on the committed reference:
+exit 1
+Error: Cannot find module '<repo>/scripts/canvas-closures.mjs'
+  code: 'MODULE_NOT_FOUND'
+: expected 1 to be +0 // Object.is equality
+ ❯ redraft/closures-drift-redraft.test.ts:37:88
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)

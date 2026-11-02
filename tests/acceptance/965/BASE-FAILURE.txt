@@ -1,0 +1,78 @@
+Base commit: a7e140b2 (Merge pull request #1007 from windoliver/worktree-github-issue-386-b3be11)
+Where: a plain export of the base (git archive a7e140b2) in /tmp/dh965-base, with npm ci, npm run build --workspaces and
+  cargo build --locked -q -p deep-hook done there, and this folder copied in.
+Commands (one file at a time, node = ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node first on PATH):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/965/<file>.test.ts
+Date: 2026-11-02  Node v24.22.0  vitest 5.0.5  darwin-arm64, 12 cores, shared with other sessions' hubs and suites
+  (1-minute load averages 30-130 during these runs).
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/965/tsconfig.json exits 0 at the base.
+
+Every criterion's main test fails at a named assertion, for the reason the issue gives: the base starts a loop's slow
+checks at its green stop (AC1, AC2, AC4), starts a check that ends after the cron's next prompt (AC3), and names no held
+check in its line (AC5, whose journey the base already holds for the background command, #907). Every wrong-program
+test fails at its setup: the base hub refuses each DEEP_HUB_PLANT it doesn't list ("names no planted program"), which
+the suite throws as BLOCKED, never as the plant's failure. Trimmed to the relevant lines.
+
+== loops.test.ts (AC1): exit 1, Tests 3 failed (3), 36 s
+  AC1 stop 1: line "says done · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S1 (slow lane) at 1793611479771; held: none
+× AC1 #965.2723aec9 three scheduled turns: no journey on the first two snapshots, each line says it waits for the loop, the second takes the first's place, and the third stop starts it on its own snapshot
+  AssertionError: stop 1: its turn scheduled the next wake-up in 60 s, so the 300 s journey waits for the loop: no journey may run on S1, where it would end stale: expected [ Array(1) ] to deeply equal []
+  + ".deepbuild/checks/journey.sh on S1 (slow lane) at …"
+× AC1 (wrong program) … DEEP_HUB_PLANT=starts-on-every-green-stop …   Error: BLOCKED: … DEEP_HUB_PLANT=starts-on-every-green-stop names no planted program
+× AC1 (wrong program) … DEEP_HUB_PLANT=holds-every-loop-check …       Error: BLOCKED: … DEEP_HUB_PLANT=holds-every-loop-check names no planted program
+
+== starts.test.ts (AC2): exit 1, Tests 5 failed (5), 57 s
+  AC2 deep_claim, stop 1: line "says done · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S1 (slow lane) at 1793610966024; held: none
+  AC2 gh pr create, stop 1: (the same)
+  AC2 words, stop 1: (the same)
+× AC2 #965.932ea160 the second turn calls deep_claim: …
+× AC2 #965.932ea160 (twin) the second turn runs gh pr create: …
+× AC2 #965.932ea160 (twin) you type a message while the second turn runs, with no claim: …
+  each: AssertionError: stop 1: a loop's turn with no claim and none of your words holds the 300 s journey for the loop: no journey may run on S1: expected [ Array(1) ] to deeply equal []
+× AC2 (wrong program) … holds-claim-stop-for-loop …   Error: BLOCKED: … names no planted program
+× AC2 (wrong program) … words-only-at-turn-start …    Error: BLOCKED: … names no planted program
+  (Each twin fails at stop 1, before its claim or your words: the base holds no loop turn, so the claim and words paths
+  are not reached here. A debug run at the base with all of them in one turn recorded the deep_claim's claim.made, the
+  gh pr create reading "Opened pull request https://github.com/acme/shop/pull/12" and your words as a person's user.ask.)
+
+== cron.test.ts (AC3): exit 1, Tests 2 failed (2), 19 s
+  AC3: line "says done · next: DeepBuild · receipt"; .deepbuild/checks/journey.sh: … on S1 (slow lane) at 1793611021035; .deepbuild/checks/soak.sh: … on S1 (slow lane) at 1793611021506; held: none
+× AC3 #965.3dfb5f43 the stop starts the journey when its fast-lane check ends and holds the 20-minute check, whose line names the cron
+  AssertionError: .deepbuild/checks/soak.sh: the 20-minute check would end after the cron's next prompt, 15 minutes on, so it is held for the loop and must not start: expected [ Array(1) ] to deeply equal []
+  (the journey's start passes at the base: it is the one start the criterion wants at that stop)
+× AC3 (wrong program) … holds-every-loop-check …   Error: BLOCKED: … names no planted program
+
+== grace.test.ts (AC4): exit 1, Tests 4 failed (4), 151 s (60 s and less pass in real time on a hub with no test.clock)
+  AC4 no prompt, 50 s after the reply: line "says done · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S1 (slow lane) at 1793611041772; held: none
+× AC4 #965.a4f3c27b a turn another session's message started ends green; no automatic prompt by 60 s after its reply, and the journey starts at 60 s; …
+  AssertionError: stop 1: a turn another session's message started may be followed by another prompt nothing foresees, so the 300 s journey waits through the 60 s grace window: none may start in its first 50 s: expected [ Array(1) ] to deeply equal []
+  AC4 next message at 40 s: journeys: .deepbuild/checks/journey.sh on S1 (slow lane) at 1793611100752; .deepbuild/checks/journey.sh on S2 (slow lane) at 1793611144564; held: none
+× AC4 #965.a4f3c27b (twin) the next message comes at 40 s and its turn changes src/cart.ts: no journey starts on the first snapshot
+  AssertionError: stop 1: the next message came 40 s after its reply, inside the grace window, and its turn changed src/cart.ts, so no journey may start on the first snapshot: expected [ Array(1) ] to deeply equal []
+× AC4 (wrong program) … no-grace-window …              Error: BLOCKED: … names no planted program
+× AC4 (wrong program) … starts-on-every-green-stop …   Error: BLOCKED: … names no planted program
+
+== background.test.ts (AC5): exit 1, Tests 6 failed (6), 54 s (run at 00:45; twin 3 again at 01:25)
+  AC5 stop 1: line "says done · next: DeepBuild · receipt"; journeys: none; held: none      (once per twin)
+× AC5 #965.ef38e013 the journey is held while `npm run e2e` runs in the background, and starts when its process group ends at 4 minutes with the session idle
+× AC5 #965.ef38e013 (twin) the command never ends: …
+× AC5 #965.ef38e013 (twin) the end notice wakes the agent at 20 minutes …
+  each: AssertionError: stop 1: its line names the held journey and the command it waits for: expected 'says done · next: DeepBuild · receipt' to contain '1 check waits for the loop · npm run …'
+× AC5 (wrong program) … holds-background-without-limit …   Error: BLOCKED: … names no planted program
+× AC5 (wrong program) … caps-from-first-stop …             Error: BLOCKED: … names no planted program
+× AC5 (wrong program) … rechecks-facts-at-stops-only …     Error: BLOCKED: … names no planted program
+
+A harness check beyond the first assertion, at the base: twin 1 run once with the line assertion removed and minutes
+passing in real time (the base has no test.clock): the journey stayed held at 3.5 minutes, started on S1 in the slow
+lane within the window after the test ended the command's process group at 4 minutes (#907's poll), and the test then
+failed at "stop 1: its held place was started by the loop's pause: none", since the base records no held place.
+
+Flakiness seen under load (not the base's #965 behavior): in some runs at 1-minute loads of 40-130 a stop never reached
+the record within 180 s (deep-hook: "could not spool … within the hook's 50 ms", or the hub took the hook and recorded no
+agent.stop), or a typed ask took over 180 s to lock its definition, or the 2 s check outran the 60 s stop hold so the
+stop queued nothing. The suite throws those as BLOCKED (or fails them), never passes them. The results above are each
+file's run with no such event; a run with one is redone.
+
+Not verified: no test was run against an implementation of #965 (none exists), so no planted wrong program has been seen
+to fail its assertion for the criterion's own reason yet, the `test.clock` and `check.held` surfaces are untried, and the
+expected values are unchecked against a running fix.
