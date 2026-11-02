@@ -10,7 +10,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  allEvents, askNamed, BEHAVIOR, cleanup, draftFor, lockedFor, makeWorld, req, Session, settle, startHub, stopHub, taskOf, type Ev, type Hub,
+  allEvents, askNamed, BEHAVIOR, cleanup, draftFor, lockedFor, makeWorld, req, Session, settle, startHub, stopHub, taskOf, tempDir, type Ev, type Hub,
 } from '../../../tests/acceptance/29/h-d.ts';
 
 afterEach(cleanup);
@@ -119,9 +119,9 @@ describe('the gate runner at a real stop', () => {
       // A stranger's commit, authored as you, made in a clone of their own and brought in by a fetch and a fast-forward
       // the hub never saw from any session's tool call: as a PR from a fork arrives.
       const { execFileSync } = await import('node:child_process');
-      const { mkdtempSync, writeFileSync } = await import('node:fs');
+      const { writeFileSync } = await import('node:fs');
       const g = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=you', '-c', 'user.email=you@example.test', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd });
-      const fork = join(mkdtempSync('/tmp/dh29-fork-'), 'fork');
+      const fork = join(tempDir(), 'fork');
       g('/tmp', 'clone', '-q', repo, fork);
       writeFileSync(join(fork, 'src/users.ts'), 'export function getUser(id: string) {\n  return { id, name: "x" };\n}\n');
       g(fork, 'commit', '-qam', 'not from a session');
