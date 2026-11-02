@@ -12,6 +12,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { scrubValues } from '@deepbuild/evidence';
 import { ulid } from '@deepbuild/record';
+import { SERIES_MAX } from './series.js';
 
 /** One outside call the hub makes for a source, as it hands it to its HTTP client. */
 export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string }
@@ -30,7 +31,10 @@ export interface RecordedCall { source: string; request: HttpRequest; answer: Ht
 export interface Recording { v: 1; calls: RecordedCall[] }
 /** A reading: the parser's value and unit, with the source and the as-of time of the call that fetched it. */
 export interface Reading { source: string; value: number; unit: string; as_of: number }
-export type SourceRead = { status: 'reading'; reading: Reading } | { status: 'BLOCKED' | 'failed'; source: string; cause: string };
+/** A series call's values, kept in one evidence file named by one reading.batch event (#262). */
+export interface Batch { handle: string; source: string; as_of: number; file: string; count: number }
+/** A read: a number's reading, a series' batch, or why there is none; `until`, when the quota refused it, is when it can run. */
+export type SourceRead = { status: 'reading'; reading: Reading } | { status: 'batch'; batch: Batch } | { status: 'BLOCKED' | 'failed'; source: string; cause: string; until?: number };
 export type KeyTest = 'valid' | 'invalid' | 'INCONCLUSIVE' | 'untested';
 /** One event of a stream source, as source@1 has it. */
 export interface StreamEvent { seq: number; kind: string; data: unknown }
@@ -47,6 +51,10 @@ export interface Polled {
   quota: { per_minute: number; per_day: number };
   timeout: number; freshFor: number;
   keyTest: { path: string } | null;
+  /** A number, or a series of up to 10,000 named values a call (#262). */
+  shape: 'number' | 'series';
+  /** A cadence the hub runs only while a view that binds the source is shown (#262). */
+  whileShown: { every: number } | null;
 }
 export type Declared = Polled | { variant: 'stream'; name: string };
 
@@ -66,6 +74,8 @@ const BACKOFF_CAP_MS = 6 * 3_600_000;
 /** How long a sign-in waits for the browser to come back. */
 const SIGN_IN_MS = 5 * MINUTE;
 const HEADER = /^[A-Za-z0-9-]+$/;
+/** The shortest while-shown cadence. */
+const SHOWN_MIN_MS = 10_000;
 const whole = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
 const path = (p: unknown): p is string => typeof p === 'string' && p.startsWith('/') && !p.startsWith('//');
 
@@ -97,6 +107,19 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
   if (!whole(d.timeout) || !whole(d.freshFor)) refuse('gives no timeout or freshness in ms');
   const keyPath = (d.keyTest as { path?: unknown } | undefined)?.path;
   if (d.keyTest !== undefined && (!secret || !path(keyPath))) refuse('declares a key test with no secret or no path');
+  if (d.shape !== undefined && d.shape !== 'number' && d.shape !== 'series') refuse(`declares its shape as a number or a series, not ${String(d.shape)}`);
+  // A while-shown cadence its quota can't serve is refused here, naming both (#262).
+  let whileShown: Polled['whileShown'] = null;
+  if (d.while_shown !== undefined) {
+    const every = (d.while_shown as { every?: unknown } | null)?.every;
+    if (!Number.isSafeInteger(every) || (every as number) < SHOWN_MIN_MS) refuse(`declares while_shown every ${String(every)} ms; while_shown runs every ${SHOWN_MIN_MS / 1000} s or longer`);
+    whileShown = { every: every as number };
+    const perMinute = Math.ceil(MINUTE / whileShown.every);
+    const perDay = Math.ceil(DAY / whileShown.every);
+    if (perMinute > (quota?.per_minute as number) || perDay > (quota?.per_day as number)) {
+      refuse(`declares while_shown every ${whileShown.every / 1000} s, ${perMinute} calls a minute and ${perDay} a day, which its quota of ${String(quota?.per_minute)} calls a minute and ${String(quota?.per_day)} a day can't serve`);
+    }
+  }
   const o = d.oauth as { authorize?: unknown; token?: unknown; client?: unknown; scope?: unknown } | undefined;
   if (o !== undefined && (!secret || !path(o.authorize) || !path(o.token) || typeof o.client !== 'string' || !o.client || (o.scope !== undefined && typeof o.scope !== 'string'))) {
     refuse('declares an OAuth sign-in with no secret, or without its authorize and token paths and its client');
@@ -106,6 +129,7 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
     oauth: o === undefined ? null : { authorize: o.authorize as string, token: o.token as string, client: o.client as string, scope: (o.scope as string | undefined) ?? null },
     quota: { per_minute: quota!.per_minute as number, per_day: quota!.per_day as number }, timeout: d.timeout as number, freshFor: d.freshFor as number,
     keyTest: d.keyTest === undefined ? null : { path: keyPath as string },
+    shape: d.shape === 'series' ? 'series' : 'number', whileShown,
   };
 }
 
@@ -185,9 +209,8 @@ export type Append = (kind: 'source.called' | 'reading.recorded', data: Record<s
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
-  private readonly cache = new Map<string, Reading>();
-  /** The reading.recorded handle of each cached reading. */
-  private readonly handles = new Map<string, string>();
+  /** Each source's last answer: its reading or batch, with the handle the record holds it by. */
+  private readonly cache = new Map<string, { as_of: number; read: SourceRead; handle: string }>();
   private readonly spent = new Map<string, number[]>();
   private readonly backoff = new Map<string, { until: number; gap: number }>();
   private readonly recorded: RecordedCall[] = [];
@@ -195,30 +218,36 @@ export class Sources {
   /** Every secret value the hub read or was given: each is scrubbed from what a package gets and from the recording. */
   private readonly held = new Set<string>();
 
-  constructor(private readonly options: { now: () => number; http: HttpClient; secrets: SecretStore; append: Append; replay?: Recording }) {}
+  constructor(private readonly options: {
+    now: () => number; http: HttpClient; secrets: SecretStore; append: Append; replay?: Recording;
+    /** A series call's values, landed as one batch (#262). */
+    land?: (source: Polled, asOf: number, values: Map<string, number>) => Promise<Batch>;
+  }) {}
+
+  /** The source's last answer, fresh or not: what Read now keeps and a live bound value shows (#262). */
+  last(name: string): { as_of: number; read: SourceRead; handle: string } | undefined {
+    return this.cache.get(name);
+  }
 
   recording(): Recording {
     return { v: 1, calls: structuredClone(this.recorded) };
   }
 
-  /** A reading of the source: from the cache while it's fresh, else one call, parsed by the package once scrubbed. */
-  async read(owner: string, source: Polled, parse: (answer: HttpAnswer) => Promise<unknown>): Promise<SourceRead> {
-    return (await this.readOne(owner, source, parse)).read;
-  }
   /** Whether the secret store holds a package's secret now. */
   async holds(owner: string, name: string): Promise<boolean> {
     return this.options.replay !== undefined || (await this.options.secrets.get(secretKey(owner, name))) !== undefined;
   }
   /**
-   * A read as a schedule's run needs it (#365): with the handle of the reading.recorded it came from, and whether the
+   * A reading of the source: from the cache while it's fresh, else one call, parsed by the package once scrubbed. As a
+   * schedule's run needs it (#365): with the handle of the reading.recorded it came from, and whether the
    * call was held, by a rate limit or a 5xx from the provider, or by the hub's own quota or back-off.
    */
   async readOne(owner: string, source: Polled, parse: (answer: HttpAnswer) => Promise<unknown>): Promise<{ read: SourceRead; handle: string | null; held: boolean }> {
     const now = this.options.now();
     const cached = this.cache.get(source.name);
-    if (cached && now - cached.as_of < source.freshFor) return { read: { status: 'reading', reading: { ...cached } }, handle: this.handles.get(source.name) ?? null, held: false };
+    if (cached && now - cached.as_of < source.freshFor) return { read: structuredClone(cached.read), handle: cached.handle, held: false };
     let held = false;
-    const stop = (status: 'BLOCKED' | 'failed', cause: string): { read: SourceRead; handle: null; held: boolean } => ({ read: { status, source: source.name, cause }, handle: null, held });
+    const stop = (status: 'BLOCKED' | 'failed', cause: string, until?: number): { read: SourceRead; handle: null; held: boolean } => ({ read: { status, source: source.name, cause, ...(until === undefined ? {} : { until }) }, handle: null, held });
     // A replay reads no secret: a recording holds none.
     let value: string | undefined;
     if (source.secret && !this.options.replay) {
@@ -230,8 +259,11 @@ export class Sources {
     held = true;
     if (back && now < back.until) return stop('failed', `backing off until ${new Date(back.until).toISOString()}`);
     const times = (this.spent.get(source.name) ?? []).filter((t) => now - t < DAY);
-    if (times.filter((t) => now - t < MINUTE).length >= source.quota.per_minute) return stop('failed', `quota: ${source.quota.per_minute} calls a minute`);
-    if (times.length >= source.quota.per_day) return stop('failed', `quota: ${source.quota.per_day} calls a day`);
+    const minute = times.filter((t) => now - t < MINUTE);
+    // A call the quota refuses says when it can run: once the oldest call in the window leaves it.
+    const spent = minute.length >= source.quota.per_minute ? { per: 'minute', n: source.quota.per_minute, until: minute[minute.length - source.quota.per_minute]! + MINUTE }
+      : times.length >= source.quota.per_day ? { per: 'day', n: source.quota.per_day, until: times[times.length - source.quota.per_day]! + DAY } : null;
+    if (spent) return stop('failed', `quota: ${spent.n} calls a ${spent.per}, until ${new Date(spent.until).toISOString()}`, spent.until);
     this.spent.set(source.name, [...times, now]);
     held = false;
     let url = `https://${source.host}${source.path}`;
@@ -254,6 +286,7 @@ export class Sources {
         } catch (e) {
           return stop('failed', `no reading: ${this.scrub(e instanceof Error ? e.message : String(e))}`);
         }
+        if (source.shape === 'series') return this.series(source, parsed, now);
         const { value: v, unit } = (parsed ?? {}) as { value?: unknown; unit?: unknown };
         if (typeof v !== 'number' || !Number.isFinite(v) || typeof unit !== 'string' || !unit) {
           // What it returned goes back scrubbed, so the plug-in's author sees what to fix (#366).
@@ -264,9 +297,9 @@ export class Sources {
         const reading: Reading = { source: source.name, value: v, unit, as_of: now };
         const handle = `reading:${ulid(now)}`;
         await this.options.append('reading.recorded', { reading: handle, value: v, unit, as_of: now, source: source.name, n: 1, outside: false });
-        this.cache.set(source.name, reading);
-        this.handles.set(source.name, handle);
-        return { read: { status: 'reading', reading: { ...reading } }, handle, held: false };
+        const read: SourceRead = { status: 'reading', reading };
+        this.cache.set(source.name, { as_of: now, read, handle });
+        return { read: structuredClone(read), handle, held: false };
       }
       // The client never follows a redirect: the hub does, only to the source's own host, which the handle goes to.
       let next: URL | undefined;
@@ -275,6 +308,22 @@ export class Sources {
       if (hop >= HOPS) return stop('failed', `more than ${HOPS} redirects`);
       url = next.href;
     }
+  }
+
+  /** A series call's values (#262): up to 10,000 finite numbers by name, landed as one batch; past that, no reading. */
+  private async series(source: Polled, parsed: unknown, now: number): Promise<{ read: SourceRead; handle: string | null; held: boolean }> {
+    const failed = (cause: string) => ({ read: { status: 'failed' as const, source: source.name, cause }, handle: null, held: false });
+    const values = (parsed as { values?: unknown } | null)?.values;
+    if (typeof values !== 'object' || values === null || Array.isArray(values)) return failed('no reading: a series parser returns { values, unit }, its values a record of numbers by name');
+    const entries = Object.entries(values);
+    if (entries.length > SERIES_MAX) return failed(`no reading: the call returned ${entries.length.toLocaleString('en-US')} values, over a series' ${SERIES_MAX.toLocaleString('en-US')}`);
+    const bad = entries.find(([name, v]) => !name || name.includes('\n') || typeof v !== 'number' || !Number.isFinite(v));
+    if (bad) return failed(`no reading: the series value ${JSON.stringify(bad[0]).slice(0, 100)} isn't a finite number by a name`);
+    if (!this.options.land) return failed('no reading: this host keeps no series');
+    const batch = await this.options.land(source, now, new Map(entries as [string, number][]));
+    const read: SourceRead = { status: 'batch', batch };
+    this.cache.set(source.name, { as_of: now, read, handle: batch.handle });
+    return { read: structuredClone(read), handle: batch.handle, held: false };
   }
 
   /**
