@@ -25,19 +25,27 @@ export interface ClaimState { task: string; session: string | null; created: num
  * the time `expected` gives it.
  */
 export async function claimState(query: Query, id: string, expected: ReadonlyMap<string, number>): Promise<ClaimState | undefined> {
-  const [claim] = (await query(`SELECT id, session_id, subject_ref, created, round FROM claims WHERE id = '${sql(id)}'`)) as { id: string; session_id: string | null; subject_ref: string; created: number; round: number | null }[];
+  const [claim] = (await query(`SELECT id, session_id, subject_ref, commit_sha, created, round FROM claims WHERE id = '${sql(id)}'`)) as { id: string; session_id: string | null; subject_ref: string; commit_sha: string | null; created: number; round: number | null }[];
   if (!claim) return undefined;
-  const runs = (await query(`SELECT id, check_id, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; ended: number | null; outcome: string | null }[];
+  const [definition] = (await query(`SELECT requirements FROM definitions WHERE task_ref = '${sql(claim.subject_ref)}'`)) as { requirements: string | null }[];
+  const fixes = (JSON.parse(definition?.requirements ?? '[]') as Obj[]).filter((r) => typeof r.check === 'string' && r.on_base !== 'passes').map((r) => String(r.check));
+  const runs = (await query(`SELECT id, check_id, commit_sha, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; commit_sha: string | null; ended: number | null; outcome: string | null }[];
   const [verdict] = (await query(`SELECT outcome, requirements, created FROM verdicts WHERE claim_id = '${sql(id)}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as { outcome: string; requirements: string; created: number }[];
   const running = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
-  const checks = runs.filter((r) => r.ended !== null).map((r) => ({ check: r.check_id, outcome: r.outcome ?? 'unknown' }));
+  // A check's run on the merge base (#31), on another commit than the claim's, is its proof, not its result: a fix
+  // check with none that finished stays unproved.
+  const isBase = (r: { commit_sha: string | null }): boolean => claim.commit_sha !== null && r.commit_sha !== null && r.commit_sha !== claim.commit_sha;
+  const onBase = runs.filter((r) => isBase(r) && ['passed', 'failed', 'overran'].includes(r.outcome ?? '')).map((r) => r.check_id);
+  const unproved = new Set(fixes.filter((check) => !onBase.includes(check)));
+  const own = runs.filter((r) => !isBase(r));
+  const checks = own.filter((r) => r.ended !== null).map((r) => ({ check: r.check_id, outcome: r.outcome ?? 'unknown' }));
   let state: LineState;
   if (verdict) {
     const reqs = (JSON.parse(verdict.requirements) as Obj[]).map((r): LineRequirement => ({ req: String(r.req), outcome: r.outcome as Result, smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
     state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running };
   } else {
-    const seen = new Set(runs.map((r) => r.check_id));
-    const passed = new Set(checks.filter((c) => c.outcome === 'passed').map((c) => c.check));
+    const seen = new Set(own.map((r) => r.check_id));
+    const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
     state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running };
   }
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };

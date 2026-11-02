@@ -21,7 +21,7 @@ import { openRecord, RecordError, type Connection, type EventInput, type Message
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { slot, validityGate, type SessionLog } from '@deepbuild/gate';
+import { openCheckouts, slot, validityGate, type Checkouts, type SessionLog } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -46,8 +46,9 @@ import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { Forge, parsePrUrl, prUrlIn } from './forge.js';
+import { Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
+import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { downLeaving } from './leftover.js';
 import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
@@ -56,7 +57,7 @@ import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } fro
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
+import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -210,12 +211,44 @@ const AUTOMATIC_QUEUED = /<task-notification>|^\s*<(?:cross-session-message|agen
  * its app showed a wake working.
  */
 interface Routes {
-  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number;
+  /**
+   * `ended`: when a StopFailure last ended the newest turn (wall ms); the session is idle from then until a hook
+   * shows work. `prompt`: the newest prompt's id, the turn a StopFailure must name to end it. `handed`: continues a
+   * waiter took that no turn has shown yet; the next prompt carries them unless it is the wake that shows them.
+   */
+  cwd: string; shown: Set<string>; covered: boolean; holding: number; busy: number; ended: number; prompt?: string | undefined; handed?: string[];
   waiter?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   continued: number; capped: boolean; sendBacks: string[]; later: string[]; wakes?: boolean;
   /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
   places?: boolean; placing?: Set<string>;
+  /**
+   * The cause of its newest stop while that cause's task is open (#85): a sign-in, a token refresh, a refusal, a
+   * spend limit, a plan window, or any block you own. No turn DeepBuild causes starts there: what would wake it waits
+   * on its row and goes with the resume. Cleared by a turn running, a prompt you typed or the continue that resumes it.
+   */
+  blocked?: string | undefined;
 }
+/** Whether a stop's cause holds the turns DeepBuild would start in its session until its task closes (#85). */
+/** A call of the cut-off turn with no recorded end (#85): how the block names it, the key an identical send matches by, and whether it is a send that opens a pull request. */
+interface CutOff { key: string; label: string; send: boolean; pr: boolean }
+/** The effect classes each `effect:` guard entry in `<dir>/rules.json` stands for, by the entry's name. */
+function effectEntries(dir: string): Map<string, string[]> {
+  const classes = new Map<string, string[]>();
+  const entries = readJson(join(dir, 'rules.json'));
+  for (const [name, entry] of Object.entries(isObj(entries) ? entries : {})) {
+    const effect = isObj(entry) && typeof entry.match === 'string' ? /^effect:([\w-]+)$/.exec(entry.match)?.[1] : undefined;
+    if (effect) classes.set(name, [effect]);
+  }
+  return classes;
+}
+/** How long the gate waits on the forge for a cut-off send's result (#85): well inside the gate's 10 s hold. */
+const PULL_LOOKUP_MS = 4000;
+/**
+ * In a query over a session's events `e`: not a child session's stop (a subagent's agent.stop@5, which names the
+ * child). A child's stop is no turn end of the session, so it never bounds a turn, ends a hold or carries a parked line.
+ */
+const OWN_TURN = "NOT (e.kind = 'agent.stop' AND json_extract(e.data, '$.child') IS NOT NULL)";
+const holdsTurns = (data: Obj): boolean => data.owner === 'you' || ['sign_in_required', 'token_refresh_failed', 'plan_window_spent', 'refusal'].includes(String(data.cause));
 /** An answered ask, as a route delivers it. */
 interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
 /** Your words sent from the app into a session (#340), by the delivery's request ID. */
@@ -275,6 +308,7 @@ export class Core {
   private readonly confirmer: Confirmer;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  private checkouts!: Checkouts;
   /** The kernel's lease table (#237), read by deep env down for who holds a port now, and the gate runner's cpu.slot. */
   private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
@@ -370,8 +404,16 @@ export class Core {
   private watcher: FSWatcher | undefined;
   private settingsKey = '';
   private readonly settingsReadings: string[] = [];
+  /** Hooks waiting on a network stop's try, which the hub finishes before it stops. */
+  private readonly tried = new Set<Promise<unknown>>();
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
+  /** The log position of the last session.continued the hub routed (#85). */
+  private continuedPos = 0;
+  /** The sends each session's cut-off turn started with no recorded end (#85), by the key an identical call matches: denied at PreToolUse with the earlier result. */
+  private readonly unknownSends = new Map<string, Map<string, { label: string; pr: boolean; denied?: boolean }>>();
+  /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
+  private continuing: Promise<void> = Promise.resolve();
   /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
   private readonly settling = new Map<string, Set<() => void>>();
   /** Each session's routes back into it, by session ID. */
@@ -418,7 +460,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
@@ -442,6 +484,7 @@ export class Core {
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run), judged: (claim) => this.judged(claim),
+      checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
@@ -486,13 +529,38 @@ export class Core {
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
+    // The continues the hub carried before this start are those recorded before it; opening the core below settles
+    // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
+    // continue that records is routed right after, never skipped as already carried (#85).
+    this.continuedPos = Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind = 'session.continued'`)) as { pos: number }[])[0]?.pos ?? 0);
+    // A continue parked for a session's next prompt outlives the hub: each that no later turn of its session carried
+    // goes with that session's next prompt again (#85).
+    for (const row of (await this.record.raw(`SELECT c.session_id, c.data FROM events c WHERE c.kind = 'session.continued' AND c.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = c.session_id AND e.log_pos > c.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'permission.request') AND ${OWN_TURN}) ORDER BY c.log_pos`)) as { session_id: string; data: string | Obj }[]) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      this.routesOf(row.session_id).later.push(await this.continueBlock(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null, typeof d.stop === 'string' ? d.stop : undefined));
+    }
+    // A stop whose task is open holds its session's DeepBuild turns across a restart too (#85): each session's newest
+    // stop that no turn, prompt or continue followed.
+    for (const row of (await this.record.raw(`SELECT s.session_id, s.data FROM events s WHERE s.kind = 'agent.stop' AND s.session_id IS NOT NULL AND json_extract(s.data, '$.child') IS NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.session_id AND e.log_pos > s.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'session.continued', 'session.end') AND ${OWN_TURN})`)) as { session_id: string; data: string | Obj }[]) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      if (holdsTurns(d)) this.routesOf(row.session_id).blocked = String(d.cause);
+    }
     // Opening the supervisor reaps what the record says a run left before this start.
-    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir });
+    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck() });
+    await this.continues();
     this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
-    // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
-    const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
-    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => { if (await due()) await asks.tick(); });
+    // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
+    // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
+    // so a backfill never feeds it. The hub takes each continue's route every beat, since an answer records them too.
+    const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
+    let ticked = await landed();
+    const due = async (): Promise<boolean> => {
+      const pos = await landed();
+      if (pos > ticked) { ticked = pos; return true; }
+      return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
+    };
+    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => { if (await due()) await asks.tick(); await this.continues(); });
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -531,12 +599,18 @@ export class Core {
       // the sandbox profile itself keeps every project's agent hook and MCP files. The runner's jobs/ is left to
       // each run's own grant: a job's checkout writes only its own folder.
       guarded: [
-        { path: this.root.dir, except: [join(this.root.dir, 'jobs')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
+        { path: this.root.dir, except: [join(this.root.dir, 'jobs'), join(this.root.dir, 'checkouts')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
         join(homedir(), 'Library', 'LaunchAgents'),
         process.execPath, resolve(process.execPath, '../../lib/node_modules'),
         ...[process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME].filter((p): p is string => !!p && isAbsolute(p)),
         ...compose.guarded,
       ],
+    });
+    // The base-commit service (#31), its checkouts under the hub's root: opening removes what a crash left, whose
+    // processes the supervisor has just reaped; no run writes the store, each only its own checkout.
+    this.checkouts = await openCheckouts({
+      store: join(this.root.dir, 'objects'), root: join(this.root.dir, 'checkouts'), kinds: [], host: this.supervisor, leases, now: this.now,
+      ...(this.options.plant === 'git-inherits-env' ? { plant: 'git-inherits-env' } : {}),
     });
     // The keys a stack leased per session before this start (#332): its processes were reaped as the supervisor opened,
     // so each ends now that the record proves them gone.
@@ -728,6 +802,15 @@ export class Core {
 
   // ---- Hooks.
 
+  /** A Claude Code stop whose payload says server_error, under 10 minutes old: the try of the host its API calls go to. */
+  private tryNetwork(drafts: Draft[], meta: HookMeta, tries = new Map<string, Promise<boolean>>()): Promise<void> | undefined {
+    if ((meta.agent !== 'claude-code' && meta.agent !== 'claude') || meta.fields?.error !== 'server_error' || this.now() - (drafts[0]?.ts ?? 0) >= 10 * 60_000) return undefined;
+    const host = apiHost();
+    const trying = tries.get(host) ?? reachable(host);
+    tries.set(host, trying);
+    return trying.then((reached) => { meta.network = { host, reached }; });
+  }
+
   /**
    * One hook's events, checked and handed to the record in the order hooks arrived; the next hook waits only
    * for that, not for the commit. Resolves once each append settled.
@@ -737,7 +820,14 @@ export class Core {
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
     const replayed = this.replaying ?? Promise.resolve();
-    return replayed.then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+    // A network stop's try runs before it queues, so it holds no other hook of any session (#85).
+    const tried = this.tryNetwork(drafts, meta);
+    const handled = replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+    if (!tried) return handled;
+    // It was acknowledged, so nothing else keeps it: the hub stops only once it's in the record.
+    const kept = handled.catch(() => undefined).finally(() => this.tried.delete(kept));
+    this.tried.add(kept);
+    return handled;
   }
   /**
    * A hook reaching the running hub shows it answers again: what deep-hook spooled while the hub was late is
@@ -861,6 +951,19 @@ export class Core {
       }
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
+    // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
+    // would start there until the task closes (#85); any other stop ends an earlier hold.
+    const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
+    if (stopped) this.routesOf(meta.session, meta.cwd).blocked = holdsTurns(stopped.data) ? String(stopped.data.cause) : undefined;
+    // The cut-off turn's unknown sends are the continue's business: a turn that ended normally, or a prompt you typed,
+    // ends their denial, so a later identical send of yours runs. Not the prompt that carries a parked continue itself:
+    // the block goes with it, and its turn is the one the denial is for.
+    const carrying = this.routes.get(meta.session ?? '');
+    const typedNow = drafts.some((d) => d.kind === 'user.ask' && d.data.from === 'person' && !d.queued) && !carrying?.later.length && !carrying?.handed?.length;
+    if (meta.session && this.unknownSends.has(meta.session) && ((stopped && stopped.data.outcome !== 'failed') || typedNow)) {
+      this.unknownSends.delete(meta.session);
+      this.askingSoon();
+    }
     // After a restart the core knows a session's state from its next hook on; a person's status question, which
     // changes none, takes the row's before the prompt's event reads as work (#83). Read before the queue's splice,
     // which may take the prompt's own draft.
@@ -1086,7 +1189,8 @@ export class Core {
           r.lastLine = e.ts;
           r.open = [];
           break;
-        case 'agent.stop': r.lastLine = e.ts; r.open = []; break;
+        // A child's stop (agent.stop@5 naming the child) ends no turn of the session: its open calls stay open.
+        case 'agent.stop': if (typeof d.child !== 'string') { r.lastLine = e.ts; r.open = []; } break;
         case 'session.end': state.delete(e.session); break;
         case 'tool.before':
           if (call) {
@@ -1175,7 +1279,8 @@ export class Core {
     if (p.due > this.now()) return this.armPromise(session);
     const agent = this.sessions.get(session)?.agent ?? this.live.get(session)?.agent ?? 'claude-code';
     const r = this.routes.get(session);
-    const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && r.busy < r.waiter.since;
+    // A session stopped on a cause whose task is open isn't woken for it (#85): the check goes with the resume.
+    const idle = r !== undefined && r.waiter !== undefined && r.covered && r.shown.has('waiter') && r.wakes !== false && !r.holding && !r.blocked && r.busy < r.waiter.since;
     await this.appendSession(session, agent, 'promise.due', { promise: p.id, due: p.due, route: idle ? 'wake' : 'next_hook' });
     p.status = 'due';
     if (idle && r.waiter) return this.handPromise(session, p, r);
@@ -1460,7 +1565,10 @@ export class Core {
     const cause = String(data.cause);
     if (cause === 'unknown') return;
     data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
-    data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' ? 'service' : 'agent';
+    // Who clears it. A spend limit reads as a rate limit, but only you can raise it (#85).
+    data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' || meta.fields?.error === 'billing_error' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' || cause === 'timed_out' ? 'service' : 'agent';
+    // The payload can't tell a dropped connection from a network you must reconnect, so the hub tried it (#85).
+    if (cause === 'timed_out' && meta.network && !meta.network.reached) { data.owner = 'you'; data.signature = signature('stop:network', meta.network.host); }
   }
 
   /**
@@ -1691,7 +1799,7 @@ export class Core {
   /** What a session has shown of the routes back into it since it last started, its holds, waiter and continuations. */
   private routesOf(session: string, cwd = ''): Routes {
     let r = this.routes.get(session);
-    if (!r) this.routes.set(session, r = { cwd, shown: new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] });
+    if (!r) this.routes.set(session, r = { cwd, shown: new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] });
     return r;
   }
   /**
@@ -1704,9 +1812,12 @@ export class Core {
     if (meta.event === 'SessionStart') {
       // What a session has shown resets only when it starts again.
       const before = this.options.plant === 'routes-kept-across-sessions' ? [...this.routes.values()].reverse().find((r) => r.cwd === meta.cwd) : undefined;
-      const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, continued: 0, capped: false, sendBacks: [], later: [] };
+      const fresh: Routes = { cwd: meta.cwd, shown: before ? before.shown : new Set(), covered: true, holding: 0, busy: 0, ended: 0, continued: 0, capped: false, sendBacks: [], later: [] };
       const old = this.routes.get(meta.session);
       if (old?.waiter) fresh.waiter = old.waiter;
+      // A continue parked for the next prompt goes with the first prompt after a resume (#85); a clear or a
+      // compaction starts a new session ID, and the cleared one's continues end with it.
+      if (old) fresh.later = [...(old.handed ?? []), ...old.later];
       if (old?.places) fresh.places = true;
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
@@ -1719,17 +1830,28 @@ export class Core {
       if (this.options.plant !== 'stop-count-never-resets') r.continued = 0;
       r.capped = false;
     }
+    // A turn running, or a prompt you typed, is the session yours again: its stop's hold on DeepBuild's turns ends (#85).
+    if (meta.event === 'UserPromptSubmit' || meta.event === 'PreToolUse' || meta.event === 'PostToolUse') r.blocked = undefined;
     if (meta.event === 'SessionEnd') {
       plantedSessionEnd(this.options.plant, meta.session);
       if (this.options.plant !== 'waiter-outlives-session') r.waiter?.give({ exit: 'session ended' });
       this.routes.delete(meta.session);
+      // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
+      // it as the folder's last session.
+      if (r.later.length || r.handed?.length) this.routesOf(meta.session).later = [...(r.handed ?? []), ...r.later];
       // A call running as its session quit returns to nobody: its answer waits for the session's resume.
       for (const [ask, waiting] of this.askWaits) if (waiting === meta.session) this.stopAskWait(ask);
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
       for (const map of [this.acks, this.midTurn, this.carried, this.turnsStarted, this.onScreen]) map.delete(meta.session);
+    } else if (meta.event === 'StopFailure') {
+      // A turn that ends on an API error ends like a Stop, and Claude Code starts its waiter as at a Stop; one an
+      // earlier stop started may still wait, and either may wake the idle session (#85). Only the newest turn's: a prompt you
+      // queued may start before the failed turn's hook is stamped, and one that names no turn ends none.
+      if (!meta.fields?.agent_id && meta.fields?.prompt_id !== undefined && meta.fields.prompt_id === r.prompt) r.ended = Math.max(r.ended, ulidTime(meta.id));
     } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart') r.busy = Math.max(r.busy, ulidTime(meta.id));
+    if (meta.event === 'UserPromptSubmit') r.prompt = meta.fields?.prompt_id;
   }
   /** Claude Code's cap on stop-hook continuations in one turn, from its facts. */
   private cap(): number {
@@ -1855,27 +1977,33 @@ export class Core {
     const promised = [...this.promises].filter(([, p]) => p.status === 'due').map(([id]) => id);
     const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted, ...promised])].sort();
     const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
-    const key = `${sessions.join(' ')}|${judged.join(' ')}`;
+    // A session whose cut-off turn started a send with no recorded end has its tool calls held for the gate (#85).
+    const resend = [...this.unknownSends].filter(([, sends]) => sends.size).map(([id]) => id).sort();
+    const key = `${sessions.join(' ')}|${judged.join(' ')}|${resend.join(' ')}`;
     if (key === this.askingSent) return;
     this.askingSent = key;
-    this.asking(sessions, judged);
+    this.asking(sessions, judged, resend);
   }
 
   /**
    * Hands what waits for an idle session to its waiter, which exits 2 with it and so wakes the session. Claude Code
    * starts the waiter at a stop, so the session is idle while no stop of it is held (the hold takes the answer) and no
-   * hook started since shows a turn running; never past the turn's cap (the next prompt does), or once its app has
-   * shown it doesn't wake.
+   * hook started since the waiter, or since a StopFailure ended a later turn, shows a turn running; never past the
+   * turn's cap (the next prompt does), or once its app has shown it doesn't wake.
    */
   private offer(session: string): void {
     const r = this.routes.get(session);
     if (!r) return;
     if (r.places) return void this.queue(() => this.placeOrRefuse(session)).catch(() => undefined);
-    const idle = () => r.waiter !== undefined && !r.holding && r.busy < r.waiter.since;
+    const idle = () => r.waiter !== undefined && !r.holding && r.busy < Math.max(r.waiter.since, r.ended);
     if (!r.covered || !r.shown.has('waiter') || r.capped || r.wakes === false || !idle()) return;
     void this.queue(async () => {
       const waiter = r.waiter;
       if (!waiter || !idle()) return;
+      // While the session's newest stop carries a cause whose task is open, no turn DeepBuild causes starts there (#85):
+      // an answer, a promised check or a parked line waits on its row and goes with the resume. Only a message you
+      // typed goes at once.
+      if (r.blocked && !(this.notes.get(session) ?? []).length) return;
       // A promised check that came due before this waiter asked (a hub restarted on the record, the waiter back a
       // moment later) wakes the session now: the route is the waiter's, however the two arrived (#120).
       const p = this.promises.get(session);
@@ -1888,7 +2016,7 @@ export class Core {
       }
       const rows = await this.waitingFor(session);
       const notes = this.notes.get(session) ?? [];
-      if (!rows.length && !notes.length) return;
+      if (!rows.length && !notes.length && !r.later.length) return;
       if (this.options.plant === 'waiter-checks-every-5s') {
         // The planted waiter asks every 5 s instead of being told.
         const due = 5000 - ((Date.now() - waiter.at) % 5000);
@@ -1897,7 +2025,10 @@ export class Core {
       }
       r.waiter = undefined;
       if (this.options.plant === 'waiter-never-wakes') return waiter.give({ exit: 'planted: never wakes' });
-      waiter.give({ session, text: [rows.length ? this.answerText(rows) : '', notes.length ? this.noteText(notes) : ''].filter(Boolean).join('\n\n') });
+      // A continue parked before this waiter connected goes with it too (#85): a first turn that failed had none open.
+      const later = r.later.splice(0);
+      if (later.length) r.handed = [...(r.handed ?? []), ...later];
+      waiter.give({ session, text: [rows.length ? this.answerText(rows) : '', notes.length ? this.noteText(notes) : '', ...later].filter(Boolean).join('\n\n') });
       // A note is your words once a turn shows them: the wake's prompt names its request ID, else it goes by the next prompt.
       for (const note of this.notes.get(session)?.splice(0) ?? []) {
         this.handedNotes.set(note.request, { ...note, timer: setTimeout(() => void this.queue(async () => this.notWoken(note.request)).catch(() => undefined), WAKE_GRACE) });
@@ -1910,6 +2041,156 @@ export class Core {
       const at = Date.now();
       for (const row of rows) this.handed.set(row.id, { session, at, via: 'wake', timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
     }).catch(() => undefined);
+  }
+  /** The continues the asks core recorded since the hub last read them (#85): each takes a route back into its session. */
+  private continues(): Promise<void> {
+    return (this.continuing = this.continuing.then(() => this.readContinues()).catch(() => undefined));
+  }
+  private async readContinues(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT log_pos, session_id, data FROM events WHERE kind = 'session.continued' AND log_pos > ${this.continuedPos} ORDER BY log_pos`)) as { log_pos: number; session_id: string | null; data: string | Obj }[];
+    for (const row of rows) {
+      this.continuedPos = row.log_pos;
+      if (!row.session_id) continue;
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      await this.continueSession(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null, typeof d.stop === 'string' ? d.stop : undefined);
+    }
+  }
+  /**
+   * The words a continue goes into its session with (#85): why it continues, then the block from the record for the
+   * turn the stop cut off: each change or send call that started with no recorded end, marked outcome unknown, to
+   * check before acting on. A send among them is denied at PreToolUse while its outcome is unknown. The box's resume
+   * (#146) reuses the block. The block is kept as the session's reading, so the record says what the session heard.
+   */
+  private async continueBlock(session: string, because: string, task: string | null, stop: string | undefined): Promise<string> {
+    const text = continueText(because, task);
+    const calls = stop ? await this.cutOff(session, stop) : [];
+    if (!calls.length) return text;
+    const sends = this.unknownSends.get(session) ?? this.unknownSends.set(session, new Map()).get(session)!;
+    // Only a shell send has its input recorded (its command), so only one can be matched as identical; an MCP send is named, never denied.
+    for (const call of calls) if (call.send && call.key.startsWith('shell:')) sends.set(call.key, { label: call.label, pr: call.pr });
+    const block = `DeepBuild: the turn that was cut off started ${calls.length === 1 ? 'this call' : 'these calls'} with no recorded end, so ${calls.length === 1 ? 'its' : 'each one\'s'} outcome is unknown; check before acting on it: ${calls.map((c) => `${c.label} (outcome unknown)`).join('; ')}.`;
+    const agent = this.live.get(session)?.agent ?? this.sessions.get(session)?.agent ?? 'claude-code';
+    const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') = ? LIMIT 1`, [session, block]);
+    if (!seen) await this.appendReading(session, agent, block).catch(() => undefined);
+    if (sends.size) this.askingSoon();
+    return `${text}\n\n${block}`;
+  }
+  /**
+   * The change and send calls of the turn `stop` cut off that started with no recorded end: each tool.before of the
+   * session between the stop before it and the stop itself with no tool.after for its call. A change is an edit or
+   * a write; a send is a shell call that opens a pull request, or one the `effect:` guard entries deep-hook matched
+   * read as a push, merge, dispatch, send or delete, or an MCP tool whose facts give it such an effect.
+   */
+  private async cutOff(session: string, stop: string): Promise<CutOff[]> {
+    const rows = (await this.record.raw(`SELECT kind, data FROM events WHERE session_id = ? AND kind IN ('tool.before', 'tool.after')
+      AND log_pos < (SELECT log_pos FROM events WHERE id = ?)
+      AND log_pos > COALESCE((SELECT MAX(log_pos) FROM events e WHERE e.session_id = ? AND e.kind IN ('agent.stop', 'session.start') AND ${OWN_TURN} AND e.log_pos < (SELECT log_pos FROM events WHERE id = ?)), 0) ORDER BY log_pos`, [session, stop, session, stop])) as { kind: string; data: string | Obj }[];
+    const open = new Map<string, Obj>();
+    for (const row of rows) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      if (typeof d.call !== 'string') continue;
+      if (row.kind === 'tool.before') open.set(d.call, d);
+      else open.delete(d.call);
+    }
+    const effects = effectEntries(this.root.dir);
+    const found: CutOff[] = [];
+    for (const d of open.values()) {
+      const kind = String(d.kind);
+      const command = typeof d.command === 'string' ? d.command : undefined;
+      const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
+      const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
+      const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && typeof d.effect === 'string' && EFFECTS.has(d.effect));
+      const change = kind === 'edit' || kind === 'write';
+      if (!send && !change) continue;
+      const paths = Array.isArray(d.paths) ? d.paths.map(String).join(', ') : '';
+      const label = kind === 'shell' ? `Bash \`${command ?? ''}\`` : kind === 'mcp' ? `${String(d.server)} ${String(d.tool)}` : `${kind} ${paths}`;
+      found.push({ key: kind === 'mcp' ? `mcp:${String(d.server)}/${String(d.tool)}` : `${kind}:${command ?? paths}`, label, send, pr });
+    }
+    return found;
+  }
+  /**
+   * Whether a PreToolUse repeats a send the cut-off turn started with no recorded end (#85), and why it is denied: with
+   * the earlier result when the hub can read it (a pull request the forge holds for the session's branch), else with
+   * the outcome unknown, once, so the agent checks before sending again. A send the forge shows never went out runs.
+   */
+  private async resent(meta: HookMeta): Promise<string | undefined> {
+    const sends = this.unknownSends.get(meta.session);
+    const call = meta.call;
+    if (!sends?.size || !call) return undefined;
+    const command = typeof call.input.command === 'string' ? call.input.command : undefined;
+    // The recorded command was scrubbed by the parser with the values it held then; either spelling matches.
+    const keys = command === undefined ? [] : [...new Set([`shell:${scrubText(command, { held: this.options.held })}`, `shell:${command}`])];
+    const key = keys.find((k) => sends.has(k));
+    const found = key ? sends.get(key) : undefined;
+    if (!key || !found) {
+      // A different call ran: the agent went on, or checked, as the denial asked. A send denied once is free to run again.
+      for (const [k, v] of sends) if (v.denied) sends.delete(k);
+      if (!sends.size) { this.unknownSends.delete(meta.session); this.askingSoon(); }
+      return undefined;
+    }
+    const result = found.pr ? await this.pullFor(meta) : undefined;
+    if (result === null) {
+      // The forge holds no pull request for the branch: the send never went out, so this one runs.
+      sends.delete(key);
+      if (!sends.size) { this.unknownSends.delete(meta.session); this.askingSoon(); }
+      return undefined;
+    }
+    if (result) {
+      const agent = this.live.get(meta.session)?.agent ?? meta.agent;
+      await this.openedPr(meta.session, agent, result).catch(() => undefined);
+      return `DeepBuild denied this: ${found.label} is the send the turn that was cut off already made. Its result: pull request ${result}. Go on from there; don't open it again.`;
+    }
+    // Its outcome can't be read from here: denied with that, until a different call shows the agent went on or checked;
+    // a retry right after a late reply is denied again, so a hold that ran out never lets the send through.
+    found.denied = true;
+    return `DeepBuild denied this: ${found.label} is the send the turn that was cut off started with no recorded end, so its outcome is unknown. Check whether it went through before sending again; only a call you've checked, or a different one, runs.`;
+  }
+  /** The pull request the forge holds for the session's branch, or null when it holds none, or undefined when it can't be read. */
+  private async pullFor(meta: HookMeta): Promise<string | null | undefined> {
+    const lookup = async (): Promise<string | null | undefined> => {
+      const repo = repoOf(meta.cwd);
+      const [row] = (await this.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
+      const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 2000 }, (error, out) => done(error ? undefined : out.trim())));
+      if (!repo || !branch) return undefined;
+      const forge = new Forge(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+      return forge.pullFor(repo, branch);
+    };
+    // Well inside the gate's hold, so the reply is never late for this: past it the result is unknown.
+    return Promise.race([lookup().catch(() => undefined), new Promise<undefined>((done) => setTimeout(() => done(undefined), PULL_LOOKUP_MS).unref())]);
+  }
+  /**
+   * One automatic continue of a stopped session (#85), by #25's routes: a stop of the session held now is sent back
+   * with it; else its idle waiter wakes the session with it; else it goes with the session's next prompt, and the
+   * record says so. The core decided it from the stop's structure; the hub only carries it. What waited on the row
+   * while the stop's task was open (a parked line, a promised check due) goes with the resume.
+   */
+  private async continueSession(session: string, because: string, task: string | null, stop?: string): Promise<void> {
+    const block = await this.continueBlock(session, because, task, stop);
+    // A verdict that landed while the session was stopped (a slow-lane FAIL, say) waited on its row: it goes with the resume.
+    const landed = await this.landedLine(session).catch(() => undefined);
+    const claim = this.live.get(session)?.claim;
+    const text = landed ? `${block}\n\nDeepBuild: while this session was stopped, its claim${claim ? ` ${claim}` : ''} was judged: ${landed}` : block;
+    const r = this.routesOf(session);
+    r.blocked = undefined;
+    if (r.holding) {
+      r.sendBacks.push(text);
+      for (const wake of this.waiting.get(session) ?? []) wake();
+      return;
+    }
+    const waiter = r.waiter;
+    if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < Math.max(waiter.since, r.ended)) {
+      r.waiter = undefined;
+      const later = r.later.splice(0);
+      r.handed = [...(r.handed ?? []), text, ...later];
+      const p = this.promises.get(session);
+      let promised: string | undefined;
+      if (p?.status === 'due' && !p.handed) { p.handed = true; promised = wakeText(p); this.armPromiseGrace(session, p, WAKE_GRACE); }
+      waiter.give({ session, text: [text, ...later, promised].filter(Boolean).join('\n\n') });
+      return;
+    }
+    r.later.push(text);
+    const agent = this.live.get(session)?.agent ?? this.sessions.get(session)?.agent ?? 'claude-code';
+    await this.appendReading(session, agent, `DeepBuild continues this session (${because}${task ? `, task ${task}` : ''}), but no route into it is open now: the continue goes with its next prompt.`).catch(() => undefined);
   }
   /**
    * An answer handed to a route that no turn has shown: the transcript is read for it, and with none it reads stalled
@@ -2013,6 +2294,12 @@ export class Core {
       const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
       if (deny) return { deny };
     }
+    // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result.
+    if (call.resend) {
+      const deny = await this.resent(meta).catch(() => undefined);
+      if (deny) return { deny };
+      if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
+    }
     // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
     // can't be worked out runs only staged.
     if (FOREIGN.has(meta.agent) || !meta.session) {
@@ -2097,7 +2384,7 @@ export class Core {
     const key = subjectKey({ kind: 'authority', subject: about.subject, options } as unknown as Parameters<typeof subjectKey>[0], '');
     const answer = await this.precheck({
       ask: 'ask:0', kind: 'authority', options, plan: null, words: [], changed: null, folded: [], undo: false, cost_usd: null, suggested: null, conflict: [],
-      needs_person: [], budget: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
+      needs_person: [], budget: null, missing: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
     });
     return answer !== undefined && !answer.also?.length;
   }
@@ -2237,6 +2524,9 @@ export class Core {
         // Behind this prompt's own hook, so its origin is recorded (its event, or the queue's) when read.
         const status = await this.statusReply(meta);
         for (const [ask, handed] of [...this.handed]) if (handed.session === meta.session) await this.unwoken(meta.session, ask, prompt);
+        // A continue a waiter took is shown by the wake that carries it; any other prompt carries it instead (#85).
+        r.later.unshift(...(r.handed ?? []).filter((text) => !prompt.includes(text)));
+        delete r.handed;
         // An answer whose delivery timed out is read for first: one a turn already showed isn't sent again.
         for (const [ask, session] of [...this.unread]) {
           if (session !== meta.session) continue;
@@ -2257,6 +2547,8 @@ export class Core {
         const answers = leaves ? undefined : await this.deliver(waiting, 'next_prompt', { session: meta.session, id: meta.id });
         // A verdict that landed after the stop's reply goes with the next prompt (#83).
         const landed = await this.landedLine(meta.session);
+        // A continue the core recorded since the timer last read them goes with this prompt, not the one after (#85).
+        await this.continues();
         // Notes this prompt's hook recorded go as its context, once; a prompt typed mid-turn is acknowledged in its reply (#340).
         const notes = this.carried.get(meta.session);
         this.carried.delete(meta.session);
@@ -2272,7 +2564,7 @@ export class Core {
         const first = !this.firstPrompted.has(meta.session);
         this.firstPrompted.add(meta.session);
         const taste = first ? await this.tasteAt(meta.session, meta.cwd, prompt, false) : undefined;
-        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0), landed && `DeepBuild: ${landed}`, ack.context, taste].filter(Boolean).join('\n\n');
+        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0).filter((text) => !prompt.includes(text)), landed && `DeepBuild: ${landed}`, ack.context, taste].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -2396,6 +2688,11 @@ export class Core {
     const polls = this.options.plant === 'stop-hold-polls';
     const held = Date.now();
     while (!this.stopping && Date.now() < until && !this.abandoned.has(meta.id) && await open()) {
+      // A continue the core recorded while the stop waited (#85): sent back with it.
+      if (r.sendBacks.length) {
+        this.askingSoon();
+        return r.sendBacks.shift();
+      }
       if (this.releases) {
         if ((await this.queue(() => this.waitingFor(session))).length) return undefined;
       } else {
@@ -3322,7 +3619,8 @@ export class Core {
 
   /**
    * asks/:id/answer, from the app or `deep inbox answer`: once the trusted path allows it, the asks core records it
-   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither saves none.
+   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
+   * (#85), saves none.
    */
   private async answer(params: Obj, context: CallContext): Promise<Obj> {
     const { ask: handle, device: _device, signature: _signature, ...input } = params;
@@ -3940,14 +4238,20 @@ export class Core {
     const need = (field: string, why: string) => { if (args[field] === null) throw refuse('required', `/params/arguments/${field}`, why, null); };
     let raised: Obj;
     if (kind === 'unblock') {
-      need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-      if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+      const thread = args.thread as { link: string; expect: string } | null | undefined;
+      if (thread) {
+        if (!slackThread(thread.link)) throw refuse('format', '/params/arguments/thread/link', 'Give a Slack thread link: https://<workspace>.slack.com/archives/<channel>/p<timestamp>.', thread.link);
+        if (!slackConfig(this.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your bot token and user ID in the hub\'s slack.json, mode 0600, to read this thread.', null);
+      } else {
+        need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
+        if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+      }
       need('steps', 'List the task\'s steps, in order.');
       need('where', 'Say where the person does the task.');
       need('why', 'Say what the task unblocks.');
       raised = {
         kind, question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done',
-        steps: args.steps, where: args.where, why: args.why, unblocks: [`session:${letters(session)}`], proves: args.check,
+        steps: args.steps, where: args.where, why: args.why, unblocks: [`session:${letters(session)}`], proves: thread ? `thread:${sha256Hex(new TextEncoder().encode(thread.link))}` : args.check, ...(thread ? { thread } : {}),
       };
     } else {
       need('options', 'Give the question\'s options.');
@@ -4148,13 +4452,13 @@ export class Core {
     return fromCredential;
   }
   /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */
-  private async invalid(claim: string, commit: string, reason: string): Promise<void> {
+  private async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID'): Promise<void> {
     const ts = this.now();
     const id = ulid(ts);
     await this.append(this.connection('core'), {
       v: 1, id, kind: 'verdict.made', ts, subject: claim,
       data: {
-        outcome: 'INVALID', verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
+        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
         key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
       },
     });
@@ -4192,7 +4496,7 @@ export class Core {
         const deepest = covered.map((q) => DEPTHS.indexOf(depth(q.depth))).reduce((a, b) => Math.max(a, b), 0);
         return { ...c, command: `sh '${c.check.replaceAll("'", "'\\''")}'`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]! };
       });
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, requirements, checks, stopAt: at });
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at });
       await this.judged(r.claim);
       return { ...ran, findings };
     })();
@@ -4275,7 +4579,7 @@ export class Core {
     const [started] = prompt ? await this.record.raw(`SELECT 1 AS one FROM events WHERE session_id = ? AND kind = 'session.start' AND log_pos > ? LIMIT 1`, [session, prompt.log_pos]).catch(() => []) as { one: number }[] : [];
     // The turn's work since its last boundary (its prompt, its last stop or a start), so a turn a hub restart
     // interrupted is judged at its stop as the rule reads it (#83): a tool call, and one that may have changed code.
-    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events WHERE session_id = ? AND kind IN ('user.ask', 'agent.stop', 'session.start')`, [session]).catch(() => []) as { at: number | null }[] : [];
+    const [boundary] = session ? await this.record.raw(`SELECT MAX(log_pos) AS at FROM events e WHERE e.session_id = ? AND e.kind IN ('user.ask', 'agent.stop', 'session.start') AND ${OWN_TURN}`, [session]).catch(() => []) as { at: number | null }[] : [];
     const calls = boundary?.at !== null && boundary?.at !== undefined ? (await this.record.raw(`SELECT json_extract(data, '$.kind') AS k FROM events WHERE session_id = ? AND kind = 'tool.after' AND log_pos > ?`, [session, boundary.at]).catch(() => [])) as { k: string | null }[] : [];
     const count = this.counters.get(session) ?? {
       msgs: row?.msg === null || row?.msg === undefined ? 0 : Number(row.msg) + 1, turns: 0, worked: calls.length > 0, changed: calls.some((c) => !READS.has(String(c.k))),
@@ -4529,6 +4833,13 @@ export class Core {
       // Its processes were reaped when the supervisor opened.
       if (await recorded('run.started', run.run)) await this.finish(run, 'stopped', ['hub restarted'], []);
       else this.writeJournal((runs) => { delete runs[run.run]; });
+      // Its checkout went as the service opened, so it isn't run again where nothing is left: what it would have shown stays unknown.
+      if (run.cwd && isUnder(run.cwd, realpathSync(join(this.root.dir, 'checkouts')))) {
+        const [claim] = (await this.record.raw(`SELECT commit_sha, verdict_id FROM claims WHERE id = '${sql(run.claim.slice(6))}'`)) as { commit_sha: string | null; verdict_id: string | null }[];
+        // A verdict it already has stands.
+        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart`, 'INCONCLUSIVE');
+        continue;
+      }
       // Its claim's check runs again.
       await this.launch({ ...run, run: `run:${ulid(this.now())}`, cwd: run.cwd ?? process.cwd(), grant: run.grant ?? RUN_AS_YOU });
     }
@@ -4779,6 +5090,8 @@ export class Core {
    * one appended right after the cut bytes included. A file is removed only once its events are in a FULL commit.
    */
   private async replaySpool(): Promise<void> {
+    // One try per host for the pass: a spool of stops from one outage holds later hooks for one try at most.
+    const tries = new Map<string, Promise<boolean>>();
     if (!existsSync(this.root.spool)) return;
     // Every deep-hook appends to spool.jsonl. It moves aside first, so a hook that spools during the replay begins
     // a new file, which the next replay takes. A hook whose write lands in the moved file sees the path no longer
@@ -4833,6 +5146,7 @@ export class Core {
         }
         if (parsed?.kind === 'hook') {
           const { drafts, meta } = parsed;
+          await this.tryNetwork(drafts, meta, tries);
           await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch((error: unknown) => {
             failed = true;
             process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -4868,6 +5182,23 @@ export class Core {
     const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);
     const { removed } = await this.store.retain({ cited, archived });
     for (const sha256 of removed) await this.appendCore('evidence.removed', { sha256 }).catch(() => undefined);
+    await this.pruneSnapshots(cited).catch(() => undefined);
+  }
+  /**
+   * Lets go of the snapshots nothing holds (#31): an open claim's (no verdict, its task not closed), an open ask's, and
+   * any with evidence a verdict or decision cites. Empty output is one hash for every run, so it holds none.
+   */
+  private async pruneSnapshots(cited: ReadonlySet<string>): Promise<void> {
+    const open = (await this.record.raw('SELECT DISTINCT r.commit_sha AS sha FROM runs r JOIN claims c ON c.id = r.claim_id LEFT JOIN tasks t ON t.task_ref = c.subject_ref WHERE c.verdict_id IS NULL AND t.closed IS NULL')) as { sha: string | null }[];
+    const asks = (await this.record.raw("SELECT pinned_to FROM asks WHERE status IN ('open', 'later')")) as { pinned_to: string | null }[];
+    const runs = (await this.record.raw('SELECT commit_sha AS sha, evidence FROM runs WHERE evidence IS NOT NULL')) as { sha: string | null; evidence: string }[];
+    const verdicts = (await this.record.raw("SELECT json_extract(data, '$.commit') AS sha, evidence FROM events WHERE kind = 'verdict.made' AND evidence IS NOT NULL")) as { sha: string | null; evidence: string }[];
+    const empty = sha256Hex(new Uint8Array());
+    const pins = asks.flatMap((a) => { const pin = JSON.parse(a.pinned_to ?? 'null') as { kind: string; ref: string } | null; return pin?.kind === 'commit' ? [pin.ref] : []; });
+    await this.checkouts.prune({
+      open_claims: open.flatMap((r) => (r.sha ? [r.sha] : [])), open_asks: pins,
+      kept_evidence: [...runs, ...verdicts].flatMap((r) => (r.sha && (JSON.parse(r.evidence) as string[]).some((sha) => sha !== empty && cited.has(sha)) ? [{ snapshot: r.sha, behind_decision: true }] : [])),
+    });
   }
 
   /** The GitHub repos (owner/name) whose worktrees sessions worked in over the last 90 days, GitHub's default log retention. */
@@ -4961,6 +5292,7 @@ export class Core {
       return;
     }
     await this.replaying;
+    await Promise.all(this.tried);
     await this.chain;
     this.writeCursors();
     this.canvasCore?.close();
@@ -4973,6 +5305,7 @@ export class Core {
     await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
     await this.runner.close();
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
+    await this.checkouts.close().catch(() => undefined);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
     await this.extensions?.close();
     await this.supervisor.close();
@@ -4987,6 +5320,12 @@ export class Core {
  * prompt is written. Only tests set it.
  */
 /** The record, with its append replaced. */
+/** The words an automatic continue of a stopped session goes into it with (#85). */
+function continueText(because: string, task: string | null): string {
+  return because === 'task_closed' ? `DeepBuild: the task that blocked this session, ${task ?? ''}, closed. Continue where you left off.`
+    : because === 'context_overflow' ? 'DeepBuild: this turn overflowed the context. Compact, then continue where you left off; this is its one automatic re-send.'
+      : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
+}
 function withAppend(record: RecordStore, append: RecordStore['append']): RecordStore {
   return new Proxy(record, {
     get: (target, key) => {

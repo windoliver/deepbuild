@@ -24,7 +24,7 @@ export type Plant =
   // #19's, which only its twins select: the proof lanes' wrong programs for tests no plant above reaches.
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
-  | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-polls' | 'waiter-checks-every-5s'
+  | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
   | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
   // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
@@ -72,6 +72,8 @@ export type Plant =
   | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
   | 'delivered-when-written' | 'sends-shown-again'
+  // #31's: the gate's git gets the hub's whole environment, GIT_DIR and the rest included.
+  | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
   | 'fills-every-slot' | 'background-subagents-only';
 const PLANTS: readonly string[] = [
@@ -89,7 +91,7 @@ const PLANTS: readonly string[] = [
   'matches-text', 'fail-closed-only-rules', 'installs-unchecked', 'trusts-hints', 'warn-as-block',
   'bundle-raw-logs', 'doctor-hides-token', 'doctor-not-checked-first', 'doctor-takes-any-flag', 'stop-hold-wide-margin',
   'answer-skips-held-stop', 'stop-hold-releases-without-answer', 'both-routes', 'stop-hold-polls', 'no-stop-count', 'stop-count-never-resets',
-  'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-polls', 'waiter-checks-every-5s',
+  'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
   'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
@@ -114,7 +116,7 @@ const PLANTS: readonly string[] = [
   'signature-covers-anything',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
-  'fills-every-slot', 'background-subagents-only',
+  'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

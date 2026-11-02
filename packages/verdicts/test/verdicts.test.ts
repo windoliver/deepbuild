@@ -510,6 +510,12 @@ describe('wording a person reads', () => {
     const item = v.open_items.find((i) => i.check === 'fix');
     expect(item?.closes_with.evidence).toBe('a run of it on the merge base that fails on an assertion it names');
   });
+  it('a fix check whose runs are still to come is pending, not INVALID for the base run it has yet to get (#31)', () => {
+    const c = check('fix', { state: 'running' });
+    const v = verdict(claim({ requirements: [fixReq], checks: [c], runs: [run(c, 'passed')] }));
+    expect(v.outcome).toBe('pending');
+    expect(v.reasons.join('\n')).not.toMatch(/merge base/);
+  });
   it('a requirement no check covers at its depth reads as a sentence', () => {
     const c = check('unit');
     const deep = verdict(claim({ requirements: [{ req: REQ, depth: 'journey', oracle: 'code', on_base: 'passes' }], checks: [c], runs: [run(c, 'passed')] }));

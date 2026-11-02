@@ -20,7 +20,9 @@ const CALLS_SHOWN = 20;
 
 /** Each session's row, from the record's tables through `query` (the hub's record, or its database read-only). */
 export async function statusRows(query: (sql: string) => Promise<unknown[]>, now: number): Promise<StatusRow[]> {
-  const sessions = (await query('SELECT id, project_id, agent, status, last_seen, worktree FROM sessions')) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null }[];
+  // A database the hub hasn't opened since the stop's cause joined the table (#85) has no cause column yet.
+  const causes = (await query("SELECT 1 AS c FROM pragma_table_info('sessions') WHERE name = 'cause'")).length > 0;
+  const sessions = (await query(`SELECT id, project_id, agent, status, last_seen, worktree, ${causes ? 'cause' : 'NULL AS cause'} FROM sessions`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null }[];
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query);
@@ -30,9 +32,9 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
     const promised = due.get(s.id);
     const [state, why]: [State, string] = open ? ['needs you', `${open.n === 1 ? 'an ask' : `${open.n} asks`} open for ${ago(open.since)}`]
       : s.status === 'waiting' ? ['needs you', 'a permission prompt waits on you']
-      : s.status === 'stuck' ? ['stuck', 'blocked on something only you or a service can clear']
+      : s.status === 'stuck' ? ['stuck', `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`]
       : promised ? ['flagged', `a promised check is due since ${clockTime(promised.due)}, waiting for its next prompt or stop: "${promised.quote}"`]
-      : s.status === 'failed' ? ['flagged', 'its turn ended failed, with no claim']
+      : s.status === 'failed' ? ['flagged', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`]
       : gone.has(s.id) && s.status !== 'finished' ? ['flagged', 'its process is gone mid-turn']
       : s.status === 'unknown' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
       : s.status === 'finished' ? ['finished', `its turn stopped ${ago(s.last_seen)} ago`]
