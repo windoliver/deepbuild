@@ -156,23 +156,5 @@ describe(`${AC[16]} A turn you interrupt records an Interrupt event and reads as
     expect(mine.filter((e) => e.kind === 'claim.made').length, `${AC[16]} never a claim`).toBe(0);
     expect(JSON.stringify(await rowOf(hub, t.id)), `${AC[16]} reads as interrupted`).toMatch(/interrupted/i);
   }, 120_000);
-  it(`${AC[16]} SubagentStart and SubagentStop carrying the root's session ID and an agent_id: answered at once, recorded as the child's, and the parent's stop is neither held nor judged by them`, async () => {
-    const h = makeHome();
-    const hub = await hubWithSetup(h);
-    const t = newThread(h);
-    await begin(h, t);
-    const child = { agent_id: `agent-${tag()}`, agent_type: 'worker' };
-    await codexHook(h, t, 'SubagentStart', child);
-    await codexHook(h, t, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: `call_${tag()}`, ...child });
-    const stop = await codexHook(h, t, 'SubagentStop', { ...child, stop_hook_active: false, last_assistant_message: 'Child done.', agent_transcript_path: null });
-    expect(stop.ran.ms, `${AC[16]} never held`).toBeLessThan(10_000);
-    expect(stop.reply?.decision, `${AC[16]} never sent back: ${hookShown(stop)}`).toBeUndefined();
-    await sleep(1000);
-    const mine = ofSession(await allEvents(hub), t.id);
-    const stops = mine.filter((e) => e.kind === 'agent.stop');
-    expect(stops.length, `${AC[16]} the child's stop is recorded: ${said(mine)}`).toBe(1);
-    expect(stops[0]!.data.subagent, `${AC[16]} as the child's`).toBe(child.agent_id);
-    expect(mine.filter((e) => e.kind === 'claim.made').length, `${AC[16]} no claim for the parent`).toBe(0);
-    expect(mine.filter((e) => e.kind === 'session.start').length, `${AC[16]} no second session`).toBe(1);
-  }, 120_000);
+  // AC16's SubagentStop half is the blind redraft in tests/acceptance/39-redraft-ac16: a child's stop is recorded with agent.stop@5's `child` (#85), the field both adapters share.
 });

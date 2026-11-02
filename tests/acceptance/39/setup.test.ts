@@ -1,5 +1,5 @@
 // AC9, AC10, AC11, AC14, AC24: `deep setup`, `deep doctor` and Codex's own hook list (the real codex in a scratch home).
-import { lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, symlinkSync, watch, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -44,31 +44,7 @@ describe(`${AC[10]} A Codex config.toml with hooks = false under [features] show
   }, 180_000);
 });
 
-describe(`${AC[11]} With ~/.codex/hooks.json a symlink into a dotfiles folder, setup writes its entries into the linked file through a temporary file beside it, and the link is still the same symlink afterwards; a setup that renames its temporary file over the link replaces the link with a plain file and fails this test, naming the path`, () => {
-  it(`${AC[11]} the link stays the same symlink; the linked file holds your entry then DeepBuild's; a temporary file appeared beside the linked file, none beside the link`, async () => {
-    const h = makeHome();
-    const dotfiles = join(h.tmp, 'dotfiles', 'codex');
-    mkdirSync(dotfiles, { recursive: true });
-    const target = join(dotfiles, 'hooks.json');
-    writeFileSync(target, JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: '/usr/bin/true', timeout: 5 }] }] } }, null, 2));
-    symlinkSync(target, h.hooksFile);
-    const seenByTarget = new Set<string>();
-    const seenByLink = new Set<string>();
-    const w1 = watch(dotfiles, (_e, n) => { if (n && n !== 'hooks.json') seenByTarget.add(n); });
-    const w2 = watch(h.codexHome, (_e, n) => { if (n && n !== 'hooks.json' && /hooks/.test(n)) seenByLink.add(n); });
-    await hubWithSetup(h);
-    await new Promise((r) => setTimeout(r, 300));
-    w1.close(); w2.close();
-    expect(lstatSync(h.hooksFile).isSymbolicLink(), `${AC[11]} ${h.hooksFile} must still be a symlink, but setup replaced it with a plain file`).toBe(true);
-    expect(readlinkSync(h.hooksFile), `${AC[11]} ${h.hooksFile} points where it did`).toBe(target);
-    const linked = JSON.parse(readFileSync(target, 'utf8')) as { hooks: { Stop: { hooks: { command: string }[] }[] } };
-    const stops = linked.hooks.Stop.flatMap((g) => g.hooks.map((x) => x.command));
-    expect(stops.some(isDeepBuild), `${AC[11]} the linked file ${target} holds DeepBuild's Stop entry: ${JSON.stringify(stops)}`).toBe(true);
-    expect(stops[0], `${AC[11]} your entry stays first, ours after`).toBe('/usr/bin/true');
-    expect(seenByTarget.size, `${AC[11]} a temporary file beside the linked file (${dotfiles})`).toBeGreaterThan(0);
-    expect([...seenByLink], `${AC[11]} none beside the link`).toEqual([]);
-  }, 180_000);
-});
+// AC11's test is the blind redraft in tests/acceptance/39-redraft-ac11: it proves the temporary file through folder permissions and a separate volume, not fs.watch.
 
 describe(`${AC[14]} After a DeepBuild update, its entries in hooks.json are byte-identical and Codex's hook list still reports them trusted; changing one entry's timeout in a test makes health show that entry as modified within one session`, () => {
   it(`${AC[14]} entries name a fixed path; a second setup (the update) leaves the file byte-identical and Codex's hooks/list trusted; a changed timeout shows as modified in health`, async () => {
