@@ -1507,8 +1507,8 @@ const TEST_BUILD: bool = cfg!(any(
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
 /// look, which every set holds; `r1` adds marks2d, data, graph, record, sheet and motion; `r2`
-/// adds scene3d (#378) and effects (#380); and, under its `test-*` features, the acceptance
-/// READMEs' test canvas modules, with #388's builds that leave text or look out.
+/// adds scene3d (#378), effects (#380) and vector (#398); and, under its `test-*` features, the
+/// acceptance READMEs' test canvas modules, with #388's builds that leave text or look out.
 fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
@@ -1531,6 +1531,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame.
         out.push(deep_canvas_effects::module::module());
+        // Issue #398: SVG import and formulas, drawn as marks2d's items.
+        out.push(deep_canvas_vector::module::module());
     }
     #[cfg(feature = "test-leave-out-look")]
     out.retain(|m| m.manifest.name != "look");

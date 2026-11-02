@@ -75,6 +75,7 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
         ValueType::F32 => json!(value[0]),
         ValueType::Color => json!(value),
         ValueType::Bool => json!(value[0] != 0.0),
+        ValueType::Enum => json!(motion.labels.get(value[0] as usize)),
     };
     let mut out = doc.clone();
     let Some(Value::Object(keys_json)) = out

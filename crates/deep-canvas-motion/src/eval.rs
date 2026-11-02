@@ -292,6 +292,7 @@ fn evaluated(
         let run = &state.slots[field.slot..field.slot + field.width];
         let value = match run {
             [one] if field.boolean => json!(*one >= 0.5),
+            [one] if field.enumerated => json!(program.label(*one)),
             [one] => json!(one),
             many => json!(many),
         };

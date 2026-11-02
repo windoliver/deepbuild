@@ -8,7 +8,10 @@
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
 //! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
-//! wakeups and CPU read from this process.
+//! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
+//! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
+//! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
+//! `import_skips_clip_path`.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -20,8 +23,9 @@
 //! CPU and by GPUI, the edges they draw and each glyph run and stroke as a coverage mask, which
 //! `deep-gpu`'s live-headless calls compare.
 
+use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use deep_canvas_marks::look::{self, Look};
 use deep_canvas_marks::scene::{Palette, Planted, Record};
@@ -253,19 +257,53 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
     value?.as_object().cloned()
 }
 
-/// The document check: the core's, then, with a look and no core error, the marks2d module's.
-fn check(doc: &Map<String, Value>, look: Option<&Look>) -> Value {
+/// Each imported `vector@1` item by ID (#398).
+type Vectors = BTreeMap<String, deep_canvas_vector::Imported>;
+
+/// The document check: the core's, then the vector module's import of each vector item from
+/// `store`, then, with a look and no error yet, the marks2d module's over the document with its
+/// vectors drawn as marks2d's items; and the imported vectors.
+fn check(
+    doc: &Map<String, Value>,
+    look: Option<&Look>,
+    store: Option<&Path>,
+    skips_clip_path: bool,
+) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
     let mut issues = result.issues;
-    if let (true, Some(look)) = (result.ok, look) {
-        issues.extend(deep_canvas_marks::check::check(doc, look));
+    let (found, vectors) =
+        deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), skips_clip_path);
+    issues.extend(found);
+    let ok = !issues.iter().any(|i| i.severity == "error");
+    if let (true, Some(look)) = (ok, look) {
+        let mut drawn = doc.clone();
+        if let Some(Value::Object(items)) = doc.get("items") {
+            let items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            drawn.insert("items".into(), Value::Object(items));
+        }
+        // An issue on an item a vector draws as names the vector.
+        for mut issue in deep_canvas_marks::check::check(&drawn, look) {
+            for id in issue.ids.iter_mut() {
+                if let Some(v) = vectors.keys().find(|v| id.starts_with(&format!("{v}."))) {
+                    *id = v.clone();
+                }
+            }
+            issues.push(issue);
+        }
     }
     let ok = !issues.iter().any(|i| i.severity == "error");
-    json!({
+    let answer = json!({
         "ok": ok,
         "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
-    })
+    });
+    (answer, vectors)
+}
+
+/// #398 AC6's wrong program, which `check`, `raster` and `geometry` take: an importer that skips
+/// `<clipPath>` without an issue. `None` for another planted value, which another command reads.
+fn skips_clip_path(input: &Map<String, Value>) -> bool {
+    input.get("planted").and_then(Value::as_str) == Some("import_skips_clip_path")
 }
 
 /// A document the check refuses, as a drawing command answers it: the first error's code.
@@ -315,16 +353,25 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             json!({"ok": true, "look": def, "roles": roles(&look)}),
         ));
     }
-    if command == "check" {
+    let skips = skips_clip_path(input);
+    let store_dir = store(input.get("store"))?;
+    if command == "check" || command == "geometry" {
+        if input.get("planted").is_some() && !skips {
+            return None;
+        }
         let doc = doc(input.get("doc"))?;
-        return Some(Answer::Now(check(&doc, look.as_ref().map(|(l, _)| l))));
-    }
-    if command == "geometry" {
-        let doc = doc(input.get("doc"))?;
+        let (checked, vectors) = check(
+            &doc,
+            look.as_ref().map(|(l, _)| l),
+            store_dir.as_deref(),
+            skips,
+        );
+        if command == "check" {
+            return Some(Answer::Now(checked));
+        }
         let item = input.get("item")?.as_str()?;
-        let checked = check(&doc, look.as_ref().map(|(l, _)| l));
         return Some(Answer::Now(
-            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item)),
+            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item, &vectors)),
         ));
     }
     let (look, _) = look?;
@@ -340,7 +387,16 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::String(p)) if p == "sectors_source_over" => {
                 (Planted::SectorsSourceOver, false, false)
             }
+            Some(Value::String(p))
+                if p == "write_fades_fills_from_start" || p == "import_skips_clip_path" =>
+            {
+                (Planted::None, false, false)
+            }
             Some(_) => return None,
+        };
+        let write = match input.get("planted").and_then(Value::as_str) {
+            Some("write_fades_fills_from_start") => deep_canvas_vector::Write::FadesFillsFromStart,
+            _ => deep_canvas_vector::Write::Honest,
         };
         let config = raster::Config {
             simd: match input.get("simd").map(Value::as_str) {
@@ -380,15 +436,24 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             view: view(input.get("view"))?,
             t: input.get("t").map_or(Some(0), Value::as_i64)?,
             record: record(input)?,
-            store: store(input.get("store"))?,
+            store: store_dir,
             planted,
+            vectors: Vectors::new(),
+            write,
             encoded_luma,
             spans_apart,
             look,
             config,
             blend_inputs,
         };
-        let checked = check(&request.doc, Some(&request.look));
+        let mut request = request;
+        let (checked, vectors) = check(
+            &request.doc,
+            Some(&request.look),
+            request.store.as_deref(),
+            skips,
+        );
+        request.vectors = vectors;
         return Some(Answer::Now(
             refused_by_check(&checked).unwrap_or_else(|| raster::answer(request)),
         ));
