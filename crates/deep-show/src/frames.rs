@@ -140,7 +140,12 @@ impl<'a> Hub<'a> {
         }
         for m in &sealed.modules {
             for p in &m.shapes.passes {
-                passes.insert(p.name.clone(), json!({"module": m.name, "place": p.place}));
+                let mut pass = json!({"module": m.name, "place": p.place});
+                // #200: the gpu.step@1 steps a GPU pass compiles from, each resolved at the seal.
+                if !p.steps.is_empty() {
+                    pass["steps"] = json!(p.steps);
+                }
+                passes.insert(p.name.clone(), pass);
                 cost(&p.name, &m.name);
             }
         }
@@ -166,7 +171,9 @@ impl<'a> Hub<'a> {
             "plan": sealed.plan,
             "schedule": {"uri": sealed.schedule_uri(), "sha256": deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(&sealed.schedule()))},
             "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed),
-                     "interfaces": {"ms": sealed.interface_ns as f64 / 1e6, "runs": INTERFACE_RUNS.load(Ordering::Relaxed)}},
+                     "interfaces": {"ms": sealed.interface_ns as f64 / 1e6, "runs": INTERFACE_RUNS.load(Ordering::Relaxed)},
+                     "registries": {"ms": sealed.registry_ns as f64 / 1e6, "runs": INTERFACE_RUNS.load(Ordering::Relaxed)}},
+            "registries": {"uri": sealed.registries_uri()},
         })
     }
 

@@ -1,0 +1,17 @@
+{
+  "name": "bigpack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #200 acceptance suite whose one test.mark@1 entry has size 80, over the kit's limit of 64.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "test.mark": ">=0.0.0"
+    }
+  },
+  "entries": {
+    "test.mark@1": [
+      { "name": "bigpack.huge", "size": 80 }
+    ]
+  }
+}

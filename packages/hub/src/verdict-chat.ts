@@ -32,6 +32,13 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   const runs = (await query(`SELECT id, check_id, commit_sha, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; commit_sha: string | null; ended: number | null; outcome: string | null }[];
   const [verdict] = (await query(`SELECT outcome, requirements, created FROM verdicts WHERE claim_id = '${sql(id)}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as { outcome: string; requirements: string; created: number }[];
   const running = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
+  // Its checks held for a loop (#965): the newest record of each place, while it neither started nor gave way.
+  const places = new Map<string, Obj>();
+  for (const row of (await query(`SELECT data FROM events WHERE kind = 'check.held' AND subject = 'claim:${sql(id)}' ORDER BY log_pos`)) as { data: string | Obj }[]) {
+    const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+    places.set(`${String(d.check)}\0${String(d.snapshot)}`, d);
+  }
+  const held = [...places.values()].filter((d) => d.started_at === null && d.replaced_by === null).map((d) => ({ check: String(d.check), reason: String(d.reason) }));
   // A check's run on the merge base (#31), on another commit than the claim's, is its proof, not its result: a fix
   // check with none that finished stays unproved.
   const isBase = (r: { commit_sha: string | null }): boolean => claim.commit_sha !== null && r.commit_sha !== null && r.commit_sha !== claim.commit_sha;
@@ -42,11 +49,11 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   let state: LineState;
   if (verdict) {
     const reqs = (JSON.parse(verdict.requirements) as Obj[]).map((r): LineRequirement => ({ req: String(r.req), outcome: r.outcome as Result, smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
-    state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running };
+    state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running, ...(held.length ? { held } : {}) };
   } else {
     const seen = new Set(own.map((r) => r.check_id));
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
-    state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running };
+    state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}) };
   }
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };
 }
