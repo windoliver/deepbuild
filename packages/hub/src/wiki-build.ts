@@ -97,7 +97,7 @@ const segments = (command: string): string[] => command.split(/\s*(?:&&|;|\|\|)\
  * that say so. Never a value: the quote is the name and its source, and a command that carries a value elsewhere is
  * quoted only as far as the name.
  */
-export function credentialsOf(command: string): { text: string; quote: string }[] {
+function credentialsOf(command: string): { text: string; quote: string }[] {
   const out = new Map<string, { text: string; quote: string }>();
   const add = (name: string, text: string, quote: string): void => { if (CREDENTIAL.test(name)) out.set(text, { text, quote }); };
   for (const m of command.matchAll(/\b([A-Z][A-Z0-9_]*)=\$\(([^()]{1,60})\)/g)) {

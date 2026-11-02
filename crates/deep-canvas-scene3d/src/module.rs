@@ -36,6 +36,7 @@ fn manifest() -> Manifest {
         feature: "scene3d".into(),
         license: "Apache-2.0".into(),
         implements: "scene3d@1".into(),
+        implementation: deep_canvas::registry::Implementation::reference("scene3d", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
     }
 }
 

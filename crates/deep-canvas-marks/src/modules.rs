@@ -53,6 +53,7 @@ fn manifest(name: &str, deps: &[&str]) -> Manifest {
         feature: name.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
+        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
     }
 }
 
@@ -304,6 +305,9 @@ fn is_text(_: &Value, _: &str, item: &Value) -> bool {
 
 /// A text a bound value's text targets, or a counter.
 fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
+    if !is_text(doc, id, item) {
+        return false;
+    }
     let target = format!("items/{id}/params/text");
     let bound = doc
         .get("bound_values")
@@ -317,7 +321,7 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
         .and_then(|t| t.get("counter"))
         .is_some();
     let template = scene::template_of(item).is_some();
-    is_text(doc, id, item) && (bound || counter || template)
+    bound || counter || template
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {

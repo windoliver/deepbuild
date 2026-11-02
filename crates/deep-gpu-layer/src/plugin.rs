@@ -355,7 +355,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .map(|d| {
                     let name = d["name"].as_str().unwrap_or("document");
                     let title = d["document"]["title"].as_str().unwrap_or(name);
-                    let issues = match stamp(&d["document"], &format!("plugin-{name}"), &writer, title) {
+                    let issues = match stamp(d["document"].clone(), &format!("plugin-{name}"), &writer, title) {
                         Err(issues) => issues,
                         Ok(stamped) => {
                             let checked = deep_canvas::document::check_in(&stamped, &sealed);
@@ -420,7 +420,7 @@ mod tests {
                 let mut doc = board.document.clone();
                 doc["requires"] = json!({"modules": {module: "^1"}});
                 let stamped =
-                    stamp(&doc, "plugin-board", &writer, "Board").expect("the board stamps");
+                    stamp(doc, "plugin-board", &writer, "Board").expect("the board stamps");
                 let checked = deep_canvas::document::check_in(&stamped, sealed);
                 assert!(
                     checked.ok,

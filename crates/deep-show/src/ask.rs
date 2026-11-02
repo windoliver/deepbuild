@@ -279,7 +279,10 @@ impl Hub<'_> {
         };
         let shown = crate::shared::drawable(&document);
         match self.snapshot(&shown, t, size) {
-            Ok(snap) => json!({"rev": rev, "t": t, "snapshots": [snap]}),
+            Ok(snap) => json!({
+                "rev": rev, "t": t, "outcome": "presented", "snapshots": [snap],
+                "backends": crate::seams::backends(true),
+            }),
             Err(e) => e,
         }
     }

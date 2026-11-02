@@ -3,6 +3,8 @@
 //! channels and placements write their items' fields; the frame's `valid_until` is the earliest
 //! time anything it shows changes next.
 
+use std::collections::BTreeSet;
+
 use serde_json::{json, Map, Value};
 
 use crate::curve::Sample;
@@ -235,10 +237,40 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
 /// The evaluated items of `doc` from a program's state: each item as authored, with `at.pos`,
 /// `at.rot` and `at.scale` as three numbers from its slots, and each field a channel writes.
 pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
-    let mut items = match doc.get("items") {
+    let items = match doc.get("items") {
         Some(Value::Object(items)) => items.clone(),
         _ => Map::new(),
     };
+    evaluated(items, program, state)
+}
+
+/// [`items`] of only the items a field names, each as [`items`] gives it: every other evaluated
+/// item is the document's own with `at` from its slots, which a reader can take from the state
+/// without copying the item.
+pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    let named: BTreeSet<&str> = program
+        .fields
+        .iter()
+        .filter_map(|f| program.items.get(f.item?))
+        .map(String::as_str)
+        .collect();
+    let items = match doc.get("items") {
+        Some(Value::Object(items)) => items
+            .iter()
+            .filter(|(id, _)| named.contains(id.as_str()))
+            .map(|(id, item)| (id.clone(), item.clone()))
+            .collect(),
+        _ => Map::new(),
+    };
+    evaluated(items, program, state)
+}
+
+/// `items` with each one's slots and fields written, as [`items`] evaluates them.
+fn evaluated(
+    mut items: Map<String, Value>,
+    program: &Program,
+    state: &State,
+) -> Map<String, Value> {
     for (i, id) in program.items.iter().enumerate() {
         let Some(item) = items.get_mut(id).and_then(Value::as_object_mut) else {
             continue;

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
+members = ["crates/deep-contracts", "crates/deep-canvas-seams", "crates/deep-relay", "crates/deep-codecs", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
@@ -37,6 +37,15 @@ opt-level = 3
 opt-level = 3
 # Its window captures read 2000 × 1648 frames back through the GPUI patch's Metal renderer.
 [profile.dev.package.gpui-pre-apple]
+opt-level = 3
+# Issue #386: a 10,000-item 3D document's frame (under 4 ms of CPU) and its check before it shows
+# (under 50 ms) are read off the same dev binary; its motion program, its frame path, the scene's
+# first evaluation and the renderer's record writes run there.
+[profile.dev.package.deep-canvas-motion]
+opt-level = 3
+[profile.dev.package.deep-canvas-scene3d]
+opt-level = 3
+[profile.dev.package.deep-scene3d-render]
 opt-level = 3
 # Issue #124: a replica's budgets (an action's round trip under 50 ms plus its wait, a 2,000-node snapshot under
 # 20 ms) are read off the dev `deep-drive` the acceptance tests run, and a replica's frame spends its time in GPUI's

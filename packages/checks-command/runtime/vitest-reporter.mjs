@@ -13,19 +13,33 @@ try {
 } catch { /* the runner's file; no report is no count */ }
 let lines = 0;
 let closed = false;
+// Lines wait in memory and go to the file in one write at most FLUSH_MS after the first of them, at the run's end
+// and at exit: one syscall per batch, not per test (AC12's budget). A run stopped at its deadline keeps every line
+// older than FLUSH_MS, well inside the runner's settle before it kills the run. The trailer counts the lines handed
+// in, so a batch a failed write lost shows as a report cut short, never as a complete one.
+const FLUSH_MS = 100;
+let waiting = [];
+let timer = null;
+const flush = () => {
+  if (timer !== null) { clearTimeout(timer); timer = null; }
+  if (fd === null || !waiting.length) return;
+  const text = waiting.join('');
+  waiting = [];
+  try {
+    writeSync(fd, text);
+  } catch { /* the runner's file; the trailer shows the loss */ }
+};
 const write = (line) => {
   if (fd === null || closed) return;
-  try {
-    writeSync(fd, `${JSON.stringify(line)}\n`);
-    lines += 1;
-  } catch { /* the runner's file; a failed write loses one line */ }
+  waiting.push(`${JSON.stringify(line)}\n`);
+  lines += 1;
+  if (timer === null) { timer = setTimeout(flush, FLUSH_MS); timer.unref?.(); }
 };
 const close = () => {
   if (fd === null || closed) return;
   closed = true;
-  try {
-    writeSync(fd, `${JSON.stringify({ deep: 'end', lines })}\n`);
-  } catch { /* the runner's file */ }
+  waiting.push(`${JSON.stringify({ deep: 'end', lines })}\n`);
+  flush();
 };
 process.on('exit', close);
 
@@ -66,6 +80,11 @@ export default class DeepCheckReporter {
     if (!Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0)) return;
     const vm = configs.some((c) => c?.browser?.enabled) ? 'browser' : configs.map((c) => c?.pool).find((p) => typeof p === 'string' && p.startsWith('vm'));
     if (vm) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `the clock wasn't moved ahead: the ${vm} pool runs tests with a clock of its own`, stack: null, frames: [] }] });
+  }
+
+  // A test that started: one still running at the deadline has no result line (#31, overran after its test started).
+  onTestCaseReady(test) {
+    write({ type: 'test:started', name: test.fullName, file: test.module.moduleId, errors: [] });
   }
 
   onTestCaseResult(test) {

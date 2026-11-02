@@ -7,13 +7,14 @@ import { createHash } from 'node:crypto';
 import { accessSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { loadavg, availableParallelism, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Lease, LeaseTable, Resource } from '@deepbuild/leases';
+import { SLOW_SLOT, type Lease, type LeaseTable, type Resource } from '@deepbuild/leases';
 import type { Result, RunOutcome } from '@deepbuild/verdicts';
+import { gitEnv } from './env.js';
 import { matches } from './glob.js';
 
 const SLOT: Resource = { host: 'local', kind: 'cpu.slot', key: 'slot' };
 const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): Promise<string> => new Promise((resolve, reject) => {
-  execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, ...env } }, (error, stdout, stderr) => {
+  execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...gitEnv(), ...env } }, (error, stdout, stderr) => {
     if (error) reject(Error(`git ${args[0]}: ${stderr.trim() || error.message}`));
     else resolve(stdout.trim());
   });
@@ -56,10 +57,6 @@ export async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<s
     rmSync(dir, { recursive: true, force: true });
   }
 }
-/** The tree of a commit, a snapshot's among them; undefined when git can't read it. The same tree on another HEAD is another snapshot. */
-export async function treeOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string | undefined> {
-  try { return await git(repo, ['rev-parse', `${commit}^{tree}`], await storeEnv(repo, store)); } catch { return undefined; }
-}
 /** A temporary checkout of `commit`, outside every worktree: git's own worktree list, refs and stash stay as they were. */
 export async function checkoutOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string> {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-checkout-')));
@@ -71,13 +68,26 @@ export async function checkoutOf(repo: string, commit: string, store = DEFAULT_S
   return dir;
 }
 
-/** Waits for a `cpu.slot` lease from the table, as `holder` for `run`; never a queue of the runner's own. */
-export async function slot(table: LeaseTable, holder: string, run: string): Promise<Lease> {
-  for (let wait = 5; ; wait = Math.min(wait * 2, 50)) {
-    const got = await table.lease({ holder, run }, SLOT, 'exclusive');
-    if (got.status === 'granted') return got.lease;
-    if (got.status === 'BLOCKED') throw Error(got.message);
-    await sleep(wait);
+/** The fast-lane leases each table has waiting: a slow run or heavy command asks for no slot while one waits (#907). */
+const fastWaiting = new WeakMap<LeaseTable, number>();
+/**
+ * Waits for a `cpu.slot` lease from the table, as `holder` for `run`; never a queue of the runner's own. A held stop's
+ * fast-lane check may take the slot the pool keeps for it, and takes the next free slot ahead of every slow run.
+ */
+export async function slot(table: LeaseTable, holder: string, run: string, lane: 'fast' | 'slow' = 'slow'): Promise<Lease> {
+  const fast = lane === 'fast';
+  if (fast) fastWaiting.set(table, (fastWaiting.get(table) ?? 0) + 1);
+  try {
+    for (let wait = 5; ; wait = fast ? 5 : Math.min(wait * 2, 50)) {
+      if (fast || !fastWaiting.get(table)) {
+        const got = await table.lease({ holder, run }, fast ? SLOT : { ...SLOT, key: SLOW_SLOT }, 'exclusive');
+        if (got.status === 'granted') return got.lease;
+        if (got.status === 'BLOCKED') throw Error(got.message);
+      }
+      await sleep(wait);
+    }
+  } finally {
+    if (fast) fastWaiting.set(table, fastWaiting.get(table)! - 1);
   }
 }
 interface Spawned { exit: number | null; output: string; started_at: number; ended_at: number }

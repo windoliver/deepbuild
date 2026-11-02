@@ -63,6 +63,8 @@ export const derivedId = (ms: number, key: string): string => ulid(ms, createHas
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
 /** What the parser read of a hook request that the core needs to check and bind it. */
 export interface HookMeta {
+  /** A Claude Code network stop's try of the host its API calls go to (#85), made before it queues. */
+  network?: { host: string; reached: boolean };
   /** The session this one replaced in the same process, where its agent says. */
   parent?: string;
   id: string;
@@ -105,8 +107,8 @@ export interface HookMeta {
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
-  /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
-  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
+  /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent or command (#907) started, by its call. */
+  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string };
 }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
@@ -125,6 +127,8 @@ export interface Gated {
   screen?: boolean;
   /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
   stage?: string[] | null;
+  /** A call in a session whose cut-off turn started a send with no recorded end (#85): checked against it first. */
+  resend?: boolean;
 }
 /**
  * How long the hub holds a call it stages (#347): under Claude Code's 60 s PreToolUse timeout with room for the reply,

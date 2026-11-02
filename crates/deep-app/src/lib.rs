@@ -47,6 +47,13 @@ pub mod trusted_input;
 
 pub mod capture;
 
+/// Issue #498: the camera and microphone, live, through the OS permission and the held control.
+#[cfg(target_os = "macos")]
+pub mod devices;
+
+#[cfg(target_os = "macos")]
+pub mod color;
+
 pub mod brand;
 
 pub const SESSION_COUNT: usize = 1_000;

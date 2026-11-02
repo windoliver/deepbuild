@@ -62,7 +62,7 @@ const CLOSERS: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
 const named = new Map<string, boolean>();
 
 /** Whether a field name's parts, split at `_`, `-`, `.`, spaces and case changes, hold a secret word. */
-export function secretName(name: string): boolean {
+function secretName(name: string): boolean {
   const known = named.get(name);
   if (known !== undefined) return known;
   const parts = name.split(/[_. :-]+/).flatMap((part) => part.split(/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/)).map((part) => part.toLowerCase());

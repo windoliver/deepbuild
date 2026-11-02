@@ -1,0 +1,33 @@
+{
+  "module": "test.sim",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.sim.work",
+        "module": "test.sim",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.sim.scratch"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "test.sim.step",
+        "module": "test.sim",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "test.sim.scratch"
+        ],
+        "writes": [
+          "test.sim.pos"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}
