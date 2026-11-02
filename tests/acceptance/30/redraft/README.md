@@ -33,7 +33,7 @@ Every value asserted is the criterion's, the fixture's or the surface's: the out
 ## How to run
 
 ```sh
-export PATH=/home/jing/.local/bin:$PATH   # node 24
+export PATH=~/.local/bin:$PATH   # node 24
 env -u CLAUDECODE -u AI_AGENT node node_modules/vitest/vitest.mjs run --root tests/acceptance/30 --no-file-parallelism redraft/ac17-claim.test.ts
 node node_modules/typescript/bin/tsc -p tests/acceptance/30/tsconfig.json   # clean at 40419393
 ```
