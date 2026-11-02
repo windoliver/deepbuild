@@ -3,19 +3,13 @@
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
+import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
 import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
-/**
- * The agent names a hook request may carry, to the adapter that maps them. Cursor's CLI and Grok run the hooks in
- * Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts read their
- * payloads, but their events are recorded under their own agent, never as Claude Code's.
- */
-const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude', pi: 'pi' };
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   pi: { session_start: 'SessionStart', session_shutdown: 'SessionEnd', input: 'UserPromptSubmit', tool_call: 'PreToolUse', tool_result: 'PostToolUse', agent_before_settle: 'Stop' },
@@ -269,8 +263,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
+      // A child session's stop (a subagent's) names the child, from the payload field the facts' common template maps
+      // to `subagent`: it is no turn end of the session, so the core and the hub leave it out of the session's turns.
+      if (str(mapped.subagent)) data.child = str(mapped.subagent);
       fill = 'turn';
-      v = 4;
+      v = 5;
       break;
     case 'permission.request':
       data = {
