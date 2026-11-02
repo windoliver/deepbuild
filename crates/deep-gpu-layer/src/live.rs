@@ -563,7 +563,12 @@ fn admit(
     })?;
     let mut doc = stamp(payload, doc_id, &w, writer)
         .map_err(|issues| issues.iter().map(|i| i.to_json()).collect::<Vec<_>>())?;
-    let checked = check_in(&doc, sealed());
+    // The motion program reads what the check reads and never the size set below, so it
+    // compiles beside the check, and is dropped with the document if the check refuses it.
+    let (checked, program) = std::thread::scope(|s| {
+        let program = s.spawn(|| Frames::compile(&doc));
+        (check_in(&doc, sealed()), program.join())
+    });
     let errors: Vec<Value> = checked
         .issues
         .iter()
@@ -576,6 +581,7 @@ fn admit(
     if !errors.is_empty() {
         return Err(errors);
     }
+    let program = program.unwrap_or_else(|e| std::panic::resume_unwind(e));
     let (class, limits) = match budget::of(&doc) {
         Some((c, l)) => (Some(c), l),
         None => (None, Class::Figure.limits()),
@@ -591,14 +597,16 @@ fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let frames = Frames::new(&doc, look, labels).map_err(|r| {
-        vec![issue(
-            r.code,
-            &r.path,
-            Value::Null,
-            "the document can't be evaluated",
-        )]
-    })?;
+    let frames = program
+        .and_then(|p| Frames::with_program(&doc, p, look, labels))
+        .map_err(|r| {
+            vec![issue(
+                r.code,
+                &r.path,
+                Value::Null,
+                "the document can't be evaluated",
+            )]
+        })?;
     let moving = camera_moves(&doc);
     let base_scale = if moving { limits.scale_moving } else { 1.0 };
     let effects = doc["items"]
