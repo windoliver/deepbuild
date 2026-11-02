@@ -29,7 +29,7 @@
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
+import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
@@ -38,7 +38,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
-import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -1262,6 +1261,8 @@ class Host implements ExtensionHost {
     const runs: KitRun[] = [];
     // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
     const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      // The kits load with the first install that runs one: a hub that installs nothing never holds them.
+      const { runKit, slotKits } = await import('@deepbuild/conformance');
       const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
       if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
       const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
@@ -3401,6 +3402,8 @@ class Host implements ExtensionHost {
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
+    // node:http loads only for a package turned on: about 2.7 MB of heap the hub's core otherwise never holds.
+    const { createServer: createHttpServer } = await import('node:http');
     // A request has the call deadline to arrive whole; one that fails is that request's alone.
     const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
