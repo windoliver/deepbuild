@@ -65,7 +65,10 @@ export type Plant =
   // #31's: the gate's git gets the hub's whole environment, GIT_DIR and the rest included.
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
-  | 'fills-every-slot' | 'background-subagents-only';
+  | 'fills-every-slot' | 'background-subagents-only'
+  // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
+  // where the part already starts, and a pass on a stand-in taken as proof.
+  | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -105,6 +108,7 @@ const PLANTS: readonly string[] = [
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
