@@ -414,6 +414,10 @@
           "spec": "0.0.0",
           "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
         },
+        "@deepbuild/checks-command": {
+          "spec": "0.0.0",
+          "why": "Issue #30: a claim's checks run through the command check kind, hermetically through host@1, and its closed run records are what the claim's verdict is made from."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
@@ -777,6 +781,18 @@
         "skrifa": {
           "spec": "^0.44",
           "why": "Issue #140: each glyph's outline as edges for the perceptual oracle's interior mask; already in parley's tree."
+        },
+        "vello_gpu": {
+          "spec": "^0.3",
+          "why": "Issue #385: Vello GPU, the GPU renderer the 2D renderer decision names, draws a 2D writer layer on the GPU layer's device through the same painter as Vello CPU; never Vello's compute renderer."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #385: the device, queue and target views Vello GPU draws a 2D writer layer with, the GPU layer's own wgpu; already in the workspace tree."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #385: the GPUI live view opens the GPU layer's device the first time a writer layer needs Vello GPU."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {

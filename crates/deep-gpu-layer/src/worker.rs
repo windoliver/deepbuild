@@ -42,6 +42,9 @@ pub struct State {
     pub releases_early: bool,
     /// The test writer's textures, by writer (#379, `test-meter` builds only).
     pub allocations: HashMap<String, Vec<wgpu::Texture>>,
+    /// Vello GPU drawing 2D writer layers read back, and a 2D layer's surface (#385).
+    pub vello2d: Option<deep_marks_render::gpu::Vello2d>,
+    pub view2d: Option<View>,
 }
 
 /// The slot count every surface takes.
@@ -132,6 +135,8 @@ impl Worker {
                     submits_on_completion,
                     releases_early,
                     allocations: HashMap::new(),
+                    vello2d: None,
+                    view2d: None,
                 };
                 for work in rx {
                     work(&mut state);

@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "composition.reopened",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "piece": "acme/brief",
+    "provider": "acme/stocks",
+    "version": "2.0.0"
+  }
+}

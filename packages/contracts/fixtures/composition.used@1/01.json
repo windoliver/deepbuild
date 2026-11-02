@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "composition.used",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "user": "acme/web",
+    "interface": "environment@1",
+    "provider": "env-local"
+  }
+}
