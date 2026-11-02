@@ -1,0 +1,89 @@
+#319 AC2 blind redraft (restart): runs at a7e140b2, Node v24.22.0, darwin.
+
+The asks core at a7e140b2 already carries #319's showing rules, so the criterion passes at this commit; the failing
+run is the plant's. The two plant tests in the suite pass because the plant fails the way they expect.
+
+== 1. At this commit (exit 0):
+   node node_modules/vitest/vitest.mjs run tests/acceptance/319/restart-redraft --reporter=verbose
+
+ RUN  v5.0.5 <base checkout>
+
+ ✓ tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with room in the day's cap 185ms
+ ✓ tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > a hub that waits for the next batch fails, naming each such ask, with room in the day's cap 5210ms
+ ✓ tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with the day's cap reached 350ms
+ ✓ tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > a hub that waits for the next batch fails, naming each such ask, with the day's cap reached 5187ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  00:42:44
+   Duration  21.83s (tests 50%, import 48%, transform 1%)
+
+
+== 2. The plant, a hub that waits for the next batch, started under the criterion's tests (exit 1):
+   DEEP_319_PLANT=waits-for-next-batch node node_modules/vitest/vitest.mjs run tests/acceptance/319/restart-redraft --reporter=verbose
+
+ RUN  v5.0.5 <base checkout>
+
+ × tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with room in the day's cap 5178ms
+   → ask:01Q8EBX8A01Z3FPK9GY37SBYQ6 (deadline 2030-03-04T16:30:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z
+ask:01Q8EBX8A07H863CJTR1TJZBKZ (deadline 2030-03-04T22:00:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z: expected [ …(2) ] to deeply equal []
+ ✓ tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > a hub that waits for the next batch fails, naming each such ask, with room in the day's cap 5153ms
+ × tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with the day's cap reached 5138ms
+   → ask:01Q8EBX8A0PPDTVZBH5A5ZW44G (deadline 2030-03-04T16:30:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z
+ask:01Q8EBX8A0R2V1YYC13EMWVMAG (deadline 2030-03-04T22:00:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z: expected [ …(2) ] to deeply equal []
+ ✓ tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > a hub that waits for the next batch fails, naming each such ask, with the day's cap reached 5189ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with room in the day's cap
+AssertionError: ask:01Q8EBX8A01Z3FPK9GY37SBYQ6 (deadline 2030-03-04T16:30:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z
+ask:01Q8EBX8A07H863CJTR1TJZBKZ (deadline 2030-03-04T22:00:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask:01Q8EBX8A01Z3FPK9GY37SBYQ6 (deadline 2030-03-04T16:30:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z",
++   "ask:01Q8EBX8A07H863CJTR1TJZBKZ (deadline 2030-03-04T22:00:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z",
++ ]
+
+ ❯ tests/acceptance/319/restart-redraft/restart.test.ts:109:43
+    107|       const world = await beforeTheStop(capReached);
+    108|       const { missing, took } = await startAcrossTheBatch(world, UNDER…
+    109|       expect(missing, missing.join('\n')).toEqual([]);
+       |                                           ^
+    110|       for (const d of world.due) expect(took[d.ask]!).toBeLessThan(WIT…
+    111|     }, 30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/319/restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with the day's cap reached
+AssertionError: ask:01Q8EBX8A0PPDTVZBH5A5ZW44G (deadline 2030-03-04T16:30:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z
+ask:01Q8EBX8A0R2V1YYC13EMWVMAG (deadline 2030-03-04T22:00:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask:01Q8EBX8A0PPDTVZBH5A5ZW44G (deadline 2030-03-04T16:30:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z",
++   "ask:01Q8EBX8A0R2V1YYC13EMWVMAG (deadline 2030-03-04T22:00:00.000Z, before the next batch at 2030-03-05T00:00:00.000Z) is not in Needs you 5 s after the hub's start at 2030-03-04T16:10:00.000Z",
++ ]
+
+ ❯ tests/acceptance/319/restart-redraft/restart.test.ts:109:43
+    107|       const world = await beforeTheStop(capReached);
+    108|       const { missing, took } = await startAcrossTheBatch(world, UNDER…
+    109|       expect(missing, missing.join('\n')).toEqual([]);
+       |                                           ^
+    110|       for (const d of world.due) expect(took[d.ask]!).toBeLessThan(WIT…
+    111|     }, 30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  00:43:08
+   Duration  21.46s (tests 97%, import 2%, transform 1%)
+
