@@ -34,6 +34,15 @@ test.each([
   expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringContaining('environment.ready.http') });
 });
 
+test('a port nothing listens on is free, on this platform\'s lsof', async () => {
+  // A port the kernel just handed out and that was given back: nothing listens on it now.
+  const server = net.createServer();
+  await new Promise<void>((resolve) => server.listen({ port: 0, host: '127.0.0.1' }, resolve));
+  const port = (server.address() as net.AddressInfo).port;
+  await new Promise((resolve) => server.close(resolve));
+  expect(await portKind().free!(String(port))).toBe(true);
+});
+
 test('a port something listens on at ::1 alone is not free', async () => {
   const server = net.createServer();
   await new Promise<void>((resolve) => server.listen({ port: 0, host: '::1' }, resolve));
