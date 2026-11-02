@@ -11,11 +11,12 @@
 //! `ns_per_glyph_warm`: a frame is charged the warm cost, since a text is shaped once and its run
 //! reused from the shaped-run cache, and the cold cost decides whether shaping leaves the UI thread.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
 use crate::registry::{Per, Sealed};
+use crate::schedule::is_check_phase;
 
 /// The coefficients the reference Mac measured (`node benchmarks/canvas.mjs costs --write`).
 pub const REFERENCE: &str = include_str!("../costs.json");
@@ -232,10 +233,76 @@ impl Estimate {
     }
 }
 
-/// The estimate of `doc` (lowered) in the build `sealed` describes, from `coefficients`: each
-/// operator over the items its own `applies` gives it (a document's operator over all of them),
-/// each pass over the frame and the items of its module's kinds, and the CPU each module's kinds
-/// register per item.
+/// The items a warm frame evaluates (canvas primitives: Invalidation and damage, "CPU O(dirty)"):
+/// those an item operator reading the time applies to, as a channel moves them, with the items
+/// whose params name one of them or that hang from one. `None` when nothing moves: a still
+/// document draws only when it shows or changes, and that frame evaluates every item.
+fn moving<'d>(
+    doc: &Value,
+    items: &'d Map<String, Value>,
+    sealed: &Sealed,
+) -> Option<BTreeSet<&'d str>> {
+    let timed: Vec<_> = sealed
+        .ops
+        .iter()
+        .filter(|o| {
+            o.op.run.is_some()
+                && o.op.per != Per::Document
+                && !is_check_phase(&o.op.phase)
+                && o.op.reads.iter().any(|r| r == "t")
+        })
+        .collect();
+    let mut dirty: BTreeSet<&str> = items
+        .iter()
+        .filter(|(id, item)| {
+            timed
+                .iter()
+                .any(|o| o.op.applies.is_none_or(|f| f(doc, id, item)))
+        })
+        .map(|(id, _)| id.as_str())
+        .collect();
+    if dirty.is_empty() {
+        return None;
+    }
+    // Each item an item names in its params or hangs from, with the items that do.
+    let mut readers: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for (id, item) in items {
+        let mut named = Vec::new();
+        if let Some(p) = item.get("parent").and_then(Value::as_str) {
+            named.push(p);
+        }
+        item_ids_in(&item["params"], items, &mut named);
+        for n in named {
+            readers.entry(n).or_default().push(id);
+        }
+    }
+    let mut next: Vec<&str> = dirty.iter().copied().collect();
+    while let Some(id) = next.pop() {
+        for r in readers.get(id).into_iter().flatten() {
+            if dirty.insert(r) {
+                next.push(r);
+            }
+        }
+    }
+    Some(dirty)
+}
+
+/// Each string at any depth of `v` that is an item's ID.
+fn item_ids_in<'d>(v: &'d Value, items: &Map<String, Value>, out: &mut Vec<&'d str>) {
+    match v {
+        Value::String(s) if items.contains_key(s) => out.push(s),
+        Value::Array(a) => a.iter().for_each(|x| item_ids_in(x, items, out)),
+        Value::Object(m) => m.values().for_each(|x| item_ids_in(x, items, out)),
+        _ => {}
+    }
+}
+
+/// The estimate of `doc` (lowered) in the build `sealed` describes, from `coefficients`, for one
+/// warm frame (The cost model: "Frame CPU" is warm frame times): each frame operator over the
+/// items its own `applies` gives it (a document's operator over all of them) that the frame
+/// evaluates, while a check phase's operators run once at check and cost no frame; each pass over
+/// the frame and the items of its module's kinds; and the CPU each module's kinds register per
+/// item. GPU memory holds every item, moving or not.
 pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Estimate {
     let empty = Map::new();
     let items = doc
@@ -251,8 +318,9 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
     let mut gpu_ns = 0.0;
     let mut bytes = 0.0;
     let mut by_item: BTreeMap<&str, f64> = BTreeMap::new();
+    let moving = moving(doc, items, sealed);
     for op in &sealed.ops {
-        if op.op.run.is_none() {
+        if op.op.run.is_none() || is_check_phase(&op.op.phase) {
             continue;
         }
         let t = coefficients.get(&op.key);
@@ -265,11 +333,14 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
             if !document && op.op.applies.is_some_and(|f| !f(doc, id, item)) {
                 continue;
             }
+            bytes += t.bytes_per_item;
+            if moving.as_ref().is_some_and(|m| !m.contains(id.as_str())) {
+                continue;
+            }
             let c = counts(item);
             let ns =
                 t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_frame_glyph() * c.glyphs;
             cpu_ns += ns;
-            bytes += t.bytes_per_item;
             *by_item.entry(id).or_default() += ns;
         }
     }
@@ -329,6 +400,84 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::{BuildSet, Manifest, Module, Range, Registrar, Registry, Semver};
+    use crate::schedule::Val;
+
+    fn register_tick(r: &mut Registrar) {
+        r.array("tick.at", "f64", "item", "geometry", "items");
+        r.operator("move", "items", &["t"], &["tick.at"])
+            .applies(|_, _, item| item.pointer("/params/moves") == Some(&json!(true)))
+            .run(|v| v.write("tick.at", Val::typed(0.0f64)));
+    }
+
+    /// A module whose operator reads the time over the items marked `moves`, as a channel does.
+    fn tick() -> Module {
+        Module {
+            manifest: Manifest {
+                name: "tick".into(),
+                version: Semver {
+                    major: 1,
+                    minor: 0,
+                    patch: 0,
+                },
+                core: Range::parse("*").expect("a range"),
+                depends_on: BTreeMap::new(),
+                feature: "tick".into(),
+                license: "Apache-2.0".into(),
+                implements: "tick@1".into(),
+            },
+            register: register_tick,
+        }
+    }
+
+    /// A board of `still` still rects, beside a moving one when `moves`, its child and a rect
+    /// whose params name it.
+    fn board(still: usize, moves: bool) -> Value {
+        let rect = |params: Value| json!({"kind": "rect@1", "params": params});
+        let mut items = Map::new();
+        for i in 0..still {
+            items.insert(format!("s{i}"), rect(json!({"box": [0, 0, 1, 1]})));
+        }
+        items.insert(
+            "m".into(),
+            rect(json!({"box": [0, 0, 1, 1], "moves": moves})),
+        );
+        let mut child = rect(json!({"box": [0, 0, 1, 1]}));
+        child["parent"] = json!("m");
+        items.insert("child".into(), child);
+        items.insert(
+            "namer".into(),
+            rect(json!({"box": [0, 0, 1, 1], "near": "m"})),
+        );
+        json!({"format": 1, "size": [100, 100], "items": items})
+    }
+
+    #[test]
+    fn a_frame_charges_its_moving_items_and_their_readers_and_no_check_phase() {
+        let sealed = Registry::new(BuildSet::Core)
+            .with(tick())
+            .seal()
+            .expect("seals");
+        let per_item = |ns| Terms {
+            ns_per_item: ns,
+            ..Terms::default()
+        };
+        let coefficients = Coefficients {
+            fingerprint: Value::Null,
+            build: Value::Null,
+            terms: BTreeMap::from([
+                ("core.fields".to_string(), per_item(1000.0)),
+                ("core.lower".to_string(), per_item(1e6)),
+            ]),
+        };
+        // The moving rect, its child and the rect naming it, never the 100 still ones.
+        let moving = estimate(&board(100, true), &sealed, &coefficients);
+        assert_eq!(moving.cpu_ms, 0.003);
+        assert_eq!(moving.top(5), ["child", "m", "namer"]);
+        // Nothing moves: the frame that shows it evaluates every item.
+        let still = estimate(&board(100, false), &sealed, &coefficients);
+        assert_eq!(still.cpu_ms, 0.103);
+    }
 
     #[test]
     fn a_file_from_a_build_that_isnt_optimized_is_refused_naming_its_profile() {
