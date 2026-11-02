@@ -62,3 +62,10 @@ Error: BLOCKED: the planted runner didn't pass the retried test (outcome missing
  Test Files  1 failed (1)
       Tests  2 failed (2)
 ```
+
+## Decision (2026-11-01, the owner)
+
+On the reference Mac at `574dd22a` both tests here pass (2 of 2), while the original AC17 wrong-program block in
+`claims.test.ts` fails on every implementation: it expects the name in a PASS verdict's reasons, which name nothing.
+The owner decided this redraft stands for AC17's claim half; the original block is superseded and its failure is
+no finding. Neither file is edited by the implementer.
