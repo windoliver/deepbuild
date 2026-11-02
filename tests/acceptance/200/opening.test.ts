@@ -80,9 +80,9 @@ describe('AC5 #200.f96a94c8 opening a closed list as a registry changes no conte
     const before = capture(builds.bin(CLOSED));
     expect(before.docs.slice(1).some((d) => [...modesOf(d.document).values()].includes('b')), 'one of test.mode\'s own fixtures has an item using b').toBe(true);
     none(openingFailures(before, capture(builds.bin(OPENED))), 'the opening as test.mode@1');
-  });
+  }, 1_800_000);
 
   it('AC5 a planted opening that renumbers the entries changes the key of an item that uses b and fails, naming the entry and the item', () => {
     failsNaming(openingFailures(capture(builds.bin(CLOSED)), capture(builds.bin(RENUMBERED))), ['entry b', 'swatch-b'], 'the renumbering opening');
-  });
+  }, 1_800_000);
 });

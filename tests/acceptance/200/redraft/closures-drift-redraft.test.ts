@@ -56,5 +56,5 @@ describe('AC4 #200.be794a42: the closure lint against the reference table (redra
     expect(fails.length, `a FAIL drift line on the planted row:\n${shown(bad)}`).toBeGreaterThan(0);
     const naming = fails.filter((l) => l.includes(LIST) && l.includes('budget.class@1') && CLOSED_BUDGET.test(l));
     expect(naming.length, `a FAIL drift line names ${LIST}, budget.class@1 and the closed budget closure:\n${shown(bad)}`).toBeGreaterThan(0);
-  });
+  }, 1_800_000);
 });

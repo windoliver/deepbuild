@@ -47,7 +47,7 @@ describe('AC3 #200.31886771 a pack never takes a first-party name, and an entry 
     const [packs] = run(builds.bin(MARKS), scenario(evidence(), [PACKS], { packs: [TESTPACK, BAREPACK] }));
     expect(packRow(packs!, TESTPACK).state, 'the control: a pack entry named with its pack\'s name installs').toBe('installed');
     none(packRefusedFailures(packRow(packs!, BAREPACK), BAREPACK, ['dot', MARK]), 'the pack check of an entry named dot');
-  });
+  }, 1_800_000);
 
   it('AC3 the working agent\'s own entry, in a registry that binds author, is the only cover of a requirement, which stays INCONCLUSIVE with an approval ask, never PASS', () => {
     const { install, shown, listed, verdict } = judged(builds.bin(AUTHOR));
@@ -61,12 +61,12 @@ describe('AC3 #200.31886771 a pack never takes a first-party name, and an entry 
     expect(verdict['result'], 'and so is the claim, never PASS').toBe('INCONCLUSIVE');
     const asks = arr(verdict['asks'] ?? [], 'verdict: asks').filter((a) => isObject(a) && a['kind'] === 'approval' && mentions(a, REQ));
     expect(asks.length, `the verdict asks for your approval of the requirement: ${show(verdict['asks'])}`).toBeGreaterThan(0);
-  });
+  }, 1_800_000);
 
   it('AC3 the control: the same claim in a registry that binds all passes, so the INCONCLUSIVE comes from the author binding alone', () => {
     const { install, verdict } = judged(builds.bin(MARKS));
     expect(str(install['outcome'], 'install_pack: outcome'), `the agent's pack installs: ${show(install)}`).toBe('installed');
     expect(theRegistry(listing(builds.bin(MARKS), evidence()), MARK).binds, 'test.mark@1 binds all in the test-mark build').toBe('all');
     expect(requirement(verdict)['result'], 'the requirement passes on the same entry').toBe('PASS');
-  });
+  }, 1_800_000);
 });

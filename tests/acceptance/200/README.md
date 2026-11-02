@@ -72,6 +72,12 @@ temporary folder is deleted. Node built-ins and vitest only, plus the repo's own
 `budgets.test.ts` times the seal), which also takes the folder off the parallel line; this README is the
 instruction, and the implementer makes that edit.
 
+Every test, here and in `redraft/`, passes an explicit timeout as the last argument of `it` (`1_800_000` ms, or the
+longer one it already had), as the other `deep-show` suites do: each starts freshly built binaries, whose first exec
+on macOS alone can take seconds, and AC10's pixel-hash test builds the merge base in its body, which vitest's 5 s
+default can't hold. The blind job added these timeouts on the owner's approval; no assertion or expected value
+changed.
+
 Gates: `budgets.test.ts`'s two timings run only on a reference Mac (Mac15,7 or Mac15,12, Low Power Mode off,
 thermal state nominal, a 1-minute load at most the core count; mains power never gates); elsewhere they skip as
 INCONCLUSIVE after their structural checks, and a reading between the limit and the margin also skips as

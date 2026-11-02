@@ -37,7 +37,7 @@ describe('AC14 #200.78025075 every kit rule is isolated by its own planted wrong
     const { module, part } = registriesPart(builds.bin(SHARED));
     expect([part.verdict, module.verdict], 'the kit fails test.rules in its registries part').toEqual(['FAIL', 'FAIL']);
     for (const rule of RULE_IDS) expect(part.failures.some((f) => mentions(f, rule) && mentions(f, RULES)), `a failure names test.rules@1 and the rule ${rule}, which no planted entry isolates: ${show(part.failures)}`).toBe(true);
-  });
+  }, 1_800_000);
 
   it('AC14 the same kit with one planted entry per rule passes, each entry failing its rule alone with that rule\'s message', () => {
     const l = theRegistry(listing(builds.bin(ISOLATED), evidence()), RULES);
@@ -52,5 +52,5 @@ describe('AC14 #200.78025075 every kit rule is isolated by its own planted wrong
     expect(broken.sort(), 'one planted entry per rule').toEqual([...RULE_IDS].sort());
     const { part } = registriesPart(builds.bin(ISOLATED));
     expect(part.verdict, `the kit's registries part passes: ${show(part.failures)}`).toBe('PASS');
-  });
+  }, 1_800_000);
 });

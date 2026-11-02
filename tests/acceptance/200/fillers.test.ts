@@ -43,19 +43,19 @@ describe('AC8 #200.a1b12018 a registry more than one module fills is the core\'s
     const both = theRegistry(listing(builds.bin(AB), evidence()), SHAPE);
     expect([theEntry(both, 'square').module, theEntry(both, 'circle').module], 'with b, a fills square and b fills circle').toEqual([FILL_A, FILL_B]);
     none(digestFailures(digestOf(builds.bin(A), FILL_A), digestOf(builds.bin(AB), FILL_A), FILL_A), 'a\'s digest');
-  });
+  }, 1_800_000);
 
   it('AC8 a planted seal that hashes every entry of test.shape@1 into each filler\'s digest changes a\'s and fails this', () => {
     failsNaming(digestFailures(digestOf(builds.bin(A), FILL_A, 'hashes_every_entry'), digestOf(builds.bin(AB), FILL_A, 'hashes_every_entry'), FILL_A), [FILL_A], 'the seal that hashes every entry into each filler');
-  });
+  }, 1_800_000);
 
   it('AC8 a test module c that declares test.part@1 is refused at the seal when b fills an entry in it, naming test.part@1, c and b', () => {
     none(refusalFailures(startup(builds.bin(BC)), foreign), 'b\'s entry in c\'s registry');
-  });
+  }, 1_800_000);
 
   it('AC8 a planted seal that takes b\'s entry into c\'s digest seals that build and fails this', () => {
     const planted = startup(builds.bin(BC), 'takes_foreign_entry');
     expect(planted.status, `the planted seal seals the build: ${planted.stdout.slice(0, 600)}`).toBe(0);
     failsNaming(refusalFailures(planted, foreign), [PART], 'the seal that takes b\'s entry into c\'s digest');
-  });
+  }, 1_800_000);
 });
