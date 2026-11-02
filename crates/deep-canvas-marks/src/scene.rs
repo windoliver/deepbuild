@@ -119,41 +119,131 @@ impl Fill {
 }
 
 /// What a mark draws inside (Mask `mask@1`; Frame and group): a rect mask's or a frame's
-/// scissor, an alpha or luminance mask's coverage from its own paint over its rect, or a group's
-/// (or an item's adjust) opacity through one offscreen pass.
+/// scissor, an alpha or luminance mask's coverage from its own paint over its rect, a group's (or
+/// an item's adjust) opacity and blend through one offscreen pass, or the one coverage target a
+/// group's fills that share an edge draw through (Decided, The 2D renderer: no conflation seams).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Scope {
+    /// A rect scissor, or with `radius` above 0 a rounded frame's mask by shape (#385).
     Clip {
         item: String,
         rect: [f64; 4],
+        radius: f64,
     },
+    /// Coverage from the mask's paint over its rect, its edges ramped over `feather` u (#385).
     Mask {
         item: String,
         rect: [f64; 4],
         luminance: bool,
         fill: Fill,
+        feather: f64,
     },
+    /// `blend` is the group's when it names one (a group that does renders isolated).
     Opacity {
         item: String,
         alpha: f64,
+        blend: Option<Blend>,
     },
+    /// `verbs` is the union of the fills inside, which draw inside it with no antialiasing of
+    /// their own, so a shared edge shows neither of them partly and nothing under it.
+    Cover { item: String, verbs: Arc<Vec<Verb>> },
+}
+
+/// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which R2 draws.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Blend {
+    #[default]
+    Normal,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
+    Add,
+}
+
+impl Blend {
+    pub const ALL: [(&'static str, Blend); 17] = [
+        ("normal", Blend::Normal),
+        ("multiply", Blend::Multiply),
+        ("screen", Blend::Screen),
+        ("overlay", Blend::Overlay),
+        ("darken", Blend::Darken),
+        ("lighten", Blend::Lighten),
+        ("color_dodge", Blend::ColorDodge),
+        ("color_burn", Blend::ColorBurn),
+        ("hard_light", Blend::HardLight),
+        ("soft_light", Blend::SoftLight),
+        ("difference", Blend::Difference),
+        ("exclusion", Blend::Exclusion),
+        ("hue", Blend::Hue),
+        ("saturation", Blend::Saturation),
+        ("color", Blend::Color),
+        ("luminosity", Blend::Luminosity),
+        ("add", Blend::Add),
+    ];
+
+    pub fn name(self) -> &'static str {
+        Blend::ALL
+            .iter()
+            .find(|(_, b)| *b == self)
+            .map_or("normal", |(n, _)| n)
+    }
+
+    /// A group's `blend`, if it names one; the eleven modes R6 draws on the GPU layer wait for it.
+    fn read(id: &str, v: Option<&Value>) -> Result<Option<Blend>, Refused> {
+        const LATER: [&str; 11] = [
+            "subtract",
+            "divide",
+            "linear_burn",
+            "linear_dodge",
+            "linear_light",
+            "vivid_light",
+            "pin_light",
+            "hard_mix",
+            "darker_color",
+            "lighter_color",
+            "dissolve",
+        ];
+        let path = format!("items/{id}/params/blend");
+        match v {
+            None => Ok(None),
+            Some(Value::String(name)) => match Blend::ALL.iter().find(|(n, _)| n == name) {
+                Some((_, b)) => Ok(Some(*b)),
+                None if LATER.contains(&name.as_str()) => refuse("module_missing", path),
+                None => refuse("bad_doc", path),
+            },
+            Some(_) => refuse("bad_doc", path),
+        }
+    }
 }
 
 impl Scope {
     pub fn item(&self) -> &str {
         match self {
-            Scope::Clip { item, .. } | Scope::Mask { item, .. } | Scope::Opacity { item, .. } => {
-                item
-            }
+            Scope::Clip { item, .. }
+            | Scope::Mask { item, .. }
+            | Scope::Opacity { item, .. }
+            | Scope::Cover { item, .. } => item,
         }
     }
 
     fn feed(&self, k: &mut KeyBuilder) {
         k.text(self.item());
         match self {
-            Scope::Clip { rect, .. } => {
+            Scope::Clip { rect, radius, .. } => {
                 k.text("clip");
-                rect.iter().for_each(|v| {
+                rect.iter().chain([radius]).for_each(|v| {
                     k.number(*v);
                 });
             }
@@ -161,18 +251,40 @@ impl Scope {
                 rect,
                 luminance,
                 fill,
+                feather,
                 ..
             } => {
                 k.text(if *luminance { "luminance" } else { "alpha" });
-                rect.iter().for_each(|v| {
+                rect.iter().chain([feather]).for_each(|v| {
                     k.number(*v);
                 });
                 fill.feed(k);
             }
-            Scope::Opacity { alpha, .. } => {
+            Scope::Opacity { alpha, blend, .. } => {
                 k.text("opacity").number(*alpha);
+                if let Some(b) = blend {
+                    k.text(b.name());
+                }
+            }
+            Scope::Cover { verbs, .. } => {
+                k.text("cover");
+                for v in verbs.iter() {
+                    verb_points(v).iter().for_each(|p| {
+                        k.number(p[0]).number(p[1]);
+                    });
+                }
             }
         }
+    }
+}
+
+/// A verb's points: where it moves or draws to, after its control points.
+fn verb_points(v: &Verb) -> Vec<[f64; 2]> {
+    match *v {
+        Verb::Move(p) | Verb::Line(p) => vec![p],
+        Verb::Quad(a, b) => vec![a, b],
+        Verb::Cubic(a, b, c) => vec![a, b, c],
+        Verb::Close => Vec::new(),
     }
 }
 
@@ -1881,16 +1993,19 @@ type Ordered<'a> = (&'a str, usize, &'a str, &'a Arc<Drawn>, ContentKey);
 const MASK_DEPTH: usize = 4;
 
 /// A mask's scope over the items it applies to: a scissor for a shape mask, coverage from its own
-/// paint for an alpha or luminance one. Other shapes, feathers, inverted and combined masks wait
-/// for Vello GPU (#385).
+/// paint for an alpha or luminance one, and for a feathered one its rect's coverage ramped over the
+/// feather (#385). Other shapes, inverted and combined masks wait.
 fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
     if p.get("shape").and_then(Value::as_str).unwrap_or("rect") != "rect" {
         return refuse("mask_r2", format!("{path}/shape"));
     }
-    let soft = num(p.get("feather")).unwrap_or(0.0) != 0.0
-        || p.get("invert") == Some(&Value::Bool(true))
+    let feather = num(p.get("feather")).unwrap_or(0.0);
+    if feather < 0.0 {
+        return refuse("bad_doc", format!("{path}/feather"));
+    }
+    let soft = p.get("invert") == Some(&Value::Bool(true))
         || p.get("combine")
             .and_then(Value::as_str)
             .is_some_and(|c| c != "add");
@@ -1908,10 +2023,20 @@ fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refuse
     let e = num(p.get("expand")).unwrap_or(0.0);
     let rect = Place::of(item).rect([x - e, y - e, w + 2.0 * e, h + 2.0 * e]);
     let luminance = match p.get("mode").and_then(Value::as_str) {
+        None | Some("shape") if feather > 0.0 => {
+            return Ok(Scope::Mask {
+                item: id.to_string(),
+                rect,
+                luminance: false,
+                fill: Fill::Solid([255, 255, 255]),
+                feather,
+            })
+        }
         None | Some("shape") => {
             return Ok(Scope::Clip {
                 item: id.to_string(),
                 rect,
+                radius: 0.0,
             })
         }
         Some("alpha") => false,
@@ -1931,6 +2056,7 @@ fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refuse
         fill: fill_of(palette, fill, &format!("{path}/paint/fill"), rect)?,
         rect,
         luminance,
+        feather,
     })
 }
 
@@ -1948,13 +2074,17 @@ fn ancestor_scope(id: &str, item: &Value, palette: &Palette) -> Result<Option<Sc
             Some(Scope::Clip {
                 item: id.to_string(),
                 rect: Place::of(item).rect(frame_box(id, item)?),
+                radius: num(get("radius")).unwrap_or(0.0).max(0.0),
             })
         }
         Some("group@1") => {
             let alpha = num(get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0);
-            (alpha < 1.0 || get("isolate") == Some(&Value::Bool(true))).then(|| Scope::Opacity {
+            let blend = Blend::read(id, get("blend"))?;
+            let isolated = get("isolate") == Some(&Value::Bool(true)) || blend.is_some();
+            (alpha < 1.0 || isolated).then(|| Scope::Opacity {
                 item: id.to_string(),
                 alpha,
+                blend,
             })
         }
         _ => None,
@@ -2069,6 +2199,152 @@ fn scopes_of(
     Ok(out)
 }
 
+/// A fill drawn as one outline: its verbs where it draws, with nothing else (no stroke, no soft
+/// paint below opacity 1) that a coverage target would change.
+fn fill_outline(mark: &Mark) -> Option<Vec<Verb>> {
+    let moved = |verbs: &[Verb], by: [f64; 2]| -> Vec<Verb> {
+        let m = |p: [f64; 2]| [p[0] + by[0], p[1] + by[1]];
+        verbs
+            .iter()
+            .map(|v| match *v {
+                Verb::Move(p) => Verb::Move(m(p)),
+                Verb::Line(p) => Verb::Line(m(p)),
+                Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
+                Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
+                Verb::Close => Verb::Close,
+            })
+            .collect()
+    };
+    match mark {
+        Mark::Path {
+            geometry, offset, ..
+        } if geometry.fill && geometry.stroke.is_none() => Some(moved(&geometry.verbs, *offset)),
+        Mark::Shape {
+            verbs,
+            fill: Some((_, opacity)),
+            stroke: None,
+            ..
+        } if *opacity == 1.0 => Some(verbs.clone()),
+        _ => None,
+    }
+}
+
+/// Each edge of an outline (a line, or a curve with its control points) as its points rounded to
+/// 1/1024 u, read the same way whichever way it runs.
+fn edge_keys(verbs: &[Verb]) -> Vec<Vec<[i64; 2]>> {
+    let q = |p: [f64; 2]| {
+        [
+            (p[0] * 1024.0).round() as i64,
+            (p[1] * 1024.0).round() as i64,
+        ]
+    };
+    let (mut start, mut at) = ([0.0; 2], [0.0; 2]);
+    let mut out = Vec::new();
+    let mut push = |points: Vec<[f64; 2]>| {
+        let fwd: Vec<[i64; 2]> = points.iter().map(|p| q(*p)).collect();
+        let back: Vec<[i64; 2]> = fwd.iter().rev().copied().collect();
+        if fwd.first() != fwd.last() {
+            out.push(fwd.min(back));
+        }
+    };
+    for v in verbs {
+        match *v {
+            Verb::Move(p) => (start, at) = (p, p),
+            Verb::Close => {
+                push(vec![at, start]);
+                at = start;
+            }
+            _ => {
+                let mut points = vec![at];
+                points.extend(verb_points(v));
+                at = *points.last().expect("a drawing verb has a point");
+                push(points);
+            }
+        }
+    }
+    out
+}
+
+/// No conflation seams (Decided, The 2D renderer): a group's fills that share an edge draw through
+/// one coverage target, the union of their outlines, each group of fills joined by shared edges
+/// its own target.
+fn cover(built: &mut [(&str, Placed)], items: &Map<String, Value>) {
+    /// A fill of a group: its built item, its mark, and its outline.
+    type Member = (usize, usize, Vec<Verb>);
+    let mut groups: BTreeMap<&str, Vec<Member>> = BTreeMap::new();
+    for (i, (id, placed)) in built.iter().enumerate() {
+        let Some(parent) = items
+            .get(*id)
+            .and_then(|it| it.get("parent"))
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        if items
+            .get(parent)
+            .and_then(|p| p.get("kind"))
+            .and_then(Value::as_str)
+            != Some("group@1")
+        {
+            continue;
+        }
+        for (k, drawn) in placed.drawn.iter().enumerate() {
+            if let Some(verbs) = fill_outline(&drawn.mark) {
+                groups
+                    .entry(items.get_key_value(parent).expect("found above").0)
+                    .or_default()
+                    .push((i, k, verbs));
+            }
+        }
+    }
+    for (group, fills) in groups {
+        // Fills joined by a shared edge, as sets of one root.
+        let mut root: Vec<usize> = (0..fills.len()).collect();
+        fn find(root: &mut [usize], i: usize) -> usize {
+            let mut r = i;
+            while root[r] != r {
+                r = root[r];
+            }
+            root[i] = r;
+            r
+        }
+        let mut seen: BTreeMap<Vec<[i64; 2]>, usize> = BTreeMap::new();
+        for (f, (.., verbs)) in fills.iter().enumerate() {
+            for e in edge_keys(verbs) {
+                match seen.get(&e) {
+                    Some(&g) => {
+                        let (a, b) = (find(&mut root, g), find(&mut root, f));
+                        root[a] = b;
+                    }
+                    None => {
+                        seen.insert(e, f);
+                    }
+                }
+            }
+        }
+        let mut sets: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for f in 0..fills.len() {
+            let r = find(&mut root, f);
+            sets.entry(r).or_default().push(f);
+        }
+        for (n, members) in sets.values().filter(|m| m.len() > 1).enumerate() {
+            let verbs: Vec<Verb> = members.iter().flat_map(|&f| fills[f].2.clone()).collect();
+            let scope = Scope::Cover {
+                item: format!("{group}#cover{n}"),
+                verbs: Arc::new(verbs),
+            };
+            for &f in members {
+                let (i, k, _) = fills[f];
+                let placed = &mut built[i].1;
+                let mut drawn = (*placed.drawn[k]).clone();
+                drawn.scopes.push(scope.clone());
+                placed.drawn[k] = Arc::new(drawn);
+                placed.keys.clear();
+            }
+        }
+    }
+}
+
 /// The rect a mark's scissors leave it, for a renderer that clips only by rect.
 fn clip_of(scopes: &[Scope]) -> Option<[f64; 4]> {
     scopes.iter().fold(None, |acc, s| {
@@ -2092,6 +2368,8 @@ pub enum Planted {
     None,
     /// #373 AC5's twin: a filled arc closes along its chord.
     ArcClosedAlongChord,
+    /// #385 AC8's twin: a group's fills that share an edge draw each on its own, source-over.
+    SectorsSourceOver,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -2310,7 +2588,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             let close = match (fill.is_some(), ctx.planted) {
                 (false, _) => outline::Close::Open,
                 (true, Planted::ArcClosedAlongChord) => outline::Close::Chord,
-                (true, Planted::None) => outline::Close::Filled,
+                (true, _) => outline::Close::Filled,
             };
             let verbs = outline::arc(
                 center,
@@ -2500,6 +2778,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         scopes.push(Scope::Opacity {
             item: format!("{id}#adjust"),
             alpha: adjust.opacity,
+            blend: None,
         });
     }
     let clip = clip_of(&scopes);
@@ -2697,6 +2976,9 @@ fn build(
             return refuse("ref_unresolved", format!("items/{id}/layer"));
         }
         built.push((id, placed));
+    }
+    if planted != Planted::SectorsSourceOver {
+        cover(&mut built, items);
     }
     let built = built.iter().map(|(id, p)| (*id, p));
     for (id, placed) in built.chain(prebuilt.iter().copied()) {
@@ -2915,10 +3197,11 @@ mod tests {
             draw(&board(Value::Object(items))).unwrap_err().code,
             "mask_depth"
         );
-        let soft = board(
-            json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "feather": 2}}}),
+        // #385 draws a feathered mask; an inverted one still waits.
+        let inverted = board(
+            json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "invert": true}}}),
         );
-        assert_eq!(draw(&soft).unwrap_err().code, "mask_r2");
+        assert_eq!(draw(&inverted).unwrap_err().code, "mask_r2");
     }
 
     fn mark_of<'a>(f: &'a Frame, item: &str) -> &'a Mark {

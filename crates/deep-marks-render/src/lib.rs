@@ -193,7 +193,7 @@ fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
 
 /// The record a request pins: `readings` (a number, or `{value, as_of}` with its as-of time on the
 /// record's clock) and `states` (handle → state).
-fn record(input: &Map<String, Value>) -> Option<Record> {
+pub fn record(input: &Map<String, Value>) -> Option<Record> {
     let mut record = Record::default();
     if let Some(value) = input.get("readings") {
         for (h, r) in value.as_object()? {
@@ -337,7 +337,32 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::String(p)) if p == "mask_encoded_luma" => (Planted::None, true, false),
             Some(Value::String(p)) if p == "shapes_spans_apart" => (Planted::None, false, true),
             Some(Value::String(p)) if p == "reads_process_locale" => (Planted::None, false, false),
+            Some(Value::String(p)) if p == "sectors_source_over" => {
+                (Planted::SectorsSourceOver, false, false)
+            }
             Some(_) => return None,
+        };
+        let config = raster::Config {
+            simd: match input.get("simd").map(Value::as_str) {
+                None | Some(Some("scalar")) => raster::Simd::Scalar,
+                Some(Some("neon")) => raster::Simd::Neon,
+                Some(Some("detected")) => raster::Simd::Detected,
+                Some(_) => return None,
+            },
+            u8: match input.get("pipeline").map(Value::as_str) {
+                None | Some(Some("f32")) => false,
+                Some(Some("u8")) => true,
+                Some(_) => return None,
+            },
+            golden: input.get("golden").map_or(Some(true), Value::as_bool)?,
+        };
+        // A golden at any setting but the scalar level through the f32 pipeline draws nothing.
+        if let Some(setting) = config.refusal() {
+            return Some(Answer::Now(refused("golden_config", setting)));
+        }
+        let blend_inputs = match input.get("blend_inputs") {
+            None => None,
+            Some(v) => Some(PathBuf::from(v.as_str()?)),
         };
         let mut doc = doc(input.get("doc"))?;
         // #140's wrong program: the number formatter takes its marks from the process's locale.
@@ -360,6 +385,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             encoded_luma,
             spans_apart,
             look,
+            config,
+            blend_inputs,
         };
         let checked = check(&request.doc, Some(&request.look));
         return Some(Answer::Now(
@@ -532,6 +559,7 @@ pub fn main() {
 }
 
 mod asset;
+pub mod gpu;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;

@@ -11,4 +11,6 @@ publish = false
 # it and the wasm32 lane builds it: the web is a platform too.
 
 [dependencies]
+# Issue #185: each backend is a canvas module, one implementation of its seam's interface.
+deep-canvas = { path = "../deep-canvas" }
 serde_json = { version = "1", features = ["preserve_order"] }

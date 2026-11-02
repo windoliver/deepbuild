@@ -108,7 +108,7 @@ function nextCron(cron: Cron, after: number): number {
   throw Error('the cron line matches no time in the years ahead');
 }
 /** The first slot of a cadence strictly after `after`. */
-export function nextSlot(cadence: Cadence, after: number): number {
+function nextSlot(cadence: Cadence, after: number): number {
   return 'every' in cadence ? (Math.floor(after / cadence.every) + 1) * cadence.every : nextCron(parseCron(cadence.cron), after);
 }
 

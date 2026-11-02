@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 
 mod time;
 pub use time::{cache, tick};
+pub mod sim;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
     let one = Semver {
@@ -40,6 +41,7 @@ fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
         feature: name.replace('.', "-"),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
+        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
     }
 }
 

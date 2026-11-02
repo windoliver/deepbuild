@@ -47,6 +47,7 @@ pub fn module() -> Module {
             feature: "sheet".into(),
             license: "Apache-2.0".into(),
             implements: "sheet@1".into(),
+            implementation: deep_canvas::registry::Implementation::reference("sheet", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
         },
         register,
     }

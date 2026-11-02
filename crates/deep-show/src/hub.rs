@@ -296,6 +296,9 @@ pub struct Startup {
 /// `registry` reply's `seal.runs` is a measurement, not the binary's word; 1 whatever frames ran.
 pub static SEAL_RUNS: AtomicU32 = AtomicU32::new(0);
 
+/// How many times this process ran the seal's interface checks (#185), counted as `SEAL_RUNS`.
+pub static INTERFACE_RUNS: AtomicU32 = AtomicU32::new(0);
+
 /// A revision's diff, its four lists, in the reply.
 pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
     reply.insert("changed".into(), json!(diff.changed));

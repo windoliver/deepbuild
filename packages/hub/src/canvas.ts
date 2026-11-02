@@ -20,7 +20,7 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const PRESENT_MS = 2000;
 
 /** The canvas core's binary: the checkout's build of `deep-show`, the newer of release and debug. */
-export function canvasCore(): string {
+function canvasCore(): string {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
   const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-show')).filter((p) => existsSync(p));
   if (!built.length) throw refuse('unavailable', '', `No canvas core is built under ${join(repo, 'target')}; run cargo build --bin deep-show first.`, 'deep-show', true);

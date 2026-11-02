@@ -77,7 +77,7 @@ export interface AskTaskOptions {
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
    * it takes the claim's snapshot and checkout, and starts the fast lane's checks.
    */
-  run(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
@@ -302,8 +302,11 @@ export class AskTasks {
         });
       }
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
-      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: r.on_base === 'passes' ? 'passes' as const : 'fails' as const }] : []));
-      await this.o.run({ claim: `claim:${id}`, session, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, checks });
+      const onBase = (r: Requirement) => (r.on_base === 'passes' ? 'passes' as const : 'fails' as const);
+      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: onBase(r) }] : []));
+      // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
+      const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));
+      await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, requirements: handles, checks });
       } catch (error) {
         process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
       }
