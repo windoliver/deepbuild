@@ -1,9 +1,10 @@
 //! A document evaluated frame after frame (issue #379; technical design: Rules every primitive
 //! follows, "evaluated in dependency order with no heap allocation after warm-up"). It's
 //! compiled and evaluated whole once; each later frame evaluates the motion program into its
-//! flat slots and rewrites only what those move, the solids' world matrices and the camera, in
-//! place. A document that moves anything else (a line, a label, a paint) is evaluated whole every
-//! frame, which gives the same scene and allocates.
+//! flat slots and rewrites only what those move, in place: the world matrices of the solids the
+//! program moves (the item or a parent) and the camera. A solid nothing moves keeps the matrix the
+//! whole evaluation gave it. A document that moves anything else (a line, a label, a paint) is
+//! evaluated whole every frame, which gives the same scene and allocates.
 
 use deep_canvas::camera::{Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
@@ -13,13 +14,16 @@ use serde_json::{Map, Value};
 
 use crate::look::Look3;
 use crate::scene::{
-    corners_into, evaluate, local_of, matmul, near_far, num, posed, Affine3, Labels, Refused, Scene,
+    corners8, corners_into, evaluate, local_of, matmul, near_far, num, posed, Affine3, Labels,
+    Refused, Scene,
 };
 
-/// One solid's place in the scene and what its world matrix is made of.
+/// A solid the motion program moves: its place in the scene and what its world matrix is made of.
 struct Solid {
     layer: usize,
     index: usize,
+    /// Its first corner in the bounds.
+    corner: usize,
     /// Program item indices, the item first, then each parent outward.
     chain: Vec<usize>,
     size: Vec3,
@@ -50,6 +54,16 @@ struct Camera {
     fields: Vec<(CamField, usize)>,
 }
 
+/// What the frame path rewrites: the solids the motion program moves, the transform groups channels
+/// override, and the camera.
+struct Fast {
+    solids: Vec<Solid>,
+    overrides: Vec<Override>,
+    camera: Camera,
+    /// Each moving solid's layer and index in it.
+    moved: Vec<(usize, usize)>,
+}
+
 pub struct Frames {
     doc: Value,
     look: Look3,
@@ -58,7 +72,8 @@ pub struct Frames {
     scene: Scene,
     /// `None`: the document moves something the frame path doesn't rewrite, so every frame is
     /// evaluated whole.
-    fast: Option<(Vec<Solid>, Vec<Override>, Camera)>,
+    fast: Option<Fast>,
+    /// Every solid's eight corners, in layer and solid order.
     bounds: Vec<Vec3>,
 }
 
@@ -76,7 +91,12 @@ impl Frames {
         })?;
         let state = program.state();
         let fast = fast_path(map, &program, &scene);
-        let bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
+        let mut bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
+        for l in &scene.layers {
+            for s in &l.solids {
+                corners_into(&s.model, &mut bounds);
+            }
+        }
         Ok(Frames {
             doc: doc.clone(),
             look: look.clone(),
@@ -93,6 +113,18 @@ impl Frames {
         self.fast.is_some()
     }
 
+    /// The scene the last [`Frames::at`] gave.
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    /// The solids (layer, index) a frame on the fast path may rewrite: everything else in its
+    /// scene but the size and the camera is as [`Frames::new`] evaluated it. `None` when every
+    /// frame is evaluated whole.
+    pub fn moved(&self) -> Option<&[(usize, usize)]> {
+        self.fast.as_ref().map(|f| f.moved.as_slice())
+    }
+
     /// The scene at `t` (flicks) on a frame of `size` px, the view turned by `offsets`.
     pub fn at(
         &mut self,
@@ -101,7 +133,13 @@ impl Frames {
         offsets: &Offsets,
         labels: &mut Labels,
     ) -> Result<&Scene, Refused> {
-        let Some((solids, overrides, cam)) = self.fast.as_mut() else {
+        let Some(Fast {
+            solids,
+            overrides,
+            camera: cam,
+            ..
+        }) = self.fast.as_mut()
+        else {
             return self.whole(t, size, offsets, labels);
         };
         self.program
@@ -122,7 +160,6 @@ impl Frames {
         };
         let local =
             |item: usize| -> Affine3 { local_of(at(item, 0), at(item, 1), at(item, 2), [1.0; 3]) };
-        self.bounds.clear();
         for s in solids.iter() {
             let mut m = local(s.chain[0]);
             for &p in &s.chain[1..] {
@@ -136,7 +173,7 @@ impl Frames {
                     [0.0, 0.0, s.size[2], 0.0],
                 ],
             );
-            corners_into(&model, &mut self.bounds);
+            self.bounds[s.corner..s.corner + 8].copy_from_slice(&corners8(&model));
             self.scene.layers[s.layer].solids[s.index].model = model;
         }
         for &(field, slot) in &cam.fields {
@@ -250,11 +287,7 @@ fn turned(
 }
 
 /// What the frame path rewrites for this document, or `None` when it moves anything else.
-fn fast_path(
-    map: &Map<String, Value>,
-    program: &Program,
-    scene: &Scene,
-) -> Option<(Vec<Solid>, Vec<Override>, Camera)> {
+fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Option<Fast> {
     // A sun's direction and another module's items (#380) move with transforms this path
     // doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
@@ -309,8 +342,10 @@ fn fast_path(
         return None;
     }
     let mut solids = Vec::new();
+    let mut corner = 0;
     for (l, layer) in scene.layers.iter().enumerate() {
         for (i, s) in layer.solids.iter().enumerate() {
+            corner += 8;
             let mut chain = vec![index(&s.id)?];
             let mut seen = vec![s.id.as_str()];
             let mut parent = items.get(&s.id)?.get("parent").and_then(Value::as_str);
@@ -326,25 +361,34 @@ fn fast_path(
                 items[&s.id].get("params").and_then(|p| p.get("size")),
                 [1.0; 3],
             )?;
+            let moves = |c: usize| {
+                program.writes(c * TRANSFORM..(c + 1) * TRANSFORM)
+                    || overrides.iter().any(|o| o.item == c)
+            };
+            if !chain.iter().any(|&c| moves(c)) {
+                continue;
+            }
             solids.push(Solid {
                 layer: l,
                 index: i,
+                corner: corner - 8,
                 chain,
                 size,
             });
         }
     }
-    Some((
+    Some(Fast {
+        moved: solids.iter().map(|s| (s.layer, s.index)).collect(),
         solids,
         overrides,
-        Camera {
+        camera: Camera {
             spec,
             path,
             near: num(params.get("near")),
             far: num(params.get("far")),
             fields,
         },
-    ))
+    })
 }
 
 #[cfg(test)]
@@ -356,8 +400,8 @@ mod tests {
         Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap()
     }
 
-    /// Boxes, one sliding by a channel and one riding it as a child, under a camera whose
-    /// orbit a second channel turns.
+    /// Boxes, one sliding by a channel, one riding it as a child and one far off that nothing
+    /// moves, under a camera whose orbit a second channel turns.
     fn doc(orbit: bool) -> Value {
         let mut d = json!({
             "format": 1, "profile": "scene", "title": "T", "size": [128, 96], "camera": "cam",
@@ -366,7 +410,8 @@ mod tests {
                 "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0",
                         "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 14}, "fov": 40}},
                 "a": {"id": "a", "kind": "mark.box@1", "name": "A", "order": "b0", "params": {"size": [1, 2, 1], "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [-2, 0.5, 0], "rot": [0, 30, 0]}},
-                "b": {"id": "b", "kind": "mark.box@1", "name": "B", "order": "b1", "parent": "a", "params": {"size": 0.5, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 1, 0]}}
+                "b": {"id": "b", "kind": "mark.box@1", "name": "B", "order": "b1", "parent": "a", "params": {"size": 0.5, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 1, 0]}},
+                "c": {"id": "c", "kind": "mark.box@1", "name": "C", "order": "b2", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [9, 0.5, -40]}}
             },
             "channels": {"slide": {"target": "items/a/at/pos/0", "type": "f32", "keys": {"k0": {"t": "0s", "value": -3, "interp": "linear"}, "k1": {"t": "60s", "value": 3, "interp": "linear"}}}}
         });

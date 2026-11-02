@@ -2028,6 +2028,7 @@ dependencies = [
  "bytemuck",
  "deep-canvas-scene3d",
  "deep-gpu",
+ "serde_json",
  "wgpu 30.0.1",
  "wgpu-profiler",
 ]
