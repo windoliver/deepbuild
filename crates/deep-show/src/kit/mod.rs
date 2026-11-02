@@ -63,6 +63,10 @@ pub const PARTS: [&str; 13] = [
 /// `behavior`, an interface's behavior part on its implementation.
 pub const INTERFACE_PARTS: [&str; 2] = ["bit", "behavior"];
 
+/// The part a module that declares registries adds (#200): each kit rule isolated by a planted
+/// wrong entry that breaks it alone.
+pub const REGISTRY_PART: &str = "registries";
+
 /// The kit parts a canvas module's interface lists: every part, and `bit`; an interface with a
 /// behavior part lists it too.
 pub fn interface_parts() -> Vec<String> {
@@ -130,13 +134,13 @@ impl KitCall {
             }
         };
         let parts = list("parts")?;
-        if parts
-            .as_ref()
-            .is_some_and(|p| {
-                p.iter()
-                    .any(|x| !PARTS.contains(&x.as_str()) && !INTERFACE_PARTS.contains(&x.as_str()))
+        if parts.as_ref().is_some_and(|p| {
+            p.iter().any(|x| {
+                !PARTS.contains(&x.as_str())
+                    && !INTERFACE_PARTS.contains(&x.as_str())
+                    && x != REGISTRY_PART
             })
-        {
+        }) {
             return None;
         }
         let backends = list("backends")?.unwrap_or_else(|| vec!["vello_cpu".into(), "noop".into()]);
@@ -387,7 +391,11 @@ impl<'a> Hub<'a> {
             let mut parts = Vec::new();
             let mut module_failures: Vec<Value> = Vec::new();
             let mut verdict = Verdict::Pass;
-            for part in PARTS.into_iter().chain(INTERFACE_PARTS) {
+            for part in PARTS
+                .into_iter()
+                .chain(INTERFACE_PARTS)
+                .chain([REGISTRY_PART])
+            {
                 if !call.runs(part) {
                     continue;
                 }
@@ -470,8 +478,48 @@ impl<'a> Hub<'a> {
             "migration" => migration::run(self, ctx),
             "bit" => interface::bit(self, ctx),
             "behavior" => interface::behavior(self, ctx),
+            REGISTRY_PART => self.registries_part(ctx.module),
             _ => None,
         }
+    }
+
+    /// The registries part (#200): for each registry the module declares, each kit rule must
+    /// have a planted wrong entry that breaks that rule alone and fails with its message; a rule
+    /// no planted entry isolates fails, naming the registry and the rule.
+    fn registries_part(&self, module: &str) -> Option<PartRun> {
+        let regs: Vec<_> = self
+            .startup
+            .sealed
+            .registries
+            .iter()
+            .filter(|r| r.owner == module)
+            .collect();
+        if regs.is_empty() {
+            return None;
+        }
+        let mut run = PartRun::new(regs.iter().map(|r| r.def.kit.len() as u64).sum());
+        for r in regs {
+            let open = deep_canvas::registry::lists::unisolated(&r.def);
+            for k in &r.def.kit {
+                let name = format!("{} {}", r.def.name, k.rule);
+                let case = if open.contains(&k.rule) {
+                    Case::new(name, Verdict::Fail).with(
+                        "failure",
+                        failure(
+                            "rule_not_isolated",
+                            module,
+                            REGISTRY_PART,
+                            json!({"registry": r.def.name, "rule": k.rule,
+                                   "what": format!("no planted entry of `{}` breaks `{}` alone", r.def.name, k.rule)}),
+                        ),
+                    )
+                } else {
+                    Case::new(name, Verdict::Pass)
+                };
+                run.cases.push(case);
+            }
+        }
+        Some(run)
     }
 
     /// Whether the scenario plants this wrong program.

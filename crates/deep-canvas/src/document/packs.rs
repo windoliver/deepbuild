@@ -131,6 +131,9 @@ pub struct Pack {
     pub recipes: BTreeMap<String, Recipe>,
     /// `d1:` SHA-256 of the manifest's canonical form: a version's bytes, frozen.
     pub digest: String,
+    /// The entries it fills into registries the build declares, each admitted by its registry's
+    /// kit at the pack check (#200).
+    pub entries: Vec<registry::lists::SealedEntry>,
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
@@ -296,6 +299,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         }
         Some(other) => issues.push(bad("recipes", other.clone(), "not an object")),
     }
+    let entries = match fields.get("entries") {
+        None => Vec::new(),
+        Some(e) => check_entries(&id, e, sealed, &mut issues),
+    };
     for key in fields.keys() {
         if !PACK_KEYS.contains(&key.as_str()) {
             issues.push(Issue::envelope(
@@ -314,7 +321,124 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         requires_modules,
         recipes,
         digest: digest(manifest),
+        entries,
     })
+}
+
+/// A pack's registry entries (Registry and seal: registries), each checked at the pack check: in
+/// a registry the build declares that packs may fill, named `<pack>.<name>` so it never takes a
+/// first-party name, meeting the entry schema and passing the registry's kit. Each refusal is an
+/// issue at `entries/<registry>`, naming the registry and the entry.
+fn check_entries(
+    id: &PackId,
+    entries: &Value,
+    sealed: &Sealed,
+    issues: &mut Vec<Issue>,
+) -> Vec<registry::lists::SealedEntry> {
+    let mut out = Vec::new();
+    let Some(by_registry) = entries.as_object() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "entries".into(),
+            entries.clone(),
+            "not an object",
+        ));
+        return out;
+    };
+    let pack = id.text();
+    for (name, list) in by_registry {
+        let path = format!("entries/{name}");
+        let refuse = |actual: Value, what: String| {
+            Issue::envelope("out_of_range", path.clone(), actual, &what)
+        };
+        let Some(reg) = sealed.registry(name) else {
+            issues.push(refuse(
+                json!({"registry": name}),
+                format!("this build declares no registry `{name}`"),
+            ));
+            continue;
+        };
+        if !reg.def.fill.contains(&"pack") {
+            issues.push(refuse(
+                json!({"registry": name, "fill": reg.def.fill}),
+                format!(
+                    "`{name}` is filled by {} (fill: {}); a pack adds no entry to it",
+                    reg.def.fill.join(", "),
+                    reg.def.fill.join(" | ")
+                ),
+            ));
+            continue;
+        }
+        let Some(list) = list.as_array() else {
+            issues.push(refuse(list.clone(), "not a list of entries".into()));
+            continue;
+        };
+        for value in list {
+            let Some(entry) = value.get("name").and_then(Value::as_str) else {
+                issues.push(refuse(
+                    value.clone(),
+                    format!("an entry of `{name}` has no name"),
+                ));
+                continue;
+            };
+            let own = format!("{}.", id.name);
+            if !entry.starts_with(&own) {
+                let what = match reg.entry(entry) {
+                    Some(first) => format!(
+                        "`{entry}` would take the first-party entry `{entry}` of `{name}` (`{}`'s); a pack's entry is named `{}{entry}`",
+                        first.module, own
+                    ),
+                    None => format!("a pack's entry is named `<pack>.<name>`: `{}{entry}`, not `{entry}`", own),
+                };
+                issues.push(refuse(json!({"registry": name, "entry": entry}), what));
+                continue;
+            }
+            if out
+                .iter()
+                .any(|e: &registry::lists::SealedEntry| e.registry == *name && e.name == entry)
+            {
+                issues.push(refuse(
+                    json!({"registry": name, "entry": entry}),
+                    format!("`{name}` has two entries named `{entry}`"),
+                ));
+                continue;
+            }
+            if let Some(why) = registry::lists::schema_fault(&reg.def.entry, value, "") {
+                issues.push(refuse(
+                    json!({"registry": name, "entry": entry, "rules": ["entry_schema"]}),
+                    format!("`{entry}` doesn't meet `{name}`'s entry schema: {why}"),
+                ));
+                continue;
+            }
+            let kit = reg.def.run_kit(entry, value);
+            if !kit.pass() {
+                let why: Vec<String> = kit
+                    .rules
+                    .iter()
+                    .filter(|r| !r.pass)
+                    .map(|r| format!("{}: {}", r.rule, r.why))
+                    .collect();
+                issues.push(refuse(
+                    json!({"registry": name, "entry": entry, "rules": kit.failed()}),
+                    format!("`{entry}` fails `{name}`'s kit: {}", why.join("; ")),
+                ));
+                continue;
+            }
+            out.push(registry::lists::SealedEntry {
+                name: entry.to_string(),
+                registry: name.clone(),
+                origin: "pack",
+                module: String::new(),
+                pack: pack.clone(),
+                value: value.clone(),
+                since: id.version.to_string(),
+                digest: registry::lists::entry_digest(name, entry, value, &id.version.to_string()),
+                twin: reg.def.twin.map(|t| t(entry, value)),
+                kit,
+            });
+        }
+    }
+    out
 }
 
 /// `d1:` SHA-256 of a manifest's canonical form: a version's bytes, frozen.
@@ -332,6 +456,7 @@ const PACK_KEYS: &[&str] = &[
     "description",
     "requires",
     "recipes",
+    "entries",
 ];
 
 /// The recipe's keys.
@@ -736,6 +861,11 @@ impl Packs {
     /// The admitted pack at `owner/name@version`.
     pub fn get(&self, id: &str) -> Option<&Pack> {
         self.by_id.get(id)
+    }
+
+    /// Every admitted pack, by ID.
+    pub fn all(&self) -> impl Iterator<Item = &Pack> {
+        self.by_id.values()
     }
 }
 
@@ -1717,6 +1847,46 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pack format's contract entry (#200) holds the keys and lists the pack check reads, so
+    /// the contract diff sees a change to either.
+    #[test]
+    fn the_pack_schema_holds_the_checks_keys_and_lists() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../../packages/contracts/canvas-schemas/pack@1.json"
+        ))
+        .expect("JSON");
+        let keys = |v: &Value| -> Vec<String> {
+            let mut k: Vec<String> = v["properties"]
+                .as_object()
+                .expect("properties")
+                .keys()
+                .cloned()
+                .collect();
+            k.sort();
+            k
+        };
+        let sorted = |l: &[&str]| -> Vec<String> {
+            let mut k: Vec<String> = l.iter().map(|s| s.to_string()).collect();
+            k.sort();
+            k
+        };
+        let list = |v: &Value| -> Vec<String> {
+            v["enum"]
+                .as_array()
+                .expect("enum")
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        };
+        let defs = &schema["$defs"];
+        assert_eq!(keys(&schema), sorted(PACK_KEYS), "a pack's keys");
+        assert_eq!(keys(&defs["recipe"]), sorted(RECIPE_KEYS), "a recipe's keys");
+        assert_eq!(keys(&defs["step"]), sorted(STEP_KEYS), "a step's keys");
+        assert_eq!(list(&defs["step"]["properties"]["op"]), STEP_OPS, "step ops");
+        assert_eq!(list(&defs["input"]["properties"]["type"]), INPUT_TYPES, "input types");
+    }
 
     fn scope() -> Vec<(String, Value)> {
         vec![("n".into(), json!(5)), ("i".into(), json!(2))]

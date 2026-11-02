@@ -27,6 +27,7 @@ mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
+mod registries;
 mod ring;
 mod scene3d;
 mod seams;
@@ -37,6 +38,7 @@ mod snapshot;
 mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
+mod test_registries;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
@@ -518,6 +520,19 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::InstallPack {
                 id: c.get("id")?.as_str()?.to_string(),
                 dir: PathBuf::from(c.get("dir")?.as_str()?),
+                session: optional(c.get("session"), |s| Some(s.as_str()?.to_string()))?,
+            })
+        }
+        "registries" => return Some(Call::Registries),
+        "resolve" if c.get("registry").is_some() => {
+            return Some(Call::Lookup {
+                doc: doc()?,
+                registry: c.get("registry")?.as_str()?.to_string(),
+                name: c.get("name")?.as_str()?.to_string(),
+                runs: optional(c.get("runs"), |n| {
+                    n.as_u64().filter(|n| (1..=100_000).contains(n))
+                })?
+                .unwrap_or(0) as usize,
             })
         }
         "costs" => return Some(Call::Costs),
@@ -914,7 +929,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         })
     })?;
     let claims = entries(input, "claims", |c| {
-        c.get("session")?.as_str()?;
+        let session = c.get("session")?.as_str()?.to_string();
         let requirements = match c.get("requirements") {
             None => Vec::new(),
             Some(list) => list
@@ -931,6 +946,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 .collect::<Option<Vec<_>>>()?,
         };
         Some(Claim {
+            session,
             deliverables: strings(c.get("deliverables"))?,
             requirements,
         })
@@ -1214,9 +1230,24 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    // #200: the hub's installed slot fills, each `{slot, fill, kit}`.
+    let installed = match input.get("installed") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|i| {
+                i.get("slot")?.as_str()?;
+                i.get("fill")?.as_str()?;
+                i.get("kit")?.as_object()?;
+                Some(i.clone())
+            })
+            .collect::<Option<_>>()?,
+    };
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        installed,
         sessions,
         processes,
         panels,
@@ -1507,8 +1538,8 @@ const TEST_BUILD: bool = cfg!(any(
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
 /// look, which every set holds; `r1` adds marks2d, data, graph, record, sheet and motion; `r2`
-/// adds scene3d (#378), effects (#380) and vector (#398); and, under its `test-*` features, the
-/// acceptance READMEs' test canvas modules, with #388's builds that leave text or look out.
+/// adds scene3d (#378) and effects (#380); and, under its `test-*` features, the acceptance
+/// READMEs' test canvas modules, with #388's builds that leave text or look out.
 fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
@@ -1529,11 +1560,19 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // Issue #402: the cell grid, on the text module.
         out.push(deep_canvas_cells::module::module());
         out.push(deep_canvas_scene3d::module::module());
-        // Issue #380: the shipped effects, whose passes go into scene3d's frame.
-        out.push(deep_canvas_effects::module::module());
+        // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
+        // layout has it fill the op table's base steps.
+        out.push(if cfg!(feature = "test-steps-in-effects") {
+            test_registries::effects_with_base_steps()
+        } else {
+            deep_canvas_effects::module::module()
+        });
         // Issue #398: SVG import and formulas, drawn as marks2d's items.
         out.push(deep_canvas_vector::module::module());
     }
+    #[cfg(feature = "test-leave-out-effects")]
+    out.retain(|m| m.manifest.name != "effects");
+    out.extend(test_registries::modules());
     #[cfg(feature = "test-leave-out-look")]
     out.retain(|m| m.manifest.name != "look");
     #[cfg(feature = "test-leave-out-text")]
@@ -1745,11 +1784,8 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             return Err(SealError {
                 code: "missing_core_module",
                 modules: vec![name.to_string()],
-                arrays: Vec::new(),
-                operators: Vec::new(),
-                interface: None,
-                implementations: Vec::new(),
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
+                ..SealError::default()
             });
         }
     }
@@ -1758,6 +1794,17 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
         .timed(clock_ns);
     if let Some(StartPlanted::Seal(fault)) = planted {
         registry = registry.plant(fault);
+    }
+    // #200: the registries the core declares in a test build, the planted layout whose base
+    // steps a canvas module fills, and the kit that admits every entry.
+    for def in test_registries::core() {
+        registry = registry.declares(def);
+    }
+    if cfg!(feature = "test-steps-in-effects") {
+        registry = registry.plant(Fault::BaseStepsElsewhere);
+    }
+    if let Some(StartPlanted::KitAdmitsAll(name)) = planted {
+        registry = registry.plant_admits_all(name);
     }
     let sealed = registry.seal();
     hub::INTERFACE_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1776,6 +1823,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             _ => None,
         },
         ignores_unknown_occlusion: planted == Some(StartPlanted::IgnoresUnknownOcclusion),
+        listing: match planted {
+            Some(StartPlanted::Listing(l)) => Some(l),
+            _ => None,
+        },
     })
 }
 
@@ -1795,6 +1846,10 @@ enum StartPlanted {
     Network(seams::NetFault),
     /// #140: the card that treats unknown occlusion as unobscured.
     IgnoresUnknownOcclusion,
+    /// #200: the kit of the named registry replaced by one that admits every entry.
+    KitAdmitsAll(&'static str),
+    /// #200: a wrong `deep://registries` listing.
+    Listing(registries::Listing),
 }
 
 #[cfg(test)]
@@ -1813,6 +1868,7 @@ mod tests {
             run_per_document: false,
             network: None,
             ignores_unknown_occlusion: false,
+            listing: None,
         }
     }
 
@@ -2142,6 +2198,16 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
         "run_per_document" => Ok(StartPlanted::RunPerDocument),
         "card_ignores_unknown_occlusion" => Ok(StartPlanted::IgnoresUnknownOcclusion),
+        "hashes_every_entry" => Ok(StartPlanted::Seal(Fault::HashesEveryEntry)),
+        "takes_foreign_entry" => Ok(StartPlanted::Seal(Fault::TakesForeignEntry)),
+        "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
+        "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
+        _ if twin.starts_with("kit_admits_all:") => {
+            let name = twin.trim_start_matches("kit_admits_all:");
+            Ok(StartPlanted::KitAdmitsAll(Box::leak(
+                name.to_string().into_boxed_str(),
+            )))
+        }
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
@@ -2220,6 +2286,15 @@ fn main() {
             }
             if !err.implementations.is_empty() {
                 line["implementations"] = json!(err.implementations);
+            }
+            // #200: the registry, its entries, the kit rules and the passes a refusal involves.
+            if let Some(r) = &err.registry {
+                line["registry"] = json!(r.name);
+                line["entries"] = json!(r.entries);
+                line["rules"] = json!(r.rules);
+                if !r.passes.is_empty() {
+                    line["passes"] = json!(r.passes);
+                }
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();

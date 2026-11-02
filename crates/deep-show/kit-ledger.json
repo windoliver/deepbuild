@@ -12,7 +12,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "registries": "PASS"
     }
   },
   "cells": {

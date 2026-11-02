@@ -1,0 +1,157 @@
+{
+  "title": "check.held@1",
+  "description": "A slow check held in its queued place for a looping session (#965): when it was held and why, then what started it and when, or the snapshot that took its place first. Appended when it is held and again, whole, each time it changes; the newest for a check and snapshot stands.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "check.held"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string",
+          "pattern": "^session:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The session whose stop held it."
+        },
+        "claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim whose check it is."
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The check, as its definition names it."
+        },
+        "snapshot": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The commit the claim's runs name."
+        },
+        "held_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When it was held, in ms since the Unix epoch."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "What it waits for: a wake-up, a cron job, background work, or a prompt no fact foresees."
+        },
+        "started_at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When it started, or null while it is held."
+        },
+        "started_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "What started it: loop_paused (the loop's pause), cap (background work's 30 minutes), claim, words (yours) or answer (yours, delivered); null while it is held."
+        },
+        "replaced_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The snapshot that took its place before it started, or null."
+        }
+      },
+      "required": [
+        "session",
+        "claim",
+        "check",
+        "snapshot",
+        "held_at",
+        "reason",
+        "started_at",
+        "started_by",
+        "replaced_by"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

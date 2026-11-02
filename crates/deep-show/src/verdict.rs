@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use deep_canvas::document::{check_in, Issue, Notice, CHECK};
+use deep_canvas::document::{check_packed, Issue, Notice, CHECK};
 use deep_canvas::registry::{Raised, CORE_CHECK_KINDS};
 use serde_json::{json, Map, Value};
 
@@ -160,7 +160,7 @@ impl<'a> Hub<'a> {
         let rows: Vec<Value> = c
             .requirements
             .iter()
-            .map(|r| self.judge(r, &docs, missing, &read))
+            .map(|r| self.judge(r, &docs, missing, &read, &c.session))
             .collect();
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
@@ -175,8 +175,17 @@ impl<'a> Hub<'a> {
                 .find(|w| rows.iter().any(|r| r["result"] == *w))
                 .unwrap_or("INCONCLUSIVE")
         };
-        let recorded =
+        // #200: the approvals asked for, one per requirement only the working agent's own entry
+        // covers.
+        let asks: Vec<Value> = rows
+            .iter()
+            .flat_map(|r| r["asks"].as_array().cloned().unwrap_or_default())
+            .collect();
+        let mut recorded =
             json!({"result": result, "key": {"revisions": revisions}, "requirements": rows});
+        if !asks.is_empty() {
+            recorded["asks"] = Value::Array(asks);
+        }
         self.verdicts_made
             .entry(claim.to_string())
             .or_default()
@@ -269,6 +278,7 @@ impl<'a> Hub<'a> {
         docs: &[(String, Current)],
         missing: bool,
         read: &BTreeMap<String, Value>,
+        author: &str,
     ) -> Value {
         let kind = r.check["kind"].as_str().unwrap_or_default().to_string();
         let sealed = &self.startup.sealed;
@@ -310,8 +320,11 @@ impl<'a> Hub<'a> {
         let mut issues: Vec<Value> = Vec::new();
         let mut blocked: Vec<Value> = Vec::new();
         let mut by_kind = BTreeMap::new();
+        let mut own: Vec<(String, String)> = Vec::new();
         for (doc, cur) in docs {
-            let checked = check_in(cur.doc, sealed);
+            // Checked with the pack store, so a deliverable that names an installed pack resolves
+            // it, as its show did (#200).
+            let checked = check_packed(cur.doc, sealed, &self.packs);
             if !self.planted(Planted::ChecksSkipUnknownKind) {
                 unknown_by_kind(&checked.notices, &mut by_kind);
             }
@@ -333,6 +346,30 @@ impl<'a> Hub<'a> {
                 if let (Some(map), Some(values)) = (input.as_object_mut(), read.get(doc)) {
                     map.insert("read".into(), values.clone());
                 }
+                // #200: the entry a check input names, resolved through the deliverable's pinned
+                // packs in a registry the check's module declares.
+                if let Some(name) = r.check["entry"].as_str() {
+                    let found = sealed
+                        .registries
+                        .iter()
+                        .filter(|reg| reg.owner == m.name)
+                        .find_map(|reg| {
+                            self.entry_for(cur.doc, &reg.def.name, name)
+                                .map(|e| (reg, e))
+                        });
+                    if let Some((reg, e)) = found {
+                        // With binds author, an entry the working agent wrote binds only its own
+                        // claims: it can't make this claim's PASS.
+                        let by_author = e.origin == "agent"
+                            && self.pack_authors.get(&e.pack).is_some_and(|s| s == author);
+                        if reg.def.binds == "author" && by_author {
+                            own.push((reg.def.name.clone(), e.name.clone()));
+                        }
+                        if let Some(map) = input.as_object_mut() {
+                            map.insert("resolved".into(), e.to_json());
+                        }
+                    }
+                }
                 raised.extend(run_check(
                     self,
                     check,
@@ -353,6 +390,18 @@ impl<'a> Hub<'a> {
             "BLOCKED"
         } else if errors {
             "FAIL"
+        } else if !own.is_empty() {
+            // Its only cover is the working agent's own entry: INCONCLUSIVE, with your approval
+            // asked for, never PASS.
+            let asks: Vec<Value> = own
+                .iter()
+                .map(|(registry, entry)| json!({
+                    "kind": "approval", "requirement": r.id, "registry": registry, "entry": entry,
+                    "why": format!("`{entry}` is the working agent's own entry in `{registry}`, which binds author: it binds only its own claims"),
+                }))
+                .collect();
+            row.insert("asks".into(), Value::Array(asks));
+            "INCONCLUSIVE"
         } else {
             "PASS"
         };

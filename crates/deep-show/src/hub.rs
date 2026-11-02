@@ -290,6 +290,8 @@ pub struct Startup {
     pub network: Option<crate::seams::NetFault>,
     /// #140: the planted card that treats unknown occlusion as unobscured.
     pub ignores_unknown_occlusion: bool,
+    /// #200: a planted wrong `deep://registries` listing.
+    pub listing: Option<crate::registries::Listing>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -371,6 +373,8 @@ pub struct RecordObject {
 }
 
 pub struct Claim {
+    /// The session that made the claim: its working agent.
+    pub session: String,
     pub deliverables: Vec<String>,
     /// The locked definition's requirements, each one check input (#403).
     pub requirements: Vec<Requirement>,
@@ -489,10 +493,20 @@ pub enum Call {
     Registry,
     /// #306: the pack store's rows.
     Packs,
-    /// #306: one pack version installed mid-run.
+    /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
     InstallPack {
         id: String,
         dir: PathBuf,
+        session: Option<String>,
+    },
+    /// #200: `deep://registries/<core version>`.
+    Registries,
+    /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
+    Lookup {
+        doc: String,
+        registry: String,
+        name: String,
+        runs: usize,
     },
     Screen,
     /// The sealed plan as published at `deep://schedule/<core version>` (#387).
@@ -766,6 +780,9 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
+    /// recorded at install.
+    pub installed: Vec<Value>,
     /// Every session's pool in place of its budget class's (#857).
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
@@ -833,6 +850,8 @@ pub struct Hub<'a> {
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
+    /// #200: the session that installed each pack, by `owner/name@version`.
+    pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -969,6 +988,7 @@ impl<'a> Hub<'a> {
             verdicts_made: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
+            pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -996,7 +1016,7 @@ impl<'a> Hub<'a> {
         deep_text::cache::record();
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
-            hub.install_pack(id, dir);
+            hub.install_pack(id, dir, None);
         }
         hub
     }
@@ -1094,14 +1114,26 @@ impl<'a> Hub<'a> {
 
     /// `install_pack` (#306): one pack version read from its folder and put through the pack
     /// check once.
-    pub fn install_pack(&mut self, id: &str, dir: &std::path::Path) -> Value {
-        crate::packs::install(
+    pub fn install_pack(
+        &mut self,
+        id: &str,
+        dir: &std::path::Path,
+        session: Option<&str>,
+    ) -> Value {
+        let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
             &self.startup.sealed,
             id,
             dir,
-        )
+        );
+        // #200: a pack installed through a session is that agent's own: its entries are listed
+        // with origin agent, and in a registry that binds author they bind only its own claims.
+        if let (Some(s), "installed") = (session, reply["outcome"].as_str().unwrap_or_default()) {
+            let key = format!("{id}@{}", reply["version"].as_str().unwrap_or_default());
+            self.pack_authors.insert(key, s.to_string());
+        }
+        reply
     }
 
     /// A fresh scheduler's options: the hub's own (#488's comparisons run each side on its own
@@ -1328,7 +1360,16 @@ impl<'a> Hub<'a> {
             Call::Registry => self.registry_reply(),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
-            Call::InstallPack { id, dir } => self.install_pack(id, dir),
+            Call::InstallPack { id, dir, session } => {
+                self.install_pack(id, dir, session.as_deref())
+            }
+            Call::Registries => self.registries_reply(),
+            Call::Lookup {
+                doc,
+                registry,
+                name,
+                runs,
+            } => self.lookup_reply(doc, registry, name, *runs),
             Call::Costs => crate::costs::measure(self.startup),
             Call::NetworkSuite {
                 macos,
