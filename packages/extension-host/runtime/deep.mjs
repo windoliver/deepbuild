@@ -51,6 +51,8 @@ export const API = Object.freeze([
   { method: 'deep.send', needs: 'hosts' },
   // #366: a model job on your own agent through the runner, its inputs by handle, its answer a reading.
   { method: 'deep.runner.run', needs: 'agent' },
+  // #262: re-read every source a view of the package binds, each through its quota.
+  { method: 'deep.readNow', needs: null },
   // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
   // only from the panel you focused, through the app.
   { method: 'deep.terminal.open', needs: 'run_as_you' },

@@ -16,7 +16,7 @@ import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, t
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
-import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
+import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type ViewShown } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
@@ -672,7 +672,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = await openTrust({ record: this.record, now: this.now });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
@@ -3583,6 +3583,16 @@ export class Core {
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
       case 'canvas.drawn': return this.drawnBy(context);
+      // The app API's views/shown and views/hidden (#262): which views it shows, which decides the while-shown cadences.
+      case 'views.shown':
+      case 'views.hidden': {
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app reports the views it shows.', method);
+        if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', method, true));
+        const report = params as unknown as ViewShown;
+        await (method === 'views.shown' ? this.extensions.viewsShown(this.connection('app'), report) : this.extensions.viewsHidden(this.connection('app'), report))
+          .catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+        return { reported: true };
+      }
       case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => ({ reported: true }));
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
@@ -5374,8 +5384,8 @@ export class Core {
    * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
    */
   private async retain(): Promise<void> {
-    const rows = (await this.record.raw("SELECT evidence FROM events WHERE kind IN ('decision.created', 'decision.applied', 'verdict.made') AND evidence IS NOT NULL")) as { evidence: string }[];
-    const cited = new Set<string>(this.options.plant === 'empty-cited' ? [] : rows.flatMap((r) => JSON.parse(r.evidence) as string[]));
+    // What a decision or verdict cites, and the series batches a notice cites for 30 days (#262).
+    const cited = this.options.plant === 'empty-cited' ? new Set<string>() : await citedEvidence(this.record, this.now());
     const linked = (await this.record.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
     const logs = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];
     const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);
