@@ -8,17 +8,24 @@ Run: `npx vitest run --root tests/acceptance/39 --no-file-parallelism` under Nod
 
 | AC | File |
 |---|---|
-| 1, 2, 3, 5, 7, 8, 16 | session.test.ts |
-| 9, 10, 11, 14, 24 | setup.test.ts |
+| 1, 2, 3, 5, 7, 8, 16 (Interrupt) | session.test.ts |
+| 16 (SubagentStop) | 39-redraft-ac16/ac16.test.ts, the blind redraft for #85's `child` field |
+| 9, 10, 14, 24 | setup.test.ts |
+| 11 | 39-redraft-ac11/ac11.test.ts, the blind redraft |
 | 17, 18, 19, 25 | lanes.test.ts |
-| 12, 13, 15, 21 | replies.test.ts (12 also engine.ts) |
+| 12, 13 (adapter), 15, 21 | replies.test.ts (12 also engine.ts) |
+| 13 (hub) | 39-redraft/permission.test.ts, the blind redraft |
 | 4, 20, 23 | kit.test.ts |
-| 6, 26, 28 | runner.test.ts (uses tests/acceptance/159's world) |
+| 28 | runner.test.ts (uses tests/acceptance/159's world) |
+| 6 | 39-redraft/job.test.ts, the blind redraft |
+| 26 | 39-redraft-ac26/refusal.test.ts, the blind redraft, as amended for `-s danger-full-access` |
 | 27, 29, 30 | loops.test.ts |
 | 22 | budgets.test.ts |
 | 4, 12, 13, 26, live | app.live.test.ts |
 
-criteria.json holds each criterion's text and ID.
+criteria.json holds each criterion's text and ID. The first drafts of AC6, AC11, AC13's hub case, AC26 and AC16's SubagentStop case are retired for their blind redrafts (each redraft's README states the dispute); the retirement lands only with the maintainer's approval (deep/approved/).
+
+The slow check `slowRepo` writes is a node:test suite declared `on_base: passes`, since #30's command check kind counts only a test runner's run and a fix check needs a merge-base run (#31).
 
 ## What stays BLOCKED, never passed
 

@@ -113,26 +113,7 @@ describe(`${AC[13]} A permission request that a saved deny covers gets behavior:
     const forSession = reply!(answerOf({ decision: 'allow', for: 'session', option: 'allow' }), { ...request(), payload: { ...recorded(), permission_suggestions: [{ type: 'addRules' }] } });
     expect(forSession, `${AC[13]} a rule for later is never sent, even for the session`).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } });
   });
-  it(`${AC[13]} through the hub: with a saved deny for the call (your deny on its authority ask, saved as a decision), the PermissionRequest gets behavior: deny and its message, validated by Codex's schema, and no ask opens`, async () => {
-    const h = makeHome();
-    const hub = await hubWithSetup(h);
-    const t = newThread(h);
-    const d = Daemon.start(h, t.cwd);
-    await d.begin(t);
-    await d.init();
-    const question = `Push to main ${tag()}?`;
-    void d.ask(t, { kind: 'authority', question, options: [{ id: 'allow', label: 'Push', decision: 'allow' }, { id: 'deny', label: 'Deny', decision: 'deny' }], recommended: 'deny', permission: { tool: 'Bash', command: PUSH } });
-    const asked = await waitFor(async () => asksOf(await allEvents(hub), question)[0], 30_000, 'the ask');
-    await answer(h, `ask:${asked.id}`, 'deny');
-    const saved = await waitFor(async () => (await allEvents(hub)).find((e) => e.kind === 'decision.created'), 10_000, 'the decision').catch(() => undefined);
-    expect(saved, `${AC[13]} your deny is saved as a decision (README: Assumed surfaces)`).toBeDefined();
-    const r = await codexHook(h, t, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: PUSH, description: 'Push' } });
-    expect(r.reply?.hookSpecificOutput?.decision?.behavior, `${AC[13]} ${hookShown(r)}`).toBe('deny');
-    expect(Object.keys(r.reply?.hookSpecificOutput?.decision ?? {}).sort(), `${AC[13]} no other field`).toEqual(['behavior', 'message']);
-    expect(valid('PermissionRequest', r.ran.stdout)).toBeNull();
-    d.stop();
-    expect((await allEvents(hub)).filter((e) => e.kind === 'user.ask' && e.session === t.id && JSON.stringify(e.data).includes(PUSH) && !JSON.stringify(e.data).includes(question)).length, `${AC[13]} no prompt reaches you for it`).toBe(0);
-  }, 180_000);
+  // AC13 through the hub is the blind redraft in tests/acceptance/39-redraft (permission.test.ts): an agent can't raise an ask's authority with `permission` (invariant 3).
 });
 
 describe(`${AC[21]} A Codex PermissionRequest for git push origin main, answered with only the words "yes but not on main", gets behavior: deny with those words as its message, and the push never runs; answered by its allow option, it gets behavior: allow for that call alone; an adapter that maps the "yes" in the words to allow fails this test`, () => {
