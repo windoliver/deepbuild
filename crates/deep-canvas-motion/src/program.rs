@@ -431,6 +431,20 @@ impl Program {
 }
 
 impl Program {
+    /// Whether an evaluation may write any slot in `slots` beyond its base: a channel, a
+    /// placement, a driver or a limit targets one.
+    pub fn writes(&self, slots: std::ops::Range<usize>) -> bool {
+        let hits = |at: usize, width: usize| at < slots.end && slots.start < at + width;
+        self.channels.iter().any(|&(at, width)| hits(at, width))
+            || self
+                .placements
+                .iter()
+                .flatten()
+                .any(|w| hits(w.slot, w.width.min(3)))
+            || self.drivers.iter().any(|(at, _)| hits(*at, 1))
+            || self.limits.iter().any(|(first, _)| hits(*first, 3))
+    }
+
     /// The slot the field `field` of item `owner` takes, if anything in the program reads or
     /// writes it: its transform's for `at/pos|rot|scale/k`, or a field's of its own.
     pub fn slot_of(&self, owner: &str, field: &[String]) -> Option<usize> {

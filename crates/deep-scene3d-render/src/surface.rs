@@ -331,7 +331,7 @@ impl Low {
                     self.up_srgb.clone()
                 },
                 pipeline: pipeline.clone(),
-                groups: vec![source.clone()],
+                groups: [Some(source.clone()), None],
                 blend,
                 reps,
             }
@@ -340,7 +340,7 @@ impl Low {
                 name: SHARPEN_PASS,
                 target: slot.clone(),
                 pipeline: up.sharpen.clone(),
-                groups: vec![self.up_bind.clone(), self.amount_bind.clone()],
+                groups: [Some(self.up_bind.clone()), Some(self.amount_bind.clone())],
                 blend: false,
                 reps,
             }
@@ -353,7 +353,8 @@ pub struct Step {
     name: &'static str,
     target: wgpu::TextureView,
     pipeline: wgpu::RenderPipeline,
-    groups: Vec<wgpu::BindGroup>,
+    /// Its bind groups in order; the upscale binds one.
+    groups: [Option<wgpu::BindGroup>; 2],
     /// The planted blend into the previous frame.
     blend: bool,
     reps: u32,
@@ -397,7 +398,7 @@ impl Step {
                     a: 0.5,
                 });
             }
-            for (i, g) in self.groups.iter().enumerate() {
+            for (i, g) in self.groups.iter().flatten().enumerate() {
                 pass.set_bind_group(i as u32, g, &[]);
             }
             pass.draw(0..3, 0..self.reps);

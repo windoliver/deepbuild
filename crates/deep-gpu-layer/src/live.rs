@@ -1059,7 +1059,7 @@ impl Live {
                 }
             }
             Some(v) => {
-                v.frames = frames;
+                v.set_frames(frames);
                 v.scale = rev.fit.scale.min(ses.surface.scale);
                 v.window = rev.fit.history;
             }

@@ -479,7 +479,10 @@ pub struct View {
     /// The slot the last drawn frame is in.
     pub shown: Option<usize>,
     renderer: Renderer,
-    pub frames: Frames,
+    frames: Frames,
+    /// Whether the renderer last prepared a scene of `frames`, so a frame need only write what
+    /// moved.
+    prepared: bool,
     /// The internal scale and history window that fit, at the class's base rung.
     pub scale: f64,
     pub window: u32,
@@ -508,15 +511,19 @@ impl View {
         look: &Look3,
         labels: &mut Labels,
     ) -> Result<View, String> {
-        let ((slots, renderer, frames), base_bytes) = memory::across(device, || {
+        let ((slots, renderer, frames, prepared), base_bytes) = memory::across(device, || {
             let slots: Result<Vec<_>, String> =
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, Planted3::default());
             let mut frames = frames;
-            if let Ok(scene) = frames.at(0, size, &Offsets::default(), labels) {
-                renderer.prepare(device, scene, look);
-            }
-            (slots, renderer, frames)
+            let prepared = match frames.at(0, size, &Offsets::default(), labels) {
+                Ok(scene) => {
+                    renderer.prepare(device, scene, look);
+                    true
+                }
+                Err(_) => false,
+            };
+            (slots, renderer, frames, prepared)
         });
         Ok(View {
             size,
@@ -525,6 +532,7 @@ impl View {
             shown: None,
             renderer,
             frames,
+            prepared,
             scale,
             window,
             surface: Surface::default(),
@@ -534,6 +542,12 @@ impl View {
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
+    }
+
+    /// Draws `frames` from the next frame on: a revision's document.
+    pub fn set_frames(&mut self, frames: Frames) {
+        self.frames = frames;
+        self.prepared = false;
     }
 
     /// What the view itself holds on the device, as the device reports it.
@@ -636,9 +650,14 @@ impl View {
             self.after(encoder, slot);
             return Ok(());
         }
-        let scene = self.frames.at(t, self.size, &drawing.offsets, labels)?;
+        self.frames.at(t, self.size, &drawing.offsets, labels)?;
+        let scene = self.frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
-        self.renderer.prepare(device, scene, look);
+        match self.frames.moved().filter(|_| self.prepared) {
+            Some(moved) => self.renderer.prepare_moved(device, scene, look, moved),
+            None => self.renderer.prepare(device, scene, look),
+        }
+        self.prepared = true;
         let i = timer.start(GEOMETRY_PASS, session);
         self.renderer.record_geometry(encoder, timer.writes(i));
         timer.end(i);
