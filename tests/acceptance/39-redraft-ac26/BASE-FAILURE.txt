@@ -1,0 +1,35 @@
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a91442a61f32f2794
+
+ ❯ tests/acceptance/39-redraft-ac26/refusal.test.ts (1 test | 1 failed) 4508ms
+   ❯ AC26 #39.8807ac2c a Codex job asked to write is refused by the sandbox confining it, and that is its stop cause (1)
+     × AC26 a Codex job launched by exec --json with its prompt on stdin really fails its write under the sandbox, leaves no file, finishes with stop cause refusal; a command that exits 0 is no refusal 4505ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/39-redraft-ac26/refusal.test.ts > AC26 #39.8807ac2c a Codex job asked to write is refused by the sandbox confining it, and that is its stop cause > AC26 a Codex job launched by exec --json with its prompt on stdin really fails its write under the sandbox, leaves no file, finishes with stop cause refusal; a command that exits 0 is no refusal
+AssertionError: a Codex job runs; it is not refused before it starts: expected 'Codex\'s headless launch comes with i…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"
+
+ ❯ runCodexJob tests/acceptance/39-redraft-ac26/refusal.test.ts:57:85
+     55| async function runCodexJob(w: World, kind: 'draft' | 'read', prompt: s…
+     56|   const submitted = await w.runner.submit({ kind, agent: 'codex', prom…
+     57|   expect(submitted.refused, 'a Codex job runs; it is not refused befor…
+       |                                                                                     ^
+     58|   const resets = Math.floor((w.clock.now() + 5 * 3_600_000) / 1000);
+     59|   await w.runner.report({
+ ❯ tests/acceptance/39-redraft-ac26/refusal.test.ts:87:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:44:12
+   Duration  5.90s (tests 79%, transform 17%, import 4%)
+
