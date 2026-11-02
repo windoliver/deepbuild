@@ -1133,10 +1133,10 @@ export interface AgentStopV5 {
     cause: "sign_in_required";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1144,10 +1144,10 @@ export interface AgentStopV5 {
     cause: "token_refresh_failed";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1156,10 +1156,10 @@ export interface AgentStopV5 {
     plan_resets: number;
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1167,10 +1167,10 @@ export interface AgentStopV5 {
     cause: "rate_limited";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1178,10 +1178,10 @@ export interface AgentStopV5 {
     cause: "refusal";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1189,10 +1189,10 @@ export interface AgentStopV5 {
     cause: "max_turns";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1200,10 +1200,10 @@ export interface AgentStopV5 {
     cause: "context_overflow";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1211,10 +1211,10 @@ export interface AgentStopV5 {
     cause: "tool_schema_rejected";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1222,10 +1222,10 @@ export interface AgentStopV5 {
     cause: "agent_crashed";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1233,10 +1233,10 @@ export interface AgentStopV5 {
     cause: "timed_out";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   } | {
     turn: AgentStopV5Turn;
     did_work: boolean;
@@ -1244,10 +1244,10 @@ export interface AgentStopV5 {
     cause: "unknown";
     usage: AgentStopV5Usage;
     outcome: "finished" | "failed";
+    child?: string;
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
-    subagent?: string;
   };
   evidence?: Array<string>;
 }
@@ -1746,6 +1746,10 @@ export interface AskCreatedV3 {
     unblocks: Array<string>;
     proves: string;
     cost_usd?: number;
+    thread?: {
+      link: string;
+      expect: string;
+    };
   } | {
     kind: "taste";
     question: string;
@@ -2020,6 +2024,37 @@ export interface AskMoot {
   } | {
     because: "attempt_replaced";
     session: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** ask.moot@2 */
+export interface AskMootV2 {
+  v: 2;
+  id: string;
+  kind: "ask.moot";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    because: "check_passed";
+    verdict: string;
+  } | {
+    because: "attempt_replaced";
+    session: string;
+  } | {
+    because: "window_reset";
+    at: number;
+  } | {
+    because: "thread_replied";
+    link: string;
+  } | {
+    because: "network_reached";
+    host: string;
   };
   evidence?: Array<string>;
 }
@@ -2404,6 +2439,68 @@ export interface CommitMade {
     branch: string | null;
   };
   evidence?: Array<string>;
+}
+
+/** composition.reopened@1 */
+export interface CompositionReopened {
+  v: 1;
+  id: string;
+  kind: "composition.reopened";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    piece: string;
+    provider: string;
+    version: string;
+  };
+}
+
+/** composition.tested@1 */
+export interface CompositionTested {
+  v: 1;
+  id: string;
+  kind: "composition.tested";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+    version: string;
+    passed: boolean;
+  };
+}
+
+/** composition.used@1 */
+export interface CompositionUsed {
+  v: 1;
+  id: string;
+  kind: "composition.used";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+  };
 }
 
 /** decision.applied@1 */
@@ -2953,6 +3050,20 @@ export interface EvidenceStored {
 
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
+
+/** extension.compose@1 */
+export interface ExtensionCompose {
+  provides?: Array<{
+    schema?: unknown;
+    digests?: { [key: string]: string };
+  }>;
+  uses?: Array<{
+    schema?: unknown;
+    from?: string;
+    optional?: boolean;
+  }>;
+  pieces?: Array<string>;
+}
 
 /** extension.contract@1 */
 export interface ExtensionContract {
@@ -4535,6 +4646,26 @@ export interface SessionChildStarted {
     parent: string;
     child: string;
     task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.continued@1 */
+export interface SessionContinued {
+  v: 1;
+  id: string;
+  kind: "session.continued";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    stop: string;
+    because: "transient" | "context_overflow" | "task_closed";
+    task: string | null;
   };
   evidence?: Array<string>;
 }

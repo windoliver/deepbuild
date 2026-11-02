@@ -33,7 +33,7 @@ type Obj = { [key: string]: JsonValue };
 const T = (name: string, pk: string[], columns: string, indexes?: string[]): TableDef => ({ name, pk, columns, ...(indexes ? { indexes } : {}) });
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
 const TABLES: readonly TableDef[] = [
-  T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT'),
+  T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT'),
   T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT'),
   T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, deliverables TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
   T('attempts', ['task_ref', 'attempt'], 'task_ref TEXT, attempt INTEGER, session_id TEXT, child_id TEXT, worktree TEXT, base TEXT'),
@@ -206,15 +206,17 @@ export class Projector {
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,
       // a call is work again unless its turn already stopped, and a stop ends the turn finished, failed, or stuck on a
       // block only you or a service can clear. The core and the app say the rest with session.attention.
-      if (e.writer === 'hook' && !d.subagent) {
+      if (e.writer === 'hook' && !d.child) {
         const state = e.kind === 'user.ask' || e.kind === 'tool.before' || e.kind === 'tool.after' ? 'working' : e.kind === 'permission.request' ? 'waiting'
           : e.kind === 'agent.stop' ? (d.outcome !== 'failed' ? 'finished' : d.owner === 'you' || d.owner === 'service' ? 'stuck' : 'failed') : undefined;
         const late = e.kind === 'tool.before' || e.kind === 'tool.after' ? " AND status NOT IN ('finished', 'failed', 'stuck')" : '';
         if (state) this.stmt(`UPDATE sessions SET status = ?, ended_log_pos = ? WHERE id = ?${late}`).run(state, ENDED.has(state) ? e.log_pos : null, e.session);
+        // The session's row shows its newest stop's cause, from the closed set (#85); NULL before any stop.
+        if (e.kind === 'agent.stop') this.up('sessions', { id: e.session, cause: str(d.cause) });
       }
       // A reading the hub took of a session is about it, never one of its turn's events.
       // Nor is a subagent's stop: it ends no turn of the session's.
-      if (e.kind !== 'session.reading' && !d.subagent) this.turn(e, d);
+      if (e.kind !== 'session.reading' && !d.child) this.turn(e, d);
     }
     switch (e.kind) {
       case 'session.reading':
@@ -268,7 +270,7 @@ export class Projector {
         break;
       }
       case 'agent.stop':
-        if (d.subagent) break;
+        if (d.child) break;
         this.up('returns', { id: e.id, session: e.session, turn: int(d.turn), did_work: int(d.did_work), at: e.ts });
         break;
       case 'commit.made':

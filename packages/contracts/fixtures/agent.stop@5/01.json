@@ -9,12 +9,36 @@
   "ts": 1760013451123,
   "seq": "1760013451123456789",
   "data": {
-    "turn": 0,
-    "did_work": false,
-    "claim": false,
+    "turn": 7,
+    "did_work": true,
+    "claim": true,
     "cause": "unknown",
-    "usage": null,
+    "usage": {
+      "covers": "turn",
+      "model": "claude-haiku-5-5",
+      "input": {
+        "value": 2,
+        "exact": true
+      },
+      "cached": {
+        "value": 26572,
+        "exact": true
+      },
+      "output": {
+        "value": 78,
+        "exact": true
+      },
+      "context_fill": 0.1734,
+      "cost": {
+        "usd": 0.0123,
+        "basis": "estimated",
+        "rate_card": "anthropic-2026-10"
+      }
+    },
     "outcome": "finished",
-    "subagent": "agent-01"
+    "loop": {
+      "state": "looping",
+      "due": 1760013511123
+    }
   }
 }

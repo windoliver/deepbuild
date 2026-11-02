@@ -32,6 +32,7 @@ pub fn module() -> Module {
             feature: "record".into(),
             license: "Apache-2.0".into(),
             implements: "record@1".into(),
+            implementation: deep_canvas::registry::Implementation::reference("record", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
         },
         register,
     }

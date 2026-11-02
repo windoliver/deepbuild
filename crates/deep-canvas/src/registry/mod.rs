@@ -196,6 +196,137 @@ pub struct Manifest {
     pub license: String,
     /// `interface@major`; a build seals one implementation of each.
     pub implements: String,
+    /// The crate behind the interface (Canvas module: interface and implementation).
+    pub implementation: Implementation,
+}
+
+/// How an implementation's results compare with its interface's reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Equivalence {
+    /// Every kit fixture gives the reference implementation's hashes.
+    Bit,
+    /// Every behavior fixture lands within the interface's tolerances.
+    Measured,
+}
+
+/// What an implementation's carried state is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateClass {
+    /// A documented layout any implementation of the interface reads.
+    Canonical,
+    /// Its crate's own bytes, which no other implementation or version loads.
+    BackendBytes,
+}
+
+/// One library an implementation pins.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pin {
+    pub version: String,
+    pub features: Vec<String>,
+}
+
+/// The implementation a canvas module is of its interface.
+#[derive(Clone, Debug)]
+pub struct Implementation {
+    pub name: String,
+    pub version: Semver,
+    /// crate → its version and features.
+    pub pins: BTreeMap<String, Pin>,
+    pub equivalence: Equivalence,
+    pub state: StateClass,
+}
+
+impl Implementation {
+    /// A bit, canonical implementation pinning nothing, as every shipped module but physics is.
+    pub fn reference(name: &str, version: Semver) -> Implementation {
+        Implementation {
+            name: name.into(),
+            version,
+            pins: BTreeMap::new(),
+            equivalence: Equivalence::Bit,
+            state: StateClass::Canonical,
+        }
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "name": self.name,
+            "version": self.version.to_string(),
+            "pins": self.pins.iter().map(|(k, p)| (k.clone(), json!({"version": p.version, "features": p.features}))).collect::<serde_json::Map<_, _>>(),
+            "equivalence": match self.equivalence { Equivalence::Bit => "bit", Equivalence::Measured => "measured" },
+            "state": match self.state { StateClass::Canonical => "canonical", StateClass::BackendBytes => "backend_bytes" },
+        })
+    }
+}
+
+/// A canvas interface: what documents, checks and other canvas modules see of an implementation.
+/// Its digest is its reference implementation's, so the seal registers the reference's shapes
+/// beside any other implementation's and names the first that differs. The interface, never the
+/// implementation, holds its kit and its behavior part.
+#[derive(Clone, Debug)]
+pub struct Interface {
+    /// `name@major`.
+    pub name: String,
+    pub reference: Module,
+    /// The kit parts every implementation passes.
+    pub kit: Vec<String>,
+    /// For an interface whose implementations may differ in results: the fixtures with analytic
+    /// answers and tolerances a `measured` implementation lands within.
+    pub behavior: Option<Behavior>,
+}
+
+/// An interface's behavior part (canvas primitives: Physics: behavior kit).
+#[derive(Clone, Debug)]
+pub struct Behavior {
+    /// The kit part it is.
+    pub name: String,
+    pub fixtures: Vec<BehaviorFixture>,
+}
+
+/// A document and the answers an implementation's evaluation of it must land on.
+#[derive(Clone, Debug)]
+pub struct BehaviorFixture {
+    pub name: String,
+    pub document: Value,
+    pub answers: Vec<Answer>,
+}
+
+/// One analytic answer: the value `array` holds for `item` at time 0, within `tolerance`, a
+/// fraction of the answer (0.01 is 1%).
+#[derive(Clone, Debug)]
+pub struct Answer {
+    pub item: String,
+    pub array: String,
+    pub value: f64,
+    pub tolerance: f64,
+}
+
+/// One interface in the sealed set, with the implementation the build chose.
+#[derive(Clone, Debug)]
+pub struct SealedInterface {
+    /// `name@major`.
+    pub name: String,
+    pub digest: String,
+    /// The reference implementation's name.
+    pub reference: String,
+    /// The kit parts its implementations pass; `None` when the interface wasn't declared, which
+    /// leaves the whole canvas kit.
+    pub kit: Option<Vec<String>>,
+    pub behavior: Option<Behavior>,
+    /// The canvas module the build chose, and its implementation.
+    pub module: String,
+    pub implementation: Implementation,
+}
+
+impl SealedInterface {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "digest": self.digest, "reference": self.reference,
+            "kit": self.kit.clone().unwrap_or_default(),
+            "behavior": self.behavior.as_ref().map_or("none", |b| b.name.as_str()), "module": self.module,
+            "implementation": self.implementation.to_json(),
+        })
+    }
 }
 
 /// A kind the module registers: its kind-registry entry (versions, params and migrations), with
@@ -792,6 +923,7 @@ impl Registrar {
 }
 
 /// A canvas module as a build holds it: its manifest and its one register call.
+#[derive(Clone, Debug)]
 pub struct Module {
     pub manifest: Manifest,
     pub register: fn(&mut Registrar),
@@ -804,6 +936,8 @@ pub enum Fault {
     EveryDependencyRequired,
     /// Lets a frame-phase operator that writes JSON in (#855).
     AdmitsFrameJson,
+    /// Hashes private arrays into an interface's digest (#185).
+    DigestHashesPrivate,
 }
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
@@ -817,6 +951,10 @@ pub struct SealError {
     pub arrays: Vec<String>,
     /// The operators involved, as `module.operator`, sorted; empty where none is.
     pub operators: Vec<String>,
+    /// The canvas interface involved, as `name@major`.
+    pub interface: Option<String>,
+    /// The implementations involved, by name, sorted; empty where none is.
+    pub implementations: Vec<String>,
     pub what: String,
 }
 
@@ -838,8 +976,19 @@ impl SealError {
             modules,
             arrays,
             operators: Vec::new(),
+            interface: None,
+            implementations: Vec::new(),
             what,
         }
+    }
+
+    /// The same refusal, naming the interface and the implementations involved.
+    fn on(mut self, interface: &str, implementations: &[&str]) -> SealError {
+        self.interface = Some(interface.to_string());
+        self.implementations = implementations.iter().map(|s| s.to_string()).collect();
+        self.implementations.sort();
+        self.implementations.dedup();
+        self
     }
 }
 
@@ -906,6 +1055,11 @@ pub struct Sealed {
     left_out_kinds: BTreeMap<String, String>,
     /// A d1 digest over the sorted modules' names, versions and digests.
     pub set_digest: String,
+    /// Each canvas interface, by name, with its digest and the implementation the build chose.
+    pub interfaces: Vec<SealedInterface>,
+    /// The time the seal's interface checks took, in nanoseconds of the registry's clock; 0
+    /// without one.
+    pub interface_ns: u64,
     /// The cost model's coefficients every check in this process estimates with: the build's
     /// own, unless the process read another file (#855).
     pub costs: crate::cost::Coefficients,
@@ -949,9 +1103,15 @@ impl Sealed {
             "core": core_name(),
             "build_set": self.build_set.name(),
             "set_digest": self.set_digest,
+            "interfaces": self.interfaces.iter().map(|i| (i.name.clone(), i.to_json())).collect::<serde_json::Map<_, _>>(),
             "phases": phases,
             "contributions": self.contributions,
         })
+    }
+
+    /// The interface the module `name` implements in this build.
+    pub fn interface_of(&self, name: &str) -> Option<&SealedInterface> {
+        self.interfaces.iter().find(|i| i.module == name)
     }
 
     /// The module named `name`, if this build holds it.
@@ -1184,6 +1344,15 @@ impl Sealed {
 pub struct Registry {
     build_set: BuildSet,
     modules: Vec<Module>,
+    /// The interfaces the build declares, by name; one a module implements undeclared is its own
+    /// reference's.
+    interfaces: BTreeMap<String, Interface>,
+    /// Each seam's backend: an implementation of its seam's interface, sealed beside the canvas
+    /// modules and not one of the build set's.
+    backends: Vec<Module>,
+    /// A monotonic clock in nanoseconds that times the interface checks; a canvas crate reads none
+    /// itself.
+    clock: Option<fn() -> u64>,
     fault: Option<Fault>,
     costs: Option<crate::cost::Coefficients>,
 }
@@ -1193,6 +1362,9 @@ impl Registry {
         Registry {
             build_set,
             modules: Vec::new(),
+            interfaces: BTreeMap::new(),
+            backends: Vec::new(),
+            clock: None,
             fault: None,
             costs: None,
         }
@@ -1210,6 +1382,24 @@ impl Registry {
         self
     }
 
+    /// Times the seal's interface checks with `clock`.
+    pub fn timed(mut self, clock: fn() -> u64) -> Registry {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// Declares an interface, whose reference's shapes every implementation must match.
+    pub fn declare(mut self, interface: Interface) -> Registry {
+        self.interfaces.insert(interface.name.clone(), interface);
+        self
+    }
+
+    /// Adds a seam's backend, which the seal holds to one implementation of its seam's interface.
+    pub fn backend(mut self, backend: Module) -> Registry {
+        self.backends.push(backend);
+        self
+    }
+
     /// Adds a module to register; the seal orders them by name.
     pub fn with(mut self, module: Module) -> Registry {
         self.modules.push(module);
@@ -1222,8 +1412,38 @@ impl Registry {
             .sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
         let core = Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch");
 
-        // Manifests: names, core ranges, dependency ranges, one implementation per interface.
-        let mut implementations: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        // One implementation per interface, before names: two implementations of one interface
+        // may register under its one module name.
+        let mut implementations: BTreeMap<&str, Vec<&Module>> = BTreeMap::new();
+        for module in self
+            .modules
+            .iter()
+            .chain(&self.backends)
+            .filter(|m| !m.manifest.implements.is_empty())
+        {
+            implementations
+                .entry(module.manifest.implements.as_str())
+                .or_default()
+                .push(module);
+        }
+        if let Some((interface, list)) = implementations.iter().find(|(_, l)| l.len() > 1) {
+            let modules: Vec<&str> = list.iter().map(|m| m.manifest.name.as_str()).collect();
+            let names: Vec<&str> = list
+                .iter()
+                .map(|m| m.manifest.implementation.name.as_str())
+                .collect();
+            return Err(SealError::new(
+                "two_implementations",
+                &modules,
+                &[],
+                format!(
+                    "`{interface}` has two implementations in this build: {}",
+                    names.join(", ")
+                ),
+            )
+            .on(interface, &names));
+        }
+        // Manifests: names, core ranges, dependency ranges.
         let mut missing_optional: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for (i, module) in self.modules.iter().enumerate() {
             let m = &module.manifest;
@@ -1286,26 +1506,6 @@ impl Registry {
                     }
                     Some(_) => {}
                 }
-            }
-            if !m.implements.is_empty() {
-                implementations
-                    .entry(m.implements.as_str())
-                    .or_default()
-                    .push(name);
-            }
-        }
-        for (interface, names) in &implementations {
-            if names.len() > 1 {
-                let list: Vec<&str> = names.clone();
-                return Err(SealError::new(
-                    "two_implementations",
-                    &list,
-                    &[],
-                    format!(
-                        "`{interface}` has two implementations in this build: {}",
-                        list.join(", ")
-                    ),
-                ));
             }
         }
         // Register: the core's own shapes first, under the name `core`, then each module's.
@@ -2346,11 +2546,16 @@ impl Registry {
             }
         }
 
-        // Digests: each module's own; the core's shapes are no module's.
+        // Digests: each module's own; the core's shapes are no module's. Each module's shapes
+        // hash to its interface's digest: its reference's, registered beside it when the module
+        // isn't that reference (Canvas module: interface and implementation).
+        let private = self.fault == Some(Fault::DigestHashesPrivate);
         let mut modules = Vec::new();
+        let mut interfaces = Vec::new();
+        let mut interface_ns = 0;
         for ((name, shapes), module) in shapes.into_iter().skip(1).zip(&self.modules) {
-            let digest = module_digest(&shapes)
-                .map_err(|e| SealError::new("bad_shape", &[&name], &[], e.to_string()))?;
+            let (digest, interface) = self.implementation_of(&name, &module.manifest, &shapes, private, &mut interface_ns)?;
+            interfaces.extend(interface);
             modules.push(SealedModule {
                 name,
                 version: module.manifest.version,
@@ -2358,6 +2563,16 @@ impl Registry {
                 shapes,
             });
         }
+        // Each seam's backend, an implementation of its seam's interface beside the canvas
+        // modules, registering no shape a document reads; every reply names it already, as the
+        // platform's, so the published plan leaves it out (Seam and backend).
+        for backend in &self.backends {
+            let mut shapes = Registrar::default();
+            (backend.register)(&mut shapes);
+            let m = &backend.manifest;
+            self.implementation_of(&m.name, m, &shapes, private, &mut interface_ns)?;
+        }
+        interfaces.sort_by(|a, b| a.name.cmp(&b.name));
         let set_digest = d1(&Value::Array(
             modules
                 .iter()
@@ -2377,11 +2592,74 @@ impl Registry {
             left_out,
             left_out_kinds,
             set_digest,
+            interfaces,
+            interface_ns,
             costs: self
                 .costs
                 .take()
                 .unwrap_or_else(crate::cost::Coefficients::reference),
         })
+    }
+}
+
+impl Registry {
+    /// `name`'s digest, and its interface with the implementation it is, when it names one: its
+    /// shapes hash to its interface's digest, its reference's, registered beside it when it isn't
+    /// that reference (Canvas module: interface and implementation). Adds the time it took to
+    /// `ns` by the registry's clock.
+    fn implementation_of(
+        &self,
+        name: &str,
+        m: &Manifest,
+        shapes: &Registrar,
+        private: bool,
+        ns: &mut u64,
+    ) -> Result<(String, Option<SealedInterface>), SealError> {
+        let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
+        let (digest, listed) = module_shapes(shapes, private).map_err(bad)?;
+        let started = self.clock.map(|c| c());
+        let declared = self.interfaces.get(&m.implements);
+        let reference = declared.map_or(&m.implementation.name, |i| {
+            &i.reference.manifest.implementation.name
+        });
+        if let Some(i) = declared.filter(|_| *reference != m.implementation.name) {
+            let mut r = Registrar::default();
+            (i.reference.register)(&mut r);
+            let (want, want_listed) = module_shapes(&r, private).map_err(bad)?;
+            if want != digest {
+                let differs = want_listed
+                    .iter()
+                    .find(|(k, v)| listed.get(*k) != Some(v))
+                    .or_else(|| listed.iter().find(|(k, _)| !want_listed.contains_key(*k)))
+                    .map(|(k, _)| k.clone())
+                    .unwrap_or_default();
+                let array = differs.strip_prefix("array ").unwrap_or_default();
+                let arrays: &[&str] = if array.is_empty() { &[] } else { &[array] };
+                return Err(SealError::new(
+                    "interface_digest",
+                    &[name],
+                    arrays,
+                    format!(
+                        "`{}`'s shapes don't hash to `{}`'s digest: {differs} differs from the reference `{reference}`",
+                        m.implementation.name, m.implements
+                    ),
+                )
+                .on(&m.implements, &[&m.implementation.name]));
+            }
+        }
+        let interface = (!m.implements.is_empty()).then(|| SealedInterface {
+            name: m.implements.clone(),
+            digest: digest.clone(),
+            reference: reference.clone(),
+            kit: declared.map(|i| i.kit.clone()),
+            behavior: declared.and_then(|i| i.behavior.clone()),
+            module: name.to_string(),
+            implementation: m.implementation.clone(),
+        });
+        if let (Some(clock), Some(t0)) = (self.clock, started) {
+            *ns += clock().saturating_sub(t0);
+        }
+        Ok((digest, interface))
     }
 }
 
@@ -2422,12 +2700,25 @@ fn may_read(
     private: bool,
 ) -> Result<(), SealError> {
     if private && owner != name {
-        return Err(SealError::new(
+        let implementation = |n: &str| {
+            modules
+                .iter()
+                .find(|m| m.manifest.name == n)
+                .map(|m| m.manifest.implementation.name.as_str())
+        };
+        let (reader, owned_by) = (implementation(name), implementation(owner));
+        let mut err = SealError::new(
             "private_read",
             &[name, owner],
             &[read],
-            format!("{who} `{read}`, a private array of `{owner}`"),
-        ));
+            format!(
+                "{who} `{read}`, a private array of `{owner}` ({})",
+                owned_by.unwrap_or(owner)
+            ),
+        );
+        err.implementations = [reader, owned_by].into_iter().flatten().map(str::to_string).collect();
+        err.implementations.sort();
+        return Err(err);
     }
     may_depend(modules, name, who, &format!("`{read}`"), read, owner)
 }
@@ -2584,16 +2875,26 @@ fn phase_index(phase: &str) -> Option<usize> {
 
 /// A module's digest: `d1` over the kinds, public arrays, tables, carried state, check kinds
 /// and tool entries it registers (Canvas module: interface and implementation: digest scope),
-/// each list sorted.
-fn module_digest(r: &Registrar) -> Result<String, CanonError> {
+/// each list sorted; and each of those shapes by its own name (`array <name>`, `kind <name>`)
+/// with its own `d1`, so a mismatch names the first that differs. `hash_private` is the planted
+/// digest that lets private arrays in.
+fn module_shapes(
+    r: &Registrar,
+    hash_private: bool,
+) -> Result<(String, BTreeMap<String, String>), CanonError> {
     // A private array is the implementation's own, so neither its entry nor its name in a
     // kind's needs or a table's reads enters the interface's digest.
     let private: BTreeSet<&str> = r
         .arrays
         .iter()
-        .filter(|a| a.private)
+        .filter(|a| a.private && !hash_private)
         .map(|a| a.name.as_str())
         .collect();
+    let mut listed = BTreeMap::new();
+    let mut list = |key: String, v: &Value| -> Result<(), CanonError> {
+        listed.insert(key, d1(v)?);
+        Ok(())
+    };
     let public = |names: &[String]| -> Vec<String> {
         sorted(
             &names
@@ -2636,7 +2937,7 @@ fn module_digest(r: &Registrar) -> Result<String, CanonError> {
     let mut arrays: Vec<Value> = r
         .arrays
         .iter()
-        .filter(|a| !a.private)
+        .filter(|a| !private.contains(a.name.as_str()))
         .map(|a| json!({"class": a.class, "contributes_to": a.contributes_to, "domain": a.domain, "name": a.name, "phase": a.phase, "type": a.ty}))
         .collect();
     sort_values(&mut arrays)?;
@@ -2671,14 +2972,28 @@ fn module_digest(r: &Registrar) -> Result<String, CanonError> {
         .map(|t| json!({"entry": t.entry, "tool": t.tool}))
         .collect();
     sort_values(&mut tools)?;
-    d1(&json!({
+    for (what, list_of, keys) in [
+        ("kind", &kinds, &["name"][..]),
+        ("array", &arrays, &["name"]),
+        ("table", &tables, &["name"]),
+        ("carried", &carried, &["kind", "key"]),
+        ("check", &checks, &["kind"]),
+        ("tool_entry", &tools, &["tool", "entry"]),
+    ] {
+        for v in list_of {
+            let name: Vec<String> = keys.iter().map(|k| v[*k].to_string().trim_matches('"').to_string()).collect();
+            list(format!("{what} {}", name.join(" ")), v)?;
+        }
+    }
+    let digest = d1(&json!({
         "arrays": arrays,
         "carried": carried,
         "checks": checks,
         "kinds": kinds,
         "tables": tables,
         "tool_entries": tools,
-    }))
+    }))?;
+    Ok((digest, listed))
 }
 
 fn sorted(list: &[String]) -> Vec<String> {
@@ -2740,6 +3055,7 @@ mod tests {
             feature: name.into(),
             license: "Apache-2.0".into(),
             implements: format!("{name}@1"),
+            implementation: Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
         }
     }
 

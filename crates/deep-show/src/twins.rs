@@ -24,6 +24,7 @@ pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
         feature: feature.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
+        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
     }
 }
 

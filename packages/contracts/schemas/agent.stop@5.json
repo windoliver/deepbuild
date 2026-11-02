@@ -1,6 +1,6 @@
 {
   "title": "agent.stop@5",
-  "description": "The agent stopped a turn: why, from the stop's closed set of causes, and what the turn used. With the stop rule's reading: whether the stop is a claim.",
+  "description": "The agent stopped a turn: why, from the stop's closed set of causes, and what the turn used. With the stop rule's reading: whether the stop is a claim. A child session's stop (a subagent's) names the child.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -91,6 +91,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -113,12 +119,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -163,6 +163,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -185,12 +191,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -241,6 +241,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -263,12 +269,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -314,6 +314,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -336,12 +342,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -386,6 +386,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -408,12 +414,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -458,6 +458,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -480,12 +486,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -530,6 +530,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -552,12 +558,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -602,6 +602,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -624,12 +630,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -674,6 +674,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -696,12 +702,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -746,6 +746,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -768,12 +774,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
@@ -818,6 +818,12 @@
                 "mark": "exhaustive"
               }
             },
+            "child": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The child session whose turn this stop ends, as the agent names it (Claude Code's agent_id on SubagentStop); absent for the session's own turn. A child's stop is no turn end of the session: it neither counts for the automatic continue nor bounds the cut-off turn."
+            },
             "signature": {
               "type": "string",
               "pattern": "^sig:[0-9a-f]{16}$",
@@ -840,12 +846,6 @@
             },
             "loop": {
               "$ref": "#/$defs/loop"
-            },
-            "subagent": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192,
-              "description": "The subagent whose stop this is, by its agent ID: the root session's ID with its agent_id. Its stop ends no turn of the session's and is no claim."
             }
           },
           "required": [
