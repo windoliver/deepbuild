@@ -1,6 +1,6 @@
 {
   "title": "definition.locked@3",
-  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author, its check's approved bytes by digest, and the surface its check declares it enters through. Only the core appends it.",
+  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author and its check's approved bytes by digest. Only the core appends it.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -198,55 +198,17 @@
                 ],
                 "additionalProperties": false
               },
-              "surface": {
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "description": "The surface its check declares it enters through, for a stand-in on a base with nothing to start: a JSON service's routes, a page's routes, a command's name, or a module's path and exports; null for none.",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192,
-                    "description": "service, page, command or module have a fixed form; any other kind goes to the early question."
-                  },
-                  "routes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "format": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "path": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "exports": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  }
-                },
-                "required": [
-                  "kind"
-                ],
-                "additionalProperties": false
+              "expected_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "How long its check is expected to take, in milliseconds: what admits it to a lane."
+              },
+              "deadline_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "How long its check may take, in milliseconds, past which its run times out."
               }
             },
             "required": [
@@ -261,8 +223,7 @@
               "depth",
               "oracle",
               "near_misses",
-              "author",
-              "surface"
+              "author"
             ],
             "additionalProperties": false
           }
