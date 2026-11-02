@@ -1,0 +1,7 @@
+Twin stop-not-the-childs (#39.3f1db111): twins/stop-not-the-childs/packages/hub/src/hookmap.ts copied over packages/hub/src/hookmap.ts,
+`npm run build -w packages/hub`, then `npx vitest run tests/acceptance/39-redraft-ac16`: 1 failed (1).
+
+AssertionError: AC16 #39.3f1db111 the agent.stop names the child by its agent_id, so it reads as no turn end of the session: {"v":5,"kind":"agent.stop","writer":"hook",...,"data":{"turn":0,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null},...,"agent":"codex","verified":true}: expected undefined to be 'agent-ebf6dc57' // Object.is equality
+ ❯ tests/acceptance/39-redraft-ac16/ac16.test.ts:33
+
+hookmap.ts restored with `git checkout -- packages/hub/src/hookmap.ts` and the hub rebuilt; the test passes again (1 passed (1)).
