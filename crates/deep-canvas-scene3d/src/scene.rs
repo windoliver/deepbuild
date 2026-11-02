@@ -1025,7 +1025,7 @@ pub(crate) fn evaluate_compiled(
                         color: paint(look, params, &path)?,
                     });
                 }
-                OVERLAY => overlay_items.push((layer_id.clone(), id.clone())),
+                OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
                 "light.sun@1" if sun.is_none() => {
                     // It shines along its local −Z, glTF's convention for lights.
                     let m = world(&items, id);

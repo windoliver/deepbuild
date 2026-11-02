@@ -234,7 +234,8 @@ fn check_by(
         .and_then(Value::as_object)
         .is_some_and(|items| items.len() >= SPLIT_FROM);
     let mut tail = [Tail::Modules, Tail::Budget, Tail::Document];
-    let found = in_threads(&mut tail, if big { 2 } else { 1 }, |part| {
+    let threads = if big { tail.len() } else { 1 };
+    let found = in_threads(&mut tail, threads, |part| {
         let (mut issues, mut notices) = (Vec::new(), Vec::new());
         for step in part.iter() {
             match step {
@@ -454,7 +455,9 @@ fn budget_check(
         return;
     };
     let coefficients = coefficients.unwrap_or(&sealed.costs);
-    let e = crate::cost::estimate(lowered, sealed, coefficients);
+    let e = crate::cost::estimate_by(lowered, sealed, coefficients, |entries, work| {
+        in_chunks(entries, work)
+    });
     let over: Vec<String> = [
         ("CPU", e.cpu_ms, limits.cpu_ms, "ms"),
         ("GPU", e.gpu_ms, limits.gpu_ms, "ms"),

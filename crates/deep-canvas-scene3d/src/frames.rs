@@ -355,24 +355,27 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     }
     let mut solids = Vec::new();
     let mut corner = 0;
+    // A solid's chain, built here and copied out only for a solid that moves.
+    let mut chain = Vec::new();
     for (l, layer) in scene.layers.iter().enumerate() {
         for (i, s) in layer.solids.iter().enumerate() {
             corner += 8;
-            let mut chain = vec![index(&s.id)?];
-            let mut seen = vec![s.id.as_str()];
-            let mut parent = items.get(&s.id)?.get("parent").and_then(Value::as_str);
+            chain.clear();
+            chain.push(index(&s.id)?);
+            // The parents passed, after the solid itself.
+            let mut seen: Vec<&str> = Vec::new();
+            let item = items.get(&s.id)?;
+            let mut parent = item.get("parent").and_then(Value::as_str);
             while let Some(p) = parent {
-                if seen.contains(&p) || !items.contains_key(p) {
+                if p == s.id || seen.contains(&p) || !items.contains_key(p) {
                     break;
                 }
                 chain.push(index(p)?);
                 seen.push(p);
                 parent = items[p].get("parent").and_then(Value::as_str);
             }
-            let size = crate::scene::size3(
-                items[&s.id].get("params").and_then(|p| p.get("size")),
-                [1.0; 3],
-            )?;
+            let size =
+                crate::scene::size3(item.get("params").and_then(|p| p.get("size")), [1.0; 3])?;
             let moves = |c: usize| {
                 program.writes(c * TRANSFORM..(c + 1) * TRANSFORM)
                     || overrides.iter().any(|o| o.item == c)
@@ -384,7 +387,7 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
                 layer: l,
                 index: i,
                 corner: corner - 8,
-                chain,
+                chain: chain.clone(),
                 size,
             });
         }
