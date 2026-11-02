@@ -241,6 +241,7 @@ pub fn module() -> Module {
             feature: "test-machines".into(),
             license: "Apache-2.0".into(),
             implements: "test.machines@1".into(),
+            implementation: deep_canvas::registry::Implementation::reference("test.machines", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
         },
         register,
     }

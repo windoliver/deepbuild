@@ -9,6 +9,7 @@ import net from 'node:net';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { canvasItems } from './canvas-doctor.js';
 import { claudeSettings, commands, installed, readJson } from './claude-settings.js';
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
@@ -160,6 +161,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const loginPath = loginPathOf(root);
   const [claude, codex] = await Promise.all([which('claude', path), which('codex', path)]);
   await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add)]);
+  // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
+  items.push(...(await canvasItems(env)));
   return items;
 }
 

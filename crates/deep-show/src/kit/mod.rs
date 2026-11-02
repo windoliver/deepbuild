@@ -25,6 +25,7 @@ mod fuzz;
 pub mod goldens;
 mod gpu;
 mod instance;
+mod interface;
 pub mod ledger;
 pub mod manifest;
 mod migration;
@@ -57,6 +58,20 @@ pub const PARTS: [&str; 13] = [
     "catalog",
     "migration",
 ];
+
+/// The parts an interface adds (#185): `bit`, a bit implementation against its reference, and
+/// `behavior`, an interface's behavior part on its implementation.
+pub const INTERFACE_PARTS: [&str; 2] = ["bit", "behavior"];
+
+/// The kit parts a canvas module's interface lists: every part, and `bit`; an interface with a
+/// behavior part lists it too.
+pub fn interface_parts() -> Vec<String> {
+    PARTS
+        .iter()
+        .chain(&INTERFACE_PARTS[..1])
+        .map(|p| p.to_string())
+        .collect()
+}
 
 /// The backends a case can run on: Vello CPU, wgpu's noop backend and the GPU.
 pub const BACKENDS: [&str; 3] = ["vello_cpu", "noop", "gpu"];
@@ -117,7 +132,10 @@ impl KitCall {
         let parts = list("parts")?;
         if parts
             .as_ref()
-            .is_some_and(|p| p.iter().any(|x| !PARTS.contains(&x.as_str())))
+            .is_some_and(|p| {
+                p.iter()
+                    .any(|x| !PARTS.contains(&x.as_str()) && !INTERFACE_PARTS.contains(&x.as_str()))
+            })
         {
             return None;
         }
@@ -369,7 +387,7 @@ impl<'a> Hub<'a> {
             let mut parts = Vec::new();
             let mut module_failures: Vec<Value> = Vec::new();
             let mut verdict = Verdict::Pass;
-            for part in PARTS {
+            for part in PARTS.into_iter().chain(INTERFACE_PARTS) {
                 if !call.runs(part) {
                     continue;
                 }
@@ -450,6 +468,8 @@ impl<'a> Hub<'a> {
             "contribution" => order::contribution(self, ctx),
             "catalog" => catalog::run(self, ctx),
             "migration" => migration::run(self, ctx),
+            "bit" => interface::bit(self, ctx),
+            "behavior" => interface::behavior(self, ctx),
             _ => None,
         }
     }

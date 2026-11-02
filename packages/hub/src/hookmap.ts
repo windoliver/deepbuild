@@ -3,19 +3,13 @@
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
+import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
 import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
-/**
- * The agent names a hook request may carry, to the adapter that maps them. Cursor's CLI and Grok run the hooks in
- * Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts read their
- * payloads, but their events are recorded under their own agent, never as Claude Code's.
- */
-const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude', pi: 'pi' };
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   pi: { session_start: 'SessionStart', session_shutdown: 'SessionEnd', input: 'UserPromptSubmit', tool_call: 'PreToolUse', tool_result: 'PostToolUse', agent_before_settle: 'Stop' },
@@ -261,7 +255,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
           if (url) meta.pr = url;
         }
       }
-      const loop = loopFact(name, tool, event, payload);
+      const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));
       if (loop) meta.loop = loop;
       break;
     }
@@ -269,8 +263,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
+      // A child session's stop (a subagent's) names the child, from the payload field the facts' common template maps
+      // to `subagent`: it is no turn end of the session, so the core and the hub leave it out of the session's turns.
+      if (str(mapped.subagent)) data.child = str(mapped.subagent);
       fill = 'turn';
-      v = 4;
+      v = 5;
       break;
     case 'permission.request':
       data = {
@@ -313,8 +310,8 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
 }
 
-/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents. */
-function loopFact(name: string, tool: string, event: string, payload: JsonObject): HookMeta['loop'] {
+/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands. */
+function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);
   const wakeup = isObj(facts.wakeups) ? facts.wakeups[tool] : undefined;
@@ -329,7 +326,10 @@ function loopFact(name: string, tool: string, event: string, payload: JsonObject
   }
   const cancel = isObj(facts.cancels) ? facts.cancels[tool] : undefined;
   if (isObj(cancel)) return { cancelled: String(at(payload, String(cancel.id)) ?? '') };
+  const call = String(payload.tool_use_id ?? '');
   const background = isObj(facts.background) ? facts.background[tool] : undefined;
-  if (typeof background === 'string' && at(payload, background) === true) return { background: true };
+  if (typeof background === 'string' && at(payload, background) === true) return { background: 'subagent', call, what };
+  const command = isObj(facts.commands) ? facts.commands[tool] : undefined;
+  if (typeof command === 'string' && at(payload, command) === true) return { background: 'command', call, what };
   return undefined;
 }

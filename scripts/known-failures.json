@@ -1,0 +1,51 @@
+{
+  "failures": {
+    "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network": "fails on main 772f5482: the base loader reaches the network",
+    "cargo -p deep-replica --test acceptance_327_card": "fails on main 772f5482: #327's blind card suite fails",
+    "cargo -p deep-replica --test headless › replica_equals_live_tree": "fails on main 772f5482: the replica differs from the live tree",
+    "packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again": "failed on main 772f5482 at load 50 in one run, not re-run; may be load",
+    "tests/acceptance/350/staged.test.ts › AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it › AC4 a hub package enabled and disabled 20 times leaves no handler or action of an earlier load: each hook calls one handler once, each action call runs once": "failed on main 772f5482 at load 50 in one run, not re-run; may be load",
+    "tests/acceptance/56/decision.test.mjs › #56 scope import(\"effect/Effect\") is timed on Node 22, and the command that times it measures this Node": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node",
+    "tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node",
+    "tests/acceptance/879/checkout.test.mjs › AC1: every folder under packages/ and crates/ has a README.md card with the four headings": "fails on main 772f5482: crates/deep-panel-host has no README.md card",
+    "tests/acceptance/879/checkout.test.mjs › AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged": "fails on main 772f5482: crates/deep-panel-host has no README.md card",
+    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or \"#rrggbb\" line": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals",
+    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the guard passes the app, and fails each planted literal naming its file and line (the views.rs one with the role to use); an exception at its place with a reason and a review date passes": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals",
+    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the lint lane runs the guard: a planted rgb(0x2563eb) in views.rs fails the lane, naming views.rs and the line": "fails on main 772f5482: crates/deep-app/src/panel_check.rs and panel_tree.rs hold color literals",
+    "tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block": "fails on main 772f5482: it reads tests/acceptance/plans.ts as a folder (ENOTDIR)"
+  },
+  "lint": {
+    "canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs": 1,
+    "canvas-lint: crates/deep-canvas/src/document/check.rs the thread module, ambient input a check never reads": 2,
+    "canvas-lint: crates/deep-canvas/src/schedule/tests.rs the thread module, ambient input a check never reads": 1,
+    "canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs": 4,
+    "canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs": 3,
+    "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)": 1,
+    "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": 2,
+    "canvas-lint: crates/deep-text/src/worker.rs a static item, state a check could carry between runs": 1,
+    "canvas-lint: crates/deep-text/src/worker.rs the thread module, ambient input a check never reads": 2,
+    "cards: crates/deep-panel-host has no README.md card": 1,
+    "clippy: tests/acceptance/327/ac3_redraft.rs needlessly taken reference of both operands": 1,
+    "clippy: tests/acceptance/327/card.rs this `map_or` can be simplified": 4,
+    "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,
+    "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
+    "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
+    "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1,
+    "code mappings: doctor job_failing maps to no verdict": 1,
+    "code mappings: verdict uncounted maps to no verdict": 1,
+    "color literal: crates/deep-app/src/panel_check.rs: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>": 1,
+    "color literal: crates/deep-app/src/panel_tree.rs: `assert_eq!(color(&tree.ops[2].args), Some(0xf8f8f8));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>": 1,
+    "color literal: crates/deep-app/src/panel_tree.rs: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>": 1,
+    "fmt: tests/acceptance/327/ac1_redraft.rs": 14,
+    "fmt: tests/acceptance/327/ac3_redraft.rs": 18,
+    "fmt: tests/acceptance/327/card.rs": 30,
+    "fmt: tests/acceptance/327/common.rs": 88,
+    "fmt: tests/acceptance/327/planted.rs": 17
+  },
+  "timing": [
+    "tests/acceptance/348/budgets.test.ts › AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base › AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule)",
+    "cargo -p deep-replica --test headless › replica_launch_under_two_seconds",
+    "tests/acceptance/326/setup/first-command.test.ts › #326 setup: the first deep command sets up as the click does, without a click › #326.523de34e the first deep status in a fresh home sets DeepBuild up and says so in one line, the second says nothing and writes nothing, and then a failed claim stops unheld and unblocked while pkill -f vite is denied with the hub up and down",
+    "tests/acceptance/16/address.test.ts › AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket › AC2 the app (#34): its socket client's tests pass against the hub through the forwarded socket the setting names"
+  ]
+}

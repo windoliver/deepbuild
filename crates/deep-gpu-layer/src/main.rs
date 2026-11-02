@@ -1,8 +1,14 @@
-//! `deep-gpu run [--backend noop] [--withhold timestamps] [--planted <name>]` (issue #377;
-//! tests/acceptance/377/README.md, The surface under test; #379 adds the meter's calls,
-//! tests/acceptance/379/README.md): one JSON scenario per stdin line, `{"out": dir, "calls":
+//! `deep-gpu run [--headless] [--backend noop] [--withhold <feature>]… [--validation]
+//! [--planted <name>]` (issue #377; tests/acceptance/377/README.md, The surface under test; #379
+//! adds the meter's calls, tests/acceptance/379/README.md; #140 the GPU seam's, with `--adapters
+//! <file>` and `--quirks <file>` in test-seam builds, tests/acceptance/140/gpu/README.md): one JSON
+//! scenario per stdin line, `{"out": dir, "calls":
 //! [Call]}`, answered with one line `{"ok": true, "replies": [Reply]}`. Every call of a run uses one
 //! app: one GPU (one wgpu device), one headless window, and each scene's session from call to call.
+//! With `--headless` (#140, tests/acceptance/140/view/README.md, "deep-gpu: the live-headless
+//! calls") the run is the headless canvas worker instead: it answers `snapshot` alone, with one GPU
+//! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
+//! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
 
 #[cfg(feature = "test-meter")]
 mod allocations;
@@ -10,6 +16,7 @@ mod compare;
 mod compile;
 mod conformance;
 mod effects;
+mod fixtures;
 mod frames;
 mod golden;
 mod guard;
@@ -17,14 +24,18 @@ mod host;
 mod levels;
 mod live;
 mod liveview;
+mod marks2d;
+mod parity;
 mod plugin;
 mod reference;
 mod scene;
+mod seam;
 mod session3;
 mod status;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod timing;
+mod validation;
 mod view3d;
 mod window;
 mod worker;
@@ -33,8 +44,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 
-use deep_gpu::device::{Backend, Gpu, Withheld};
+use deep_gpu::device::{Backend, Gpu};
 use deep_gpu::guard::Declarations;
+use deep_gpu::seam::Startup;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
 use serde_json::{json, Value};
@@ -100,6 +112,31 @@ pub enum Planted {
     BudgetsEachWindow,
     StepsMainWindow,
     TellsFirstStepOnly,
+    /// #140's wrong programs (tests/acceptance/140/gpu/README.md: Planted programs).
+    WithholdsInCode,
+    PicksFirstAdapter,
+    InstallsStalePipelines,
+    ReadsPastBuffer,
+    WritesNan,
+    ReadsPixelsOnly,
+    /// #140's (tests/acceptance/140/view/README.md: Planted programs): the live GPU layer's
+    /// read-back has one pixel one code value off in one channel.
+    ShiftsGpuPixel,
+    /// #386's wrong programs (tests/acceptance/386/README.md: Planted programs).
+    BilinearOnly,
+    UpscaleReadsPreviousFrame,
+    ExportsLiveSurface,
+    SlowUpscale,
+    StatusBeforeUpscale,
+    StatusWithoutDepth,
+    OutlinesBeforeUpscale,
+    /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
+    /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
+    /// whatever its spike record says; each sector of a group composited on its own.
+    ShiftsFillTwoCodes,
+    ShiftsGlyphQuads,
+    IgnoresSpike,
+    SectorsSourceOver,
 }
 
 impl Planted {
@@ -151,6 +188,24 @@ impl Planted {
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
             "tells_first_step_only" => Planted::TellsFirstStepOnly,
+            "withholds_in_code" => Planted::WithholdsInCode,
+            "picks_first_adapter" => Planted::PicksFirstAdapter,
+            "installs_stale_pipelines" => Planted::InstallsStalePipelines,
+            "reads_past_buffer" => Planted::ReadsPastBuffer,
+            "writes_nan" => Planted::WritesNan,
+            "reads_pixels_only" => Planted::ReadsPixelsOnly,
+            "shifts_gpu_pixel" => Planted::ShiftsGpuPixel,
+            "bilinear_only" => Planted::BilinearOnly,
+            "upscale_reads_previous_frame" => Planted::UpscaleReadsPreviousFrame,
+            "exports_live_surface" => Planted::ExportsLiveSurface,
+            "slow_upscale" => Planted::SlowUpscale,
+            "status_before_upscale" => Planted::StatusBeforeUpscale,
+            "status_without_depth" => Planted::StatusWithoutDepth,
+            "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
+            "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
+            "ignores_spike" => Planted::IgnoresSpike,
+            "sectors_source_over" => Planted::SectorsSourceOver,
             _ => return None,
         })
     }
@@ -178,6 +233,13 @@ pub struct App {
     pub scenes: HashMap<String, Arc<Scene>>,
     /// Each scene session's UI side, routed GPUI's surface reports.
     pub watched: HashMap<String, deep_gpu::view::Ui>,
+    /// The compile-thread job held open, and how many jobs were held (#140).
+    pub held: Option<compile::Held>,
+    pub jobs: u64,
+    /// A validation lane's run (`--validation`, #140).
+    pub validation: bool,
+    /// Whether Vello GPU draws 2D writer layers, by its spike record (#385).
+    pub vello: marks2d::Gate,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -330,6 +392,12 @@ impl App {
             Some("conformance") => conformance::call(self, out, call),
             Some("render") => frames::render(self, call),
             Some("compile") => compile::call(self, call),
+            Some("lose_device") => compile::lose_device(self),
+            Some("release_job") => compile::release_job(self),
+            Some("gated") => seam::gated(self, call),
+            Some("seam_suite") => seam::seam_suite(self, out, call),
+            Some("validate") => validation::validate(self, out, call),
+            Some("check_render") => validation::check_render(self, call),
             Some("compare") => compare::compare(self, call),
             Some("declare_dark") => compare::declare(self, call),
             Some("decisions") => compare::decisions(self),
@@ -346,6 +414,11 @@ impl App {
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
+            Some("live_frame") => parity::live_frame(self, out, call),
+            Some("layers") => marks2d::layers(self, out, call),
+            Some("window2d") => marks2d::window2d(self, out, call),
+            Some("vello_gpu") => marks2d::vello_gpu(self),
+            Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("canonical") => live::canonical(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
@@ -400,9 +473,20 @@ fn main() {
     if args.next().as_deref() != Some("run") {
         bad_input();
     }
-    let (mut backend, mut planted, mut withheld) = (Backend::Gpu, None, Withheld::default());
+    let (mut backend, mut planted) = (Backend::Gpu, None);
+    let (mut startup, mut validation) = (Startup::default(), false);
+    let mut headless = false;
+    // The shipped record, or in test-spike builds the one `--spike-record` names.
+    #[allow(unused_mut)]
+    let mut spike = marks2d::SPIKE.to_string();
     while let Some(a) = args.next() {
         match a.as_str() {
+            #[cfg(feature = "test-spike")]
+            "--spike-record" => match args.next().map(std::fs::read_to_string) {
+                Some(Ok(text)) => spike = text,
+                _ => bad_input(),
+            },
+            "--headless" => headless = true,
             "--backend" => match args.next().as_deref() {
                 Some("noop") => backend = Backend::Noop,
                 _ => bad_input(),
@@ -411,11 +495,37 @@ fn main() {
                 Some(p) => planted = Some(p),
                 None => bad_input(),
             },
-            "--withhold" => match args.next().as_deref() {
-                Some("timestamps") => withheld.timestamps = true,
+            "--withhold" => match args.next().as_deref().and_then(deep_gpu::seam::row) {
+                Some(r) => startup.withhold.push(r.feature),
+                None => bad_input(),
+            },
+            "--validation" => validation = true,
+            #[cfg(feature = "test-seam")]
+            "--adapters" => match args.next().as_deref().and_then(seam::test_adapters) {
+                Some(a) => startup.adapters = Some(a),
+                None => bad_input(),
+            },
+            #[cfg(feature = "test-seam")]
+            "--quirks" => match args.next().map(std::fs::read_to_string) {
+                Some(Ok(text)) => match deep_gpu::seam::Quirks::parse(&text) {
+                    Ok(q) => startup.quirks = q,
+                    Err(_) => bad_input(),
+                },
                 _ => bad_input(),
             },
             _ => bad_input(),
+        }
+    }
+    let Ok(vello) = marks2d::Gate::read(&spike, planted == Some(Planted::IgnoresSpike)) else {
+        bad_input();
+    };
+    startup.picks_first = planted == Some(Planted::PicksFirstAdapter);
+    startup.withholds_in_code = planted == Some(Planted::WithholdsInCode);
+    if validation {
+        // Metal reads these as the device opens, so they're set before it does (README: The
+        // validation lane).
+        for var in validation::ENV {
+            std::env::set_var(var, "1");
         }
     }
     #[cfg(target_os = "macos")]
@@ -429,16 +539,35 @@ fn main() {
     }
     let worker = match Worker::start(
         backend,
-        withheld,
+        &startup,
         planted == Some(Planted::SubmitsOnCompletion),
         planted == Some(Planted::ReleasesBeforeCompletion),
     ) {
         Ok(w) => w,
-        Err(e) => {
-            println!("{}", json!({"ok": false, "code": "no_device", "reason": e}));
+        Err(r) if r.code == "missing_feature" => {
+            println!(
+                "{}",
+                json!({"ok": false, "code": r.code, "adapter": r.adapter, "missing": r.missing, "reason": r.reason})
+            );
+            std::process::exit(1);
+        }
+        Err(r) => {
+            println!(
+                "{}",
+                json!({"ok": false, "code": "no_device", "reason": r.reason})
+            );
             std::process::exit(1);
         }
     };
+    if headless {
+        // The headless canvas worker opens no window and holds no app: no GPUI context, the GPU
+        // layer drawn into its offscreen slots (#140).
+        serve(|out, call| match call["call"].as_str() {
+            Some("snapshot") => parity::snapshot(&worker, backend, out, call),
+            _ => refused("bad_input", "the headless worker answers snapshot alone"),
+        });
+        return;
+    }
     // The platform's handoff as this task ships it: macOS passed the conformance fixture, so it
     // hands off zero copy until a conformance run on this machine says otherwise; the noop backend
     // has no surface to share, so it copies.
@@ -463,7 +592,16 @@ fn main() {
         window: None,
         scenes: HashMap::new(),
         watched: HashMap::new(),
+        held: None,
+        jobs: 0,
+        validation,
+        vello,
     };
+    serve(|out, call| app.call(out, call));
+}
+
+/// Answers each scenario line on stdin with one line, each call through `call`.
+fn serve(mut call: impl FnMut(&str, &Value) -> Value) {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -475,7 +613,7 @@ fn main() {
                     .as_array()
                     .expect("checked above")
                     .iter()
-                    .map(|c| app.call(&out, c))
+                    .map(|c| call(&out, c))
                     .collect();
                 json!({"ok": true, "replies": replies})
             }

@@ -504,6 +504,17 @@
       "initialReason": "Issue #379 first measurement: the merge base has no cost model. The micro-benchmark of every shipped primitive: one process times each operator the shipped build seals over three generated boards through `deep-show run`'s costs call, and scene3d's two passes by their timestamps on the device through `deep-gpu`'s live window at two sizes and two box counts, printing the measured terms beside the build's coefficients (crates/deep-canvas/costs.json, which `--write` replaces on a reference Mac); p50 includes Node's and the binaries' start. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-upscale",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "upscale"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #386 first measurement: the merge base draws no live view through a chosen internal scale. One process draws a 1080p frame of 48 labels of 12 px text and 24 thin diagonal lines in `deep-gpu`'s live window at internal scale 0.5 through the edge-adaptive upscale and sharpen, five runs of 90 frames after a warm-up one, reading each frame's time the two passes cover by their timestamps; p50 includes Node's and the binary's start. The issue's 0.3 ms for the two passes stays in tests/acceptance/386/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-class-core-view",
       "command": [
         "node",
@@ -981,6 +992,40 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then runs a schedule every second on the real clock until its job ran three times. The issue's 1 s from slot to start stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "seam-suites",
+      "command": [
+        "node",
+        "scripts/seams.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "p50Ms": 180000
+      },
+      "initialReason": "Issue #140 first measurement: the merge base has no platform seams. One run of every seam's conformance suite (node scripts/seams.mjs: the GPU seam's suite and gated fixtures, the network seam's suite through its test relay, the window and input seams' capabilities and the text, accessibility and headless suites), its start to its last line; the issue caps the suites at 3 minutes, which tests/acceptance/140/platform/budgets.test.ts judges on five runs. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "composition-wire",
+      "command": [
+        "node",
+        "benchmarks/composition.mjs",
+        "wire"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads two providers in the hub, then installs 20 users, each with a use of both providers' readings, so each install type-checks and wires two edges. The issue's 100 ms to wire a composition at install stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "composition-edge-read",
+      "command": [
+        "node",
+        "benchmarks/composition.mjs",
+        "edge-read"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads a provider and a user in the hub, then the user reads the provider's reading through its edge 1,000 times from inside its own code. The issue's 1 ms a reading adds across an edge stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

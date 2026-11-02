@@ -1,0 +1,60 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-498-62f1c5/agent-a3c81224e3a9cbcfd/tests/acceptance/498/gate
+
+ ❯ owner-redraft.test.ts (2 tests | 2 failed) 588681ms
+   ❯ C9 sound stops with its owner, and playing again needs your new press (2)
+     × C9 switch: opening doc-b in a panel playing doc-a's three voices silences them within one block, and only your new press of Play plays doc-b 4515ms
+     × C9 close: closing a panel playing doc-a's three voices silences them within one block, and only your new press of Play plays it again 80ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  owner-redraft.test.ts > C9 sound stops with its owner, and playing again needs your new press > C9 switch: opening doc-b in a panel playing doc-a's three voices silences them within one block, and only your new press of Play plays doc-b
+AssertionError: C9 switch: doc-a and your press: deep-show run answers the scenario ok (the panels' `shipped` field and the `open`, `close`, `play`, `gate`, `output` and `reserved` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:120:190
+    118| export function runShow(bin: string, s: JsonObject, what: string): Jso…
+    119|   const answer = answerOf(runRaw(bin, s), what);
+    120|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    121|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    122|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:188:21
+ ❯ owner owner-redraft.test.ts:84:16
+ ❯ owner-redraft.test.ts:184:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  owner-redraft.test.ts > C9 sound stops with its owner, and playing again needs your new press > C9 close: closing a panel playing doc-a's three voices silences them within one block, and only your new press of Play plays it again
+AssertionError: C9 close: doc-a and your press: deep-show run answers the scenario ok (the panels' `shipped` field and the `open`, `close`, `play`, `gate`, `output` and `reserved` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:120:190
+    118| export function runShow(bin: string, s: JsonObject, what: string): Jso…
+    119|   const answer = answerOf(runRaw(bin, s), what);
+    120|   expect(answer['ok'], `${what}: deep-show run answers the scenario ok…
+       |                                                                                                                                                                                              ^
+    121|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    122|   expect(replies.length, `${what}: one reply per call`).toBe(arr(s['ca…
+ ❯ Driver.step helpers.ts:188:21
+ ❯ owner owner-redraft.test.ts:84:16
+ ❯ owner-redraft.test.ts:191:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  11:44:46
+   Duration  589.12s (tests 100%)
+

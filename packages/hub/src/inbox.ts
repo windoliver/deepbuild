@@ -56,7 +56,8 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
     return USAGE_CODES.has(reply.error.code) ? 2 : UNDECIDED_CODES.has(reply.error.code) ? 3 : 1;
   }
   if (answering) {
-    process.stdout.write(`${String(reply.result.ask)} answered ${String(reply.result.answer)}, saved as a decision for ${String(reply.result.scope)}\n`);
+    // A block's task (#85), a fold and an ask with no repo or session save no decision; the sentence says only what the record holds.
+    process.stdout.write(`${String(reply.result.ask)} answered ${String(reply.result.answer)}${reply.result.scope === null ? '; no decision saved' : `, saved as a decision for ${String(reply.result.scope)}`}\n`);
     return 0;
   }
   if (undoing) {

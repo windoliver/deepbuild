@@ -7,7 +7,7 @@ The published shapes and their tooling: every event and interface schema (`name@
 ## Where new code goes
 
 - `schemas/<name>@<n>.json`: a new or next-version contract; `fixtures/<name>@<n>/`: its valid instances. A changed published shape takes a new minor or a new name, never an edit in place.
-- `slots/<slot>@<n>.json`: a hub slot's interface; `hub-slots.json` and `extension-api.json`: the slot table and the `deep.*` API.
+- `slots/<slot>@<n>.json`: a hub slot's interface, or a wire protocol's such as `relay@1`; `hub-slots.json` and `extension-api.json`: the slot table and the `deep.*` API.
 - `src/`: validator (`validate.ts`), lint, codegen, canonical JSON, digests, handles, manifest rules; `src/index.ts` is the public entry.
 - Generated, never hand-edited: `src/generated/types.ts` and `crates/deep-contracts/src/generated.rs`, plus the digests in `digests.json`, `extension-api.json` and `hub-slots.json`. Run `npm run generate -w @deepbuild/contracts`.
 - Tests: `test/`.

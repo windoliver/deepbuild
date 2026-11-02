@@ -817,14 +817,16 @@
     "conformance": "claude/stop/cause-and-usage",
     "turn": { "payload": "prompt_id", "transcript": "promptId", "elsewhere": "agent_id" },
     "cause": {
-      "readBy": "the first that names a cause: the StopFailure payload's error, then an API error entry of the turn (isApiErrorMessage, its error taking the same values), never the agent's text; Claude Code's hooks reference lists the values; it records rate limits only as those errors, with no reset time in any field, so a Claude Code stop is rate_limited and never plan_window_spent; a value not listed, and a stop nothing names a cause for, is unknown",
+      "readBy": "the first that names a cause: the StopFailure payload's error, then an API error entry of the turn (isApiErrorMessage, its error taking the same values), never the agent's text; Claude Code's hooks reference lists the values; billing_error, a spend limit or credits run out, is a rate limit (the hub places it as yours to raise, #85), and server_error, which is what a refused connection, an unknown host or a request timeout reads as (recorded live on 2.1.308), a timeout; it records rate limits only as those errors, with no reset time in any field, so a Claude Code stop is rate_limited and never plan_window_spent; a value not listed, and a stop nothing names a cause for, is unknown",
       "payload": {
         "field": "error",
         "values": {
           "rate_limit": "rate_limited",
           "overloaded": "rate_limited",
           "authentication_failed": "sign_in_required",
-          "oauth_org_not_allowed": "sign_in_required"
+          "oauth_org_not_allowed": "sign_in_required",
+          "billing_error": "rate_limited",
+          "server_error": "timed_out"
         }
       },
       "errors": {
@@ -834,7 +836,9 @@
           "rate_limit": "rate_limited",
           "overloaded": "rate_limited",
           "authentication_failed": "sign_in_required",
-          "oauth_org_not_allowed": "sign_in_required"
+          "oauth_org_not_allowed": "sign_in_required",
+          "billing_error": "rate_limited",
+          "server_error": "timed_out"
         }
       },
       "otherwise": "unknown"
