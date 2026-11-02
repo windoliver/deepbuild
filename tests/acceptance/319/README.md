@@ -146,7 +146,7 @@ IDs are the first 8 hex digits of SHA-256 of each criterion's text, trimmed, whi
 | # | ID | Criterion (short) | Tests | Wrong programs it fails on | On the base |
 |---|---|---|---|---|---|
 | 1 | `#319.ed496876` | beyond the cap, wait unless held or due first | `timing`: *asks beyond the day's cap wait…* | mutants: no batches; no cap; nothing shown at once for its deadline; held session not shown; inbox age 0 | FAIL: raise refused, no deadline from settings |
-| 2 | `#319.1ad1ab09` | hub stopped across a batch: shows within 5 s of start | `restart`: *with the hub stopped across a batch time…*; `plants`: one | plant: hub waits for the next batch (fails naming the ask); mutants: no batches; nothing shown at once | FAIL (same) |
+| 2 | `#319.1ad1ab09` | hub stopped across a batch: shows within 5 s of start | `restart-redraft/restart.test.ts`, the blind redraft that replaced this suite's first draft once #908 moved the deadlines of asks unshown while the hub was down (`restart-redraft/README.md`); `plants`: one | plant: hub waits for the next batch (fails naming the ask); mutants: no batches; nothing shown at once | FAIL (same) |
 | 3 | `#319.466f1905` | one person: authority defaults to no, never escalated | `deadlines`: *for one person, an authority ask…*; `plants`: one | plant: records it as escalated (fails naming the ask); mutants: default not announced; deadline only once passed | FAIL (same) |
 | 4 | `#319.ba0ff138` | default announced, undoable, never a pass; irreversible is no; Later within deadline | `deadlines`: three tests | mutants: approving default taken; default not announced; default policy takes the first option; Later past deadline accepted; Later hides nothing; deadline only once passed | FAIL (same) |
 | 5 | `#319.e94e8d14` | sixth ask folds; bulk answer closes all six | `fold`: *a sixth open ask…* | mutants: bulk answer closes only the exception; only the folded asks | FAIL (same) |
@@ -163,6 +163,6 @@ IDs are the first 8 hex digits of SHA-256 of each criterion's text, trimmed, whi
 - `helpers.ts`: a world (virtual clock, record and home in a temporary folder, the asks core with `home`, its deliveries, what Needs you showed and when, stop and restart), connections, `sourceOf`, `noDefaultBeforeShown`, a repo with a `done.yaml`, and the budget rule (reference Mac, judge).
 - `scenarios.ts`: the scenarios of criteria 2, 3 and 9, shared with `plants.test.ts`.
 - `plants.ts`: the wrong programs criteria 2, 3 and 9 name, each the real program with one part wrong.
-- `timing.test.ts` (criteria 1, 6), `restart.test.ts` (2), `deadlines.test.ts` (3, 4, 11), `fold.test.ts` (5, 8), `settings.test.ts` (7, 9), `budgets.test.ts` (10), `plants.test.ts`.
+- `timing.test.ts` (criteria 1, 6), `restart-redraft/` (2), `deadlines.test.ts` (3, 4, 11), `fold.test.ts` (5, 8), `settings.test.ts` (7, 9), `budgets.test.ts` (10), `plants.test.ts`.
 - `tsconfig.json`: type-checks the suite under the root's strict options with `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the base run, the sample fix, the plants and the mutants.

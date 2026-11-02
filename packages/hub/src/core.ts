@@ -93,6 +93,8 @@ const CALL_GRACE = 2_000;
 const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
 /** How long a handed answer has to show in a turn before its delivery reads stalled and goes by the next route. */
 const WAKE_GRACE = 10_000;
+/** A gap between two of the 1 s beats, on the wall clock, longer than this is time the Mac slept with the hub up (#908). */
+const SLEPT = 10_000;
 /** How soon after a hook's reply the transcript is read for the answers it carried (#906). */
 const SHOWN_SOON = 2_000;
 /** What only an answer's own text says, as the transcript shows it in a turn (#906). */
@@ -562,6 +564,9 @@ export class Core {
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
     // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
     // so a backfill never feeds it. The hub takes each continue's route every beat, since an answer records them too.
+    // While the Mac sleeps no beat runs: a beat that finds the wall clock far past the last one tells the asks core the
+    // hub didn't run in between, which moves the deadline of each ask that hadn't shown (#908).
+    let beat = { wall: Date.now(), at: this.now() };
     const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
     let ticked = await landed();
     const due = async (): Promise<boolean> => {
@@ -569,7 +574,13 @@ export class Core {
       if (pos > ticked) { ticked = pos; return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
     };
-    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => { if (await due()) await asks.tick(); await this.continues(); });
+    if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => {
+      const now = { wall: Date.now(), at: this.now() };
+      if (now.wall - beat.wall > SLEPT) await asks.away(beat.at, now.at);
+      beat = now;
+      if (await due()) await asks.tick();
+      await this.continues();
+    });
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.

@@ -217,6 +217,12 @@ export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
   answer(connection: Connection, ask: string, input: unknown): Promise<void>;
   tick(): Promise<void>;
+  /**
+   * The hub didn't run from `from` to `to` while it stayed up, as when the Mac slept (#908): each open ask that hadn't
+   * shown has its deadline moved later by the part of that time before its deadline, up to its kind's wait counted from
+   * `to`. Time the hub was down the core reads from the log when it opens.
+   */
+  away(from: number, to: number): Promise<void>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -266,6 +272,8 @@ export interface Asks {
 const DRAFTED = {
   deadline: { taste: '3d', authority: '1d', unblock: '2d', exception: '2d', choice: '2d', definition: '4h' },
   default: { taste: 'recommended', authority: 'no', unblock: 'stay-blocked', exception: 'no-change', choice: 'recommended', definition: 'leave-out' },
+  // An ask that first shows with less than this left before its deadline takes its default no sooner than this after it shows (#908).
+  notice: { taste: '1h', authority: '1h', unblock: '1h', exception: '1h', choice: '1h', definition: '1h' },
   fallback: ['change-owner'],
   fold: 5,
   // A few visits a day, at 00:00, 08:00 and 16:00 UTC, showing at most 20 asks a day.
@@ -427,6 +435,8 @@ const CORE = { writer: 'core' } as const;
 /** Writers that speak for an agent: none of them closes an ask. */
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
 const PAGE = 1000;
+/** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
+const AWAY = 10_000;
 
 type Obj = { [key: string]: JsonValue };
 type Option = { id: string; label: string; decision: Decision };
@@ -469,8 +479,14 @@ interface Ask {
   /** What the log calls for and the core hasn't appended yet. */
   pending: { superseded?: string; moot?: Obj; typed?: string };
   created: number;
+  /** How long it waits, as raised: its deadline then, less when it was raised. */
+  wait: number;
+  /** Its deadline as no time the hub didn't run moved it: what it shows at once by (#908). */
+  due: number;
   /** Shown in Needs you, by a batch or at once. */
   shown: boolean;
+  /** When it first showed. */
+  firstShown?: number;
   /** Hidden by Later until then. */
   later?: number;
   /** Raised by a turn that hadn't read a message you typed: it waits until the agent has it, unless due first. */
@@ -508,6 +524,12 @@ const CLOSING: Readonly<Record<string, string>> = {
 
 class AsksCore implements Asks {
   private cursor = 0;
+  /**
+   * When the hub last ran before this core opened (#908): the newest event the core appended in the log, a stop's
+   * hub.stopped included but not the one a start appends for a crash, which carries the start's time.
+   */
+  private logged: number | undefined;
+  private opened = false;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
   /** Each session's stops in log order, and every stop by ID (#85). */
   private readonly stops = new Map<string, Stop[]>();
@@ -784,6 +806,14 @@ class AsksCore implements Asks {
     if (saved !== null) await this.reconsult(saved);
   }
 
+  away(from: number, to: number): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      await this.moveAway(from, to);
+      await this.settle();
+    });
+  }
+
   tick(): Promise<void> {
     return this.exclusive(async () => {
       await this.sync();
@@ -857,7 +887,7 @@ class AsksCore implements Asks {
         throw new AskRefused(ask.closed ? `${ask.handle} closed as ${ask.closed.outcome}, not by its default` : `${ask.handle} is open; there's no default to undo`, { ask: ask.handle, ...(ask.closed ? { outcome: ask.closed.outcome, closed_at: ask.closed.at } : {}) });
       }
       const now = this.options.now();
-      const deadline = now + (ask.data.deadline as number) - ask.created;
+      const deadline = now + ask.wait;
       await this.options.record.append(this.core({ ...connection, ...ask.who }), { v: 1, id: ulid(now), kind: 'default.undone', subject: ask.handle, ts: now, data: { deadline } });
       await this.sync();
       await this.settle();
@@ -909,7 +939,7 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const raised = await this.raise({ ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) }, OUTSIDE_SOURCE, {
       kind: 'authority', question: `The run ${ask.handle} approved would also: ${step.does}. Your yes didn't cover it. Let it?`.slice(0, 8192),
-      options: ask.options.map((o) => ({ ...o })), recommended: null, deadline: now + (ask.data.deadline as number) - ask.created, fallback: ask.data.fallback!,
+      options: ask.options.map((o) => ({ ...o })), recommended: null, deadline: now + ask.wait, fallback: ask.data.fallback!,
       default: ask.options.find((o) => o.decision === 'deny')!.id, provisional: false, owner: ask.data.owner!, key, pinned_to: ask.data.pinned_to!,
     }, { steps: [step], diff: sha256Hex(canonicalize({ outside: ask.handle, key })) });
     return { run: false, ask: raised };
@@ -1353,7 +1383,7 @@ class AsksCore implements Asks {
     // An ask held by an exception that has shown shows there, recorded like any other showing; one from a turn that
     // hasn't read your message waits, as on its own card, for the agent's next step or a deadline before the next batch.
     const joined = this.open().filter((a) => !a.shown && this.inFold(a) && this.visible(this.asks.get(bare(a.folded!))!));
-    if (await this.showNow(joined.filter((a) => !a.unread || this.dueBy(a) <= next))) acted = true;
+    if (await this.showNow(joined.filter((a) => !a.unread || this.showBy(a) <= next))) acted = true;
     if (!batches) return (await this.showNow(waiting())) || acted;
     // The latest batch shows every ask waiting for it since before its time, as the log stands: one held for your
     // message and read after it waits for the next, and a showing that failed to append is appended on the next
@@ -1366,7 +1396,7 @@ class AsksCore implements Asks {
     }
     // A deadline at the next batch's own time counts as passing first: an ask first shown at its deadline would
     // default only on a later call, after its deadline, so it shows now instead.
-    if (await this.showNow(waiting().filter((a) => this.dueBy(a) <= next))) acted = true;
+    if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next))) acted = true;
     return acted;
   }
 
@@ -1374,6 +1404,10 @@ class AsksCore implements Asks {
   private dueBy(ask: Ask): number {
     const held = ask.fold ? this.openIn(ask.thread).filter((f) => f.folded === ask.handle).map((f) => f.data.deadline as number) : [];
     return Math.min(ask.data.deadline as number, ...held);
+  }
+  /** When an ask shows at once by: as dueBy, but time the hub didn't run moves no showing later (#908). */
+  private showBy(ask: Ask): number {
+    return Math.min(this.dueBy(ask), ask.due);
   }
 
   /** The open asks in log order: asks enter the map only from apply, which reads the log in order. */
@@ -1534,6 +1568,8 @@ class AsksCore implements Asks {
   private apply(e: Event): void {
     const d: Obj = isObj(e.data) ? e.data : {};
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
+    // Only a running hub appends as the core; a crash's hub.stopped carries the time of the start that found it.
+    if (e.writer === 'core' && !(e.kind === 'hub.stopped' && d.reason === 'crashed')) this.logged = Math.max(this.logged ?? e.ts, e.ts);
     switch (e.kind) {
       case 'session.start':
         // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
@@ -1595,7 +1631,7 @@ class AsksCore implements Asks {
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
-          created: e.ts, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
+          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -1699,7 +1735,14 @@ class AsksCore implements Asks {
         delete target.closed;
         delete target.folded;
         target.data = { ...target.data, deadline: d.deadline };
+        target.due = d.deadline;
         if (target.block && !this.blockTasks.has(target.block.signature)) this.blockTasks.set(target.block.signature, target);
+        return;
+      case 'deadline.moved':
+        // Later by the time the hub couldn't show it, or to its minimum notice once it showed (#908).
+        if (!target || target.closed || e.writer !== 'core' || typeof d.deadline !== 'number') return;
+        target.data = { ...target.data, deadline: d.deadline };
+        if (d.because !== 'away') target.due = d.deadline;
         return;
       case 'ask.batched': {
         if (e.writer !== 'core' || !Array.isArray(d.asks)) return;
@@ -1714,6 +1757,7 @@ class AsksCore implements Asks {
         for (const ask of shown) {
           // Shown again, as when its Later ends: back in Needs you.
           ask.shown = true;
+          ask.firstShown ??= e.ts;
           delete ask.later;
         }
         // Only a batch counts toward the day's cap; an ask shown at once doesn't.
@@ -1793,6 +1837,11 @@ class AsksCore implements Asks {
     // The asks that had shown before this call: only they can take a default in it, whatever the clock reads.
     // One under Later, or held by an exception under Later, wasn't in sight.
     const seen = new Set(this.open().filter((a) => this.inSight(a)).map((a) => a.handle));
+    // The core's first call: the hub was down from the last time it appended until now.
+    if (!this.opened) {
+      this.opened = true;
+      if (this.logged !== undefined) await this.moveAway(this.logged, this.options.now());
+    }
     // Each open chat-app task's thread, read once a call through the connector.
     await this.readThreads();
     this.readNetwork();
@@ -1808,6 +1857,7 @@ class AsksCore implements Asks {
       if (await this.stopsSettled(this.options.now())) acted = true;
       // What shows comes first, so no ask takes its default before it has shown.
       if (await this.show()) acted = true;
+      if (await this.giveNotice()) acted = true;
       const now = this.options.now();
       for (const ask of this.open()) {
         const as = { ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) };
@@ -1846,6 +1896,55 @@ class AsksCore implements Asks {
       // exception isn't raised again for asks it already showed you.
       await this.sync();
     }
+  }
+
+  // ---- Deadlines count only time an ask could be seen (#908).
+
+  /**
+   * Time the hub didn't run, down or with the Mac asleep, while an ask was open and hadn't shown moves its deadline
+   * later by the part of that time before its deadline as it stood: the time it lost. Recorded on the ask with its span,
+   * and never past its kind's wait counted from `to`, the soonest it shows, so it still ends.
+   */
+  private async moveAway(from: number, to: number): Promise<void> {
+    if (to - from <= AWAY) return;
+    const now = this.options.now();
+    for (const ask of this.open()) {
+      const deadline = ask.data.deadline as number;
+      const moved = Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
+      if (ask.shown || ask.theirs || moved <= deadline) continue;
+      await this.moveDeadline(ask, moved, 'away', now);
+    }
+    await this.sync();
+  }
+
+  /**
+   * An ask that first showed with less than its kind's minimum notice left takes its default no sooner than that notice
+   * after it showed, and never past its kind's wait counted again from then, so it still ends. None declared, none applies.
+   */
+  private async giveNotice(): Promise<boolean> {
+    let acted = false;
+    for (const ask of this.open()) {
+      if (ask.firstShown === undefined) continue;
+      const { notice } = this.settingsFor(ask.session);
+      const due = ask.firstShown + Math.min(duration(isObj(notice) ? notice[String(ask.data.kind)] : undefined) ?? 0, this.waitFor(ask));
+      if (due <= (ask.data.deadline as number)) continue;
+      await this.moveDeadline(ask, due, 'notice', this.options.now());
+      acted = true;
+    }
+    if (acted) await this.sync();
+    return acted;
+  }
+
+  /** Its kind's wait as set now, or the one it was raised with. */
+  private waitFor(ask: Ask): number {
+    const { deadline: wait } = this.settingsFor(ask.session);
+    return duration(isObj(wait) ? wait[String(ask.data.kind)] : undefined) ?? ask.wait;
+  }
+
+  private async moveDeadline(ask: Ask, deadline: number, because: 'away' | 'notice', now: number): Promise<void> {
+    await this.options.record.append({ ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) }, {
+      v: 1, id: ulid(now), kind: 'deadline.moved', subject: ask.handle, ts: now, data: { span: deadline - (ask.data.deadline as number), deadline, because },
+    });
   }
 
   // ---- Stops (#85): a block's task, its sessions' resumes, and the one automatic continue.
@@ -2171,7 +2270,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
