@@ -1,0 +1,141 @@
+// The test shop plug-in (#262). What it registers comes from probe.json (helpers.ts, MetricsProbe):
+// - its sources, each a polled source on api.metrics.example at /s/<name>: a number (the answer's `value`) or, with
+//   `series`, a series (every field of the answer, each a named value), with the probe's quota, timeout, freshness
+//   and `while_shown` cadence passed through as declared
+// - its views, each a panel (panel/main.js) binding the probe's reading handles (`binds`)
+// - its polls: schedules on a cadence of their own, each job reading one source
+// - with `watch`, ext.shop.watch_rate: the job that checks the notice kind ext.shop.rate_passed, declared with
+//   no cadence of its own; each run reads the source and, when its value is over the threshold, sends the notice
+//   for the probe's subscription, citing the reading; at or under it, it ends with its declared no-op
+// - ext.shop.read_now: the action the view's Read now button calls, which calls deep.readNow(view)
+// - ext.shop.notify: sends ext.shop.latency_high for a subscription, citing the reading handles it is given
+// - ext.shop.cites: a check kind whose result cites what its spec's inputs name: each SHA-256 as evidence and
+//   each reading handle as read
+// - ext.shop.report: the probe check, reporting what the plug-in saw
+import { readFileSync } from 'node:fs';
+
+interface SourceProbe {
+  name: string;
+  series?: boolean;
+  while_shown?: { every: number };
+  quota?: { per_minute: number; per_day: number };
+  timeout?: number;
+  freshFor?: number;
+}
+interface Probe {
+  sources: SourceProbe[];
+  views: { name: string; binds: string[] }[];
+  polls?: { name: string; every: number; reads: string }[];
+  watch?: { source: string; threshold: number; key: string };
+}
+interface Answer { status: number; headers: Record<string, string>; body: string }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+const PASSED = 'ext.shop.rate_passed';
+const LATENCY = 'ext.shop.latency_high';
+const HEX = /^[0-9a-f]{64}$/;
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+const said = (e: any): string => String(e?.message ?? e);
+
+export default async function (deep: any): Promise<void> {
+  const seen: any = { readNow: [], watch: [], notify: [] };
+
+  for (const s of probe.sources) {
+    await deep.registerSource(s.name, {
+      variant: 'polled',
+      host: 'api.metrics.example',
+      path: `/s/${s.name}`,
+      quota: s.quota ?? { per_minute: 600, per_day: 100_000 },
+      timeout: s.timeout ?? 5_000,
+      freshFor: s.freshFor ?? 1_000,
+      ...(s.series ? { shape: 'series' } : {}),
+      ...(s.while_shown ? { while_shown: s.while_shown } : {}),
+      parse(answer: Answer): unknown {
+        if (answer.status !== 200) throw Error(`no ${s.name} in a ${answer.status} answer`);
+        const body = JSON.parse(answer.body);
+        if (s.series) return { values: body, unit: 'n' };
+        return { value: Number(body.value), unit: 'n' };
+      },
+    });
+  }
+
+  for (const v of probe.views) await deep.registerView(v.name, 'panel', 'home', { binds: v.binds });
+
+  for (const p of probe.polls ?? []) {
+    await deep.schedule(p.name, {
+      every: p.every,
+      deadline: 60_000,
+      declares: { readings: [p.reads], notices: [], stores: [], sends: [], noop: false },
+    }, async (ctx: { read(source: string): Promise<any> }) => {
+      const r = await ctx.read(p.reads);
+      if (r?.status === 'BLOCKED' || r?.status === 'failed') throw Error(`no ${p.reads}: ${r.cause}`);
+    });
+  }
+
+  const watch = probe.watch;
+  if (watch) {
+    await deep.schedule('ext.shop.watch_rate', {
+      deadline: 60_000,
+      declares: { readings: [watch.source], notices: [PASSED], stores: [], sends: [], noop: true },
+    }, async (ctx: { run: string; at: number; read(source: string): Promise<any> }) => {
+      const r = await ctx.read(watch.source);
+      const job: any = { run: ctx.run, at: ctx.at, read: r?.status ?? null, value: r?.reading?.value ?? null };
+      seen.watch.push(job);
+      if (r?.status !== 'reading') throw Error(`no ${watch.source}: ${r?.cause}`);
+      if (!(r.reading.value > watch.threshold)) return { noop: `${watch.source} is at or under ${watch.threshold}` };
+      try {
+        job.sent = String(await deep.notices.send({ kind: PASSED, subscription: watch.key, key: watch.key, readings: [r.reading.handle] }));
+      } catch (e) {
+        job.refused = said(e);
+        throw e;
+      }
+      return {};
+    });
+  }
+
+  deep.registerAction('ext.shop.read_now', {
+    declares: 'read',
+    reads: [],
+    input: strict({ view: { type: 'string' } }),
+    output: strict({ result: { type: 'string' } }),
+  }, async (input: { view: string }) => {
+    try {
+      const result = await deep.readNow(input.view);
+      seen.readNow.push({ view: input.view, result: result ?? null });
+      return { result: JSON.stringify({ ok: true, result: result ?? null }) };
+    } catch (e) {
+      seen.readNow.push({ view: input.view, error: said(e) });
+      return { result: JSON.stringify({ ok: false, error: said(e) }) };
+    }
+  });
+
+  deep.registerAction('ext.shop.notify', {
+    declares: 'read',
+    reads: [],
+    input: strict({ subscription: { type: 'string' }, key: { type: 'string' }, readings: { type: 'array', items: { type: 'string' } } }),
+    output: strict({ result: { type: 'string' } }),
+  }, async (input: { subscription: string; key: string; readings: string[] }) => {
+    try {
+      const sent = await deep.notices.send({ kind: LATENCY, subscription: input.subscription, key: input.key, readings: input.readings });
+      seen.notify.push({ ...input, sent: String(sent) });
+      return { result: JSON.stringify({ ok: true, notice: String(sent) }) };
+    } catch (e) {
+      seen.notify.push({ ...input, refused: said(e) });
+      return { result: JSON.stringify({ ok: false, error: said(e) }) };
+    }
+  });
+
+  deep.registerCheck('ext.shop.cites', async (spec: { inputs?: string[] }) => {
+    const inputs = Array.isArray(spec?.inputs) ? spec.inputs : [];
+    return {
+      outcome: 'passed', testsRun: 1, mask: null, failures: [],
+      evidence: inputs.filter((x) => HEX.test(x)),
+      read: inputs.filter((x) => x.startsWith('reading:')),
+    };
+  });
+
+  deep.registerCheck('ext.shop.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify(seen) }],
+  }));
+}
