@@ -90,7 +90,7 @@ pub struct Planted {
     pub bilinear_only: bool,
     /// The upscale blends in the view's previous frame.
     pub reads_previous_frame: bool,
-    /// The upscale's passes draw ten times over.
+    /// The upscale's passes draw forty times over.
     pub slow: bool,
 }
 
@@ -355,7 +355,7 @@ impl Low {
         name: &str,
         slot: &wgpu::TextureView,
     ) -> Step {
-        let reps = if planted.slow { 10 } else { 1 };
+        let reps = if planted.slow { 40 } else { 1 };
         if name == UPSCALE_PASS {
             let blend = planted.reads_previous_frame && self.filled;
             self.filled = true;
