@@ -22,7 +22,7 @@ const show = (repo: string, rev: string, path: string): string | null => {
 };
 
 /** What a script target runs, from a file's text: a package.json script, or a Makefile or justfile recipe. */
-export function targetBody(file: string, text: string | null, target: string): string | null {
+function targetBody(file: string, text: string | null, target: string): string | null {
   if (text === null) return null;
   if (file.endsWith('package.json')) {
     try { return (JSON.parse(text) as { scripts?: Record<string, string> }).scripts?.[target] ?? null; } catch { return null; }

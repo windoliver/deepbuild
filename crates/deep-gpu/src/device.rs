@@ -5,6 +5,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::seam::{self, Choice, Refusal, Startup};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
     /// The platform's own GPU: Metal on macOS.
@@ -18,11 +20,13 @@ static OPENED: AtomicU64 = AtomicU64::new(0);
 /// How many app GPUs are open now.
 static LIVE: AtomicU64 = AtomicU64::new(0);
 
-/// What the app's device is opened without, on the same adapter (the platform seam's feature
-/// table: a feature "withheld at device creation"), so its fallback can be tested.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Withheld {
-    pub timestamps: bool,
+/// An error the device raised through its uncaptured-error callback (issue #140): a channel every
+/// check that renders reads, never a panic.
+#[derive(Clone, Debug)]
+pub struct Raised {
+    /// `validation`, `out_of_memory` or `internal`.
+    pub kind: &'static str,
+    pub error: String,
 }
 
 /// The device's pass timestamps, as the meter reads them (issue #379).
@@ -39,28 +43,51 @@ pub struct Timestamps {
 /// The app's GPU: its one live device, reopened after a loss.
 pub struct Gpu {
     backend: Backend,
-    withheld: Withheld,
+    /// The GPU seam's adapter and device features (issue #140); `None` on the noop backend.
+    choice: Option<Choice>,
     current: Mutex<Arc<Device>>,
 }
 
 impl Gpu {
     pub fn open(backend: Backend) -> Result<Arc<Gpu>, String> {
-        Gpu::open_withholding(backend, Withheld::default())
+        Gpu::start(backend, &Startup::default()).map_err(|r| r.reason)
     }
 
-    /// The app's GPU, its device opened without what `withheld` names.
-    pub fn open_withholding(backend: Backend, withheld: Withheld) -> Result<Arc<Gpu>, String> {
-        let device = Device::open(backend, withheld)?;
+    /// The app's GPU on the adapter the GPU seam picks, its device created without what the
+    /// startup withholds; a device without a required feature of the tier is refused, naming it.
+    pub fn start(backend: Backend, startup: &Startup) -> Result<Arc<Gpu>, Refusal> {
+        let choice = match backend {
+            Backend::Gpu => Some(seam::pick(startup)?),
+            Backend::Noop => None,
+        };
+        let device = Device::open(backend, choice.as_ref()).map_err(Refusal::no_device)?;
+        if let Some(c) = &choice {
+            let missing = seam::missing(&device.device);
+            if !missing.is_empty() {
+                return Err(Refusal {
+                    code: "missing_feature",
+                    adapter: Some(c.adapter.name.clone()),
+                    reason: format!(
+                        "the {} tier requires {}, which the device on {} wasn't created with",
+                        seam::TIER,
+                        missing.join(", "),
+                        c.adapter.name
+                    ),
+                    missing,
+                });
+            }
+        }
         LIVE.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(Gpu {
             backend,
-            withheld,
+            choice,
             current: Mutex::new(device),
         }))
     }
 
-    pub fn withheld(&self) -> Withheld {
-        self.withheld
+    /// The adapter the GPU seam picked and what its devices are created with.
+    pub fn seam(&self) -> Option<&Choice> {
+        self.choice.as_ref()
     }
 
     pub fn device(&self) -> Arc<Device> {
@@ -74,7 +101,7 @@ impl Gpu {
     pub fn recover(&self) -> Result<Arc<Device>, String> {
         let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
         if current.is_lost() {
-            *current = Device::open(self.backend, self.withheld)?;
+            *current = Device::open(self.backend, self.choice.as_ref())?;
         }
         Ok(current.clone())
     }
@@ -104,32 +131,20 @@ pub struct Device {
     pub name: String,
     pub timestamps: Timestamps,
     lost: Arc<AtomicBool>,
+    raised: Arc<Mutex<Vec<Raised>>>,
 }
 
 impl Device {
-    fn open(backend: Backend, withheld: Withheld) -> Result<Arc<Device>, String> {
-        let wanted = wgpu::Features::TIMESTAMP_QUERY
-            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
-            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES;
+    fn open(backend: Backend, choice: Option<&Choice>) -> Result<Arc<Device>, String> {
         let mut features = wgpu::Features::empty();
         let mut name = String::from("noop");
         let mut info = None;
         let (device, queue) = match backend {
             Backend::Noop => wgpu::Device::noop(&wgpu::DeviceDescriptor::default()),
             Backend::Gpu => {
-                let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-                    backends: wgpu::Backends::PRIMARY,
-                    ..wgpu::InstanceDescriptor::new_without_display_handle()
-                });
-                let adapter =
-                    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                        power_preference: wgpu::PowerPreference::HighPerformance,
-                        ..Default::default()
-                    }))
-                    .map_err(|e| format!("no GPU adapter: {e}"))?;
-                if !withheld.timestamps {
-                    features = adapter.features() & wanted;
-                }
+                let choice = choice.ok_or("no GPU adapter")?;
+                let adapter = &choice.raw;
+                features = choice.request;
                 name = adapter.get_info().name;
                 info = Some(adapter.get_info());
                 pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
@@ -143,6 +158,21 @@ impl Device {
         let lost = Arc::new(AtomicBool::new(false));
         let flag = lost.clone();
         device.set_device_lost_callback(move |_, _| flag.store(true, Ordering::SeqCst));
+        let raised = Arc::new(Mutex::new(Vec::new()));
+        let sink = raised.clone();
+        device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
+            let kind = match e {
+                wgpu::Error::Validation { .. } => "validation",
+                wgpu::Error::OutOfMemory { .. } => "out_of_memory",
+                wgpu::Error::Internal { .. } => "internal",
+            };
+            eprintln!("deep-gpu: the device raised a {kind} error: {e}");
+            let mut list = sink.lock().unwrap_or_else(|e| e.into_inner());
+            list.push(Raised {
+                kind,
+                error: e.to_string(),
+            });
+        }));
         let epoch = OPENED.fetch_add(1, Ordering::SeqCst) + 1;
         let query = features.contains(wgpu::Features::TIMESTAMP_QUERY);
         let timestamps = Timestamps {
@@ -160,6 +190,7 @@ impl Device {
             name,
             timestamps,
             lost,
+            raised,
         }))
     }
 
@@ -167,6 +198,11 @@ impl Device {
     pub fn force_loss(&self) {
         self.device.destroy();
         self.lost.store(true, Ordering::SeqCst);
+    }
+
+    /// What the device raised through its uncaptured-error callback since this was last called.
+    pub fn take_raised(&self) -> Vec<Raised> {
+        std::mem::take(&mut *self.raised.lock().unwrap_or_else(|e| e.into_inner()))
     }
 
     pub fn is_lost(&self) -> bool {

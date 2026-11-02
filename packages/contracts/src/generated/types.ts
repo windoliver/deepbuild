@@ -2229,6 +2229,68 @@ export interface CommitMade {
   evidence?: Array<string>;
 }
 
+/** composition.reopened@1 */
+export interface CompositionReopened {
+  v: 1;
+  id: string;
+  kind: "composition.reopened";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    piece: string;
+    provider: string;
+    version: string;
+  };
+}
+
+/** composition.tested@1 */
+export interface CompositionTested {
+  v: 1;
+  id: string;
+  kind: "composition.tested";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+    version: string;
+    passed: boolean;
+  };
+}
+
+/** composition.used@1 */
+export interface CompositionUsed {
+  v: 1;
+  id: string;
+  kind: "composition.used";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+  };
+}
+
 /** decision.applied@1 */
 export interface DecisionApplied {
   v: 1;
@@ -2596,7 +2658,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "job_failing" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -2710,6 +2772,20 @@ export interface EvidenceStored {
 
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
+
+/** extension.compose@1 */
+export interface ExtensionCompose {
+  provides?: Array<{
+    schema?: unknown;
+    digests?: { [key: string]: string };
+  }>;
+  uses?: Array<{
+    schema?: unknown;
+    from?: string;
+    optional?: boolean;
+  }>;
+  pieces?: Array<string>;
+}
 
 /** extension.contract@1 */
 export interface ExtensionContract {
@@ -4094,6 +4170,30 @@ export interface RunStartedV2 {
       expected_ms: number | null;
     };
     lane: "fast" | "slow";
+  };
+  evidence?: Array<string>;
+}
+
+/** runner.answered@1 */
+export interface RunnerAnswered {
+  v: 1;
+  id: string;
+  kind: "runner.answered";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    piece: string;
+    job: string;
+    value: unknown;
+    cites: Array<string>;
+    as_of: number;
+    stale_at: number | null;
   };
   evidence?: Array<string>;
 }

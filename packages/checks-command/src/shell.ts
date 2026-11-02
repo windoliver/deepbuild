@@ -117,10 +117,42 @@ function pnpmShim(at: string): string | null {
   const dir = resolve(at, '..');
   return shim && !existsSync(join(dir, 'node')) ? resolve(dir, shim[1]!) : null;
 }
-/** The programs a command's segments start, in order. */
-export function programsIn(command: string): string[] {
-  return segmentsOf(command).map((segment) => wordsOf(segment).find((w) => !ASSIGNMENT.test(w)))
-    .filter((p): p is string => p !== undefined && !BUILTINS.has(p));
+/** The shells whose script, named as their one argument, is read as the command (`sh file`, `/bin/sh file`). */
+const SCRIPT_SHELLS = new Set(['sh', 'bash', 'dash', 'zsh']);
+/** A shell script a command segment runs, and its command lines: the `#!` line, comments and blank lines left out. */
+export interface Script { file: string; lines: string[] }
+/**
+ * The script a segment runs as `sh file`, read from the checkout, or null: a shell given options or more than the
+ * file, or a file that can't be read, is a program of its own, which the tracers can't see into. The hub's drafted
+ * checks (#303) are such scripts, each a shell line or two around the tool it runs.
+ */
+export function scriptOf(segment: string, cwd: string): Script | null {
+  const words = wordsOf(segment).filter((w) => !ASSIGNMENT.test(w));
+  const [shell, file, ...rest] = words;
+  if (!shell || !file || rest.length || !SCRIPT_SHELLS.has(shell.split('/').pop() ?? shell) || file.startsWith('-')) return null;
+  let text: string;
+  try { text = readFileSync(resolve(cwd, file), 'utf8'); } catch { return null; }
+  const lines = text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  return { file, lines };
+}
+/** The programs a command's segments start, in order; a script a segment runs adds its own after the shell's. */
+export function programsIn(command: string, cwd?: string): string[] {
+  return segmentsOf(command).flatMap((segment) => {
+    const program = wordsOf(segment).find((w) => !ASSIGNMENT.test(w));
+    const script = cwd === undefined ? null : scriptOf(segment, cwd);
+    return [...(program !== undefined && !BUILTINS.has(program) ? [program] : []), ...(script ? programsIn(script.lines.join('\n')) : [])];
+  });
+}
+/** The command's mask, or a mask in the script it runs, named with the file (the core's one rule, on each): null for none. */
+export function maskOf(command: string, cwd: string): string | null {
+  const own = maskIn(command);
+  if (own !== null) return own;
+  for (const segment of segmentsOf(command)) {
+    const script = scriptOf(segment, cwd);
+    const mask = script && maskIn(script.lines.join('\n'));
+    if (mask) return `${mask} in ${script.file}`;
+  }
+  return null;
 }
 /**
  * The values a command gives the options that choose tests by name (`-t`, `--testNamePattern`, node:test's
@@ -155,7 +187,7 @@ export const GO_TEST = /(?:^|&&|\|\||[;|\n])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)
  * here-document, a substitution), or a program other than Node, Python or a script either runs (see `traced`).
  * `go test` in the check's own command (`go`) is the runner's to judge; started by a child, it's untraced.
  */
-export function untraced(command: string, cwd: string, path: string, trust: Trust = {}): string | null {
+export function untraced(command: string, cwd: string, path: string, trust: Trust = {}, depth = 0): string | null {
   const allowed = { node: true, python: true, go: true, writable: [cwd], ...trust };
   const shell = blanked(command);
   if (/(^|[^<>])<(?![<>&])/.test(shell) || /<<</.test(shell) || /<<(?![<])/.test(shell)) return 'shell input <';
@@ -167,6 +199,14 @@ export function untraced(command: string, cwd: string, path: string, trust: Trus
     const at = words.findIndex((w) => !ASSIGNMENT.test(w));
     const program = words[at];
     if (!program || BUILTINS.has(program) || (allowed.go && program === 'go' && words[at + 1] === 'test')) continue;
+    // A script the shell runs is read as the command: its lines must be traced, each named with the file. A script a
+    // script runs is a program the tracers can't see into: nothing is read twice over.
+    const script = depth === 0 ? scriptOf(segment, cwd) : null;
+    if (script) {
+      const hidden = untraced(script.lines.join('\n'), cwd, path, trust, depth + 1);
+      if (hidden !== null) return `${hidden} in ${script.file}`;
+      continue;
+    }
     if (!traced(program, words.slice(at + 1), cwd, path, allowed)) return `program ${program}`;
   }
   return null;

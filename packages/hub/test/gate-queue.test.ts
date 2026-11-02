@@ -29,8 +29,8 @@ describe('the slow lane', () => {
       checkouts: () => checkouts as unknown as ReturnType<GateOptions['checkouts']>,
       invalid: async () => undefined, stopping: () => false,
     });
-    const check = (name: string) => ({ check: name, approved: 'a', on_base: 'passes' as const });
-    await gate.stop({ session: 's', claim: 'claim:1', cwd: '/w', base: 'b', checks: [check('e1'), check('e2')], stopAt: 0 });
+    const check = (name: string) => ({ check: name, approved: 'a', command: `sh '${name}'`, covers: ['R1'], depth: 'unit' as const, on_base: 'passes' as const });
+    await gate.stop({ session: 's', claim: 'claim:1', task: 'task:1', cwd: '/w', base: 'b', requirements: [], checks: [check('e1'), check('e2')], stopAt: 0 });
     await tick();
     gate.turnEnded('claim:1');
     await tick();

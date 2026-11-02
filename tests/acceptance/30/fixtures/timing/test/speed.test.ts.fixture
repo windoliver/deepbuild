@@ -1,0 +1,30 @@
+import { expect, test } from 'vitest';
+
+// A timing check (#87): a warm-up that only loads, then three timed repeats of the same work, each a test. Each
+// repeat says in the tool's own report (the test's meta, which Vitest's report carries) whether its caches were
+// flushed. TIMING_MODE picks: `flushed`, every repeat reports it was; `silent`, repeat 2 reports nothing; `printed`,
+// repeat 2 reports nothing but prints to stdout that its caches were flushed, which the runner must not read.
+const REPEATS = 3;
+const SILENT = 2;
+
+const work = (): number => {
+  const started = performance.now();
+  let sum = 0;
+  for (let i = 0; i < 200_000; i++) sum += Math.sqrt(i);
+  if (sum < 0) throw Error('unreachable');
+  return performance.now() - started;
+};
+
+test('warm-up', () => { expect(work()).toBeGreaterThanOrEqual(0); });
+
+for (let repeat = 1; repeat <= REPEATS; repeat++) {
+  test(`repeat ${repeat}`, ({ task }) => {
+    const mode = process.env.TIMING_MODE;
+    const ms = work();
+    const silent = repeat === SILENT && (mode === 'silent' || mode === 'printed');
+    if (!silent) (task.meta as Record<string, unknown>).timing = { repeat, flushed: true };
+    if (repeat === SILENT && mode === 'printed') console.log(`repeat ${repeat}: caches flushed`);
+    console.log(`repeat ${repeat}: ${ms.toFixed(3)} ms`);
+    expect(ms).toBeGreaterThanOrEqual(0);
+  });
+}

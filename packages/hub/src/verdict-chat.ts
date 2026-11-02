@@ -1,7 +1,6 @@
 // The verdict in the chat and status from the record (#83; design: The verdict in the chat). A claim's line is read
 // from the record's claims, verdicts and runs tables, never from the agent's words; a status question typed into a
 // session is answered from the same tables and the session's row, with no model call.
-import { BASE_RUN } from './gate-runner.js';
 import { verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
 
 type Obj = Record<string, unknown>;
@@ -26,17 +25,19 @@ export interface ClaimState { task: string; session: string | null; created: num
  * the time `expected` gives it.
  */
 export async function claimState(query: Query, id: string, expected: ReadonlyMap<string, number>): Promise<ClaimState | undefined> {
-  const [claim] = (await query(`SELECT id, session_id, subject_ref, created, round FROM claims WHERE id = '${sql(id)}'`)) as { id: string; session_id: string | null; subject_ref: string; created: number; round: number | null }[];
+  const [claim] = (await query(`SELECT id, session_id, subject_ref, commit_sha, created, round FROM claims WHERE id = '${sql(id)}'`)) as { id: string; session_id: string | null; subject_ref: string; commit_sha: string | null; created: number; round: number | null }[];
   if (!claim) return undefined;
   const [definition] = (await query(`SELECT requirements FROM definitions WHERE task_ref = '${sql(claim.subject_ref)}'`)) as { requirements: string | null }[];
   const fixes = (JSON.parse(definition?.requirements ?? '[]') as Obj[]).filter((r) => typeof r.check === 'string' && r.on_base !== 'passes').map((r) => String(r.check));
-  const runs = (await query(`SELECT id, check_id, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; ended: number | null; outcome: string | null }[];
+  const runs = (await query(`SELECT id, check_id, commit_sha, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; commit_sha: string | null; ended: number | null; outcome: string | null }[];
   const [verdict] = (await query(`SELECT outcome, requirements, created FROM verdicts WHERE claim_id = '${sql(id)}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as { outcome: string; requirements: string; created: number }[];
   const running = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
-  // A check's run on the merge base is its proof, not its result: a fix check with none that finished stays unproved.
-  const onBase = runs.filter((r) => r.check_id.endsWith(BASE_RUN) && ['passed', 'failed', 'overran'].includes(r.outcome ?? '')).map((r) => r.check_id.slice(0, -BASE_RUN.length));
+  // A check's run on the merge base (#31), on another commit than the claim's, is its proof, not its result: a fix
+  // check with none that finished stays unproved.
+  const isBase = (r: { commit_sha: string | null }): boolean => claim.commit_sha !== null && r.commit_sha !== null && r.commit_sha !== claim.commit_sha;
+  const onBase = runs.filter((r) => isBase(r) && ['passed', 'failed', 'overran'].includes(r.outcome ?? '')).map((r) => r.check_id);
   const unproved = new Set(fixes.filter((check) => !onBase.includes(check)));
-  const own = runs.filter((r) => !r.check_id.endsWith(BASE_RUN));
+  const own = runs.filter((r) => !isBase(r));
   const checks = own.filter((r) => r.ended !== null).map((r) => ({ check: r.check_id, outcome: r.outcome ?? 'unknown' }));
   let state: LineState;
   if (verdict) {

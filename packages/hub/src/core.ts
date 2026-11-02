@@ -20,12 +20,13 @@ import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/ext
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
-import { headTrust, openCheckouts, slot, validityGate, type Checkouts, type SessionLog } from '@deepbuild/gate';
+import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
+import { openCheckouts, slot, validityGate, type Checkouts, type SessionLog } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { after, openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
-import { predictionContradictions, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
+import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { Confirmer } from './confirm.js';
@@ -38,8 +39,8 @@ import { Holds } from './holds.js';
 import { Staging } from './staging.js';
 import { coveredBy, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { BASE_RUN, GateRunner } from './gate-runner.js';
-import { argsOf, parents, startOf } from './children.js';
+import { GateRunner } from './gate-runner.js';
+import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
@@ -168,14 +169,16 @@ interface Session {
   /** The queue's drafts in order, until the prompt hook that takes each. */
   queuedTasks?: Draft[];
 }
+/** Background work as a session's row names it: each command in backticks, cut at 80 characters (#907). */
+const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length > 80 ? `${w.slice(0, 80)}…` : w}\``).join(', ');
 /**
  * What the core follows of every session by its hooks, checked or not: its attention, its open calls, the commit
- * its worktree had, and its loop: wake-ups and crons it scheduled and background subagents still to report.
+ * its worktree had, and its loop: wake-ups and crons it scheduled, and background subagents and commands still to report, by call.
  */
 interface Live {
   agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined;
   calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; reading?: Promise<void>;
-  from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: number; looping: boolean;
+  from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number }>; looping: boolean;
   /**
    * Its turns as the verdict line judges them (#83): the turn's count and whether the stop rule reads its stop as a
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
@@ -222,7 +225,14 @@ interface Cursor { transcript: string; read: number; reached: string[]; ended?: 
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number }
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
+  /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
+  command?: string }
+/**
+ * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
+ * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
+ */
+const CHECK_DEADLINE_MS = 24 * 3_600_000;
 /** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
 const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
@@ -252,8 +262,6 @@ export class Core {
   private readonly tasks: AskTasks;
   /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
   private readonly gate: GateRunner;
-  /** Claims whose head is untrusted (#29): their checks run in the sandbox with no network and no credentials. */
-  private readonly untrusted = new Map<string, boolean>();
   /** Each session's last stop's final message, what its claims cite (#29). */
   private readonly lastMessage = new Map<string, string>();
   /** What each claim's stop waits on: its fast lane, and what the hold reports of it. */
@@ -429,9 +437,10 @@ export class Core {
     });
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
-      start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run),
+      start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run), judged: (claim) => this.judged(claim),
       checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
+      capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     });
@@ -489,13 +498,26 @@ export class Core {
     const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
-    const leases = this.leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    const leases = this.leases = await openLeases({
+      record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}), ...(this.options.plant === 'fills-every-slot' ? { plant: this.options.plant } : {}),
+    });
     for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
     // so a replica lease an earlier hub left is released.
     await leases.declare('core', REPLICA_LEASE);
     for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.every('leases', 1000, () => leases.tick());
+    // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
+    // ends mid-turn leaves them to the turn's stop.
+    this.every('background', 2000, async () => {
+      for (const [id, live] of this.live) {
+        for (const [call, b] of live.background) {
+          if (!b.group) continue;
+          try { process.kill(-b.group, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') live.background.delete(call); }
+        }
+        if (!live.background.size && live.state !== 'working') this.gate.backgroundEnded(id);
+      }
+    });
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       resources: [port, compose], leases,
@@ -547,7 +569,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = await openTrust({ record: this.record, now: this.now });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
@@ -960,7 +982,7 @@ export class Core {
 
   private liveOf(meta: HookMeta): Live {
     let live = this.live.get(meta.session);
-    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: false }));
+    if (!live) this.live.set(meta.session, (live = { agent: meta.agent, cwd: meta.cwd, last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: false }));
     return live;
   }
   /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
@@ -1005,15 +1027,23 @@ export class Core {
           const item = await this.tasks.itemOf(String(data.text));
           if (item) this.items.set(draft, item);
         }
-        // A subagent's report ends its wait; a scheduled prompt fires its one-shot crons.
-        if (from === 'subagent') live.background = Math.max(0, live.background - 1);
+        // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest;
+        // a scheduled prompt fires its one-shot crons.
+        if (from === 'subagent') {
+          const named = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(String(data.text))?.[1];
+          live.background.delete(named && live.background.has(named) ? named : [...live.background.keys()][0] ?? '');
+        }
         if (from === 'scheduled') for (const [id, cron] of live.crons) if (!cron.recurring) live.crons.delete(id);
       } else if (draft.kind === 'tool.after' && meta.loop) {
         const fact = meta.loop;
         if ('scheduled' in fact) { if (fact.scheduled !== null) live.wakeups.push(draft.ts + fact.scheduled); }
         else if ('cron' in fact) live.crons.set(fact.cron, { due: fact.due, recurring: fact.recurring });
         else if ('cancelled' in fact) live.crons.delete(fact.cancelled);
-        else live.background += 1;
+        else if (fact.background === 'subagent' || this.options.plant !== 'background-subagents-only') {
+          live.background.set(fact.call, { what: fact.what });
+          // A command also ends when its process group does, read off the agent's process tree.
+          if (fact.background === 'command') void groupUnder(meta.ppid, fact.what).then((group) => { const b = live.background.get(fact.call); if (b && group) b.group = group; });
+        }
       } else if (draft.kind === 'agent.stop') {
         await this.stopRecords(draft, meta, session);
         const loop = this.loopAt(live);
@@ -1433,7 +1463,7 @@ export class Core {
 
   /**
    * A stop's loop reading, from the session's own tool calls: looping while a wake-up or cron job it scheduled is
-   * due, or a background subagent it started hasn't reported; a loop with none left once neither holds.
+   * due, or a background subagent or command it started hasn't reported; a loop with none left once neither holds.
    */
   private loopAt(live: Live): Obj | undefined {
     const dues = [...live.wakeups, ...[...live.crons.values()].flatMap((c) => (c.due === null ? [] : [c.due]))];
@@ -1441,9 +1471,9 @@ export class Core {
     let loop: Obj | undefined;
     if (this.options.plant === 'loop-from-origins') {
       // The planted wrong program reads the loop from the prompt's origin alone.
-      loop = live.from === 'scheduled' || live.from === 'subagent' ? { state: 'looping', due: null } : live.wakeups.length || live.background ? { state: 'looping', due } : undefined;
+      loop = live.from === 'scheduled' || live.from === 'subagent' ? { state: 'looping', due: null } : live.wakeups.length || live.background.size ? { state: 'looping', due } : undefined;
     } else if (live.wakeups.length || live.crons.size) loop = { state: 'looping', due };
-    else if (live.background) loop = { state: 'looping', due: null };
+    else if (live.background.size) loop = { state: 'looping', due: null };
     else if (live.looping || live.from === 'scheduled' || live.from === 'subagent') loop = { state: 'none_left' };
     live.looping = loop?.state === 'looping';
     live.wakeups = [];
@@ -2283,12 +2313,23 @@ export class Core {
     // The chat has seen it once it is replied in time; a reply past the hold is not, and the next prompt shows the line.
     if (line && judged && Date.now() < until) judged.delivered = line;
     if (block && line) block = `${line}\n${block}`;
-    // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end.
-    if (lane && judged?.claim && !block && !proceeded) this.gate.turnEnded(judged.claim);
+    // Slow runs start when the turn ends (#29): only once the fast lane is green and this reply lets the turn end, and
+    // while the session still runs work in the background they wait for it, at most 30 minutes (#907).
+    const background = [...(this.live.get(meta.session)?.background.values() ?? [])].map((b) => b.what);
+    if (lane && judged?.claim && !block && !proceeded) {
+      this.gate.turnEnded(judged.claim, background, stopAt);
+      if (background.length && lane.slow.length) await this.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
+    } else if (!block && !background.length) this.gate.backgroundEnded(meta.session);
     if (lane && judged?.claim) {
       await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: lane.readyAt, fastEndedAt: lane.fastEndedAt, replyAt: this.now(), question: false, codeChanging: lane.fast.length + lane.slow.length > 0 }).catch(() => undefined);
     }
     return { ...(block ? { block } : {}), ...(line ? { message: line } : {}) };
+  }
+  /** Background work held a session's slow checks 30 minutes: they start now, and its row names what still runs (#907). */
+  private async backgroundCapped(session: string, checks: string[]): Promise<void> {
+    const live = this.live.get(session);
+    const still = [...(live?.background.values() ?? [])].map((b) => b.what);
+    await this.queue(() => this.appendReading(session, live?.agent ?? 'claude-code', `${checks.join(', ')} waited 30 minutes for work in the background and ${checks.length === 1 ? 'starts' : 'start'} now${still.length ? `; still running: ${backgrounded(still)}, which DeepBuild leaves running` : ''}.`));
   }
   /**
    * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one
@@ -2317,7 +2358,9 @@ export class Core {
     const late = new Promise<undefined>((done) => { timer = setTimeout(() => done(undefined), Math.max(0, until - Date.now())); });
     const ran = await Promise.race([lane.catch(() => undefined), late]).finally(() => clearTimeout(timer));
     if (!ran) return undefined;
-    const failed = this.gate.standing(claim).filter((c) => c.lane === 'fast' && (c.result === 'FAIL' || c.result === 'BLOCKED' || c.result === 'INVALID'));
+    // A send-back is a FAIL's (or a BLOCKED's cause): an INVALID names a check or a definition the agent can't change,
+    // so it is recorded for a person, never sent back.
+    const failed = this.gate.standing(claim).filter((c) => c.lane === 'fast' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
     const sendBack = ran.findings.length ? `DeepBuild sent this claim back before any check ran:\n${ran.findings.map((f) => `- ${f}`).join('\n')}`
       : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
     return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, fastEndedAt: ran.fastEndedAt, ...(sendBack ? { sendBack } : {}) };
@@ -2541,7 +2584,7 @@ export class Core {
       // A session the spool replay already brought back keeps what the replay knew of it.
       const live = this.live.get(row.id);
       if (live) live.judged = true;
-      else this.live.set(row.id, { agent: row.agent ?? 'claude-code', cwd: row.worktree && row.worktree !== '-' ? row.worktree : '', last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: 0, looping: false, turn: 0, judged: true });
+      else this.live.set(row.id, { agent: row.agent ?? 'claude-code', cwd: row.worktree && row.worktree !== '-' ? row.worktree : '', last: 0, calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: true });
     }
     // Told before the hub reports ready, so the stop that comes first is held.
     await this.askingNow();
@@ -4098,36 +4141,32 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; commit: string; base: string; cwd: string; deliverables: string[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: { check: string; approved: string; on_base: 'fails' | 'passes' }[] }): Promise<void> {
     const at = this.now();
     const lane = (async () => {
       const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, fastEndedAt: this.now(), readyAt: this.now(), findings };
-      // Head trust (#29): checks run as you only when every commit since the base was recorded from a DeepBuild
-      // session; any other head runs only in the platform sandbox, with no network and no credentials.
-      this.untrusted.set(r.claim, !(await this.trustedHead(r.cwd, r.base)));
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, cwd: r.cwd, base: r.base, checks: r.checks, stopAt: at });
+      // Every claim check runs through the command check kind (#30): hermetic, in the platform sandbox, with no network
+      // and no credentials, whatever the head's trust, which is what an untrusted head gets (#29) and more.
+      // Each check as the gate judges it: the command its run is (the approved file, run by the shell in the claim's
+      // checkout), the requirements it covers, and the deepest proof they need; each requirement with the depth and
+      // oracle its definition states.
+      const DEPTHS = ['unit', 'integration', 'journey', 'live'] as const;
+      const depth = (d: string): typeof DEPTHS[number] => (DEPTHS as readonly string[]).includes(d) ? d as typeof DEPTHS[number] : 'unit';
+      const oracle = (o: string): 'code' | 'model' | 'person' => (o === 'model' || o === 'person' ? o : 'code');
+      const requirements = r.requirements.map((q) => ({ req: q.req, depth: depth(q.depth), oracle: oracle(q.oracle), on_base: q.on_base }));
+      const checks = r.checks.map((c) => {
+        const covered = r.requirements.filter((q) => q.check === c.check);
+        const deepest = covered.map((q) => DEPTHS.indexOf(depth(q.depth))).reduce((a, b) => Math.max(a, b), 0);
+        return { ...c, command: `sh '${c.check.replaceAll("'", "'\\''")}'`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]! };
+      });
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at });
+      await this.judged(r.claim);
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
     lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
-  }
-  /**
-   * Whether a claim's head is trusted: every commit from its base to HEAD was recorded from a DeepBuild session (its
-   * commit.made) or has a push.record@1 reading whose pusher is yours. Until a forge's reader is installed (#46), no
-   * reading is there, so a commit no session recorded is untrusted, never trusted for its author or committer fields.
-   */
-  private async trustedHead(cwd: string, base: string): Promise<boolean> {
-    const head = (await headOf(cwd).catch(() => undefined))?.sha;
-    if (!head || !/^[0-9a-f]{40}$/.test(base) || head === base) return true;
-    // The commits a session's own call made, as commit.made records them (a claim's commit lands in the commits table too).
-    const recorded = ((await this.record.raw("SELECT json_extract(data, '$.sha') AS sha FROM events WHERE kind = 'commit.made'")) as { sha: string }[]).map((r) => r.sha);
-    try {
-      return headTrust({ repo: cwd, base, head, recorded, yours: [], provider: [] }).trusted;
-    } catch {
-      return false;
-    }
   }
   /** What this session read and ran, from its own tool calls in the record: what a claim's cites must name. */
   private async sessionLog(session: string): Promise<SessionLog> {
@@ -4148,17 +4187,40 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
-  private async runApproved(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null }): Promise<string> {
-    let script = join(this.root.dir, 'checks', r.approved);
-    if (this.options.plant === 'runs-disk-bytes') script = join(r.cwd, r.check);
-    else if (!existsSync(script)) {
-      mkdirSync(join(this.root.dir, 'checks'), { recursive: true, mode: 0o700 });
+  /** Each claim's last recorded verdict, by its hash: a verdict that didn't change isn't recorded again. */
+  private readonly verdictsMade = new Map<string, string>();
+  /**
+   * The claim's verdict as its runs now stand (#30): made by the verdict engine from the runs the command check kind
+   * recorded, through the gate; recorded as verdict.made once it isn't pending, and again each time it changes as
+   * pending results land. The line in the chat and the receipt read it from the record.
+   */
+  private async judged(claim: string): Promise<void> {
+    const v = this.gate.verdictOf(claim);
+    if (!v || v.outcome === 'pending') return;
+    const hash = verdictHash(v);
+    if (this.verdictsMade.get(claim) === hash) return;
+    try {
+      await recordVerdict(this.record, v, this.now());
+      this.verdictsMade.set(claim, hash);
+    } catch (error) {
+      process.stderr.write(`deep hub: ${claim}'s verdict was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+  /**
+   * A claim's check, run from its approved bytes (#303): read from the evidence store by their digest and written at
+   * the check's own path in the claim's temporary checkout, over whatever the snapshot holds there, so the file in the
+   * session's folder never runs. The run is the command check kind's (#30): `sh <check>` in that checkout, hermetic,
+   * through host@1, whatever the head's trust; an untrusted head gets no hosts and no credentials, which no drafted
+   * check has anyway.
+   */
+  private async runApproved(r: { claim: string; check: string; approved: string; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null }): Promise<string> {
+    const script = join(r.cwd, r.check);
+    if (this.options.plant !== 'runs-disk-bytes') {
+      mkdirSync(dirname(script), { recursive: true });
       writeFileSync(`${script}.tmp`, await this.store.read(r.approved), { mode: 0o500 });
       renameSync(`${script}.tmp`, script);
     }
-    // An untrusted head's run gets its checkout and nothing else: no network, no credentials, none of your files.
-    const grant = this.untrusted.get(r.claim) ? { write: [r.cwd], read: [r.cwd, script] } : RUN_AS_YOU;
-    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', script], cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null });
+    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, cwd: r.cwd, grant: RUN_AS_YOU, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null });
     return String(run);
   }
   /**
@@ -4252,7 +4314,7 @@ export class Core {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
   private async runStart(params: Obj, deadline?: number): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, command } = params;
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
     if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
@@ -4273,7 +4335,7 @@ export class Core {
     const run = await this.launch({
       run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
-      ...(deadline ? { deadline } : {}),
+      ...(deadline ? { deadline } : {}), ...(typeof command === 'string' ? { command } : {}),
     });
     return { run };
   }
@@ -4287,9 +4349,10 @@ export class Core {
   private async launch(run: Run): Promise<string> {
     this.writeJournal((runs) => { runs[run.run] = run; });
     // Every check run takes a `cpu.slot` from the kernel's lease table first, held for the claim's session (#29):
-    // at most half the cores run checks, and the slot shows in the lease table under that session.
+    // at most half the cores run checks, and the slot shows in the lease table under that session. A fast-lane run
+    // may take the slot the pool keeps for a held stop's quick checks (#907).
     const holder = await this.claimSession(run.claim);
-    const lease = await slot(this.leases, holder, run.run);
+    const lease = await slot(this.leases, holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.now();
     await this.append(this.connection('core'), {
@@ -4308,8 +4371,27 @@ export class Core {
       stderr: (chunk: Buffer) => { writes = writes.then(() => sinks[1]!.write(chunk)); },
     };
     let stop: () => void;
-    let ended: Promise<{ code: number | null; failed?: string; missing?: string }>;
-    if (this.options.plant === 'run-spawns-itself') {
+    let ended: Promise<{ code: number | null; failed?: string; missing?: string; record?: CommandRun }>;
+    if (run.command !== undefined) {
+      // A claim's check runs through the command check kind (#30): hermetic, through host@1, with its deadline and the
+      // hub going down stopping it; its output, counts, failures, attempts and stand-ins come back as one closed record.
+      // A kind a loaded package installed in place of the shipped one (`replaces`, #349) runs it instead, through the
+      // extension host, which hands it host@1: its result is check.kind@1's, with no exit, output, attempts or stand-ins.
+      const spec = { kind: 'command', runner: run.command, inputs: [run.check], depth: 'unit', oracle: 'code' as const, contract: null };
+      const deadline = run.deadline ?? CHECK_DEADLINE_MS;
+      const controller = new AbortController();
+      stop = () => controller.abort();
+      const empty = { stdout: '', stderr: '', sha256: { stdout: sha256Hex(new Uint8Array()), stderr: sha256Hex(new Uint8Array()) } };
+      const replaced = async (): Promise<boolean> => (await this.extensions?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
+      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun }> => {
+        if (!byPackage) {
+          const record = await runCommandCheck({ host: this.host, run: run.run, spec, checkout: run.cwd, deadline, env, stop: controller.signal });
+          return { code: record.exit?.code ?? null, record };
+        }
+        const result = await this.extensions!.runCheck('command', spec, { checkout: run.cwd, deadline });
+        return { code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } };
+      }).catch((error: Error) => ({ code: null, failed: error.message }));
+    } else if (this.options.plant === 'run-spawns-itself') {
       // The planted wrong program: the hub spawns the run itself, past the host and its sandbox.
       const child = spawn(run.argv[0]!, run.argv.slice(1), { cwd: run.cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
       child.stdout!.on('data', output.stdout);
@@ -4355,21 +4437,40 @@ export class Core {
         void this.supervisor.status(run.run).then((s) => (s.state === 'held' ? this.supervisor.cleanup(run.run) : undefined)).catch(() => undefined);
       };
     }
-    // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed.
+    // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed; the command
+    // check kind holds its own runs to theirs.
     let overran = false;
-    const disarm = run.deadline ? after(run.deadline, () => { overran = true; stop(); }) : undefined;
-    const done = ended.then(async ({ code, failed, missing }) => {
+    const disarm = run.deadline && run.command === undefined ? after(run.deadline, () => { overran = true; stop(); }) : undefined;
+    const done = ended.then(async ({ code, failed, missing, record }) => {
       disarm?.();
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
+      // The kind's record holds the run's output, scrubbed by value: it goes to the store as the sinks' would.
+      if (record) { output.stdout(Buffer.from(record.output.stdout)); output.stderr(Buffer.from(record.output.stderr)); }
       await writes;
       const evidence: string[] = [];
       for (const sink of sinks) {
         const put = await sink.close();
         if (put.status === 'stored') evidence.push((await this.stored(put, `${run.run}'s output`)).sha256);
       }
-      // A base run that never started is no failure on the base: it proves nothing.
-      const outcome = this.stopping ? 'stopped' : overran ? 'overran' : missing || (failed && run.check.endsWith(BASE_RUN)) ? 'missing' : code === 0 ? 'passed' : 'failed';
+      if (record) {
+        // The output's digests are the store's, the same text scrubbed once more by what the hub holds, so the verdict's
+        // evidence names what run.finished names.
+        const [stdout, stderr] = evidence;
+        if (stdout !== undefined && stderr !== undefined) record = { ...record, output: { ...record.output, sha256: { stdout, stderr } } };
+        this.gate.recorded(run.run, record);
+        const outcome = record.outcome;
+        const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
+        // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
+        findings.push(...record.evidence.filter((e) => !/^(stdout|stderr) [0-9a-f]{64}$/.test(e)).slice(0, 20));
+        const first = record.failures[0];
+        await this.finish(run, outcome, findings, evidence, {
+          tests_run: record.testsRun, passed: Math.max(0, record.testsRun - new Set(record.failures.map((f) => f.test)).size),
+          assertion: first?.assertion ? first.test : null, points_to: first ? `${first.file}:${first.line}` : null,
+        });
+        return;
+      }
+      const outcome = this.stopping ? 'stopped' : overran ? 'overran' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
       const findings = this.stopping ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [failed] : [];
       await this.finish(run, outcome, findings, evidence);
     });
@@ -4377,10 +4478,10 @@ export class Core {
     void done.finally(() => this.leases.release(lease.id, []).catch(() => undefined)).finally(() => this.runs.delete(run.run));
     return run.run;
   }
-  private async finish(run: Run, outcome: string, findings: string[], evidence: string[]): Promise<void> {
+  private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }): Promise<void> {
     await this.appendCore('run.finished', {
-      run: run.run, outcome, tests_run: 0, passed: 0, runs: 1, evidence, check: run.check, assertion: null, expected: null, actual: null, step: null,
-      points_to: null, findings, environment: `${process.platform}-${process.arch}`,
+      run: run.run, outcome, tests_run: counts.tests_run, passed: counts.passed, runs: 1, evidence, check: run.check, assertion: counts.assertion, expected: null, actual: null, step: null,
+      points_to: counts.points_to, findings, environment: `${process.platform}-${process.arch}`,
     }, { subject: run.run });
     // The journal keeps the run until its finish is durable, so a cut before then reruns it.
     await this.record.sync();

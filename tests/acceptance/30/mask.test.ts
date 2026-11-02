@@ -1,7 +1,7 @@
 // AC10, the run's half: a spec check written by hand as `pnpm test || true`, over a suite with one failing test,
 // is a run that names its mask `|| true` and never passes, while the same check as a bare `pnpm test` fails on that
 // test. The criterion names pnpm; the same rule holds for the package script npm runs, which this machine has, so
-// that variant runs too. The claim's INVALID ("exit status masked by `|| true`") and FAIL are the gate's (#29).
+// that variant runs too. The claim's INVALID ("exit status masked by `|| true`") and FAIL are the gate's (#29), in claims.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCommandCheck, type CommandRun } from '../../../packages/checks-command/src/index.ts';
 import { command, needPnpm, openWorld, outputOf, project, type World } from './helpers.ts';

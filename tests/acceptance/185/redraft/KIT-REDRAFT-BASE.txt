@@ -1,0 +1,36 @@
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/185
+
+ ❯ kit-behavior-redraft.test.ts (1 test | 1 failed) 244ms
+   ❯ #185.da9aab76 with a behavior part of three fixtures with analytic answers and tolerances, B passes and seals (1)
+     × #185.da9aab76 B, measured, passes test.sim@1's three-fixture behavior part in the kit, and the release build embedding that ledger seals it 239ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  kit-behavior-redraft.test.ts > #185.da9aab76 with a behavior part of three fixtures with analytic answers and tolerances, B passes and seals > #185.da9aab76 B, measured, passes test.sim@1's three-fixture behavior part in the kit, and the release build embedding that ledger seals it
+AssertionError: the debug build compiles: deep-show with features full,test-sim-b,test-sim-behavior: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-sim-b,test-sim-behavior failed:
++ error: none of the selected packages contains these features: test-sim-b, test-sim-behavior
++ selected packages: deep-contracts, deep-canvas-seams, deep-hook, deep-app, deep-canvas-cells, deep-canvas, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ kit-behavior-redraft.test.ts:49:112
+     47|     // 1. The debug build, and the interface as its plan publishes it.
+     48|     const debug = debugBuild(B_WITH_BEHAVIOR, dir());
+     49|     expect(debug.error, 'the debug build compiles: deep-show with feat…
+       |                                                                                                                ^
+     50|     const ledger = join(dir(), 'ledger.json');
+     51|     const [schedule, reply] = run(debug.bin, scenario(evidence(), [SCH…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:03:54
+   Duration  431ms (tests 81%, transform 12%, import 5%, worker 1%)
+
