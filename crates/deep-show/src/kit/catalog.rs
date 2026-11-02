@@ -170,7 +170,7 @@ pub fn stamped(doc: &Value) -> Value {
     if let Some(map) = payload.as_object_mut() {
         map.remove("id");
     }
-    stamp(&payload, ID, &you, "You").unwrap_or_else(|_| doc.clone())
+    stamp(payload, ID, &you, "You").unwrap_or_else(|_| doc.clone())
 }
 
 /// Whether a fixture is a document the check accepts: what the evaluation parts run on, a

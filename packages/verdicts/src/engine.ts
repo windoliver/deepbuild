@@ -280,7 +280,10 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
   } else {
     if (!need.ok) row('BLOCKED', need.reason);
     if (c.cant_fail) row('INVALID', `can't fail: ${c.cant_fail}`);
-    if (isFix(claim, c)) {
+    // Ended as the hub counts it, from every counted run: a waived failure ends runs as a failure does.
+    const state = c.state ?? (moreRuns(c, runs.map((r) => r.outcome)) > 0 ? 'running' : 'ended');
+    // A fix is judged on its base run once the check's runs have ended: while they are still to come, so is that run (#31).
+    if (isFix(claim, c) && state !== 'running') {
       const proves = 'a run of it on the merge base that fails on an assertion it names';
       if (!c.base) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves);
       else if (c.base.outcome === 'passed') row('INVALID', 'passes on the merge base, so it can\'t prove the fix', undefined, proves);
@@ -305,8 +308,6 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
     // A contract's run reports its twin and its compared counts; without that report nothing shows the twin ran.
     const unreported = c.contract ? runs.filter((r) => (r.outcome === 'passed' || r.outcome === 'failed') && !r.contract) : [];
     if (unreported.length) row('INVALID', `no contract report from ${unreported.map((r) => r.run).join(', ')}`, 'a run has no contract report');
-    // Ended as the hub counts it, from every counted run: a waived failure ends runs as a failure does.
-    const state = c.state ?? (moreRuns(c, runs.map((r) => r.outcome)) > 0 ? 'running' : 'ended');
     if (state === 'running') {
       row('pending', 'runs still to come');
     } else {

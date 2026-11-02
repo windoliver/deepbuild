@@ -1658,7 +1658,7 @@ impl<'a> Hub<'a> {
         // A doc ID is the record's ULID; the document holds it in lower case, as the ID grammar
         // reads it (a ULID's letters are case-insensitive).
         let stamped = stamp(
-            &show.document,
+            show.document.clone(),
             &show.doc.to_ascii_lowercase(),
             &writer,
             &title,

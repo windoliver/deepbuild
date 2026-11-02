@@ -122,6 +122,14 @@ pub enum Planted {
     /// #140's (tests/acceptance/140/view/README.md: Planted programs): the live GPU layer's
     /// read-back has one pixel one code value off in one channel.
     ShiftsGpuPixel,
+    /// #386's wrong programs (tests/acceptance/386/README.md: Planted programs).
+    BilinearOnly,
+    UpscaleReadsPreviousFrame,
+    ExportsLiveSurface,
+    SlowUpscale,
+    StatusBeforeUpscale,
+    StatusWithoutDepth,
+    OutlinesBeforeUpscale,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -187,6 +195,13 @@ impl Planted {
             "writes_nan" => Planted::WritesNan,
             "reads_pixels_only" => Planted::ReadsPixelsOnly,
             "shifts_gpu_pixel" => Planted::ShiftsGpuPixel,
+            "bilinear_only" => Planted::BilinearOnly,
+            "upscale_reads_previous_frame" => Planted::UpscaleReadsPreviousFrame,
+            "exports_live_surface" => Planted::ExportsLiveSurface,
+            "slow_upscale" => Planted::SlowUpscale,
+            "status_before_upscale" => Planted::StatusBeforeUpscale,
+            "status_without_depth" => Planted::StatusWithoutDepth,
+            "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,

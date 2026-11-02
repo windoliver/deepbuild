@@ -4,7 +4,7 @@
 // never imports the extension that made the runs, so the run's shape is stated here by its fields.
 import { createHash } from 'node:crypto';
 import { verdict } from '@deepbuild/verdicts';
-import type { ClaimCheck, ClaimInput, ContractResult, ContractSide, Depth, EvidenceSlot, Failure, NumericContract, Proof, Requirement, Run, RunOutcome, Source, Verdict } from '@deepbuild/verdicts';
+import type { BaseResult, ClaimCheck, ClaimInput, ContractResult, ContractSide, Depth, EvidenceSlot, Failure, NumericContract, Proof, Requirement, Run, RunOutcome, Source, Verdict } from '@deepbuild/verdicts';
 import { maskIn } from './mask.js';
 
 /** One failed test as check.kind@1 reports it. */
@@ -39,6 +39,8 @@ export interface ClaimedCheck {
   deadline?: string;
   contract?: NumericContract;
   runs: RecordedRun[];
+  /** How the check ran on the merge base (#31), for a fix check; absent while it hasn't, or couldn't. */
+  base?: BaseResult;
   /** Absent: the engine reads it from the runs; running while more start; ended once the gate starts no more (an uncounted run alone leaves it short of clean runs, never pending). */
   state?: 'running' | 'ended' | 'never_started';
   never_started?: 'quick_check_failed' | 'kept_working' | 'loop' | 'newer_claim';
@@ -110,6 +112,7 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
       ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}),
       ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : {}),
       ...(c.contract ? { contract: c.contract } : {}),
+      ...(c.base ? { base: c.base } : {}),
       ...(c.state ? { state: c.state } : {}), ...(c.never_started ? { never_started: c.never_started } : {}),
       environment: {}, tools: {},
     });

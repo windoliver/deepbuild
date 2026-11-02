@@ -4,9 +4,9 @@
 // each run records where it ran and what it needed, and each stop its held time and split. The check runs through the
 // command check kind (#30): hermetic, so it reads none of your files whatever the head's trust, its tests counted from
 // node:test's report, and the claim's verdict made from the run and recorded as verdict.made. A requirement a fix
-// proves needs its check's run on the merge base, which is #31's: with none, the verdict is INVALID naming it, recorded
-// and never sent back, since no agent can act on it.
-import { readFileSync } from 'node:fs';
+// proves needs its check's run on the merge base (#31): in a temporary checkout from the hub's own object store, and
+// a check that passes there makes the claim INVALID, recorded and never sent back, since no agent can act on it.
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -22,7 +22,7 @@ const SUITE = '.deepbuild/checks/auth.test.mjs';
  * whether it can read a file of your home folder, outside its checkout (`home: yes|no`), and one fails until
  * `src/auth.ts` says Date.now.
  */
-async function world(requirement: Record<string, unknown> = {}): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
+async function world(requirement: Record<string, unknown> = {}, rejected = "assert.match(readFileSync('src/auth.ts', 'utf8'), /Date\\.now/);"): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
   const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK, ...requirement })], deliverables: ['src/auth.ts'] })] });
   const { writeFileSync, chmodSync } = await import('node:fs');
   writeFileSync(join(w.home, 'secret.txt'), 'yours\n');
@@ -36,7 +36,7 @@ test('says whether it can read your home', () => {
   console.log(\`home: \${home}\`);
 });
 test('an expired token is rejected', () => {
-  assert.match(readFileSync('src/auth.ts', 'utf8'), /Date\\.now/);
+  ${rejected}
 });
 `);
   chmodSync(join(w.repo, CHECK), 0o755);
@@ -137,21 +137,42 @@ describe('the gate runner at a real stop', () => {
     } finally { await stopHub(hub); }
   }, 240_000);
 
-  it('a fix requirement with no run on the merge base is INVALID naming it, recorded for a person and never sent back', async () => {
-    const { hub, s, ref } = await world();
+  it('a fix check proven by its run on the merge base, which fails there on its assertion, is PASS (#31)', async () => {
+    const { hub, s, ref, repo } = await world();
     try {
+      const base = readFileSync(join(repo, '.git/refs/heads/main'), 'utf8').trim();
+      await s.read('src/auth.ts');
+      await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
+      const r = await s.stop('checkToken now compares `src/auth.ts:2` with the clock.');
+      expect(JSON.parse(r.stdout || '{}').decision, `a PASS is no send-back: ${r.stdout}`).toBeUndefined();
+      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
+      const [claim] = claimsOf(events, ref);
+      const runs = events.filter((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
+      expect(runs.map((e) => e.data.commit), 'on the snapshot, then on the merge base').toEqual([expect.not.stringMatching(base), base]);
+      const finished = runs.map((run) => events.find((e) => e.kind === 'run.finished' && e.data.run === run.data.run)?.data.outcome);
+      expect(finished, 'passed on the snapshot, failed on the base').toEqual(['passed', 'failed']);
+      const verdicts = (await settle(hub, (e) => e.some((x) => x.kind === 'verdict.made' && x.subject === `claim:${claim!.id}`), 30_000)).filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`);
+      expect(verdicts.at(-1)?.data.outcome, `the verdict: ${JSON.stringify(verdicts.at(-1)?.data.reasons)}`).toBe('PASS');
+    } finally { await stopHub(hub); }
+  }, 240_000);
+
+  it('a fix check that passes on the merge base makes the claim INVALID, recorded for a person and never sent back, and its checkouts are gone (#31)', async () => {
+    const { hub, s, ref, repo } = await world({}, 'assert.ok(true);');
+    try {
+      const base = readFileSync(join(repo, '.git/refs/heads/main'), 'utf8').trim();
       await s.read('src/auth.ts');
       await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
       const r = await s.stop('checkToken now compares `src/auth.ts:2` with the clock.');
       expect(JSON.parse(r.stdout || '{}').decision, `an INVALID is no send-back: ${r.stdout}`).toBeUndefined();
       const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
       const [claim] = claimsOf(events, ref);
-      const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
-      const finished = events.find((e) => e.kind === 'run.finished' && e.data.run === started?.data.run);
-      expect(finished?.data.outcome, 'the check itself passes on the snapshot').toBe('passed');
+      const runs = events.filter((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
+      expect(runs.map((e) => e.data.commit), 'on the snapshot, then on the merge base').toEqual([expect.not.stringMatching(base), base]);
       const verdicts = (await settle(hub, (e) => e.some((x) => x.kind === 'verdict.made' && x.subject === `claim:${claim!.id}`), 30_000)).filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`);
       expect(verdicts.at(-1)?.data.outcome, `the verdict: ${JSON.stringify(verdicts.at(-1)?.data.reasons)}`).toBe('INVALID');
-      expect(JSON.stringify(verdicts.at(-1)?.data.reasons), 'naming the base run it lacks').toContain('no run on the merge base');
+      expect(JSON.stringify(verdicts.at(-1)?.data.reasons)).toContain('passes on the merge base');
+      await settle(hub, () => readdirSync(join(hub.root, 'checkouts')).length === 0, HELD_WAIT);
+      expect(readdirSync(join(hub.root, 'checkouts')), 'no checkout is left once no run is on it').toEqual([]);
     } finally { await stopHub(hub); }
   }, 240_000);
 
