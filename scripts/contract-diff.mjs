@@ -4,7 +4,7 @@
 // A tree holds packages/contracts/ (the published data) and contracts/ (releases/, breaks/, fixtures/, shipped.json,
 // corpus.json, corpus-decisions.json). Entries are keyed <kind>:<name>: api (extension-api.json), rpc
 // (rpc-methods.json), schema (schemas/: event kinds, document kinds, sidecar formats and every other shape), interface
-// (slots/), slot (hub-slots.json rows) and registry (canvas-registries.json). A change against an earlier release is a
+// (slots/), slot (hub-slots.json rows) and registry (canvas-registries.json); canvas-schemas/ joins schema (#200). A change against an earlier release is a
 // break unless it is additive in a minor or the entry is preview; a break passes only with
 // contracts/breaks/<from>_<to>/<issue>.txt quoting each of its diff lines verbatim and a `workaround:` line. Output:
 // `PASS contracts: ...`, `FAIL contracts: <entry>: <what> (arrived in <release>)` with `diff: ...` lines under it, or
@@ -53,6 +53,8 @@ function entriesOf(base) {
     }
   };
   schemas(data('schemas'), 'schema');
+  // #200: the canvas schemas, whose lists each carry a closure, take the same history.
+  schemas(data('canvas-schemas'), 'schema');
   schemas(data('slots'), 'interface');
   for (const row of readJson(data('hub-slots.json'), [])) add('slot', `${row.method}${row.variant ? `/${row.variant}` : ''}`, { ...row, stability: row.stability ?? 'stable' }, undefined);
   for (const row of readJson(data('canvas-registries.json'), [])) add('registry', row.registry, row, row.entry);
