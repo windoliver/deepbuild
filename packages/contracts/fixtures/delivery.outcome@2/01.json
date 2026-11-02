@@ -1,0 +1,14 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "delivery.outcome",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "delivery": "01K74G3A5C7E9G1J3M5P7R9T1V",
+    "via": "on_task",
+    "outcome": "waiting"
+  }
+}
