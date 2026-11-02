@@ -347,7 +347,7 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
 }
 
 /** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands. */
-function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
+export function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);
   const wakeup = isObj(facts.wakeups) ? facts.wakeups[tool] : undefined;

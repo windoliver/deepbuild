@@ -1020,11 +1020,11 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
     }
     for (name, a) in &op.outputs {
         let path = format!("outputs/{name}");
-        let want = match (op.kind, name.as_str()) {
-            (Kind::Pass, "color") => Ty::V(Sc::F32, 4),
-            (Kind::Pass, "coverage") => Ty::F32,
-            (Kind::Material, "base_color" | "emission") => Ty::V(Sc::F32, 3),
-            (Kind::Material, "alpha" | "metallic" | "roughness") => Ty::F32,
+        // Today's outputs are the core's entries of gpu.output@1 (#200).
+        let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name) {
+            Some("vec4<f32>") => Ty::V(Sc::F32, 4),
+            Some("vec3<f32>") => Ty::V(Sc::F32, 3),
+            Some("f32") => Ty::F32,
             _ => {
                 issues.push(Issue::at_path(
                     "operator_type",
