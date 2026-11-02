@@ -227,13 +227,34 @@ fn check_by(
         )),
     }
 
-    module_checks(&lowered, sealed, &mut issues, &mut notices);
-    budget_check(&lowered, sealed, coefficients, &mut issues);
-    check_id_maps(&lowered, &mut issues);
-    check_controls(&lowered, &mut issues);
-    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
-    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
-    super::rules::check(&lowered, &mut issues);
+    // The module checks, the budget estimate and the document checks read the lowered document
+    // alone: a big document's estimate runs on its own thread, beside the others, and the
+    // findings join in this order.
+    let big = member(&lowered, "items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.len() >= SPLIT_FROM);
+    let mut tail = [Tail::Modules, Tail::Budget, Tail::Document];
+    let found = in_threads(&mut tail, if big { 2 } else { 1 }, |part| {
+        let (mut issues, mut notices) = (Vec::new(), Vec::new());
+        for step in part.iter() {
+            match step {
+                Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
+                Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
+                Tail::Document => {
+                    check_id_maps(&lowered, &mut issues);
+                    check_controls(&lowered, &mut issues);
+                    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
+                    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
+                    super::rules::check(&lowered, &mut issues);
+                }
+            }
+        }
+        (issues, notices)
+    });
+    for (i, n) in found {
+        issues.extend(i);
+        notices.extend(n);
+    }
 
     sort_issues(&mut issues);
     sort_notices(&mut notices);
@@ -263,6 +284,24 @@ fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R +
     } else {
         std::thread::available_parallelism().map_or(1, |n| n.get().min(8))
     };
+    in_threads(entries, threads, work)
+}
+
+/// The steps of a check after its items, in their order.
+#[derive(Clone, Copy)]
+enum Tail {
+    Modules,
+    Budget,
+    Document,
+}
+
+/// Runs `work` over `entries` in `threads` chunks, each on a scoped thread when there are two or
+/// more, and returns each chunk's result in order.
+fn in_threads<T: Send, R: Send>(
+    entries: &mut [T],
+    threads: usize,
+    work: impl Fn(&mut [T]) -> R + Sync,
+) -> Vec<R> {
     if threads <= 1 {
         return vec![work(entries)];
     }
