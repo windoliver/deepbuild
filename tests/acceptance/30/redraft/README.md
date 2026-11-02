@@ -69,3 +69,10 @@ On the reference Mac at `574dd22a` both tests here pass (2 of 2), while the orig
 `claims.test.ts` fails on every implementation: it expects the name in a PASS verdict's reasons, which name nothing.
 The owner decided this redraft stands for AC17's claim half; the original block is superseded and its failure is
 no finding. Neither file is edited by the implementer.
+
+## Decision (2026-11-01, the owner): AC12 moves to #1009
+
+AC12 (counting tests run adds under 1% to the check's time, judged on the reference Mac in the local preflight) is
+moved to #1009 so #30 can close on PR #986. The criterion and `budgets.test.ts` are unchanged; only its proof is
+still owed, on an idle reference Mac. The three INCONCLUSIVE runs, the reporter A/B and the idle attempt that never
+started are on #1009. Recorded by the implementer at the owner's word; no test edited.
