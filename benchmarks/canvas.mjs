@@ -157,6 +157,9 @@ const COSTS = join(root, 'crates', 'deep-canvas', 'costs.json');
 const LOOK = join(root, 'tests', 'acceptance', '379', 'fixtures', 'look.json');
 // Bytes per pixel from the passes' formats: the linear, object-ID and depth targets, and three BGRA slots.
 const PASS_BYTES = { 'scene3d.geometry': 16, 'scene3d.output': 12 };
+// Passes the bench doesn't time, which keep their declared terms (#200): the shadow map, which its scenes don't cast,
+// and the object-ID writes, which run and are timed inside scene3d.geometry, whose bytes count the object-ID target.
+const DECLARED_ONLY = ['scene3d.shadow', 'scene3d.object_id'];
 
 function sceneDoc({ title, budgetClass, size, boxes }) {
   const items = { cam: { id: 'cam', kind: 'camera@1', name: 'Camera', order: 'a0', params: { projection: 'perspective', target: [0, 1, 0], orbit: { azimuth: 30, elevation: 25, distance: 14 }, fov: 40 } } };
@@ -250,6 +253,7 @@ workloads.costs = () => {
   const declared = JSON.parse(readFileSync(COSTS, 'utf8'));
   const terms = { ...measured.terms };
   for (const [pass, bytes] of Object.entries({ ...PASS_BYTES, ...EFFECT_BYTES })) terms[pass] = { ...(declared.terms[pass] ?? {}), bytes_per_px: bytes };
+  for (const pass of DECLARED_ONLY) if (declared.terms[pass]) terms[pass] = declared.terms[pass];
   if (process.platform === 'darwin') {
     const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
     try {

@@ -65,7 +65,11 @@ export type Plant =
   // #31's: the gate's git gets the hub's whole environment, GIT_DIR and the rest included.
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
-  | 'fills-every-slot' | 'background-subagents-only';
+  | 'fills-every-slot' | 'background-subagents-only'
+  // #965's: slow checks started at every green stop, every loop check held, a loop's claim or your words mid-turn
+  // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
+  | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
+  | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -105,6 +109,8 @@ const PLANTS: readonly string[] = [
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
+  'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

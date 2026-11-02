@@ -1,27 +1,188 @@
 [
   {
-    "registry": "kind@1",
+    "registry": "builder@1",
     "owner": "core",
-    "fill": ["module", "first_party_pack", "pack"],
+    "fill": [
+      "module"
+    ],
     "resolve": "seal",
     "since": "R2",
-    "stability": "preview",
-    "tracking": "#200",
+    "stability": "stable",
     "entry": {
       "type": "object",
       "properties": {
-        "name": { "type": "string", "pattern": "^([a-z][a-z0-9_]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*$" },
-        "module": { "type": "string", "minLength": 1 },
-        "minor": { "type": "integer", "minimum": 0 }
+        "params": {
+          "type": "array"
+        },
+        "count": {}
       },
-      "required": ["name", "module", "minor"],
-      "additionalProperties": false
+      "required": [
+        "count"
+      ]
     }
   },
   {
     "registry": "check.kind.doc@1",
     "owner": "core",
-    "fill": ["module"],
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "codes": {
+          "type": "array"
+        },
+        "reads": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "codes"
+      ]
+    }
+  },
+  {
+    "registry": "device.class@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "plugin"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "object"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "plugin": {
+          "type": "boolean"
+        },
+        "fixture": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "fields",
+        "bytes"
+      ]
+    }
+  },
+  {
+    "registry": "gpu.function@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "pack"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "signature": {
+          "type": "object"
+        },
+        "exact": {
+          "type": "boolean"
+        },
+        "body": {}
+      },
+      "required": [
+        "exact",
+        "body"
+      ]
+    }
+  },
+  {
+    "registry": "gpu.output@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "read_as": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    }
+  },
+  {
+    "registry": "gpu.step@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "signature": {
+          "type": "object"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fetches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exact": {
+          "type": "boolean"
+        },
+        "impl": {
+          "type": "object"
+        },
+        "fixture": {
+          "type": "array"
+        },
+        "twin": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "weight",
+        "exact",
+        "impl"
+      ]
+    }
+  },
+  {
+    "registry": "kind@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "first_party_pack",
+      "pack"
+    ],
     "resolve": "seal",
     "since": "R2",
     "stability": "preview",
@@ -29,12 +190,97 @@
     "entry": {
       "type": "object",
       "properties": {
-        "kind": { "type": "string", "minLength": 1 },
-        "machines": { "type": "string", "enum": ["any", "same"] },
-        "codes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "name": {
+          "type": "string",
+          "pattern": "^([a-z][a-z0-9_]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*$"
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minor": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
-      "required": ["kind", "machines", "codes"],
+      "required": [
+        "name",
+        "module",
+        "minor"
+      ],
       "additionalProperties": false
+    }
+  },
+  {
+    "registry": "logic.service@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "answers_from": {
+          "type": "string"
+        },
+        "fixture": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "answers_from"
+      ]
+    }
+  },
+  {
+    "registry": "mark@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "draws": {
+          "type": "string"
+        },
+        "fixture": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "draws"
+      ]
+    }
+  },
+  {
+    "registry": "modifier@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "fixture": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "class"
+      ]
     }
   }
 ]

@@ -276,7 +276,7 @@ describe('the fold', () => {
 });
 
 describe('the hub stopped and started', () => {
-  it('an ask whose deadline passed unseen while the hub was down shows at the start and defaults only on a later call', async () => {
+  it('an ask whose deadline passed unseen while the hub was down shows at the start and defaults no sooner than its minimum notice after (#908)', async () => {
     await start('S1');
     // Filed while the hub is down: nothing has shown it.
     const raised = id(now);
@@ -290,6 +290,9 @@ describe('the hub stopped and started', () => {
     asks = planned(await openAsks({ record, now: () => clock.t++, deliver: (d) => { deliveries.push(d); }, home }));
     expect(await about(h, 'ask.defaulted')).toEqual([]);
     expect(await shown()).toContain(h);
+    await asks.tick();
+    expect(await about(h, 'ask.defaulted')).toEqual([]);
+    clock.t = T0 + DAY + 2 * HOUR;
     await asks.tick();
     expect(await about(h, 'ask.defaulted')).toHaveLength(1);
   });
@@ -309,7 +312,7 @@ describe('an ask past its deadline', () => {
     expect(await about(h, 'ask.defaulted')).toHaveLength(1);
   });
 
-  it('that joined an exception hidden by Later, when the hub was down, shows with it and defaults only on a later call', async () => {
+  it('that joined an exception hidden by Later, when the hub was down, shows with it and defaults no sooner than its minimum notice after (#908)', async () => {
     settings({});
     await start('S1');
     const { exception } = await fold('S1', ask('taste', 'S1 footer'));
@@ -319,6 +322,9 @@ describe('an ask past its deadline', () => {
     await asks.tick();
     expect(await about(joined, 'ask.defaulted')).toEqual([]);
     expect((await asks.card(exception)).folded).toContain(joined);
+    await asks.tick();
+    expect(await about(joined, 'ask.defaulted')).toEqual([]);
+    now = T0 + 4 * DAY + HOUR;
     await asks.tick();
     expect(await about(joined, 'ask.defaulted')).toHaveLength(1);
   });
@@ -337,7 +343,7 @@ describe('an ask past its deadline', () => {
     expect(await about(folded, 'ask.defaulted')).toHaveLength(1);
   });
 
-  it('first shown by one call defaults on the next, even on a clock that has not moved', async () => {
+  it('first shown by one call defaults no sooner than its minimum notice after, not on the next call (#908)', async () => {
     await start('S1');
     const raised = id(now);
     await record.append(core('S1'), { v: 1, id: raised, kind: 'ask.created', ts: now, data: ask('taste', 'header', { deadline: T0 + HOUR, default: 'green' }) });
@@ -345,6 +351,9 @@ describe('an ask past its deadline', () => {
     now = T0 + 2 * HOUR;
     await asks.tick();
     expect(await about(h, 'ask.defaulted')).toEqual([]);
+    await asks.tick();
+    expect(await about(h, 'ask.defaulted')).toEqual([]);
+    now = T0 + 3 * HOUR;
     await asks.tick();
     expect(await about(h, 'ask.defaulted')).toHaveLength(1);
   });
