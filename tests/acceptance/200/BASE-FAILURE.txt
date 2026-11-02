@@ -1,0 +1,266 @@
+Base commit: a7e140b2 ("Merge pull request #1007 from windoliver/worktree-github-issue-386-b3be11")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/200 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked), node_modules from npm ci and the
+workspaces built (npm run build --workspaces, for the contract step and the conformance package).
+All 54 tests fail, each at a named assertion, none fails to load (the suite typechecks with
+node node_modules/typescript/bin/tsc -p tests/acceptance/200/tsconfig.json):
+- 41 tests use a test feature this suite chooses (test-mark, test-mark-dot-9, test-mark-no-planted, test-mark-no-since,
+  test-mark-dot-twice, test-mark-binds-author, test-mark-schema-changed, test-mark-v2, test-mode-*, test-fill-*,
+  test-gpustep*, test-leave-out-effects, test-steps-in-effects, test-rules-*, test-registries-load), none of which exists
+  at the base, so cargo refuses the build ("none of the selected packages contains this feature") and each test fails at
+  "the binary builds" (vitest reports the six AC11 planted-kit tests, which share one cause, under one block below).
+  No merge-base build was reached.
+- core-registries.test.ts, AC13 listing and gpu.test.ts, the Map's 3D test: the r2 build seals, but `registries`
+  (deep://registries) is no call at the base: the scenario answers bad_input.
+- core-registries.test.ts, AC13's three planted kits: `--planted kit_admits_all:<registry>` is no planted name at the
+  base: bad_input, exit 2, not the seal's refusal.
+- closures.test.ts: scripts/canvas-closures.mjs doesn't exist (node: Cannot find module), the lint lane runs no closure
+  lint or drift test, and contract-diff.mjs doesn't cover packages/contracts/canvas-schemas/: its dump has no
+  test.lists@1 entry and a member added to the exhaustive test_dir passes ("PASS contracts: 0 entries of R3 against R2").
+Date: 2026-11-02T08:28:03Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (Mac15,7)
+Exit code: 1
+Paths below have the checkout's absolute path replaced by <worktree>.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/200
+
+ ❯ gpu.test.ts (7 tests | 7 failed) 17451ms
+   ❯ AC9 #200.8a760791 gpu.step@1 takes entries only from canvas modules, each with its exactness fixture and planted twin (2)
+     × AC9 a pack that declares a gpu.step@1 entry is refused at its pack check, naming the registry and fill: module 8ms
+     × AC9 a canvas module's step with its exactness fixture and planted twin seals; without either it is refused at the seal, naming the step 5ms
+   ❯ AC10 #200.70cd4e69 the GPU layer's registries are the core's, and a build without effects still compiles every base step (5)
+     × AC10 a test build of the core and scene3d without effects seals with every base step in gpu.step@1, today's outputs in gpu.output@1, each the core's entry with since and digest, and gpu.function@1 with its kit 4ms
+     × AC10 each base step's planted wrong twin is refused by its exactness fixture, naming the step; add@1's twin saturates where i32 wraps 2ms
+     × AC10 the core's own shadow and object-ID passes compile from gpu.step@1's steps in the build without effects 4ms
+     × AC10 a planted layout in which the effects module fills the base steps leaves the shadow pass with unresolved steps, so the seal refuses it, naming the first step, and fails this 3ms
+     × AC10 the Map's 3D fixture gives the same pixel hash and every operator key as on the merge base, before the lists opened 1352ms
+ ❯ closures.test.ts (8 tests | 8 failed) 1337ms
+   ❯ AC4 #200.be794a42 the closure lint and the reference table's drift test (5)
+     × AC4 a test schema enum test_mode: a | b with no closure fails the closure lint, naming test_mode 69ms
+     × AC4 the same enum closed {reason: determinism, reopens_if: a third mode} passes 44ms
+     × AC4 an enum that names the registry test.mark@1 passes only while that registry is declared 53ms
+     × AC4 the reference table passes the drift test as committed, and a planted row that calls the budget class a registry fails it, naming the list and both closures 424ms
+     × AC4 the local preflight's lint lane runs the closure lint and the drift test, and both pass on the checkout 46ms
+   ❯ AC15 #200.81fef80c a closed canvas list says whether it is extensible or exhaustive (3)
+     × AC15 a list marked extensible takes a new value in a minor, and a reader at the earlier minor maps it to the list's unknown 184ms
+     × AC15 a list marked exhaustive refuses a new value without a new major, naming the list 152ms
+     × AC15 a closed closure without the mark fails the closure lint, naming the list 43ms
+ ❯ listing.test.ts (5 tests | 5 failed) 185ms
+   ❯ AC6 #200.400aefd1 deep://registries lists test.mark@1 with its history, and its entry schema is a contract entry (2)
+     × AC6 deep://registries lists test.mark@1 with since, digest, fill, and each entry's origin and kit result 9ms
+     × AC6 a changed entry schema under test.mark@1 fails the contract diff against the previous release, naming the registry; test.mark@2 with replaced_by on test.mark@1 passes 20ms
+   ❯ AC7 #200.d93a89e4 deep://registries lists the hub's check.kind@1 slot beside the registries, marked as a slot (3)
+     × AC7 check.kind@1 is listed beside test.mark@1, marked as a slot, with the hub-slot table's interface and planted fills, and its installed fills command and journey each with its kit result 4ms
+     × AC7 a listing that leaves hub slots out fails, naming the slot 3ms
+     × AC7 a listing that lists journey as an entry of a registry fails, naming the slot 3ms
+ ❯ module.test.ts (8 tests | 8 failed) 276ms
+   ❯ AC1 #200.eec510cf a test module declares test.mark@1 with its schema, kit and planted wrong entry; module and pack entries go through the kit (4)
+     × AC1 test.mark@1 is declared by test.mark with {name, size: u32}, filled by modules and packs, a kit refusing a size over 64 and the planted {size: 65} it refuses; dot {size: 8} seals 8ms
+     × AC1 dot joins test.mark's interface digest: the digest changes when dot's size becomes 9, and only then 4ms
+     × AC1 testpack.ring {size: 12} passes the kit at pack check and resolves in a document that names the pack, and in no document that doesn't 3ms
+     × AC1 a pack entry {size: 80} is refused at pack check, naming test.mark@1, the entry and the kit's rule 4ms
+   ❯ AC2 #200.d373067b the seal refuses a kit that admits its planted entry, a registry without planted entry or since, and a second module entry of one name (4)
+     × AC2 a planted kit that admits every entry makes the seal refuse test.mark@1, naming the registry and its planted entry {size: 65}; the same build seals with its own kit 3ms
+     × AC2 a registry declared with no planted wrong entry is refused at the seal, naming it 3ms
+     × AC2 a registry declared with no since is refused at the seal, naming it 3ms
+     × AC2 a second module entry named dot is refused at the seal, naming both modules 2ms
+ ❯ core-registries.test.ts (12 tests | 12 failed) 10132ms
+   ❯ AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists (8)
+     × AC11 mark@1, builder@1, modifier@1 and check.kind.doc@1 seal in the build of the core and scene3d with today's entries as the core's, and every planted wrong entry of the six registries is refused by its kit, naming it 8ms
+     × AC11 every content key is unchanged: a 2D board and the Map's 3D evaluate to the merge base's keys 4ms
+     × AC11 a planted kit that admits every entry of mark@1 makes the seal refuse mark@1, naming it 2ms
+     × AC11 a planted kit that admits every entry of builder@1 makes the seal refuse builder@1, naming it 4ms
+     × AC11 a planted kit that admits every entry of modifier@1 makes the seal refuse modifier@1, naming it 4ms
+     × AC11 a planted kit that admits every entry of check.kind.doc@1 makes the seal refuse check.kind.doc@1, naming it 1ms
+     × AC11 a planted kit that admits every entry of gpu.output@1 makes the seal refuse gpu.output@1, naming it 4ms
+     × AC11 a planted kit that admits every entry of gpu.function@1 makes the seal refuse gpu.function@1, naming it 3ms
+   ❯ AC13 #200.a10a9ddf the planted entries of device classes, logic services and GPU steps fail their kits (4)
+     × AC13 the device class whose fixture differs at 30 and 120 fps, the plug-in class of 257 B, the logic service that answers after its next step and the saturating i32 add each fail their registry's kit, naming the entry 1298ms
+     × AC13 a kit that admits every planted entry of device.class@1 is refused at the seal, naming device.class@1 17ms
+     × AC13 a kit that admits every planted entry of logic.service@1 is refused at the seal, naming logic.service@1 15ms
+     × AC13 a kit that admits every planted entry of gpu.step@1 is refused at the seal, naming gpu.step@1 17ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 115ms
+   ❯ AC12 #200.100d2ed4 budgets on the reference Mac against the merge base: registry checks at startup, pack entry lookups, nothing per frame (3)
+     × AC12 the seal's registry checks for 10 registries of 100 entries with their kits add under 5 ms at startup, compared with the merge base 9ms
+     × AC12 resolving a pack entry by interned name takes under 1000 ns 3ms
+     × AC12 nothing runs per frame: after six frames at six times the seal and its registry checks have run once, with the same times, and the pack was checked once 4ms
+ ❯ opening.test.ts (2 tests | 2 failed) 157ms
+   ❯ AC5 #200.f96a94c8 opening a closed list as a registry changes no content key, golden or snapshot (2)
+     × AC5 test_mode: a | b opened as test.mode@1 keeps every content key, golden and snapshot of the module's fixtures byte for byte 7ms
+     × AC5 a planted opening that renumbers the entries changes the key of an item that uses b and fails, naming the entry and the item 3ms
+ ❯ names.test.ts (3 tests | 3 failed) 149ms
+   ❯ AC3 #200.31886771 a pack never takes a first-party name, and an entry the working agent wrote under binds author never makes a PASS alone (3)
+     × AC3 a pack entry named dot, without its pack's name, is refused at pack check, naming the first-party entry dot it would take 8ms
+     × AC3 the working agent's own entry, in a registry that binds author, is the only cover of a requirement, which stays INCONCLUSIVE with an approval ask, never PASS 3ms
+     × AC3 the control: the same claim in a registry that binds all passes, so the INCONCLUSIVE comes from the author binding alone 3ms
+ ❯ fillers.test.ts (4 tests | 4 failed) 161ms
+   ❯ AC8 #200.a1b12018 a registry more than one module fills is the core's, and an entry joins only its own module's digest (4)
+     × AC8 the core declares test.shape@1 and a build without b seals; a's interface digest is byte-identical with and without b 7ms
+     × AC8 a planted seal that hashes every entry of test.shape@1 into each filler's digest changes a's and fails this 5ms
+     × AC8 a test module c that declares test.part@1 is refused at the seal when b fills an entry in it, naming test.part@1, c and b 2ms
+     × AC8 a planted seal that takes b's entry into c's digest seals that build and fails this 3ms
+ ❯ kit-rules.test.ts (2 tests | 2 failed) 128ms
+   ❯ AC14 #200.78025075 every kit rule is isolated by its own planted wrong entry (2)
+     × AC14 a kit of three rules whose only planted entry breaks two of them is refused by the preflight's kit, naming every rule no entry isolates 7ms
+     × AC14 the same kit with one planted entry per rule passes, each entry failing its rule alone with that rule's message 8ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 54: each test and why it failed (first assertion, and cargo's or the script's line) ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC12 #200.100d2ed4 budgets on the reference Mac against the merge base: registry checks at startup, pack entry lookups, nothing per frame > AC12 the seal's registry checks for 10 registries of 100 entries with their kits add under 5 ms at startup, compared with the merge base
+  AssertionError: the binary builds: deep-show with features core,test-registries-load: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-registries-load
+ FAIL  budgets.test.ts > AC12 #200.100d2ed4 budgets on the reference Mac against the merge base: registry checks at startup, pack entry lookups, nothing per frame > AC12 resolving a pack entry by interned name takes under 1000 ns
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  budgets.test.ts > AC12 #200.100d2ed4 budgets on the reference Mac against the merge base: registry checks at startup, pack entry lookups, nothing per frame > AC12 nothing runs per frame: after six frames at six times the seal and its registry checks have run once, with the same times, and the pack was checked once
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  closures.test.ts > AC4 #200.be794a42 the closure lint and the reference table's drift test > AC4 a test schema enum test_mode: a | b with no closure fails the closure lint, naming test_mode
+  AssertionError: test_mode with no closure: one FAIL closures line names test_mode
+  exit 1
+  Error: Cannot find module '<worktree>/scripts/canvas-closures.mjs'
+ FAIL  closures.test.ts > AC4 #200.be794a42 the closure lint and the reference table's drift test > AC4 the same enum closed {reason: determinism, reopens_if: a third mode} passes
+  AssertionError: test_mode closed by determinism: exit 0
+  exit 1
+  Error: Cannot find module '<worktree>/scripts/canvas-closures.mjs'
+ FAIL  closures.test.ts > AC4 #200.be794a42 the closure lint and the reference table's drift test > AC4 an enum that names the registry test.mark@1 passes only while that registry is declared
+  AssertionError: test_mode closed by test.mark@1, declared: exit 0
+  exit 1
+  Error: Cannot find module '<worktree>/scripts/canvas-closures.mjs'
+ FAIL  closures.test.ts > AC4 #200.be794a42 the closure lint and the reference table's drift test > AC4 the reference table passes the drift test as committed, and a planted row that calls the budget class a registry fails it, naming the list and both closures
+  AssertionError: the canvas reference's table against the closure data, as committed: exit 0
+  exit 1
+  Error: Cannot find module '<worktree>/scripts/canvas-closures.mjs'
+ FAIL  closures.test.ts > AC4 #200.be794a42 the closure lint and the reference table's drift test > AC4 the local preflight's lint lane runs the closure lint and the drift test, and both pass on the checkout
+  AssertionError: the lint lane runs canvas-closures.mjs closures and drift: expected [ false, false ] to deeply equal [ true, true ]
+ FAIL  closures.test.ts > AC15 #200.81fef80c a closed canvas list says whether it is extensible or exhaustive > AC15 a list marked extensible takes a new value in a minor, and a reader at the earlier minor maps it to the list's unknown
+  AssertionError: the contract history covers the canvas schema test.lists@1: expected [] to have a length of 1 but got +0
+ FAIL  closures.test.ts > AC15 #200.81fef80c a closed canvas list says whether it is extensible or exhaustive > AC15 a list marked exhaustive refuses a new value without a new major, naming the list
+  AssertionError: up added to the exhaustive test_dir under test.lists@1 fails the contract step
+  exit 0
+  PASS contracts: 0 entries of R3 against R2
+ FAIL  closures.test.ts > AC15 #200.81fef80c a closed canvas list says whether it is extensible or exhaustive > AC15 a closed closure without the mark fails the closure lint, naming the list
+  AssertionError: test_tone closed with no mark: one FAIL closures line names test_tone
+  exit 1
+  Error: Cannot find module '<worktree>/scripts/canvas-closures.mjs'
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 mark@1, builder@1, modifier@1 and check.kind.doc@1 seal in the build of the core and scene3d with today's entries as the core's, and every planted wrong entry of the six registries is refused by its kit, naming it
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-leave-out-effects
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 every content key is unchanged: a 2D board and the Map's 3D evaluate to the merge base's keys
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-leave-out-effects
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 a planted kit that admits every entry of mark@1 makes the seal refuse mark@1, naming it
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 a planted kit that admits every entry of builder@1 makes the seal refuse builder@1, naming it
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 a planted kit that admits every entry of modifier@1 makes the seal refuse modifier@1, naming it
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 a planted kit that admits every entry of check.kind.doc@1 makes the seal refuse check.kind.doc@1, naming it
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 a planted kit that admits every entry of gpu.output@1 makes the seal refuse gpu.output@1, naming it
+ FAIL  core-registries.test.ts > AC11 #200.bd93251c the core's mark, builder, modifier and document check kind registries, opened from today's lists > AC11 a planted kit that admits every entry of gpu.function@1 makes the seal refuse gpu.function@1, naming it
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-leave-out-effects
+ FAIL  core-registries.test.ts > AC13 #200.a10a9ddf the planted entries of device classes, logic services and GPU steps fail their kits > AC13 the device class whose fixture differs at 30 and 120 fps, the plug-in class of 257 B, the logic service that answers after its next step and the saturating i32 add each fail their registry's kit, naming the entry
+  AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ FAIL  core-registries.test.ts > AC13 #200.a10a9ddf the planted entries of device classes, logic services and GPU steps fail their kits > AC13 a kit that admits every planted entry of device.class@1 is refused at the seal, naming device.class@1
+  AssertionError: device.class@1 with a kit that admits every entry:
+    device.class@1: the line is not the seal's refusal: {"ok":false,"code":"bad_input"}: expected [ Array(1) ] to deeply equal []
+ FAIL  core-registries.test.ts > AC13 #200.a10a9ddf the planted entries of device classes, logic services and GPU steps fail their kits > AC13 a kit that admits every planted entry of logic.service@1 is refused at the seal, naming logic.service@1
+  AssertionError: logic.service@1 with a kit that admits every entry:
+    logic.service@1: the line is not the seal's refusal: {"ok":false,"code":"bad_input"}: expected [ Array(1) ] to deeply equal []
+ FAIL  core-registries.test.ts > AC13 #200.a10a9ddf the planted entries of device classes, logic services and GPU steps fail their kits > AC13 a kit that admits every planted entry of gpu.step@1 is refused at the seal, naming gpu.step@1
+  AssertionError: gpu.step@1 with a kit that admits every entry:
+    gpu.step@1: the line is not the seal's refusal: {"ok":false,"code":"bad_input"}: expected [ Array(1) ] to deeply equal []
+ FAIL  fillers.test.ts > AC8 #200.a1b12018 a registry more than one module fills is the core's, and an entry joins only its own module's digest > AC8 the core declares test.shape@1 and a build without b seals; a's interface digest is byte-identical with and without b
+  AssertionError: the binary builds: deep-show with features core,test-fill-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-fill-a
+ FAIL  fillers.test.ts > AC8 #200.a1b12018 a registry more than one module fills is the core's, and an entry joins only its own module's digest > AC8 a planted seal that hashes every entry of test.shape@1 into each filler's digest changes a's and fails this
+  AssertionError: the binary builds: deep-show with features core,test-fill-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-fill-a
+ FAIL  fillers.test.ts > AC8 #200.a1b12018 a registry more than one module fills is the core's, and an entry joins only its own module's digest > AC8 a test module c that declares test.part@1 is refused at the seal when b fills an entry in it, naming test.part@1, c and b
+  AssertionError: the binary builds: deep-show with features core,test-fill-b-part,test-fill-c: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains these features: test-fill-b-part, test-fill-c
+ FAIL  fillers.test.ts > AC8 #200.a1b12018 a registry more than one module fills is the core's, and an entry joins only its own module's digest > AC8 a planted seal that takes b's entry into c's digest seals that build and fails this
+  AssertionError: the binary builds: deep-show with features core,test-fill-b-part,test-fill-c: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains these features: test-fill-b-part, test-fill-c
+ FAIL  gpu.test.ts > AC9 #200.8a760791 gpu.step@1 takes entries only from canvas modules, each with its exactness fixture and planted twin > AC9 a pack that declares a gpu.step@1 entry is refused at its pack check, naming the registry and fill: module
+  AssertionError: the binary builds: deep-show with features core,test-gpustep: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-gpustep
+ FAIL  gpu.test.ts > AC9 #200.8a760791 gpu.step@1 takes entries only from canvas modules, each with its exactness fixture and planted twin > AC9 a canvas module's step with its exactness fixture and planted twin seals; without either it is refused at the seal, naming the step
+  AssertionError: the binary builds: deep-show with features core,test-gpustep: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-gpustep
+ FAIL  gpu.test.ts > AC10 #200.70cd4e69 the GPU layer's registries are the core's, and a build without effects still compiles every base step > AC10 a test build of the core and scene3d without effects seals with every base step in gpu.step@1, today's outputs in gpu.output@1, each the core's entry with since and digest, and gpu.function@1 with its kit
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-leave-out-effects
+ FAIL  gpu.test.ts > AC10 #200.70cd4e69 the GPU layer's registries are the core's, and a build without effects still compiles every base step > AC10 each base step's planted wrong twin is refused by its exactness fixture, naming the step; add@1's twin saturates where i32 wraps
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-leave-out-effects
+ FAIL  gpu.test.ts > AC10 #200.70cd4e69 the GPU layer's registries are the core's, and a build without effects still compiles every base step > AC10 the core's own shadow and object-ID passes compile from gpu.step@1's steps in the build without effects
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-leave-out-effects
+ FAIL  gpu.test.ts > AC10 #200.70cd4e69 the GPU layer's registries are the core's, and a build without effects still compiles every base step > AC10 a planted layout in which the effects module fills the base steps leaves the shadow pass with unresolved steps, so the seal refuses it, naming the first step, and fails this
+  AssertionError: the binary builds: deep-show with features r2,test-leave-out-effects,test-steps-in-effects: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains these features: test-leave-out-effects, test-steps-in-effects
+ FAIL  gpu.test.ts > AC10 #200.70cd4e69 the GPU layer's registries are the core's, and a build without effects still compiles every base step > AC10 the Map's 3D fixture gives the same pixel hash and every operator key as on the merge base, before the lists opened
+  AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ FAIL  kit-rules.test.ts > AC14 #200.78025075 every kit rule is isolated by its own planted wrong entry > AC14 a kit of three rules whose only planted entry breaks two of them is refused by the preflight's kit, naming every rule no entry isolates
+  AssertionError: the binary builds: deep-show with features core,test-rules-shared: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-rules-shared
+ FAIL  kit-rules.test.ts > AC14 #200.78025075 every kit rule is isolated by its own planted wrong entry > AC14 the same kit with one planted entry per rule passes, each entry failing its rule alone with that rule's message
+  AssertionError: the binary builds: deep-show with features core,test-rules-isolated: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-rules-isolated
+ FAIL  listing.test.ts > AC6 #200.400aefd1 deep://registries lists test.mark@1 with its history, and its entry schema is a contract entry > AC6 deep://registries lists test.mark@1 with since, digest, fill, and each entry's origin and kit result
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  listing.test.ts > AC6 #200.400aefd1 deep://registries lists test.mark@1 with its history, and its entry schema is a contract entry > AC6 a changed entry schema under test.mark@1 fails the contract diff against the previous release, naming the registry; test.mark@2 with replaced_by on test.mark@1 passes
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  listing.test.ts > AC7 #200.d93a89e4 deep://registries lists the hub's check.kind@1 slot beside the registries, marked as a slot > AC7 check.kind@1 is listed beside test.mark@1, marked as a slot, with the hub-slot table's interface and planted fills, and its installed fills command and journey each with its kit result
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  listing.test.ts > AC7 #200.d93a89e4 deep://registries lists the hub's check.kind@1 slot beside the registries, marked as a slot > AC7 a listing that leaves hub slots out fails, naming the slot
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  listing.test.ts > AC7 #200.d93a89e4 deep://registries lists the hub's check.kind@1 slot beside the registries, marked as a slot > AC7 a listing that lists journey as an entry of a registry fails, naming the slot
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  module.test.ts > AC1 #200.eec510cf a test module declares test.mark@1 with its schema, kit and planted wrong entry; module and pack entries go through the kit > AC1 test.mark@1 is declared by test.mark with {name, size: u32}, filled by modules and packs, a kit refusing a size over 64 and the planted {size: 65} it refuses; dot {size: 8} seals
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  module.test.ts > AC1 #200.eec510cf a test module declares test.mark@1 with its schema, kit and planted wrong entry; module and pack entries go through the kit > AC1 dot joins test.mark's interface digest: the digest changes when dot's size becomes 9, and only then
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  module.test.ts > AC1 #200.eec510cf a test module declares test.mark@1 with its schema, kit and planted wrong entry; module and pack entries go through the kit > AC1 testpack.ring {size: 12} passes the kit at pack check and resolves in a document that names the pack, and in no document that doesn't
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  module.test.ts > AC1 #200.eec510cf a test module declares test.mark@1 with its schema, kit and planted wrong entry; module and pack entries go through the kit > AC1 a pack entry {size: 80} is refused at pack check, naming test.mark@1, the entry and the kit's rule
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  module.test.ts > AC2 #200.d373067b the seal refuses a kit that admits its planted entry, a registry without planted entry or since, and a second module entry of one name > AC2 a planted kit that admits every entry makes the seal refuse test.mark@1, naming the registry and its planted entry {size: 65}; the same build seals with its own kit
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  module.test.ts > AC2 #200.d373067b the seal refuses a kit that admits its planted entry, a registry without planted entry or since, and a second module entry of one name > AC2 a registry declared with no planted wrong entry is refused at the seal, naming it
+  AssertionError: the binary builds: deep-show with features core,test-mark-no-planted: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark-no-planted
+ FAIL  module.test.ts > AC2 #200.d373067b the seal refuses a kit that admits its planted entry, a registry without planted entry or since, and a second module entry of one name > AC2 a registry declared with no since is refused at the seal, naming it
+  AssertionError: the binary builds: deep-show with features core,test-mark-no-since: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark-no-since
+ FAIL  module.test.ts > AC2 #200.d373067b the seal refuses a kit that admits its planted entry, a registry without planted entry or since, and a second module entry of one name > AC2 a second module entry named dot is refused at the seal, naming both modules
+  AssertionError: the binary builds: deep-show with features core,test-mark-dot-twice: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark-dot-twice
+ FAIL  names.test.ts > AC3 #200.31886771 a pack never takes a first-party name, and an entry the working agent wrote under binds author never makes a PASS alone > AC3 a pack entry named dot, without its pack's name, is refused at pack check, naming the first-party entry dot it would take
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  names.test.ts > AC3 #200.31886771 a pack never takes a first-party name, and an entry the working agent wrote under binds author never makes a PASS alone > AC3 the working agent's own entry, in a registry that binds author, is the only cover of a requirement, which stays INCONCLUSIVE with an approval ask, never PASS
+  AssertionError: the binary builds: deep-show with features core,test-mark-binds-author: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark-binds-author
+ FAIL  names.test.ts > AC3 #200.31886771 a pack never takes a first-party name, and an entry the working agent wrote under binds author never makes a PASS alone > AC3 the control: the same claim in a registry that binds all passes, so the INCONCLUSIVE comes from the author binding alone
+  AssertionError: the binary builds: deep-show with features core,test-mark: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mark
+ FAIL  opening.test.ts > AC5 #200.f96a94c8 opening a closed list as a registry changes no content key, golden or snapshot > AC5 test_mode: a | b opened as test.mode@1 keeps every content key, golden and snapshot of the module's fixtures byte for byte
+  AssertionError: the binary builds: deep-show with features core,test-mode-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mode-registry
+ FAIL  opening.test.ts > AC5 #200.f96a94c8 opening a closed list as a registry changes no content key, golden or snapshot > AC5 a planted opening that renumbers the entries changes the key of an item that uses b and fails, naming the entry and the item
+  AssertionError: the binary builds: deep-show with features core,test-mode-closed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+  + error: none of the selected packages contains this feature: test-mode-closed
+
+ Test Files  10 failed (10)
+      Tests  54 failed (54)
+   Duration  31.48s (tests 99%, transform 1%)

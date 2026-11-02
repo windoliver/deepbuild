@@ -28,6 +28,8 @@ export interface LineState {
   round?: number;
   /** Checks still running, each with the time it is expected to take, in seconds, where known. */
   running: { check: string; about_s: number | null }[];
+  /** Checks held in their places for a loop, each with what it waits for (#965). */
+  held?: { check: string; reason: string }[];
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -63,6 +65,7 @@ function parts(s: LineState): Parts {
     }
   } else if (s.outcome === 'FAIL') outcome = `sent back ${Math.max(1, s.round ?? 1)}/${ROUNDS}`;
   else outcome = `${s.outcome} ${count}`;
+  if (s.held?.length) running.push(`${s.held.length} check${s.held.length === 1 ? ' waits' : 's wait'} for the loop`, [...new Set(s.held.map((h) => h.reason))].join(', '));
   let cause = '';
   let points = '';
   if (s.outcome === 'FAIL' || s.outcome === 'BLOCKED') {
