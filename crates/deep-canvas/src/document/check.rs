@@ -246,7 +246,9 @@ fn check_by(
                     check_controls(&lowered, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
-                    super::rules::check(&lowered, &mut issues);
+                    super::rules::check(&lowered, &mut issues, |entries, work| {
+                        in_chunks(entries, work)
+                    });
                 }
             }
         }

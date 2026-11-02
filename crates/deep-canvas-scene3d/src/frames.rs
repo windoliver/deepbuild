@@ -83,13 +83,33 @@ pub struct Frames {
 impl Frames {
     /// Compiles `doc` (stamped) and evaluates it whole at t = 0.
     pub fn new(doc: &Value, look: &Look3, labels: &mut Labels) -> Result<Frames, Refused> {
+        Frames::with_program(doc, Frames::compile(doc)?, look, labels)
+    }
+
+    /// The motion program [`Frames::new`] compiles of `doc`, which reads neither the look nor
+    /// the atlas: the live view compiles it while the document is checked.
+    pub fn compile(doc: &Value) -> Result<Program, Refused> {
         let map = doc.as_object().ok_or(Refused {
             code: "out_of_range",
             path: String::new(),
         })?;
-        let program = Program::compile(map).map_err(|r| Refused {
+        Program::compile(map).map_err(|r| Refused {
             code: r.code,
             path: r.path,
+        })
+    }
+
+    /// [`Frames::new`] with `program` from [`Frames::compile`] of `doc`, or of `doc` before its
+    /// `size` was set, which the program doesn't read.
+    pub fn with_program(
+        doc: &Value,
+        program: Program,
+        look: &Look3,
+        labels: &mut Labels,
+    ) -> Result<Frames, Refused> {
+        let map = doc.as_object().ok_or(Refused {
+            code: "out_of_range",
+            path: String::new(),
         })?;
         let scene = evaluate_compiled(map, &program, 0, look, labels)?;
         let state = program.state();
