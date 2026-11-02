@@ -818,13 +818,22 @@ pub fn corners(model: &Affine3) -> Vec<Vec3> {
 
 /// [`corners`], pushed onto `out`.
 pub(crate) fn corners_into(model: &Affine3, out: &mut Vec<Vec3>) {
+    out.extend(corners8(model));
+}
+
+/// [`corners`], in an array.
+pub(crate) fn corners8(model: &Affine3) -> [Vec3; 8] {
+    let mut out = [[0.0; 3]; 8];
+    let mut k = 0;
     for x in [-0.5, 0.5] {
         for y in [-0.5, 0.5] {
             for z in [-0.5, 0.5] {
-                out.push(apply(model, [x, y, z]));
+                out[k] = apply(model, [x, y, z]);
+                k += 1;
             }
         }
     }
+    out
 }
 
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`.
