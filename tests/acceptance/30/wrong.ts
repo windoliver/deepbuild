@@ -9,10 +9,17 @@ import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '../.
 import type { CommandRun } from '../../../packages/checks-command/src/index.ts';
 import { filesIn } from './helpers.ts';
 
-/** AC14: a scrub of every passed value, short and plain ones included. */
+/**
+ * AC14: a scrub of every passed value, short and plain ones included, over everything the run keeps: its output,
+ * and each failure's file, message and stack (so its place reads `src/cart.[redacted].ts:30` too).
+ */
 export function scrubsEveryPassedValue(r: CommandRun, passed: Record<string, string>): CommandRun {
   const scrub = (text: string): string => Object.values(passed).reduce((t, v) => t.split(v).join('[redacted]'), text);
-  return { ...r, output: { ...r.output, stdout: scrub(r.output.stdout), stderr: scrub(r.output.stderr) } };
+  return {
+    ...r,
+    output: { ...r.output, stdout: scrub(r.output.stdout), stderr: scrub(r.output.stderr) },
+    failures: r.failures.map((f) => ({ ...f, file: scrub(f.file), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
+  };
 }
 
 /** AC11: a runner that records only the declared paths as read (each declared glob's files in the checkout). */
@@ -46,6 +53,22 @@ export function countsFromPrintedOutput(r: CommandRun): CommandRun {
 /** AC19: a runner that takes a silent report as complete. */
 export function silentReportAsComplete(r: CommandRun): CommandRun {
   return { ...r, contract: r.contract?.map((c) => ({ ...c, compared: c.compared ?? c.size, largest_error: c.largest_error ?? 0 })) ?? null };
+}
+
+/**
+ * AC19: a runner that takes a silent repeat as flushed: a repeat whose report says nothing is recorded flushed, as
+ * every repeat whose report says so is, so no repeat of a check that never reports "not flushed" is recorded not
+ * flushed.
+ */
+export function silentRepeatAsFlushed(r: CommandRun): CommandRun {
+  return { ...r, timing: r.timing?.map((t) => ({ ...t, flushed: true })) ?? null };
+}
+
+/** AC19: a runner that reads whether a repeat's caches were flushed from the test's printed output. */
+export function flushedFromPrintedOutput(r: CommandRun): CommandRun {
+  const printed = new Set<number>();
+  for (const m of `${r.output.stdout}\n${r.output.stderr}`.matchAll(/repeat (\d+): caches flushed/g)) printed.add(Number(m[1]));
+  return { ...r, timing: r.timing?.map((t) => (printed.has(t.repeat) ? { ...t, flushed: true } : t)) ?? null };
 }
 
 /**

@@ -1,0 +1,28 @@
+// A first-party test package (#30 AC5, the slot's half): a test check kind installed in place of the shipped
+// command check kind (`replaces: ["command"]`). It runs each check with the command check kind's own runner
+// (imported lazily from the built entry command.json names, so registering needs no import), starting the check's
+// process only through the host@1 the hub hands it in ctx.host (README, The claim's surface: AC5), and builds no
+// sandbox of its own: whatever confines the check is the supervisor's. command.json also names the variables the
+// test passes its check (the hub's socket, a path outside the run's folders).
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
+interface Settings { command: string; env: Record<string, string> }
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** A run handle, run:<ULID>. */
+function runHandle(): string {
+  let id = '';
+  for (let t = BigInt(Date.now()), i = 0; i < 10; i++, t >>= 5n) id = CROCKFORD[Number(t & 31n)] + id;
+  for (const byte of randomBytes(16)) id += CROCKFORD[byte & 31];
+  return `run:${id}`;
+}
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./command.json', import.meta.url), 'utf8'));
+  deep.registerCheck('command', async (spec: any, ctx: any) => {
+    if (!ctx || typeof ctx.host?.start !== 'function') throw Error('BLOCKED: the hub handed this check kind no ctx.host (host@1) to start its process through');
+    const { runCommandCheck } = await import(settings.command);
+    const r = await runCommandCheck({ host: ctx.host, run: runHandle(), spec, checkout: ctx.checkout, deadline: ctx.deadline, env: settings.env });
+    return { outcome: r.outcome, testsRun: r.testsRun, failures: r.failures, evidence: r.evidence, read: r.read, mask: r.mask };
+  });
+}
