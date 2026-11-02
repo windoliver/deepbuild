@@ -54,6 +54,9 @@ pub struct Request {
     pub config: Config,
     /// Where each blended group's two inputs go (#385).
     pub blend_inputs: Option<PathBuf>,
+    /// Each `vector@1` item's import, and how its write draws (#398).
+    pub vectors: crate::Vectors,
+    pub write: deep_canvas_vector::Write,
 }
 
 /// The Vello CPU version Cargo.lock holds, which every answer names (a test holds it to the lock).
@@ -444,12 +447,18 @@ impl<C: Glyphs> Painter<'_, C> {
     }
 }
 
-/// The document's evaluated items at `t`.
-fn items_at(doc: &Map<String, Value>, t: i64) -> Result<Map<String, Value>, Value> {
+/// The document's evaluated items at `t`, each vector item drawn as marks2d's items (#398).
+fn items_at(
+    doc: &Map<String, Value>,
+    t: i64,
+    vectors: &crate::Vectors,
+    write: deep_canvas_vector::Write,
+) -> Result<Map<String, Value>, Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
     let mut state = program.state();
     program.evaluate(t, eval::Validity::Full, &mut state);
-    Ok(eval::items(doc, &program, &state))
+    let items = eval::items(doc, &program, &state);
+    Ok(deep_canvas_vector::lower_items(&items, vectors, write))
 }
 
 /// Draws a `raster` request and writes its PNG.
@@ -460,7 +469,7 @@ pub fn answer(req: Request) -> Value {
 }
 
 fn draw(req: &Request) -> Result<Value, Value> {
-    let items = items_at(&req.doc, req.t)?;
+    let items = items_at(&req.doc, req.t, &req.vectors, req.write)?;
     let palette = palette_of(&req.look, req.view.theme);
     let record = Record {
         pinned: req.t,
@@ -731,12 +740,14 @@ fn any_roles(value: &Value, palette: &mut scene::Palette) {
 }
 
 /// An item's outline as subpaths of verbs and points in u, its offset applied.
-pub fn geometry(doc: &Map<String, Value>, item: &str) -> Value {
+pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) -> Value {
     let run = || -> Result<Value, Value> {
-        let items = items_at(doc, 0)?;
+        let items = items_at(doc, 0, vectors, deep_canvas_vector::Write::Honest)?;
         let mut palette = scene::Palette::new();
         palette.insert("ground".into(), [255, 255, 255]);
         any_roles(&Value::Object(doc.clone()), &mut palette);
+        // And those of the items a vector draws as.
+        any_roles(&Value::Object(items.clone()), &mut palette);
         let frame = scene::frame(doc, &items, &palette, &Record::default(), 1.0)
             .map_err(|r| refused(r.code, &r.path))?;
         let mut subpaths: Vec<Value> = Vec::new();
@@ -752,34 +763,50 @@ pub fn geometry(doc: &Map<String, Value>, item: &str) -> Value {
                 } => (geometry.verbs.clone(), *offset),
                 _ => continue,
             };
-            let m = |p: [f64; 2]| json!([p[0] + by[0], p[1] + by[1]]);
-            // One subpath per move: its verb names, its points and whether it closes.
-            let mut paths: Vec<(Vec<&str>, Vec<Value>, bool)> = Vec::new();
-            for v in &verbs {
-                if let Verb::Move(_) = v {
-                    paths.push((Vec::new(), Vec::new(), false));
-                }
-                let Some((names, points, closed)) = paths.last_mut() else {
-                    continue;
-                };
-                let (name, at): (&str, &[[f64; 2]]) = match v {
-                    Verb::Move(p) => ("M", std::slice::from_ref(p)),
-                    Verb::Line(p) => ("L", std::slice::from_ref(p)),
-                    Verb::Quad(a, b) => ("Q", &[*a, *b]),
-                    Verb::Cubic(a, b, c) => ("C", &[*a, *b, *c]),
-                    Verb::Close => ("Z", &[]),
-                };
-                names.push(name);
-                points.extend(at.iter().map(|p| m(*p)));
-                *closed |= name == "Z";
-            }
-            for (names, points, closed) in paths {
-                subpaths.push(json!({"closed": closed, "verbs": names, "points": points}));
-            }
+            subpaths.extend(subpaths_of(&verbs, by));
         }
-        Ok(json!({"ok": true, "subpaths": subpaths}))
+        let mut answer = json!({"ok": true, "subpaths": subpaths});
+        // A vector's parts, each with its read-only id, source and box (#398).
+        if let (Some(found), Some(v)) = (vectors.get(item), doc_item(doc, item)) {
+            answer["parts"] =
+                deep_canvas_vector::parts_json(v, found, |verbs| subpaths_of(verbs, [0.0, 0.0]));
+        }
+        Ok(answer)
     };
     match run() {
         Ok(v) | Err(v) => v,
     }
+}
+
+fn doc_item<'a>(doc: &'a Map<String, Value>, id: &str) -> Option<&'a Value> {
+    doc.get("items")?.get(id)
+}
+
+/// Verbs moved by `by` as #373's sub-paths: one per move, its verb names, its points and whether
+/// it closes.
+fn subpaths_of(verbs: &[Verb], by: [f64; 2]) -> Vec<Value> {
+    let m = |p: [f64; 2]| json!([p[0] + by[0], p[1] + by[1]]);
+    let mut paths: Vec<(Vec<&str>, Vec<Value>, bool)> = Vec::new();
+    for v in verbs {
+        if let Verb::Move(_) = v {
+            paths.push((Vec::new(), Vec::new(), false));
+        }
+        let Some((names, points, closed)) = paths.last_mut() else {
+            continue;
+        };
+        let (name, at): (&str, &[[f64; 2]]) = match v {
+            Verb::Move(p) => ("M", std::slice::from_ref(p)),
+            Verb::Line(p) => ("L", std::slice::from_ref(p)),
+            Verb::Quad(a, b) => ("Q", &[*a, *b]),
+            Verb::Cubic(a, b, c) => ("C", &[*a, *b, *c]),
+            Verb::Close => ("Z", &[]),
+        };
+        names.push(name);
+        points.extend(at.iter().map(|p| m(*p)));
+        *closed |= name == "Z";
+    }
+    paths
+        .into_iter()
+        .map(|(names, points, closed)| json!({"closed": closed, "verbs": names, "points": points}))
+        .collect()
 }

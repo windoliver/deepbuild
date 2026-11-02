@@ -23,6 +23,11 @@ fn read(store: Option<&Path>, hash: &str, path: &str) -> Result<Vec<u8>, Value> 
     Ok(bytes)
 }
 
+/// The bytes of `hash` in the store, checked against it, if it holds them: a vector's SVG (#398).
+pub fn bytes(store: Option<&Path>, hash: &str) -> Option<Vec<u8>> {
+    read(store, hash, "").ok()
+}
+
 /// Every mark set column of `doc` whose `data` is `{sidecar: sha256}`, read from the store, checked
 /// and written in place as the base64 the column would otherwise carry.
 pub fn sidecars(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<(), Value> {

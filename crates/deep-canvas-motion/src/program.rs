@@ -28,6 +28,8 @@ pub struct Field {
     pub width: usize,
     /// A bool channel's field, written as `true` or `false`.
     pub boolean: bool,
+    /// An enum channel's field, written as its label in the motion's labels.
+    pub enumerated: bool,
     /// Something writes it; a field only a driver reads is never written back.
     pub written: bool,
 }
@@ -183,7 +185,7 @@ impl Program {
         for channel in &motion.channels {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
             let slot = program.slot(items_json, &channel.target.owner, &channel.target, width);
-            program.mark_bool(slot, channel.ty);
+            program.mark_type(slot, channel.ty);
             program.mark_written(slot);
             program.channels.push((slot, width));
             program.values.push(values);
@@ -200,7 +202,7 @@ impl Program {
                         }
                         let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
                         let slot = program.slot(items_json, &binding.item, &channel.target, width);
-                        program.mark_bool(slot, channel.ty);
+                        program.mark_type(slot, channel.ty);
                         program.mark_written(slot);
                         writes.push(Write {
                             channel: c,
@@ -256,13 +258,20 @@ impl Program {
         Ok(program)
     }
 
-    /// Marks the field at `slot` as a bool channel's, so it is written as a bool.
-    fn mark_bool(&mut self, slot: usize, ty: doc::ValueType) {
-        if ty == doc::ValueType::Bool {
-            if let Some(f) = self.fields.iter_mut().find(|f| f.slot == slot) {
-                f.boolean = true;
-            }
+    /// Marks the field at `slot` as a bool or an enum channel's, so it is written as one.
+    fn mark_type(&mut self, slot: usize, ty: doc::ValueType) {
+        if let Some(f) = self.fields.iter_mut().find(|f| f.slot == slot) {
+            f.boolean |= ty == doc::ValueType::Bool;
+            f.enumerated |= ty == doc::ValueType::Enum;
         }
+    }
+
+    /// An enum field's label for the index a slot holds.
+    pub fn label(&self, slot: f64) -> &str {
+        self.motion
+            .labels
+            .get(slot.max(0.0) as usize)
+            .map_or("", String::as_str)
     }
 
     /// Marks the field at `slot` as one something writes.
@@ -313,6 +322,7 @@ impl Program {
             slot,
             width,
             boolean: false,
+            enumerated: false,
             written: false,
         });
         slot
@@ -424,6 +434,7 @@ impl Program {
                 let run = &state.slots[f.slot..f.slot + f.width];
                 let value = match run {
                     [one] if f.boolean => Datum::Bool(*one >= 0.5),
+                    [one] if f.enumerated => Datum::Text(self.label(*one).to_string()),
                     [one] => Datum::Num(*one),
                     many => Datum::Nums(many.to_vec()),
                 };

@@ -2133,6 +2133,16 @@ pub(crate) fn resolve(
         }
         ["adjust", name] if ADJUST_FIELDS.contains(name) => Ok(()),
         [field] if ITEM_OWN_FIELDS.contains(field) => Ok(()),
+        // A part of a module's kind, such as a vector's SVG ids (#398): its role, opacity and
+        // offset. The parts come from the module's import, so the module resolves the part.
+        ["parts", _, "role" | "opacity" | "at", ..]
+            if !matches!(
+                kind_text(target).map(|text| lookup(kinds, text)),
+                Some(Lookup::Known { .. })
+            ) =>
+        {
+            Ok(())
+        }
         _ => unreachable(),
     }
 }
