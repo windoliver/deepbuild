@@ -53,7 +53,7 @@ export type Declared = Polled | { variant: 'stream'; name: string };
 /** The handle `deep.secret(name)` gives: it names the secret, never holds its value. */
 export const handleOf = (name: string): string => `secret:${name}`;
 /** Where a package's secret is kept in the secret store. */
-export const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/${name}`;
+const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/${name}`;
 
 /** The largest answer a source call takes. */
 const ANSWER = 1024 * 1024;
@@ -124,7 +124,7 @@ export const nodeHttp: HttpClient = async (request, signal) => {
   return { status: res.status, headers, body: Buffer.concat(chunks).toString('utf8') };
 };
 /** No OS secret store this host can reach: nothing is held, so what needs a secret is BLOCKED, and none can be entered. */
-export const noSecrets: SecretStore = {
+const noSecrets: SecretStore = {
   get: async () => undefined,
   set: async () => { throw Error('this host has no secret store to keep a secret in'); },
   delete: async () => undefined,

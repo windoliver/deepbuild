@@ -323,8 +323,19 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
         else row('FAIL', `failed on every real run: ${what}`, undefined, 'a commit whose runs pass');
       } else if (fails.length) {
         flaky = true;
-        row('INCONCLUSIVE', `passed and failed on real runs of one commit; failing runs ${fails.map((r) => r.run).join(', ')}`,
+        const tests = sorted(fails.flatMap((r) => r.failures.map((f) => f.test)));
+        row('INCONCLUSIVE', `passed and failed on real runs of one commit; failing runs ${fails.map((r) => r.run).join(', ')}${tests.length ? ` (failing tests: ${tests.join(', ')})` : ''}`,
           'passed and failed on real runs of one commit', 'a waiver, a quarantine, your answer or a commit that changes its inputs');
+      }
+      // A test that failed and passed on its attempts within one run is a pass and a fail on the commit (#30): the
+      // tool's own retry hid nothing. The item names the test, never the run.
+      for (const r of runs) {
+        const outcomes = new Map<string, Set<string>>();
+        for (const a of r.attempts ?? []) outcomes.set(a.test, (outcomes.get(a.test) ?? new Set<string>()).add(a.outcome));
+        for (const test of sorted([...outcomes].filter(([, o]) => o.size > 1).map(([t]) => t))) {
+          row('INCONCLUSIVE', `${test} failed and passed on its attempts within ${r.run}`, `${test} failed and passed on its attempts within one run`,
+            'a waiver, a quarantine, your answer or a commit that changes its inputs');
+        }
       }
       const stopped = runs.some((r) => r.outcome === 'stopped');
       if (stopped) row('INCONCLUSIVE', 'a run was stopped before it ended', undefined, 'a run that ends');
@@ -562,7 +573,18 @@ function requirementOutcome(
       approvals.set(approve, [...(approvals.get(approve) ?? []), q.req]);
       asked = true;
     }
-  } else own = 'PASS';
+  } else {
+    // A requirement about what real users get isn't met by a stand-in (#30): a counted run whose setup seeded a
+    // table nothing outside the test, fixture and script folders writes leaves it INCONCLUSIVE, naming the table.
+    const standIns = q.real_users === true
+      ? sorted(atDepth.flatMap((j) => j.runs.flatMap((r) => (r.stand_ins ?? []).map((s) => `${j.check.check}'s run seeded \`${s.table}\` from \`${s.by}\` as a stand-in`))))
+      : [];
+    if (standIns.length) {
+      own = 'INCONCLUSIVE';
+      why = `${q.req} is about what real users get, and ${standIns.join(', ')}`;
+      closes = 'a run whose setup writes nothing the code outside the test, fixture and script folders doesn\'t, or your answer';
+    } else own = 'PASS';
+  }
 
   const outcome = highest([own, ...covering.map((j) => j.result.outcome)]);
   if (why && own !== 'PASS') {

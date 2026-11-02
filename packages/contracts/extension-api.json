@@ -839,6 +839,34 @@
     }
   },
   {
+    "method": "deep.call",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#103",
+    "digest": "d1:1c5f7641c708c1fdfa6ed560da1c214609cc402478dd05977cbdc3a94d07251b",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$"
+        },
+        "input": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "input"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerAction",
     "variants": null,
     "since": "R2",

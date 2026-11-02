@@ -42,6 +42,7 @@ fn manifest() -> Manifest {
         feature: "effects".into(),
         license: "Apache-2.0".into(),
         implements: "effects@1".into(),
+        implementation: deep_canvas::registry::Implementation::reference("effects", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
     }
 }
 

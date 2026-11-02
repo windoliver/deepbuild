@@ -2229,6 +2229,68 @@ export interface CommitMade {
   evidence?: Array<string>;
 }
 
+/** composition.reopened@1 */
+export interface CompositionReopened {
+  v: 1;
+  id: string;
+  kind: "composition.reopened";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    piece: string;
+    provider: string;
+    version: string;
+  };
+}
+
+/** composition.tested@1 */
+export interface CompositionTested {
+  v: 1;
+  id: string;
+  kind: "composition.tested";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+    version: string;
+    passed: boolean;
+  };
+}
+
+/** composition.used@1 */
+export interface CompositionUsed {
+  v: 1;
+  id: string;
+  kind: "composition.used";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+  };
+}
+
 /** decision.applied@1 */
 export interface DecisionApplied {
   v: 1;
@@ -2710,6 +2772,20 @@ export interface EvidenceStored {
 
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
+
+/** extension.compose@1 */
+export interface ExtensionCompose {
+  provides?: Array<{
+    schema?: unknown;
+    digests?: { [key: string]: string };
+  }>;
+  uses?: Array<{
+    schema?: unknown;
+    from?: string;
+    optional?: boolean;
+  }>;
+  pieces?: Array<string>;
+}
 
 /** extension.contract@1 */
 export interface ExtensionContract {

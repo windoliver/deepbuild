@@ -208,7 +208,7 @@ expects that twin to fail the criterion's judge (`judges.ts`) with the problem n
 | AC6 `#350.7884cbb1` | ungranted host refused; one capability.refused by `ext:<id>` with clause and digest; token nowhere; writer-from-arguments host fails | `refusals.test.ts` AC6 (3): the refusal; the token on disk and read back; wrong program `writer-from-arguments` | none | fails |
 | AC7 `#350.b5c18039` | quota and schema refusals each recorded, naming the quota or the field | `refusals.test.ts` AC7 (1) | none | fails |
 | AC8 `#350.170a7bd3` | z-notes whole, a and b equal shares; by-ID host and keep-a-whole host fail, naming the extension | `join.test.ts` AC8 (3): the cut; wrong programs `join-by-id-alone` and `cut-in-join-order` | none | fails |
-| AC9 `#350.bff15b51` | removing B detaches A's use before B's handlers stop; stop-B-first host fails, naming the edge | `staged.test.ts` AC9 (2): the removal; wrong program `stop-provider-first` | none | fails |
+| AC9 `#350.bff15b51` | removing B detaches A's use before B's handlers stop; stop-B-first host fails, naming the edge | `ac9-redraft/ac9.test.ts` (2), the blind redraft for #103's dispute (its README): the removal; wrong program `stop-provider-first` | none | fails |
 
 ## Wrong programs
 
@@ -251,7 +251,7 @@ No half of a criterion here waits on an unbuilt issue. So a PR for #350 that pas
 - The test files:
   - `replies.test.ts`: AC1, AC2
   - `join.test.ts`: AC3, AC8
-  - `staged.test.ts`: AC4, AC9
+  - `staged.test.ts`: AC4; AC9's first draft is retired for the blind redraft in `ac9-redraft/`, since it removed the provider of a required use with no ask, which #103 forbids
   - `actions.test.ts`: AC5
   - `refusals.test.ts`: AC6, AC7
 - `fixtures/`: the test packages, their `.ts` code carrying a `.fixture` suffix so this suite and `tsc` skip it:

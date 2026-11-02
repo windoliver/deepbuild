@@ -4,24 +4,24 @@
 // admitted, and its expected time, `on_base: fails` checks first and then the rest, shortest first; the rest wait in
 // the slow lane. The stop's hold replies once, when every admitted check has ended or the hold ends; slow checks join
 // the queue only once the fast lane is green and the reply ends the turn, and the newest snapshot wins the queue. Each
-// check's verdict is made from its runs by the verdict engine's run counts, and every stop's held time is recorded
+// check's verdict is made from its recorded runs by the verdict engine (claimVerdict, #30), and every stop's held time is recorded
 // with its split. Background work the session still runs holds its slow checks in their places until it ends, and at
 // most 30 minutes from the stop (#907). Pure rules live in @deepbuild/gate; this module drives them with the hub's runs
 // and record.
 import { rmSync } from 'node:fs';
-import { checkoutOf, snapshotOf } from '@deepbuild/gate';
+import { checkoutOf, claimVerdict, snapshotOf, type ClaimRequirement, type RecordedRun } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
+import type { Result, Verdict } from '@deepbuild/verdicts';
 
-
-/** A check of a claim, as the definition locks it: its approved bytes and its lane facts. */
-export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes' }
+/** A check of a claim, as the definition locks it: its approved bytes, the command its run is, the requirements it covers, and its lane facts. */
+export interface ClaimCheck { check: string; approved: string; command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes' }
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -30,16 +30,15 @@ export interface GateOptions {
   hold_ms: number;
   /** Background work held a session's slow checks for 30 minutes and they start now, the work still running (#907). */
   capped?(session: string, checks: string[]): void;
+  /** A run of the claim ended: its verdict as it now stands is read and, once made, recorded (#30). */
+  judged?(claim: string): Promise<void>;
 }
 /** The longest background work holds a stop's slow checks, from that stop (#907). */
 const BACKGROUND_MS = 30 * 60_000;
 
 /** A claim's check on one snapshot: its runs, its lane, and whether a newer claim outdated it. */
 interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; outcome: string | null; running: boolean; stale: boolean }
-interface Claim { claim: string; session: string; cwd: string; checkout: string | null; entries: Map<string, Entry> }
-
-const RESULT = (outcome: string | null): 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'pending' =>
-  outcome === null ? 'pending' : outcome === 'passed' ? 'PASS' : outcome === 'failed' || outcome === 'overran' ? 'FAIL' : outcome === 'missing' ? 'BLOCKED' : 'INCONCLUSIVE';
+interface Claim { claim: string; session: string; task: string; cwd: string; checkout: string | null; snapshot: string; requirements: ClaimRequirement[]; entries: Map<string, Entry> }
 
 export class GateRunner {
   /** Each session's claims, oldest first. */
@@ -48,7 +47,37 @@ export class GateRunner {
   private readonly queue = new Map<string, Entry>();
   /** Each session's slow checks held for its background work, with the timer that starts them 30 minutes from the stop. */
   private readonly holding = new Map<string, { entries: Entry[]; timer: NodeJS.Timeout }>();
+  /** Each run's record as the command check kind closed it (#30), by run handle: what the claim's verdict is made from. */
+  private readonly records = new Map<string, RecordedRun>();
   constructor(private readonly o: GateOptions) {}
+
+  /** A run's closed record, kept for the verdicts of the claim it ran for. */
+  recorded(run: string, record: RecordedRun): void {
+    this.records.set(run, record);
+  }
+  /**
+   * The claim's verdict as it stands: its checks' recorded runs judged by the verdict engine through the gate's
+   * claimVerdict (#30), each check ended once no run of it is going or queued; undefined for a claim this runner
+   * never saw. Pending while runs are still to come.
+   */
+  verdictOf(claim: string): Verdict | undefined {
+    const c = this.claimOf(claim);
+    if (!c) return undefined;
+    const queued = new Set(this.queue.values());
+    return claimVerdict({
+      claim: c.claim, agent: `session:${c.session.replace(/[^0-9A-Za-z]/g, '')}`, repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(),
+      checks: [...c.entries.values()].map((e) => ({
+        check: e.check.check, command: e.check.command, source: 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
+        runs: e.runs.flatMap((run) => { const r = this.records.get(run); return r ? [r] : []; }),
+        // Running while going or queued; ended once runs exist and none goes; never started once a newer claim took its place.
+        ...(e.running || queued.has(e) ? { state: 'running' as const } : e.runs.length ? { state: 'ended' as const } : e.stale ? { state: 'never_started' as const, never_started: 'newer_claim' as const } : {}),
+      })),
+    });
+  }
+  private claimOf(claim: string): Claim | undefined {
+    for (const list of this.claims.values()) { const c = list.find((x) => x.claim === claim); if (c) return c; }
+    return undefined;
+  }
 
   /** The median of a check's last clean runs on this machine, from the record; null before it has run clean. */
   private async expectedMs(check: string): Promise<number | null> {
@@ -62,11 +91,11 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; cwd: string; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; fastEndedAt: number; readyAt: number }> {
     const snapshot = await snapshotOf(r.cwd);
     const checkout = await checkoutOf(r.cwd, snapshot);
     const readyAt = this.o.now();
-    const claim: Claim = { claim: r.claim, session: r.session, cwd: r.cwd, checkout, entries: new Map() };
+    const claim: Claim = { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, checkout, snapshot, requirements: r.requirements, entries: new Map() };
     const older = this.claims.get(r.session) ?? [];
     this.claims.set(r.session, [...older, claim]);
     // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue.
@@ -91,10 +120,11 @@ export class GateRunner {
     const runs = fast.map(async ({ c, ms }) => {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], outcome: null, running: true, stale: false };
       claim.entries.set(c.check, e);
-      const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null });
+      const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null });
       e.runs.push(run);
       e.outcome = await this.o.ended(run);
       e.running = false;
+      await this.o.judged?.(r.claim);
     });
     for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: snapshot, lane: 'slow', runs: [], outcome: null, running: false, stale: false });
     // The hold replies once: when every admitted check has ended, or when the hold ends.
@@ -104,13 +134,12 @@ export class GateRunner {
     return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, fastEndedAt: this.o.now(), readyAt };
   }
 
-  /** The claim's checks as they stand: each check's result, and the slow checks still to start. */
-  standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: ReturnType<typeof RESULT>; stale: boolean }[] {
-    for (const list of this.claims.values()) {
-      const c = list.find((x) => x.claim === claim);
-      if (c) return [...c.entries.values()].map((e) => ({ check: e.check.check, lane: e.lane, result: RESULT(e.outcome), stale: e.stale }));
-    }
-    return [];
+  /** The claim's checks as they stand: each check's result as the verdict engine judges its runs, and the slow checks still to start. */
+  standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: Result; stale: boolean }[] {
+    const c = this.claimOf(claim);
+    if (!c) return [];
+    const v = this.verdictOf(claim);
+    return [...c.entries.values()].map((e) => ({ check: e.check.check, lane: e.lane, result: v?.checks.find((x) => x.check === e.check.check)?.outcome ?? 'pending', stale: e.stale }));
   }
 
   /**
@@ -166,9 +195,9 @@ export class GateRunner {
       const cwd = c.checkout ??= await checkoutOf(c.cwd, e.commit).catch(() => null);
       if (!cwd) { e.outcome = 'missing'; continue; }
       e.running = true;
-      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: await this.expectedMs(e.check.check) });
+      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: await this.expectedMs(e.check.check) });
       e.runs.push(run);
-      void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      void this.o.ended(run).then(async (outcome) => { e.outcome = outcome; e.running = false; await this.o.judged?.(e.claim); void this.pump(); this.cleanup(c); });
     }
   }
   /** A claim's checkout is removed once no run on it is running or queued. */

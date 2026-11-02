@@ -971,6 +971,28 @@
         "p50Ms": 180000
       },
       "initialReason": "Issue #140 first measurement: the merge base has no platform seams. One run of every seam's conformance suite (node scripts/seams.mjs: the GPU seam's suite and gated fixtures, the network seam's suite through its test relay, the window and input seams' capabilities and the text, accessibility and headless suites), its start to its last line; the issue caps the suites at 3 minutes, which tests/acceptance/140/platform/budgets.test.ts judges on five runs. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "composition-wire",
+      "command": [
+        "node",
+        "benchmarks/composition.mjs",
+        "wire"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads two providers in the hub, then installs 20 users, each with a use of both providers' readings, so each install type-checks and wires two edges. The issue's 100 ms to wire a composition at install stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "composition-edge-read",
+      "command": [
+        "node",
+        "benchmarks/composition.mjs",
+        "edge-read"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads a provider and a user in the hub, then the user reads the provider's reading through its edge 1,000 times from inside its own code. The issue's 1 ms a reading adds across an edge stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

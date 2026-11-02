@@ -1,0 +1,20 @@
+[package]
+name = "deep-codecs"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #498: the decode worker, the trusted ring's host for the codecs seam (canvas primitives:
+# Decode worker), and the encode tool's own process (Export: encode job). Probing, decoding and
+# proxies run only in the worker, a process of its own with no network; encoding runs only in the
+# encode tool's. A binary that links this crate starts each as a copy of itself with the argument
+# `decode-worker` or `encode-tool` and hands that process to `serve`.
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"

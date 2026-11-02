@@ -142,7 +142,9 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
       const final: Attempt = l.type === 'test:pass' ? 'passed' : 'failed';
       const before = lastAttemptOnly ? 0 : retries;
       ran.push({ test: l.name ?? '', file, attempts: [...Array<Attempt>(before).fill('failed'), final], meta: l.meta ?? {} });
-      if (lastAttemptOnly && final === 'passed') continue;
+      // A test that passed on its retry is the tool's pass: its earlier attempts' errors are attempts, not failures of
+      // the run (#30 AC17: a pass and a fail on the commit, which the verdict engine reads from the attempts).
+      if (final === 'passed') continue;
       for (const e of l.errors) failures.push(failure(checkout, l.name ?? '', file, e));
     } else if (l.type === 'file:ran' || l.type === 'test:listed' || l.type === 'test:left') {
       // A file outside the checkout isn't the check's: nothing of it is listed.
