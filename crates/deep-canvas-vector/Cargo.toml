@@ -1,0 +1,15 @@
+[package]
+name = "deep-canvas-vector"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #398: the vector module (canvas primitives: Vector and formula `vector@1`): SVG imported
+# as static paths whose colors map to roles and whose ids become parts, drawn as marks2d's items.
+# roxmltree reads the XML alone; every number the import computes goes through deep-canvas's ops.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+roxmltree = { version = "0.21", default-features = false, features = ["std"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
