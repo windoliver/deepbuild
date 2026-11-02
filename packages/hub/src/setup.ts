@@ -12,10 +12,11 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { draftAskSettings } from '@deepbuild/asks';
-import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
+import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
 import { Confirmer } from './confirm.js';
 import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
+import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
@@ -99,6 +100,10 @@ async function install(cli: string, quiet = false): Promise<number> {
     const groups = ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000)));
     for (const file of [settingsFile, userFile]) keepOriginal(root, record, file);
     saveRecord(root, record);
+    if (hasCodex()) {
+      // A Codex file it can't read refuses Codex's part alone: Claude Code's goes on.
+      try { installCodex(root, record, cli, hook); } catch (e) { process.stderr.write(`Codex was left out of setup: ${e instanceof Error ? e.message : String(e)}. Fix the file and run deep setup again.\n`); }
+    }
     const settings = withStatusLine(root, withHooks(root, planned.get(settingsFile)!, groups), `${q(hook)} statusline`);
     writeJson(settingsFile, settings);
     noteWritten(record, settingsFile);
@@ -170,6 +175,26 @@ function lenient(text: string): { value: Obj } | { refused: string } {
     return { refused: `isn't JSON: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
+/**
+ * Codex's entries after yours in its hooks.json, and DeepBuild's MCP server in its config.toml (#39): each written only
+ * when it isn't there yet, through a link if the file is one, so a second setup leaves the bytes and Codex's trust alone.
+ */
+function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli: string, built: string): void {
+  const hook = fixedHook(root, built);
+  const read = (file: string) => { const real = target(file); return existsSync(real) ? readFileSync(real, 'utf8') : ''; };
+  // Both are read before either is written: one that won't parse refuses the pair.
+  const [hooksFile, configFile] = [codexHooks(), codexConfig()];
+  const [hooksText, configText] = [read(hooksFile), read(configFile)];
+  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, process.execPath, cli)];
+  recordEntries(root, hook, { node: process.execPath, cli });
+  for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
+    if (after === before) continue;
+    keepOriginal(root, record, file);
+    writeThrough(file, after);
+    noteWritten(record, file);
+  }
+}
+
 /** Your status line runs behind ours: its command kept as `statusline.yours` in config.json, which deep-hook runs. */
 function withStatusLine(root: string, settings: Obj, ours: string): Obj {
   const line = isObj(settings.statusLine) ? settings.statusLine : undefined;
@@ -259,11 +284,16 @@ async function undo(): Promise<number> {
     delete servers['deep-actions'];
     return { ...v, mcpServers: servers };
   });
+  // Codex's files where setup wrote them, and the server as it wrote it, whatever this environment says today.
+  const [recordedHooks, recordedConfig, server] = [join(recordedHome(root), 'hooks.json'), join(recordedHome(root), 'config.toml'), recordedServer(root)];
   // The planted wrong program takes our entries out and writes the JSON again, whatever you had.
   const notes = [
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
+    putBack(root, record, recordedHooks, () => editedCodex(recordedHooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
+    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server.node, server.cli) : text), "DeepBuild's MCP server if it was as setup wrote it")),
   ].filter((n): n is string => n !== undefined);
+  forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });
   rmSync(join(root, 'setup.json'), { force: true });
@@ -272,16 +302,34 @@ async function undo(): Promise<number> {
   return 0;
 }
 
+/** A Codex file you edited since setup: ours taken out, or, one that's gone or no longer reads, left as it is and said. */
+function editedCodex(file: string, without: (text: string) => string, what: string): string {
+  try {
+    writeThrough(file, without(readFileSync(target(file), 'utf8')));
+    return `you edited ${file} since setup, so undo took out ${what}`;
+  } catch (e) {
+    return `undo left ${file} as it is: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
 /** deep doctor's item for each timing relation our entries keep, with both values: broken is a failed item. */
 export function relationItems(): { item: string; agent: string; code: string; level: 'ok' | 'fail'; evidence: string; fix: string }[] {
-  return relations(installedRoot()).map((r) => ({
+  const codex = codexRelations(installedRoot()).map((r) => ({
+    item: `timing.codex_${r.name.replaceAll(' ', '_')}`,
+    agent: 'codex',
+    code: r.holds ? 'healthy' : 'timing_relation_broken',
+    level: r.holds ? 'ok' as const : 'fail' as const,
+    evidence: r.text,
+    fix: r.holds ? 'Nothing to do.' : `Put the value back as the reading says; setup never changes it, since Codex asks for trust again when an entry's timeout changes.`,
+  }));
+  return [...codex, ...relations(installedRoot()).map((r) => ({
     item: `timing.${r.name.replaceAll(' ', '_')}`,
     agent: 'claude-code',
     code: r.holds ? 'healthy' : 'timing_relation_broken',
     level: r.holds ? 'ok' as const : 'fail' as const,
     evidence: r.text,
     fix: r.holds ? 'Nothing to do.' : `Run deep setup, which writes the entry's timeout again, or raise it in ${claudeSettings()}.`,
-  }));
+  }))];
 }
 
 /**
