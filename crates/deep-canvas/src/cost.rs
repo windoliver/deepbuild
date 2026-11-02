@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Map, Value};
 
-use crate::registry::{Per, Sealed};
+use crate::registry::{Per, Sealed, SealedOp};
 use crate::schedule::is_check_phase;
 
 /// The coefficients the reference Mac measured (`node benchmarks/canvas.mjs costs --write`).
@@ -238,40 +238,24 @@ impl Estimate {
 /// whose params name one of them or that hang from one, as a flag per item in item order. `None`
 /// when nothing moves: a still document draws only when it shows or changes, and that frame
 /// evaluates every item.
-fn moving(doc: &Value, items: &Map<String, Value>, sealed: &Sealed) -> Option<Vec<bool>> {
-    let timed: Vec<_> = sealed
-        .ops
+fn moving(item_ops: &[&SealedOp], facts: &Facts<'_>, ids: &[&str]) -> Option<Vec<bool>> {
+    let timed: Vec<usize> = item_ops
         .iter()
-        .filter(|o| {
-            o.op.run.is_some()
-                && o.op.per != Per::Document
-                && !is_check_phase(&o.op.phase)
-                && o.op.reads.iter().any(|r| r == "t")
-        })
+        .enumerate()
+        .filter(|(_, o)| o.op.reads.iter().any(|r| r == "t"))
+        .map(|(k, _)| k)
         .collect();
-    let mut dirty: Vec<bool> = items
-        .iter()
-        .map(|(id, item)| {
-            timed
-                .iter()
-                .any(|o| o.op.applies.is_none_or(|f| f(doc, id, item)))
-        })
+    let n = item_ops.len();
+    let mut dirty: Vec<bool> = (0..ids.len())
+        .map(|i| timed.iter().any(|&k| facts.applies[i * n + k]))
         .collect();
     if !dirty.contains(&true) {
         return None;
     }
     // Each item an item names in its params or hangs from, with the items that do.
-    let ids: Vec<&str> = items.keys().map(String::as_str).collect();
     let mut readers: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
-    for (i, item) in items.values().enumerate() {
-        let mut named = Vec::new();
-        if let Some(p) = item.get("parent").and_then(Value::as_str) {
-            named.push(p);
-        }
-        item_ids_in(&item["params"], items, &mut named);
-        for n in named {
-            readers.entry(n).or_default().push(i);
-        }
+    for &(i, named) in &facts.named {
+        readers.entry(named).or_default().push(i);
     }
     let mut next: Vec<usize> = (0..ids.len()).filter(|&i| dirty[i]).collect();
     while let Some(i) = next.pop() {
@@ -283,6 +267,54 @@ fn moving(doc: &Value, items: &Map<String, Value>, sealed: &Sealed) -> Option<Ve
         }
     }
     Some(dirty)
+}
+
+/// An item as the estimate reads it on its own: its place in the document, its ID and itself.
+pub(crate) type Entry<'e> = (usize, &'e String, &'e Value);
+
+/// What the estimate reads of a run of items, each on its own: its kind's family and name, its
+/// counts, whether each frame operator over items applies to it (a row per item), and the items
+/// it names in its params or hangs from.
+pub(crate) struct Facts<'e> {
+    fulls: Vec<&'e str>,
+    counts: Vec<Counts>,
+    applies: Vec<bool>,
+    named: Vec<(usize, &'e str)>,
+}
+
+fn facts<'e>(
+    doc: &Value,
+    items: &Map<String, Value>,
+    item_ops: &[&SealedOp],
+    run: &[Entry<'e>],
+) -> Facts<'e> {
+    let mut f = Facts {
+        fulls: Vec::with_capacity(run.len()),
+        counts: Vec::with_capacity(run.len()),
+        applies: Vec::with_capacity(run.len() * item_ops.len()),
+        named: Vec::new(),
+    };
+    for &(i, id, item) in run {
+        f.fulls.push(
+            item.get("kind")
+                .and_then(Value::as_str)
+                .and_then(|k| k.split('@').next())
+                .unwrap_or(""),
+        );
+        f.counts.push(counts(item));
+        f.applies.extend(
+            item_ops
+                .iter()
+                .map(|o| o.op.applies.is_none_or(|a| a(doc, id, item))),
+        );
+        let mut named = Vec::new();
+        if let Some(p) = item.get("parent").and_then(Value::as_str) {
+            named.push(p);
+        }
+        item_ids_in(&item["params"], items, &mut named);
+        f.named.extend(named.into_iter().map(|n| (i, n)));
+    }
+    f
 }
 
 /// Each string at any depth of `v` that is an item's ID.
@@ -302,6 +334,23 @@ fn item_ids_in<'d>(v: &'d Value, items: &Map<String, Value>, out: &mut Vec<&'d s
 /// the frame and the items of its module's kinds; and the CPU each module's kinds register per
 /// item. GPU memory holds every item, moving or not.
 pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Estimate {
+    estimate_by(doc, sealed, coefficients, |entries, work| {
+        vec![work(entries)]
+    })
+}
+
+/// [`estimate`], reading the items on their own through `split`, which runs `work` over runs of
+/// the entries and returns each run's facts in order: the check splits a big document's across
+/// the cores.
+pub(crate) fn estimate_by(
+    doc: &Value,
+    sealed: &Sealed,
+    coefficients: &Coefficients,
+    split: impl for<'e> FnOnce(
+        &mut [Entry<'e>],
+        &(dyn Fn(&mut [Entry<'e>]) -> Facts<'e> + Sync),
+    ) -> Vec<Facts<'e>>,
+) -> Estimate {
     let empty = Map::new();
     let items = doc
         .get("items")
@@ -315,20 +364,35 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
     let mut cpu_ns = 0.0;
     let mut gpu_ns = 0.0;
     let mut bytes = 0.0;
-    // Each item's family and name, counts and share, in item order: read once, not once per
-    // operator, pass and module.
-    let fulls: Vec<&str> = items
-        .values()
-        .map(|item| {
-            item.get("kind")
-                .and_then(Value::as_str)
-                .and_then(|k| k.split('@').next())
-                .unwrap_or("")
-        })
+    // The frame operators over items, in plan order.
+    let item_ops: Vec<&SealedOp> = sealed
+        .ops
+        .iter()
+        .filter(|o| o.op.run.is_some() && !is_check_phase(&o.op.phase) && o.op.per != Per::Document)
         .collect();
-    let item_counts: Vec<Counts> = items.values().map(counts).collect();
+    // Each item's facts, read once, not once per operator, pass and module.
+    let mut entries: Vec<Entry<'_>> = items
+        .iter()
+        .enumerate()
+        .map(|(i, (id, item))| (i, id, item))
+        .collect();
+    let mut f = Facts {
+        fulls: Vec::with_capacity(items.len()),
+        counts: Vec::with_capacity(items.len()),
+        applies: Vec::with_capacity(items.len() * item_ops.len()),
+        named: Vec::new(),
+    };
+    for part in split(&mut entries, &|run| facts(doc, items, &item_ops, run)) {
+        f.fulls.extend(part.fulls);
+        f.counts.extend(part.counts);
+        f.applies.extend(part.applies);
+        f.named.extend(part.named);
+    }
+    let ids: Vec<&str> = items.keys().map(String::as_str).collect();
+    let evaluated = moving(&item_ops, &f, &ids);
     let mut by_item = vec![0.0; items.len()];
-    let evaluated = moving(doc, items, sealed);
+    // The next item operator's row in `f.applies`.
+    let mut k = 0;
     for op in &sealed.ops {
         if op.op.run.is_none() || is_check_phase(&op.op.phase) {
             continue;
@@ -339,15 +403,19 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
         if document && op.op.applies.is_some_and(|f| !f(doc, "", &Value::Null)) {
             continue;
         }
-        for (i, (id, item)) in items.iter().enumerate() {
-            if !document && op.op.applies.is_some_and(|f| !f(doc, id, item)) {
+        let row = (!document).then(|| {
+            k += 1;
+            k - 1
+        });
+        for i in 0..items.len() {
+            if row.is_some_and(|k| !f.applies[i * item_ops.len() + k]) {
                 continue;
             }
             bytes += t.bytes_per_item;
             if evaluated.as_ref().is_some_and(|e| !e[i]) {
                 continue;
             }
-            let c = item_counts[i];
+            let c = f.counts[i];
             let ns =
                 t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_frame_glyph() * c.glyphs;
             cpu_ns += ns;
@@ -361,8 +429,8 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
             .iter()
             .map(|k| format!("{}.{}", k.entry.family, k.entry.name))
             .collect();
-        let drawn: Vec<usize> = (0..fulls.len())
-            .filter(|&i| kinds.iter().any(|x| x == fulls[i]))
+        let drawn: Vec<usize> = (0..f.fulls.len())
+            .filter(|&i| kinds.iter().any(|x| x == f.fulls[i]))
             .collect();
         if drawn.is_empty() {
             continue;
@@ -372,7 +440,7 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
             gpu_ns += t.ns_per_px * px;
             bytes += t.bytes_per_px * px;
             for &i in &drawn {
-                let ns = t.ns_per_vertex * item_counts[i].vertices + t.ns_per_item;
+                let ns = t.ns_per_vertex * f.counts[i].vertices + t.ns_per_item;
                 gpu_ns += ns;
                 bytes += t.bytes_per_item;
                 by_item[i] += ns;
@@ -382,8 +450,8 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
     let mut costs: BTreeMap<&str, Vec<_>> = BTreeMap::new();
     for (i, item) in items.values().enumerate() {
         let registered = costs
-            .entry(fulls[i])
-            .or_insert_with(|| sealed.costs_for(fulls[i]));
+            .entry(f.fulls[i])
+            .or_insert_with(|| sealed.costs_for(f.fulls[i]));
         for c in registered.iter() {
             let ns = c(item) * 1e6;
             cpu_ns += ns;
