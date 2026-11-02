@@ -16,14 +16,14 @@ import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
 import type { Plant } from './plant.js';
 
 /** A check of a claim, as the definition locks it: its approved bytes, the command its run is, the requirements it covers, and its lane facts. */
-export interface ClaimCheck { check: string; approved: string; command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes' }
+export interface ClaimCheck { check: string; approved: string; command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes'; expected_ms?: number; deadline_ms?: number }
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -167,7 +167,7 @@ export class GateRunner {
       for (const o of older) { const e = o.entries.get(c.check); if (e) e.stale = true; }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
-    const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: (await this.expectedMs(c.check)) ?? 0 })));
+    const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0 })));
     timed.sort((a, b) => (a.c.on_base === 'fails' ? 0 : 1) - (b.c.on_base === 'fails' ? 0 : 1) || a.ms - b.ms || a.i - b.i);
     const free = Array.from({ length: Math.max(0, this.o.slots().free) }, () => readyAt);
     const budgetEnd = r.stopAt + this.o.budget_ms;
@@ -182,7 +182,7 @@ export class GateRunner {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false, ends: this.o.now() + ms };
       claim.entries.set(c.check, e);
       try {
-        const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null });
+        const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null });
         e.runs.push(run);
         e.outcome = await this.o.ended(run);
         await this.onBase(claim, e);
@@ -218,7 +218,7 @@ export class GateRunner {
     try {
       const base = await this.o.checkouts().baseCheckout({ worktree: c.cwd, onto: c.base, claim: c.snapshot, own: [], dependencies: DEPENDENCIES, runs: [token] });
       try {
-        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null });
+        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null });
         e.base = run;
         await this.o.ended(run);
       } finally {
@@ -270,7 +270,7 @@ export class GateRunner {
       const next = loop.due ? loop.due.at : unforeseen ? now + GRACE_MS : Infinity;
       const free = await this.slotTimes(now);
       for (const e of slow) {
-        const ms = (await this.expectedMs(e.check.check)) ?? 0;
+        const ms = e.check.expected_ms ?? (await this.expectedMs(e.check.check)) ?? 0;
         free.sort((a, b) => a - b);
         const start = free[0] ?? Infinity;
         if (start + ms <= next && plant !== 'holds-every-loop-check') {
@@ -280,8 +280,32 @@ export class GateRunner {
       }
       if (unforeseen && plant !== 'no-grace-window' && [...this.heldOf(session)].some((h) => h.why === 'grace')) this.graces.set(session, now + GRACE_MS);
     }
-    void this.pump();
+    const pumped = this.pump();
     await Promise.all(writes);
+    await pumped;
+  }
+  /** A claim's slow checks as they were declared, each with the deadline a hold is measured by; null when it has none. */
+  slowDeadlines(claim: string): { check: string; deadline_ms: number | null }[] {
+    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale).map((e) => ({ check: e.check.check, deadline_ms: e.check.deadline_ms ?? e.check.expected_ms ?? null })) : [];
+  }
+  /** A claim's slow checks not started yet, for want of a CPU slot. */
+  slowUnstarted(claim: string): string[] {
+    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.runs.length).map((e) => e.check.check) : [];
+  }
+  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
+  slowStanding(claim: string): { pending: boolean; failed: string[] } {
+    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale);
+    return { pending: slow.some((c) => c.result === 'pending'), failed: slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED').map((c) => `${c.check} ${c.result}`) };
+  }
+  /** Resolves once none of a claim's slow checks is running or queued. */
+  async slowEnded(claim: string, until: number): Promise<void> {
+    while (Date.now() < until) {
+      const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+      if (!c || ![...c.entries.values()].some((e) => e.lane === 'slow' && !e.stale && e.outcome === null)) return;
+      await new Promise((done) => setTimeout(done, 100));
+    }
   }
   /** When each CPU slot is expected to free, from now: the free ones now, then the runs going, then the queue's checks in turn. */
   private async slotTimes(now: number): Promise<number[]> {
@@ -289,7 +313,7 @@ export class GateRunner {
     const free = [...Array.from({ length: Math.max(0, this.o.slots().free) }, () => now), ...going];
     for (const e of this.queue.values()) {
       free.sort((a, b) => a - b);
-      if (free.length) free[0]! += (await this.expectedMs(e.check.check)) ?? 0;
+      if (free.length) free[0]! += e.check.expected_ms ?? (await this.expectedMs(e.check.check)) ?? 0;
     }
     return free;
   }
@@ -387,9 +411,9 @@ export class GateRunner {
         // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
         // be checked out any more leaves the check missing, never passed.
         const { dir: cwd } = await this.checkoutOf(c);
-        const expected = await this.expectedMs(e.check.check);
+        const expected = e.check.expected_ms ?? await this.expectedMs(e.check.check);
         e.ends = this.o.now() + (expected ?? 0);
-        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected });
+        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null });
         e.runs.push(run);
         void this.o.ended(run).then(async (outcome) => {
           e.outcome = outcome;
