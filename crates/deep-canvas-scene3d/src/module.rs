@@ -14,6 +14,20 @@ use serde_json::{json, Value};
 pub const GEOMETRY_PASS: &str = "scene3d.geometry";
 /// The one pass that writes the final frame: exposure, tone map and the sRGB encode.
 pub const OUTPUT_PASS: &str = "scene3d.output";
+/// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
+/// only (the core's shadow pass, in the frame's shadows place).
+pub const SHADOW_PASS: &str = "scene3d.shadow";
+/// The object-ID target's writes: each draw's pick ID where it covers at least half the pixel.
+/// They run inside the geometry pass's draws, which carry their time and the target's bytes; the
+/// registry lists them apart so the steps they compile from resolve at the seal (#200).
+pub const OBJECT_ID_PASS: &str = "scene3d.object_id";
+/// The `gpu.step@1` steps the shadow pass compiles from (scene3d.wgsl's `mesh_vs`): each row of
+/// the instance's world matrix dotted with the vertex plus its offset, the camera's clip matrix
+/// times the world point (#200).
+pub const SHADOW_STEPS: &[&str] = &["camera@1", "compose@1", "dot@1", "add@1", "mul@1"];
+/// The steps the object-ID writes compile from: the pick ID selected where coverage is at least
+/// one half (scene3d.wgsl's `line_fs`, `point_fs` and `text_fs`).
+pub const OBJECT_ID_STEPS: &[&str] = &["ge@1", "select@1"];
 
 fn manifest() -> Manifest {
     Manifest {
@@ -162,6 +176,11 @@ fn register(r: &mut Registrar) {
         .applies(crate::modifiers::has_modifiers)
         .run(crate::modifiers::stack);
     r.pass(GEOMETRY_PASS, "geometry");
+    // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
+    // resolves in gpu.step@1, so a build without effects still has every step they need.
+    r.pass(SHADOW_PASS, "shadows").pass_steps(SHADOW_STEPS);
+    r.pass(OBJECT_ID_PASS, "geometry")
+        .pass_steps(OBJECT_ID_STEPS);
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
     // with no issue. Its pixels need the GPU, and the acceptance suite draws them there.

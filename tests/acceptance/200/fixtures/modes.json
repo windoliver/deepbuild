@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Two swatches, one of each mode",
+  "description": "A board of the test module test.mode's kind test.swatch@1: swatch-a uses mode a and swatch-b uses mode b, for the #200 acceptance suite.",
+  "size": [640, 360],
+  "requires": { "modules": { "test.mode": "^1" } },
+  "items": {
+    "back": { "id": "back", "kind": "rect@1", "name": "Backdrop", "order": "a0", "params": { "box": [0, 0, 640, 360], "paint": { "fill": { "role": "ground" } } } },
+    "swatch-a": { "id": "swatch-a", "kind": "test.swatch@1", "name": "Swatch in mode a", "order": "a1", "params": { "box": [40, 40, 200, 120], "mode": "a" } },
+    "swatch-b": { "id": "swatch-b", "kind": "test.swatch@1", "name": "Swatch in mode b", "order": "a2", "params": { "box": [320, 40, 200, 120], "mode": "b" } }
+  }
+}
