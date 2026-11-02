@@ -2789,6 +2789,54 @@ export interface DefinitionLockedV3 {
         handle: string;
         role: "you" | "owner" | "collaborator" | "outside";
       };
+      expected_ms?: number;
+      deadline_ms?: number;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@4 */
+export interface DefinitionLockedV4 {
+  v: 4;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
       surface: {
         kind: string;
         routes?: Array<string>;
@@ -2892,6 +2940,26 @@ export interface DeliveryOutcome {
     delivery: string;
     via: "steer" | "interrupt" | "stop_hold" | "next_prompt";
     outcome: "delivered" | "stalled" | "timed_out" | "replaced";
+  };
+  evidence?: Array<string>;
+}
+
+/** delivery.outcome@2 */
+export interface DeliveryOutcomeV2 {
+  v: 2;
+  id: string;
+  kind: "delivery.outcome";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    delivery: string;
+    via: "steer" | "interrupt" | "stop_hold" | "next_prompt" | "on_task";
+    outcome: "delivered" | "stalled" | "timed_out" | "replaced" | "waiting";
   };
   evidence?: Array<string>;
 }

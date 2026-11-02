@@ -1,0 +1,106 @@
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a884ad187f5aefb17
+
+ ❯ tests/acceptance/39-redraft/permission.test.ts (3 tests | 3 failed) 4586ms
+   ❯ #39 a permission request a saved deny covers (3)
+     × gets behavior: deny with its message and no other field, is decided for you with nothing asked of you, and a call nobody decided still reaches Codex's own prompt 100ms
+     × a saved yes offered Codex's rule for later replies behavior: allow alone: no edited input and no rule for later 120ms
+     × the entry `deep setup` writes into ~/.codex/hooks.json, run as Codex runs it, gets that same deny 382ms
+ ❯ tests/acceptance/39-redraft/job.test.ts (2 tests | 2 failed) 2704ms
+   ❯ #39 a Codex job the runner started leaves no session row, claim or task spend (2)
+     × a job through `codex exec` whose hooks carry the thread ID it printed reads as the job's events, with no session row, claim or task spend, while a plain Codex session beside it has its row 1660ms
+     × hooks that reach the hub from the job's folder before the runner has read its thread ID still read as the job's, never as a session 1043ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/39-redraft/job.test.ts > #39 a Codex job the runner started leaves no session row, claim or task spend > a job through `codex exec` whose hooks carry the thread ID it printed reads as the job's events, with no session row, claim or task spend, while a plain Codex session beside it has its row
+AssertionError: a Codex job must run through the runner: {"job":"run:01M68KWS76FHV9AZBR3TF7DSN4","kind":"read","agent":"codex","account":"acct-dh39r","state":"refused","folder":"/private/tmp/dh39r-zJOmAr/h/.deepbuild/jobs/01M68KWS76FHV9AZBR3TF7DSN4","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' not to be 'refused' // Object.is equality
+ ❯ submit tests/acceptance/39-redraft/job.test.ts:32:92
+     30| async function submit(w: World, hub: Hub, prompt: string): Promise<Lin…
+     31|   const rec = await control(w, hub, 'job.submit', { spec: { kind: 'rea…
+     32|   expect(rec.state, `a Codex job must run through the runner: ${JSON.s…
+       |                                                                                            ^
+     33|   return rec;
+     34| }
+ ❯ tests/acceptance/39-redraft/job.test.ts:87:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/39-redraft/job.test.ts > #39 a Codex job the runner started leaves no session row, claim or task spend > hooks that reach the hub from the job's folder before the runner has read its thread ID still read as the job's, never as a session
+AssertionError: a Codex job must run through the runner: {"job":"run:01M68KWT7AD58Q4G7JAB2TYFMM","kind":"read","agent":"codex","account":"acct-dh39r","state":"refused","folder":"/private/tmp/dh39r-L2WJfo/h/.deepbuild/jobs/01M68KWT7AD58Q4G7JAB2TYFMM","refused":"Codex's headless launch comes with its adapter (#39); no Codex job runs before it"}: expected 'refused' not to be 'refused' // Object.is equality
+ ❯ submit tests/acceptance/39-redraft/job.test.ts:32:92
+     30| async function submit(w: World, hub: Hub, prompt: string): Promise<Lin…
+     31|   const rec = await control(w, hub, 'job.submit', { spec: { kind: 'rea…
+     32|   expect(rec.state, `a Codex job must run through the runner: ${JSON.s…
+       |                                                                                            ^
+     33|   return rec;
+     34| }
+ ❯ tests/acceptance/39-redraft/job.test.ts:109:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/39-redraft/permission.test.ts > #39 a permission request a saved deny covers > gets behavior: deny with its message and no other field, is decided for you with nothing asked of you, and a call nobody decided still reaches Codex's own prompt
+AssertionError: a saved deny must reply behavior: deny, so Codex shows no prompt (no decision means Codex's own prompt asks you): exit 0 after 21 ms, stdout "", stderr "": expected undefined to be 'deny' // Object.is equality
+
+- Expected:
+"deny"
+
++ Received:
+undefined
+
+ ❯ denyOf tests/acceptance/39-redraft/permission.test.ts:139:159
+    137| function denyOf(r: Ran): Line {
+    138|   const decision = reply(r)?.hookSpecificOutput?.decision as Line | un…
+    139|   expect(decision?.behavior, `a saved deny must reply behavior: deny, …
+       |                                                                                                                                                               ^
+    140|   expect(typeof decision?.message === 'string' && decision.message.tri…
+    141|   expectExactly(r, { behavior: 'deny', message: decision!.message });
+ ❯ tests/acceptance/39-redraft/permission.test.ts:148:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/39-redraft/permission.test.ts > #39 a permission request a saved deny covers > a saved yes offered Codex's rule for later replies behavior: allow alone: no edited input and no rule for later
+AssertionError: the hook's stdout must be Codex's PermissionRequest reply: exit 0 after 18 ms, stdout "", stderr "": expected undefined to deeply equal { hookSpecificOutput: { …(2) } }
+
+- Expected:
+{
+  "hookSpecificOutput": {
+    "decision": {
+      "behavior": "allow",
+    },
+    "hookEventName": "PermissionRequest",
+  },
+}
+
++ Received:
+undefined
+
+ ❯ expectExactly tests/acceptance/39-redraft/permission.test.ts:135:94
+    133| function expectExactly(r: Ran, decision: Line): void {
+    134|   expect(r.code, shown(r)).toBe(0);
+    135|   expect(reply(r), `the hook's stdout must be Codex's PermissionReques…
+       |                                                                                              ^
+    136| }
+    137| function denyOf(r: Ran): Line {
+ ❯ tests/acceptance/39-redraft/permission.test.ts:161:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/39-redraft/permission.test.ts > #39 a permission request a saved deny covers > the entry `deep setup` writes into ~/.codex/hooks.json, run as Codex runs it, gets that same deny
+AssertionError: deep setup must write Codex's hooks into /private/tmp/dh39r-3U8Eni/h/.codex/hooks.json: Error: ENOENT: no such file or directory, open '/private/tmp/dh39r-3U8Eni/h/.codex/hooks.json'
+ ❯ tests/acceptance/39-redraft/permission.test.ts:169:92
+    167|     const file = join(w.home, '.codex', 'hooks.json');
+    168|     let hooks: Line = {};
+    169|     try { hooks = JSON.parse(readFileSync(file, 'utf8')) as Line; } ca…
+       |                                                                                            ^
+    170|     const commands = ((hooks.hooks?.PermissionRequest ?? []) as Line[]…
+    171|     expect(commands, `DeepBuild's one PermissionRequest entry in ${fil…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+   Start at  02:15:40
+   Duration  8.78s (tests 89%, import 6%, transform 5%)
+

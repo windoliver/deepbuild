@@ -28,33 +28,8 @@
           "handle": "you",
           "role": "you"
         },
-        "surface": null
-      },
-      {
-        "id": "R2",
-        "text": "GET /health answers 200 with {\"status\":\"ok\"}",
-        "source_line": "ask#L2",
-        "refuted_by": "a GET /health that answers anything else",
-        "check": ".deepbuild/checks/health.sh",
-        "check_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-        "on_base": "fails",
-        "asserts": [
-          ".deepbuild/checks/health.sh:21"
-        ],
-        "depth": "api",
-        "oracle": "code",
-        "near_misses": [],
-        "author": {
-          "handle": "you",
-          "role": "you"
-        },
-        "surface": {
-          "kind": "service",
-          "routes": [
-            "/health"
-          ],
-          "format": "json"
-        }
+        "expected_ms": 1200000,
+        "deadline_ms": 1200000
       }
     ],
     "deliverables": [
