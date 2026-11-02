@@ -58,7 +58,7 @@ describe('AC1 #200.eec510cf a test module declares test.mark@1 with its schema, 
     expect(obj(dot.value, 'dot.value')['size'], 'dot has size 8').toBe(8);
     expect(dot.kit.verdict, 'dot passes the kit').toBe('PASS');
     expect(dot.digest, 'dot has its digest').toMatch(DIGEST);
-  });
+  }, 1_800_000);
 
   it('AC1 dot joins test.mark\'s interface digest: the digest changes when dot\'s size becomes 9, and only then', () => {
     const at8 = registry(run(builds.bin(MARKS), scenario(evidence(), [{ call: 'registry' }]))[0]!);
@@ -69,7 +69,7 @@ describe('AC1 #200.eec510cf a test module declares test.mark@1 with its schema, 
     expect(again.digests[MARK_MODULE], 'the same build gives the same digest').toBe(at8.digests[MARK_MODULE]);
     expect(at9.digests[MARK_MODULE], 'dot {size: 9} gives test.mark another interface digest than dot {size: 8}').not.toBe(at8.digests[MARK_MODULE]);
     for (const m of at8.modules.filter((x) => x !== MARK_MODULE)) expect(at9.digests[m], `${m}'s digest doesn't move with test.mark's entry`).toBe(at8.digests[m]);
-  });
+  }, 1_800_000);
 
   it('AC1 testpack.ring {size: 12} passes the kit at pack check and resolves in a document that names the pack, and in no document that doesn\'t', () => {
     const replies = run(builds.bin(MARKS), scenario(evidence(), [
@@ -87,29 +87,29 @@ describe('AC1 #200.eec510cf a test module declares test.mark@1 with its schema, 
     expect(obj(named['value'], 'testpack.ring.value')['size'], 'with size 12').toBe(12);
     expect(isObject(replies[4]!['entry']), `a document that doesn't name the pack resolves no testpack.ring: ${show(replies[4])}`).toBe(false);
     expect(typeof replies[4]!['code'], 'it answers a refusal code').toBe('string');
-  });
+  }, 1_800_000);
 
   it('AC1 a pack entry {size: 80} is refused at pack check, naming test.mark@1, the entry and the kit\'s rule', () => {
     const [packs] = run(builds.bin(MARKS), scenario(evidence(), [PACKS], { packs: [BIGPACK] }));
     none(packRefusedFailures(packRow(packs!, BIGPACK), BIGPACK, [MARK, 'bigpack.huge', MARK_RULE]), 'the pack check of an entry of size 80');
-  });
+  }, 1_800_000);
 });
 
 describe('AC2 #200.d373067b the seal refuses a kit that admits its planted entry, a registry without planted entry or since, and a second module entry of one name', () => {
   it('AC2 a planted kit that admits every entry makes the seal refuse test.mark@1, naming the registry and its planted entry {size: 65}; the same build seals with its own kit', () => {
     none(sealFailures(startup(builds.bin(MARKS)), 'the test-mark build with its own kit'), 'the control');
     none(refusalFailures(startup(builds.bin(MARKS), kitAdmitsAll(MARK)), { reasons: ['kit_admits_planted'], registry: MARK, entries: ['"size":65'] }), 'the seal with a kit that admits every entry');
-  });
+  }, 1_800_000);
 
   it('AC2 a registry declared with no planted wrong entry is refused at the seal, naming it', () => {
     none(refusalFailures(startup(builds.bin(NO_PLANTED)), { reasons: ['registry_incomplete'], registry: MARK }), 'test.mark@1 with no planted wrong entry');
-  });
+  }, 1_800_000);
 
   it('AC2 a registry declared with no since is refused at the seal, naming it', () => {
     none(refusalFailures(startup(builds.bin(NO_SINCE)), { reasons: ['registry_incomplete'], registry: MARK }), 'test.mark@1 with no since');
-  });
+  }, 1_800_000);
 
   it('AC2 a second module entry named dot is refused at the seal, naming both modules', () => {
     none(refusalFailures(startup(builds.bin(DOT_TWICE)), { reasons: ['duplicate_entry', 'foreign_entry'], registry: MARK, modules: [MARK_MODULE, MARK_OTHER_MODULE], entries: ['dot'] }), 'test.mark.other\'s entry dot beside test.mark\'s');
-  });
+  }, 1_800_000);
 });

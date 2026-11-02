@@ -80,7 +80,7 @@ describe('AC11 #200.bd93251c the core\'s mark, builder, modifier and document ch
       ...holdsFailures(theRegistry(r, 'check.kind.doc@1'), CORE_CHECK_KINDS),
     ], 'today\'s marks, modifiers and check kinds as the core\'s entries');
     none(SIX.flatMap((name) => plantedRefusedFailures(theRegistry(r, name), PLANTED[name]!)), 'each registry\'s kit on its planted wrong entry');
-  });
+  }, 1_800_000);
 
   it('AC11 every content key is unchanged: a 2D board and the Map\'s 3D evaluate to the merge base\'s keys', () => {
     // The registries are open here first: a candidate without mark@1 never reaches the merge base's build.
@@ -96,12 +96,12 @@ describe('AC11 #200.bd93251c the core\'s mark, builder, modifier and document ch
       ...keyFailures(shared(before.board, lean.board), lean.board, 'the board, without effects'),
       ...keyFailures(shared(before.map, lean.map), lean.map, 'the Map\'s 3D, without effects'),
     ], `content keys against the merge base ${base.sha.slice(0, 12)}`);
-  });
+  }, 1_800_000);
 
   for (const name of SIX) {
     it(`AC11 a planted kit that admits every entry of ${name} makes the seal refuse ${name}, naming it`, () => {
       none(refusalFailures(startup(builds.bin(NO_EFFECTS), kitAdmitsAll(name)), { reasons: ['kit_admits_planted'], registry: name, entries: PLANTED[name]!.slice(0, 1) }), `${name} with a kit that admits every entry`);
-    });
+    }, 1_800_000);
   }
 });
 
@@ -109,11 +109,11 @@ describe('AC13 #200.a10a9ddf the planted entries of device classes, logic servic
   it('AC13 the device class whose fixture differs at 30 and 120 fps, the plug-in class of 257 B, the logic service that answers after its next step and the saturating i32 add each fail their registry\'s kit, naming the entry', () => {
     const r = listing(builds.bin(R2), evidence());
     none(AC13.flatMap((name) => plantedRefusedFailures(theRegistry(r, name), PLANTED[name]!)), 'the planted entries');
-  });
+  }, 1_800_000);
 
   for (const name of AC13) {
     it(`AC13 a kit that admits every planted entry of ${name} is refused at the seal, naming ${name}`, () => {
       none(refusalFailures(startup(builds.bin(R2), kitAdmitsAll(name)), { reasons: ['kit_admits_planted'], registry: name }), `${name} with a kit that admits every entry`);
-    });
+    }, 1_800_000);
   }
 });

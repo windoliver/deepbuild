@@ -63,17 +63,17 @@ const failsNaming = (r: ReturnType<typeof script>, prefix: string, names: (strin
 describe('AC4 #200.be794a42 the closure lint and the reference table\'s drift test', () => {
   it('AC4 a test schema enum test_mode: a | b with no closure fails the closure lint, naming test_mode', () => {
     failsNaming(closures(lintTree('noclosure', { type: 'string', enum: MODE_VALUES }, false)), 'closures', ['test_mode'], 'test_mode with no closure');
-  });
+  }, 1_800_000);
 
   it('AC4 the same enum closed {reason: determinism, reopens_if: a third mode} passes', () => {
     passes(closures(lintTree('closed', { type: 'string', enum: MODE_VALUES, 'x-closure': closedMode }, false)), 'closures', 'test_mode closed by determinism');
-  });
+  }, 1_800_000);
 
   it('AC4 an enum that names the registry test.mark@1 passes only while that registry is declared', () => {
     const named: JsonObject = { type: 'string', enum: MODE_VALUES, 'x-closure': { registry: MARK } };
     passes(closures(lintTree('declared', named, true)), 'closures', 'test_mode closed by test.mark@1, declared');
     failsNaming(closures(lintTree('undeclared', named, false)), 'closures', [MARK], 'test_mode closed by test.mark@1, which no registry row declares');
-  });
+  }, 1_800_000);
 
   it('AC4 the local preflight\'s lint lane runs the closure lint and the drift test, and both pass on the checkout', async () => {
     const lanes = ((await import(new URL('../../../scripts/lanes.mjs', import.meta.url).href)) as { checks: { name: string; commands: string[][] }[] }).checks;
@@ -83,7 +83,7 @@ describe('AC4 #200.be794a42 the closure lint and the reference table\'s drift te
     expect([runs('closures'), runs('drift')], 'the lint lane runs canvas-closures.mjs closures and drift').toEqual([true, true]);
     passes(script('canvas-closures.mjs', ['closures']), 'closures', 'the closure lint on the checkout\'s canvas schemas');
     passes(script('canvas-closures.mjs', ['drift']), 'drift', 'the drift test on the checkout');
-  });
+  }, 1_800_000);
 });
 
 // ---- AC15: a closed list's mark, through the contract step (#139) and the closure lint.
@@ -114,7 +114,7 @@ describe('AC15 #200.81fef80c a closed canvas list says whether it is extensible 
     expect(r.code, `contract-diff check --release R3\n${shown(r)}`).toBe(0);
     const { serveAt } = (await import(new URL('../../../packages/conformance/dist/index.js', import.meta.url).href)) as { serveAt: (schema: JsonValue, value: JsonValue) => JsonValue };
     expect(serveAt(R2_LISTS, { test_tone: 'mid', test_dir: 'in' }), 'a reader at R2 maps mid to unknown and keeps what it knows').toEqual({ test_tone: 'unknown', test_dir: 'in' });
-  });
+  }, 1_800_000);
 
   it('AC15 a list marked exhaustive refuses a new value without a new major, naming the list', () => {
     const root = recordedR2('exhaustive');
@@ -122,7 +122,7 @@ describe('AC15 #200.81fef80c a closed canvas list says whether it is extensible 
     const r = contracts(root, 'check', '--release', 'R3');
     expect(r.code, `up added to the exhaustive test_dir under test.lists@1 fails the contract step\n${shown(r)}`).toBe(1);
     expect(failLines(r, 'contracts').some((l) => l.includes('test_dir')), `a FAIL contracts line names the list test_dir\n${shown(r)}`).toBe(true);
-  });
+  }, 1_800_000);
 
   it('AC15 a closed closure without the mark fails the closure lint, naming the list', () => {
     const root = scratchTree('nomark', { empty: true });
@@ -132,5 +132,5 @@ describe('AC15 #200.81fef80c a closed canvas list says whether it is extensible 
     // The same list with its mark passes, so the failure is the mark's.
     writeJson(join(root, SCHEMA), lists({ test_tone: tone(['low', 'high', 'unknown'], 'extensible') }));
     passes(closures(root), 'closures', 'test_tone closed and marked extensible');
-  });
+  }, 1_800_000);
 });

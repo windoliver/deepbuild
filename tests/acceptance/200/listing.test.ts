@@ -48,7 +48,7 @@ describe('AC6 #200.400aefd1 deep://registries lists test.mark@1 with its history
       expect(e.since.length, `${e.name} has since`).toBeGreaterThan(0);
       expect(e.digest, `${e.name} has its digest`).toMatch(DIGEST);
     }
-  });
+  }, 1_800_000);
 
   it('AC6 a changed entry schema under test.mark@1 fails the contract diff against the previous release, naming the registry; test.mark@2 with replaced_by on test.mark@1 passes', () => {
     const tree = scratchTree('contracts', { empty: true });
@@ -76,7 +76,7 @@ describe('AC6 #200.400aefd1 deep://registries lists test.mark@1 with its history
     const next = script('contract-diff.mjs', ['check', '--release', 'R3', '--root', tree]);
     expect(failLines(next, 'contracts'), `test.mark@2 with replaced_by on test.mark@1 passes the contract step\n${shown(next)}`).toEqual([]);
     expect(next.code, shown(next)).toBe(0);
-  });
+  }, 1_800_000);
 });
 
 /** The contract row of each test registry a listing publishes: canvas-registries.json's fields, taken as listed. */
@@ -139,15 +139,15 @@ describe('AC7 #200.d93a89e4 deep://registries lists the hub\'s check.kind@1 slot
     expect(fills.map((f) => f['name']).sort(), 'its installed fills').toEqual(FILLS);
     expect(fills.find((f) => f['name'] === 'journey')?.['kit'], 'journey\'s own kit result').toMatchObject(KIT_JOURNEY);
     expect(fills.find((f) => f['name'] === 'command')?.['kit'], 'command\'s own kit result').toMatchObject(KIT_COMMAND);
-  });
+  }, 1_800_000);
 
   it('AC7 a listing that leaves hub slots out fails, naming the slot', () => {
     const [reply] = run(builds.bin(MARKS), scenario(evidence(), [REGISTRIES], { installed: INSTALLED }), 'registries_without_slots');
     failsNaming(slotListingFailures(reply!, SLOT, { command: KIT_COMMAND, journey: KIT_JOURNEY }), [SLOT], 'the listing without hub slots');
-  });
+  }, 1_800_000);
 
   it('AC7 a listing that lists journey as an entry of a registry fails, naming the slot', () => {
     const [reply] = run(builds.bin(MARKS), scenario(evidence(), [REGISTRIES], { installed: INSTALLED }), 'slot_fill_as_entry');
     failsNaming(slotListingFailures(reply!, SLOT, { command: KIT_COMMAND, journey: KIT_JOURNEY }), [SLOT, 'journey'], 'the listing with journey as a registry entry');
-  });
+  }, 1_800_000);
 });

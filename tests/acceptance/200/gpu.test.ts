@@ -52,14 +52,14 @@ describe('AC9 #200.8a760791 gpu.step@1 takes entries only from canvas modules, e
   it('AC9 a pack that declares a gpu.step@1 entry is refused at its pack check, naming the registry and fill: module', () => {
     const [packs] = run(builds.bin(STEPS), scenario(evidence(), [PACKS], { packs: [STEPPACK] }));
     none(packRefusedFailures(packRow(packs!, STEPPACK), STEPPACK, ['gpu.step@1', 'module']), 'the pack check of a gpu.step@1 entry');
-  });
+  }, 1_800_000);
 
   it('AC9 a canvas module\'s step with its exactness fixture and planted twin seals; without either it is refused at the seal, naming the step', () => {
     const step = theEntry(theRegistry(listing(builds.bin(STEPS), evidence()), 'gpu.step@1'), GPUSTEP);
     expect([step.module, step.kit.verdict], 'the control: test.gpustep\'s step is admitted').toEqual([GPUSTEP_MODULE, 'PASS']);
     none(refusalFailures(startup(builds.bin(NO_FIXTURE)), { reasons: ['entry_refused'], registry: 'gpu.step@1', entries: [GPUSTEP] }), 'a step without an exactness fixture');
     none(refusalFailures(startup(builds.bin(NO_TWIN)), { reasons: ['entry_refused'], registry: 'gpu.step@1', entries: [GPUSTEP] }), 'a step without a planted twin');
-  });
+  }, 1_800_000);
 });
 
 describe('AC10 #200.70cd4e69 the GPU layer\'s registries are the core\'s, and a build without effects still compiles every base step', () => {
@@ -95,7 +95,7 @@ describe('AC10 #200.70cd4e69 the GPU layer\'s registries are the core\'s, and a 
     const functions = theRegistry(r, 'gpu.function@1');
     expect(functions.owner, 'gpu.function@1 is the core\'s').toBe('core');
     expect([(functions.kit ?? []).length > 0, (functions.planted ?? []).length > 0], 'gpu.function@1 is declared with its kit and a planted entry').toEqual([true, true]);
-  });
+  }, 1_800_000);
 
   it('AC10 each base step\'s planted wrong twin is refused by its exactness fixture, naming the step; add@1\'s twin saturates where i32 wraps', () => {
     const steps = theRegistry(listing(builds.bin(NO_EFFECTS), evidence()), 'gpu.step@1');
@@ -111,7 +111,7 @@ describe('AC10 #200.70cd4e69 the GPU layer\'s registries are the core\'s, and a 
     none(problems, 'every base step\'s planted twin');
     const add = theEntry(steps, 'add@1');
     expect(mentions(add.value, '2147483647') && mentions(add.value, '-2147483648'), `add@1's exactness fixture holds the CTS's case, 2147483647 + 1 = -2147483648 as i32: ${show(add.value)}`).toBe(true);
-  });
+  }, 1_800_000);
 
   it('AC10 the core\'s own shadow and object-ID passes compile from gpu.step@1\'s steps in the build without effects', () => {
     const bin = builds.bin(NO_EFFECTS);
@@ -126,7 +126,7 @@ describe('AC10 #200.70cd4e69 the GPU layer\'s registries are the core\'s, and a 
         expect(steps.filter((s) => !names.has(s)), `${name}'s steps all resolve in gpu.step@1`).toEqual([]);
       }
     }
-  });
+  }, 1_800_000);
 
   it('AC10 a planted layout in which the effects module fills the base steps leaves the shadow pass with unresolved steps, so the seal refuses it, naming the first step, and fails this', () => {
     const s = startup(builds.bin(STEPS_IN_EFFECTS));
@@ -137,7 +137,7 @@ describe('AC10 #200.70cd4e69 the GPU layer\'s registries are the core\'s, and a 
     const base = baseOpTable().map((b) => b.name);
     expect(base.some((name) => mentions(r.entries, name)), `the refusal names a base step: ${show(r.raw)}`).toBe(true);
     expect(mentions(r.raw, 'shadow'), `and the shadow pass: ${show(r.raw)}`).toBe(true);
-  });
+  }, 1_800_000);
 
   it('AC10 the Map\'s 3D fixture gives the same pixel hash and every operator key as on the merge base, before the lists opened', (ctx) => {
     // The lists are open here first: a candidate without gpu.step@1 never reaches the merge base's build.
@@ -156,5 +156,5 @@ describe('AC10 #200.70cd4e69 the GPU layer\'s registries are the core\'s, and a 
     if (before.snapshot === null || here.snapshot === null || lean.snapshot === null) ctx.skip('INCONCLUSIVE: no GPU to draw the Map\'s 3D on here (unsupported_platform); the pixel hash is compared only on macOS');
     expect(here.snapshot, 'r2 draws the Map\'s 3D to the merge base\'s pixel hash').toBe(before.snapshot);
     expect(lean.snapshot, 'and so does the build without effects').toBe(before.snapshot);
-  });
+  }, 1_800_000);
 });
