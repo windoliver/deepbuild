@@ -8,7 +8,7 @@ import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@d
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
-import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
+import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
 /**
  * The agent names a hook request may carry, to the adapter that maps them. Cursor's CLI and Grok run the hooks in
@@ -106,6 +106,15 @@ export function versionOf(transcript: string): string | undefined {
       if (versions.size > 4096) versions.clear();
       versions.set(transcript, version);
       return version;
+    }
+    // Codex's rollout names it once, in the session_meta that opens the file, whose line may outrun the window.
+    const head = Buffer.alloc(Math.min(size, 65_536));
+    readSync(fd, head, 0, head.length, 0);
+    const named = /"cli_version"\s*:\s*"([^"]+)"/.exec(head.toString('utf8'))?.[1];
+    if (named) {
+      if (versions.size > 4096) versions.clear();
+      versions.set(transcript, named);
+      return named;
     }
   } catch {
     // No transcript yet: the version is read at the session's next hook.
@@ -263,9 +272,29 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       }
       const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));
       if (loop) meta.loop = loop;
+      // A patch the adapter can't read is denied before it runs (#39), unless the session's version is past its facts.
+      if (kind === 'tool.before' && typeof mapped.denied === 'string') {
+        const past = versionOf(meta.transcript);
+        if (past && !coveredBy(agent, past)) meta.watchOnly = true;
+        else meta.denied = mapped.denied;
+      }
       break;
     }
+    case 'session.compact':
+    case 'subagent.start':
+    case 'turn.interrupted': {
+      // What Codex says beside a turn is a reading, which is no event of its turn: it names the hook it came from.
+      const said = kind === 'turn.interrupted' ? 'you interrupted this turn' : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
+      meta.reading = `${request.event}: ${scrub(said)}`;
+      return { kind: 'hook', drafts: [], meta };
+    }
     case 'agent.stop':
+      // A Codex subagent's hooks carry the root's session ID with an agent_id: its stop is the child's (#39), no turn of the root's.
+      if (name === 'codex' && request.event === 'SubagentStop') {
+        data = { turn: 0, did_work: false, claim: false, outcome: 'finished', cause: 'unknown', usage: null, subagent: str(payload.agent_id) || 'unknown' };
+        v = 5;
+        break;
+      }
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
@@ -295,6 +324,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   // A stop, a permission request or a finished task is about its session: the session: handle takes the agent's session ID's letters and digits.
   const handle = meta.session.replace(/[^0-9A-Za-z]/g, '');
   if (handle && needsSubject(kind)) draft.subject = `session:${handle}`;
+  // A Codex question card fires PreToolUse and no permission hook, so it is caught here: the call, and its request (#39).
+  const questions = ((facts.questionTools as JsonObject).tools ?? []) as JsonValue[];
+  if (name === 'codex' && kind === 'tool.before' && questions.includes(tool)) {
+    const asked: Draft = { kind: 'permission.request', v: 1, id: derivedId(draft.ts, `${request.id}.question`), ts: draft.ts, seq: request.seq, data: { kind: 'question', tool } };
+    if (handle) asked.subject = `session:${handle}`;
+    return { kind: 'hook', drafts: [draft, asked], meta };
+  }
   return { kind: 'hook', drafts: [draft], meta };
 }
 

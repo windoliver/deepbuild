@@ -14,14 +14,14 @@ import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 
 
 /** A check of a claim, as the definition locks it: its approved bytes and its lane facts. */
-export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes' }
+export interface ClaimCheck { check: string; approved: string; on_base: 'fails' | 'passes'; expected_ms?: number; deadline_ms?: number }
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -77,7 +77,7 @@ export class GateRunner {
       for (const o of older) { const e = o.entries.get(c.check); if (e) e.stale = true; }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
-    const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: (await this.expectedMs(c.check)) ?? 0 })));
+    const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0 })));
     timed.sort((a, b) => (a.c.on_base === 'fails' ? 0 : 1) - (b.c.on_base === 'fails' ? 0 : 1) || a.ms - b.ms || a.i - b.i);
     const free = Array.from({ length: Math.max(0, this.o.slots().free) }, () => readyAt);
     const budgetEnd = r.stopAt + this.o.budget_ms;
@@ -91,7 +91,7 @@ export class GateRunner {
     const runs = fast.map(async ({ c, ms }) => {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], outcome: null, running: true, stale: false };
       claim.entries.set(c.check, e);
-      const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null });
+      const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null });
       e.runs.push(run);
       e.outcome = await this.o.ended(run);
       e.running = false;
@@ -119,11 +119,11 @@ export class GateRunner {
    * session still runs work in the background they are held in their places instead, with the session's older held
    * checks, for at most 30 minutes from this stop; with none running, the held ones start too.
    */
-  turnEnded(claim: string, background: string[] = [], stopAt = this.o.now()): void {
+  turnEnded(claim: string, background: string[] = [], stopAt = this.o.now()): Promise<void> {
     for (const list of this.claims.values()) {
       const c = list.find((x) => x.claim === claim);
       if (!c) continue;
-      const slow = [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.runs.length && !e.stale);
+      const slow = [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.runs.length && !e.running && !e.stale);
       if (!background.length) {
         this.backgroundEnded(c.session);
         for (const e of slow) this.queue.set(`${c.session}\0${e.check.check}`, e);
@@ -138,7 +138,30 @@ export class GateRunner {
       timer.unref();
       this.holding.set(c.session, { entries: [...(older?.entries ?? []), ...slow], timer });
     }
-    void this.pump();
+    return this.pump();
+  }
+  /** A claim's slow checks as they were declared, each with the deadline a hold is measured by; null when it has none. */
+  slowDeadlines(claim: string): { check: string; deadline_ms: number | null }[] {
+    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale).map((e) => ({ check: e.check.check, deadline_ms: e.check.deadline_ms ?? e.check.expected_ms ?? null })) : [];
+  }
+  /** A claim's slow checks not started yet, for want of a CPU slot. */
+  slowUnstarted(claim: string): string[] {
+    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.runs.length).map((e) => e.check.check) : [];
+  }
+  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
+  slowStanding(claim: string): { pending: boolean; failed: string[] } {
+    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale);
+    return { pending: slow.some((c) => c.result === 'pending'), failed: slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED').map((c) => `${c.check} ${c.result}`) };
+  }
+  /** Resolves once none of a claim's slow checks is running or queued. */
+  async slowEnded(claim: string, until: number): Promise<void> {
+    while (Date.now() < until) {
+      const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+      if (!c || ![...c.entries.values()].some((e) => e.lane === 'slow' && !e.stale && e.outcome === null)) return;
+      await new Promise((done) => setTimeout(done, 100));
+    }
   }
   /** The session's background work has ended, or held its checks 30 minutes: they take their queued places. Returns them. */
   backgroundEnded(session: string): string[] {
@@ -163,12 +186,18 @@ export class GateRunner {
       const c = [...this.claims.values()].flat().find((x) => x.claim === e.claim)!;
       // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
       // be checked out any more, its worktree gone, leaves the check missing, never passed.
-      const cwd = c.checkout ??= await checkoutOf(c.cwd, e.commit).catch(() => null);
-      if (!cwd) { e.outcome = 'missing'; continue; }
       e.running = true;
-      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: await this.expectedMs(e.check.check) });
-      e.runs.push(run);
-      void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      // A check that can't start ran nothing: BLOCKED, and the next in the queue still gets its turn.
+      try {
+        const cwd = c.checkout ??= await checkoutOf(c.cwd, e.commit);
+        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, commit: e.commit, cwd, lane: 'slow', expected_ms: e.check.expected_ms ?? await this.expectedMs(e.check.check), deadline_ms: e.check.deadline_ms ?? null });
+        e.runs.push(run);
+        void this.o.ended(run).then((outcome) => { e.outcome = outcome; e.running = false; void this.pump(); this.cleanup(c); });
+      } catch {
+        e.outcome = 'missing';
+        e.running = false;
+        this.cleanup(c);
+      }
     }
   }
   /** A claim's checkout is removed once no run on it is running or queued. */

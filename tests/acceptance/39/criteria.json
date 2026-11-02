@@ -1,0 +1,152 @@
+[
+ {
+  "n": 1,
+  "id": "#39.2b854223",
+  "text": "A Codex session's tool calls and commits are recorded"
+ },
+ {
+  "n": 2,
+  "id": "#39.0215da31",
+  "text": "A held stop continues with the answer"
+ },
+ {
+  "n": 3,
+  "id": "#39.a929786c",
+  "text": "An idle Codex session receives the answer on the next message"
+ },
+ {
+  "n": 4,
+  "id": "#39.3506d285",
+  "text": "The same hooks hold a stop in the Codex app; if they don't on a given app version, that gap is written down with the version and the upstream issue (openai/codex#33992, #47607)"
+ },
+ {
+  "n": 5,
+  "id": "#39.de9f23ce",
+  "text": "Two Codex threads on one daemon each call `deep_ask`, and each ask is filed under its own session"
+ },
+ {
+  "n": 6,
+  "id": "#39.edfd0196",
+  "text": "A Codex job the runner started with `codex exec` leaves no session row, claim or task spend"
+ },
+ {
+  "n": 7,
+  "id": "#39.2bf95483",
+  "text": "An answer to a Codex session that has ended reaches only the same thread when it resumes, and otherwise waits on its task"
+ },
+ {
+  "n": 8,
+  "id": "#39.9d535982",
+  "text": "A session on a Codex version past its facts is recorded with its holds watch-only and one health reading"
+ },
+ {
+  "n": 9,
+  "id": "#39.410c1db7",
+  "text": "The output of `codex login status` is never printed or logged; only its exit code is read"
+ },
+ {
+  "n": 10,
+  "id": "#39.1f0c31eb",
+  "text": "A Codex `config.toml` with `hooks = false` under `[features]` shows in `deep doctor` as hooks that won't run there, naming the setting, and `deep doctor` exits non-zero"
+ },
+ {
+  "n": 11,
+  "id": "#39.d4d2fa79",
+  "text": "With `~/.codex/hooks.json` a symlink into a dotfiles folder, setup writes its entries into the linked file through a temporary file beside it, and the link is still the same symlink afterwards; a setup that renames its temporary file over the link replaces the link with a plain file and fails this test, naming the path"
+ },
+ {
+  "n": 12,
+  "id": "#39.071692b0",
+  "text": "Every reply the hub sends for each of Codex's twelve events validates against Codex's published output schema for that event, and Codex's own hook engine, fed each reply, applies it with no failed hook"
+ },
+ {
+  "n": 13,
+  "id": "#39.3c135e58",
+  "text": "A permission request that a saved deny covers gets `behavior: deny` with its message and no other field, and Codex shows you no prompt for it; a reply carrying edited input or a rule for later is never sent"
+ },
+ {
+  "n": 14,
+  "id": "#39.c819bb37",
+  "text": "After a DeepBuild update, its entries in `hooks.json` are byte-identical and Codex's hook list still reports them trusted; changing one entry's timeout in a test makes health show that entry as modified within one session"
+ },
+ {
+  "n": 15,
+  "id": "#39.b01d8471",
+  "text": "Each of Codex's apply-patch scenario fixtures, and a heredoc patch sent through the shell tool, yields exactly the paths Codex changes; an indented `*** Update File:` line still names its path, and a patch with `*** Environment ID: remote` is denied before it runs"
+ },
+ {
+  "n": 16,
+  "id": "#39.3f1db111",
+  "text": "A turn you interrupt records an Interrupt event and reads as interrupted, never as a stop or a claim, and a subagent's SubagentStop never holds or judges the parent's stop"
+ },
+ {
+  "n": 17,
+  "id": "#39.41993b5c",
+  "text": "A FAIL from a 20-minute check reaches the agent in the same turn"
+ },
+ {
+  "n": 18,
+  "id": "#39.ef0348e3",
+  "text": "With the slow lane's expected time at 20 minutes and Codex's Stop hook entry edited to 300 s, the hub at start and `deep doctor` show the slow-lane relation broken, naming 300 s and 45 minutes, and a stop with a 20-minute check isn't held: Codex gets its reply at once, the claim stays pending, the session's row says why, and the FAIL arrives with your next message. A hub that holds anyway is cut off at 300 s and lets the stop through with no verdict, and that version fails this test"
+ },
+ {
+  "n": 19,
+  "id": "#39.52f53113",
+  "text": "With `tool_timeout_sec = 8` for DeepBuild's MCP server in a Codex config fixture, the `deep_ask` relation shows broken, and a `deep_ask` returns at once with the ask's ID, deadline and default; with 60 it says \"still waiting\" at 55 s"
+ },
+ {
+  "n": 20,
+  "id": "#39.977fabab",
+  "text": "The twin that delivers thread A's answer to thread B on one daemon fails the kit with \"answer delivered to another session\", naming both sessions, while the adapter passes; an `answerPermission` case whose fixture payload lacks the request's ID reads INVALID, \"declared answerPermission, never reached\", never passed"
+ },
+ {
+  "n": 21,
+  "id": "#39.f8985208",
+  "text": "A Codex PermissionRequest for `git push origin main`, answered with only the words \"yes but not on main\", gets `behavior: deny` with those words as its message, and the push never runs; answered by its `allow` option, it gets `behavior: allow` for that call alone; an adapter that maps the \"yes\" in the words to allow fails this test"
+ },
+ {
+  "n": 22,
+  "id": "#39.b7839f18",
+  "text": "Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead under 10 ms at p95, and setup sets Codex's Stop timeout once, to 45 minutes"
+ },
+ {
+  "n": 23,
+  "id": "#39.7ff25607",
+  "text": "Adapter types are generated from Codex's published hook schemas"
+ },
+ {
+  "n": 24,
+  "id": "#39.21dbcb3f",
+  "text": "Running setup again after the slow lane's expected time changes from 20 to 30 minutes leaves Codex's Stop hook entry byte-identical at 45 minutes, and Codex's hook list still reports it trusted; a setup that writes the new expected time into the entry makes Codex ask for trust again, and that version fails this test, naming the entry"
+ },
+ {
+  "n": 25,
+  "id": "#39.5981bf3b",
+  "text": "On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test"
+ },
+ {
+  "n": 26,
+  "id": "#39.8807ac2c",
+  "text": "A job asked to write a file is refused by its read-only mode in Codex, and the refusal is its recorded stop cause"
+ },
+ {
+  "n": 27,
+  "id": "#39.7db15b99",
+  "text": "A Codex token event whose snapshot has `limit_id: image_gen` leaves the account's `codex` windows unchanged, and a snapshot without a weekly window keeps the last weekly reading, shown with its age, instead of reading it as 0%"
+ },
+ {
+  "n": 28,
+  "id": "#39.1d214ff1",
+  "text": "In Codex, #159's end-to-end marker test passes: the drafting job's stdin, its folder and its own transcript hold none of the three markers, and the review's hold the diff's marker and neither of the others; a runner that passes the PR body to the review, or the diff to the drafting job, fails it, naming the marker"
+ },
+ {
+  "n": 29,
+  "id": "#39.dbdbda4f",
+  "text": "From recorded Codex goal sessions, each goal turn before the last reads at its Stop as looping with an active goal, and the last, in which the goal record turns `complete`, reads at its Stop as a loop with no automatic prompt left; an adapter that reads the goal only from its continuation prompts reads the last turn as looping and fails this test, naming the turn"
+ },
+ {
+  "n": 30,
+  "id": "#39.43c7dc1e",
+  "text": "A heartbeat automation with `kind = \"heartbeat\"`, `status = \"ACTIVE\"`, `rrule = \"FREQ=MINUTELY;INTERVAL=15\"` and the thread as its target reads as that thread's next automatic prompt, due at the schedule's next time after its last run, and the same automation `PAUSED`, or one that targets another thread, as none; an adapter that reads every active heartbeat as the session's fails this test, naming the automation"
+ }
+]

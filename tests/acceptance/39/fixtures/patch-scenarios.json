@@ -1,0 +1,167 @@
+[
+ {
+  "name": "001_add_file",
+  "patch": "*** Begin Patch\n*** Add File: bar.md\n+This is a new file\n*** End Patch\n",
+  "changed": [
+   "bar.md"
+  ]
+ },
+ {
+  "name": "002_multiple_operations",
+  "patch": "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Delete File: delete.txt\n*** Update File: modify.txt\n@@\n-line2\n+changed\n*** End Patch\n",
+  "changed": [
+   "delete.txt",
+   "modify.txt",
+   "nested/new.txt"
+  ]
+ },
+ {
+  "name": "003_multiple_chunks",
+  "patch": "*** Begin Patch\n*** Update File: multi.txt\n@@\n-line2\n+changed2\n@@\n-line4\n+changed4\n*** End Patch\n",
+  "changed": [
+   "multi.txt"
+  ]
+ },
+ {
+  "name": "004_move_to_new_directory",
+  "patch": "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch\n",
+  "changed": [
+   "old/name.txt",
+   "renamed/dir/name.txt"
+  ]
+ },
+ {
+  "name": "005_rejects_empty_patch",
+  "patch": "*** Begin Patch\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "006_rejects_missing_context",
+  "patch": "*** Begin Patch\n*** Update File: modify.txt\n@@\n-missing\n+changed\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "007_rejects_missing_file_delete",
+  "patch": "*** Begin Patch\n*** Delete File: missing.txt\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "008_rejects_empty_update_hunk",
+  "patch": "*** Begin Patch\n*** Update File: foo.txt\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "009_requires_existing_file_for_update",
+  "patch": "*** Begin Patch\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "010_move_overwrites_existing_destination",
+  "patch": "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-from\n+new\n*** End Patch\n",
+  "changed": [
+   "old/name.txt",
+   "renamed/dir/name.txt"
+  ]
+ },
+ {
+  "name": "011_add_overwrites_existing_file",
+  "patch": "*** Begin Patch\n*** Add File: duplicate.txt\n+new content\n*** End Patch\n",
+  "changed": [
+   "duplicate.txt"
+  ]
+ },
+ {
+  "name": "012_delete_directory_fails",
+  "patch": "*** Begin Patch\n*** Delete File: dir\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "013_rejects_invalid_hunk_header",
+  "patch": "*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch\n",
+  "changed": []
+ },
+ {
+  "name": "014_update_file_appends_trailing_newline",
+  "patch": "*** Begin Patch\n*** Update File: no_newline.txt\n@@\n-no newline at end\n+first line\n+second line\n*** End Patch\n",
+  "changed": [
+   "no_newline.txt"
+  ]
+ },
+ {
+  "name": "015_failure_after_partial_success_leaves_changes",
+  "patch": "*** Begin Patch\n*** Add File: created.txt\n+hello\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch\n",
+  "changed": [
+   "created.txt"
+  ]
+ },
+ {
+  "name": "016_pure_addition_update_chunk",
+  "patch": "*** Begin Patch\n*** Update File: input.txt\n@@\n+added line 1\n+added line 2\n*** End Patch\n",
+  "changed": [
+   "input.txt"
+  ]
+ },
+ {
+  "name": "017_whitespace_padded_hunk_header",
+  "patch": "*** Begin Patch\n  *** Update File: foo.txt\n@@\n-old\n+new\n*** End Patch\n",
+  "changed": [
+   "foo.txt"
+  ]
+ },
+ {
+  "name": "018_whitespace_padded_patch_markers",
+  "patch": " *** Begin Patch\n*** Update File: file.txt\n@@\n-one\n+two\n*** End Patch \n",
+  "changed": [
+   "file.txt"
+  ]
+ },
+ {
+  "name": "019_unicode_simple",
+  "patch": "*** Begin Patch\n*** Update File: foo.txt\n@@\n line1\n-naïve café\n+naïve café ✅\n*** End Patch\n",
+  "changed": [
+   "foo.txt"
+  ]
+ },
+ {
+  "name": "020_delete_file_success",
+  "patch": "*** Begin Patch\n*** Delete File: obsolete.txt\n*** End Patch\n",
+  "changed": [
+   "obsolete.txt"
+  ]
+ },
+ {
+  "name": "020_whitespace_padded_patch_marker_lines",
+  "patch": "*** Begin Patch \n*** Update File: file.txt\n@@\n-one\n+two\n *** End Patch\n",
+  "changed": [
+   "file.txt"
+  ]
+ },
+ {
+  "name": "021_update_file_deletion_only",
+  "patch": "*** Begin Patch\n*** Update File: lines.txt\n@@\n line1\n-line2\n line3\n*** End Patch\n",
+  "changed": [
+   "lines.txt"
+  ]
+ },
+ {
+  "name": "022_update_file_end_of_file_marker",
+  "patch": "*** Begin Patch\n*** Update File: tail.txt\n@@\n first\n-second\n+second updated\n*** End of File\n*** End Patch\n",
+  "changed": [
+   "tail.txt"
+  ]
+ },
+ {
+  "name": "023_preserves_crlf_line_endings",
+  "patch": "*** Begin Patch\n*** Update File: lines.txt\n@@\n-one\n+ONE\n two\n+between\n three\n*** End Patch\n",
+  "changed": [
+   "lines.txt"
+  ]
+ },
+ {
+  "name": "024_preserves_mixed_line_endings",
+  "patch": "*** Begin Patch\n*** Update File: lines.txt\n@@\n one\n two\n-three\n+THREE\n four\n*** End Patch\n",
+  "changed": [
+   "lines.txt"
+  ]
+ }
+]

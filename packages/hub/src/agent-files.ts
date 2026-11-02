@@ -3,7 +3,7 @@
 // link stays a link; read again before it is kept. Before setup's first write to a file its original bytes are kept
 // once, by hash, so undo puts them back where you haven't edited the file since.
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 type Obj = Record<string, unknown>;
@@ -96,7 +96,11 @@ export function writeThrough(file: string, text: string | Buffer): void {
   const real = target(file);
   mkdirSync(dirname(real), { recursive: true });
   const next = join(dirname(real), `.${real.split('/').pop()}.deepbuild-${process.pid}.tmp`);
-  writeFileSync(next, text);
+  // The file keeps its mode: a config can hold tokens. One that's new is yours alone.
+  const mode = existsSync(real) ? statSync(real).mode & 0o777 : 0o600;
+  rmSync(next, { force: true });
+  writeFileSync(next, text, { mode });
+  chmodSync(next, mode);
   const fd = openSync(next, 'r');
   try { fsyncSync(fd); } finally { closeSync(fd); }
   if (!readFileSync(next).equals(Buffer.from(text))) {

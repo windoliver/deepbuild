@@ -22,6 +22,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
+import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const MANAGED = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode/managed-settings.json' : '/etc/claude-code/managed-settings.json';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -32,6 +33,8 @@ function ran(program: string, args: string[], input?: string): Promise<{ code: n
       if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') return done(null);
       done({ code: error ? (typeof error.code === 'number' ? error.code : null) : 0, out: String(out), err: String(err) });
     });
+    // A program that exits before reading its input (a stub, a quick `--version`) closes the pipe: no crash of doctor's.
+    child.stdin?.on('error', () => undefined);
     child.stdin?.end(input ?? '');
   });
 }
@@ -213,7 +216,21 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
 }
 async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
+  const root = installedRoot();
+  if (hooksDisabled(root)) add('codex.hooks_enabled', agent, 'hooks_disabled', 'fail', `${join(recordedHome(root), 'config.toml')} has hooks = false under [features], so DeepBuild's hooks won't run there; setup never flips your setting`, 'Take hooks = false out of [features] if you want DeepBuild to hear Codex sessions.');
+  if (installedCodex(root)) {
+    const changed = modified(root);
+    for (const text of changed) add('codex.hooks', agent, 'hooks_modified', 'fail', text, `Put the entry back as ${root}/codex-hooks.json has it, then approve it once in /hooks if Codex asks.`);
+    if (!changed.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${codexHooks()} as setup wrote them`, 'Nothing to do.');
+  }
   if (!codex) return;
+  // Trust is Codex's to say, by its own hook list, as the hub read it at a Codex session's start: doctor starts no Codex.
+  const ours = readTrust(root);
+  if (ours) {
+    const problems = trustProblems(root);
+    if (problems.length) add('codex.hooks_trust', agent, 'hooks_untrusted', 'warn', `Codex's hook list reports ${problems.join(', ')}: those hooks don't run until you approve them`, 'Approve or enable them once in /hooks in a Codex session.');
+    else add('codex.hooks_trust', agent, 'healthy', 'ok', `Codex's hook list reports DeepBuild's ${ours.length} entries trusted`, 'Nothing to do.');
+  }
   const [version, login] = await Promise.all([ran(codex, ['--version']), ran(codex, ['login', 'status'])]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   const range = facts(agent).versions;
