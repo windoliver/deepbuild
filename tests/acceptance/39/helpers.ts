@@ -306,11 +306,13 @@ export function slowRepo(h: Home, o: { expected_ms: number; deadline_ms: number;
   const repo = join(h.tmp, 'repo');
   mkdirSync(join(repo, '.deepbuild', 'checks'), { recursive: true });
   writeFileSync(join(repo, 'cart.txt'), 'total\n');
-  writeFileSync(join(repo, '.deepbuild/checks/slow.sh'), `#!/bin/sh\nsleep ${o.sleepS}\nexit ${o.exit ?? 1}\n`, { mode: 0o755 });
+  // A node:test suite the command check kind counts (#30): one test that takes the check's time, then passes or fails as asked.
+  writeFileSync(join(repo, '.deepbuild/checks/slow.test.mjs'), `import { test } from 'node:test';\nimport assert from 'node:assert/strict';\ntest('the total includes tax', async () => { await new Promise((r) => setTimeout(r, ${o.sleepS * 1000})); assert.equal(${o.exit ?? 1}, 0); });\n`);
+  writeFileSync(join(repo, '.deepbuild/checks/slow.sh'), `#!/bin/sh\nnode --test .deepbuild/checks/slow.test.mjs\n`, { mode: 0o755 });
   git(repo, 'init', '-q', '-b', 'main');
   git(repo, 'add', '.');
   git(repo, 'commit', '-q', '-m', 'base');
-  const requirement = { id: 'R1', text: 'the total includes tax', source_line: 'ask#L1', refuted_by: 'a total without tax', check: '.deepbuild/checks/slow.sh', on_base: 'fails', asserts: [], depth: 'journey', oracle: 'code', near_misses: [], expected_ms: o.expected_ms, deadline_ms: o.deadline_ms };
+  const requirement = { id: 'R1', text: 'the total includes tax', source_line: 'ask#L1', refuted_by: 'a total without tax', check: '.deepbuild/checks/slow.sh', on_base: 'passes', asserts: [], depth: 'journey', oracle: 'code', near_misses: [], expected_ms: o.expected_ms, deadline_ms: o.deadline_ms };
   writeFileSync(join(h.tmp, 'drafts.json'), JSON.stringify({ drafts: [{ ask: SLOW_ASK, requirements: [requirement], deliverables: ['cart.txt'], budget: null }] }));
   editConfig(h, (c) => { c.asks = { deadline: { taste: '3d', authority: '1d', unblock: '2d', exception: '2d', choice: '2d', definition: '4h' }, default: { taste: 'recommended', authority: 'no', unblock: 'stay-blocked', exception: 'no-change', choice: 'recommended', definition: 'leave-out' }, fallback: ['change-owner'], fold: 5 }; });
   return realpathSync(repo);

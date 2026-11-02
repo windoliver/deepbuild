@@ -85,9 +85,10 @@ describe('a slow check\'s deadline', () => {
 
   it('a hold that ends with the check still going says why, and the verdict comes with your next message', async () => {
     const h = makeHome();
-    // Ignores the deadline's TERM, so the check outlasts the 7 s hold and is killed after it.
-    const repo = slowRepo(h, { expected_ms: 20 * MINUTE, deadline_ms: 1000, sleepS: 1 });
-    writeFileSync(join(repo, '.deepbuild/checks/slow.sh'), '#!/bin/sh\ntrap "" TERM\ni=0\nwhile [ $i -lt 40 ]; do sleep 1; i=$((i+1)); done\nexit 0\n', { mode: 0o755 });
+    // Its deadline fits the 7 s hold, but the command check kind kills it only a settle after the deadline (#30), so
+    // the check outlasts the hold and is killed after it.
+    const repo = slowRepo(h, { expected_ms: 20 * MINUTE, deadline_ms: 6900, sleepS: 1 });
+    writeFileSync(join(repo, '.deepbuild/checks/slow.test.mjs'), "import { test } from 'node:test';\nprocess.on('SIGTERM', () => {});\ntest('hangs', async () => { await new Promise((r) => setTimeout(r, 40_000)); });\n");
     git(repo, 'add', '.');
     git(repo, 'commit', '-q', '-m', 'hangs');
     const hub = await hubWithSetup(h);
