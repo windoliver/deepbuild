@@ -5,5 +5,10 @@
     "allowImportingTsExtensions": true,
     "rootDir": "../../.."
   },
-  "include": ["./**/*.ts"]
+  "include": [
+    "./**/*.ts"
+  ],
+  "exclude": [
+    "twins/**"
+  ]
 }
