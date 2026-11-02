@@ -192,21 +192,29 @@ pub fn is_open(events: &[Value], handle: &str) -> bool {
     reading(events, handle).0
 }
 
-/// When the ask's default applies: the deadline the core's undo of its default gave it, else its own.
+/// When the ask's default applies: the deadline the core last gave it, by an undo of its default or a move (#908),
+/// else its own.
 pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
     reading(events, &handle(ask))
         .1
         .or_else(|| ask["data"]["deadline"].as_u64())
 }
 
-/// Whether the ask `handle` is open and the deadline an undo gave it, as the core reads the record in order: the
-/// first close decides, and only the core's undo of a default opens it again.
+/// Whether the ask `handle` is open and the deadline the core last gave it, as the core reads the record in order:
+/// the first close decides, only the core's undo of a default opens it again, and the core moves an open ask's
+/// deadline.
 fn reading(events: &[Value], handle: &str) -> (bool, Option<u64>) {
     let mut closed: Option<&str> = None;
     let mut deadline = None;
     for event in events {
         if closed.is_none() && closes(event, handle) {
             closed = event["kind"].as_str();
+        } else if closed.is_none()
+            && event["kind"] == "deadline.moved"
+            && event["writer"] == "core"
+            && event["subject"] == handle
+        {
+            deadline = event["data"]["deadline"].as_u64().or(deadline);
         } else if closed == Some("ask.defaulted")
             && event["kind"] == "default.undone"
             && event["writer"] == "core"

@@ -163,10 +163,11 @@ impl Notifier {
     }
 }
 
-/// The id of the event, if it opens an ask: its creation, or the core's undo of its default.
+/// The id of the event, if it opens an ask or gives it a new deadline: its creation, the core's undo of its
+/// default, or the core moving its deadline (#908), so the notification names the time its default applies.
 fn opening(event: &Value) -> Option<String> {
     let opens = event["kind"] == "ask.created"
-        || (event["kind"] == "default.undone"
+        || ((event["kind"] == "default.undone" || event["kind"] == "deadline.moved")
             && event["writer"] == "core"
             && event["data"]["deadline"].is_u64());
     opens.then(|| event["id"].as_str().unwrap_or_default().to_owned())
@@ -251,6 +252,35 @@ mod tests {
         assert!(
             text.ends_with(&format!("If you don't answer: No, at {want}.")),
             "{text}"
+        );
+    }
+
+    #[test]
+    fn a_moved_deadline_posts_the_notification_again_with_the_time_it_moved_to() {
+        // #908: posted at raise with its deadline then, the ask's deadline moves while the Mac sleeps.
+        let raised = 1_000;
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Push?", "default": "no", "deadline": raised + 3_600_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&[ask.clone()], Vec::new());
+        let woke = raised + 9 * 3_600_000;
+        let moved = woke + 3_600_000;
+        let event = json!({"kind": "deadline.moved", "id": "m1", "writer": "core", "subject": "ask:a1",
+                           "data": {"span": moved - (raised + 3_600_000), "deadline": moved, "because": "notice"}});
+        notifier.saw(&event, woke);
+        let posted = notifier.due(&[ask, event], woke + 1_000, None, false);
+        let want = Local
+            .timestamp_millis_opt(moved as i64)
+            .unwrap()
+            .format("%H:%M");
+        assert_eq!(posted.len(), 1, "{posted:?}");
+        assert!(
+            posted[0]
+                .text
+                .ends_with(&format!("If you don't answer: No, at {want}.")),
+            "{}",
+            posted[0].text
         );
     }
 }

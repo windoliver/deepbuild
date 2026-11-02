@@ -1,0 +1,101 @@
+{
+  "$comment": "The pack format (#306) as a contract entry (#200; canvas primitives: Pack): a pack version's manifest, its recipes, steps and inputs, and the entries it fills into registries. The pack check in crates/deep-canvas/src/document/packs.rs refuses any other key, and its tests keep these keys and lists equal to the ones it reads.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "owner": { "type": "string" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "license": { "type": "string" },
+    "description": { "type": "string" },
+    "requires": {
+      "type": "object",
+      "properties": {
+        "core": { "type": "string" },
+        "modules": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "recipes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/recipe" }
+    },
+    "entries": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"]
+        }
+      }
+    }
+  },
+  "required": ["id", "name", "version", "license", "description"],
+  "additionalProperties": false,
+  "$defs": {
+    "recipe": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "title": { "type": "string" },
+        "catalog": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "license": { "type": "string" },
+        "author": { "type": "string" },
+        "description": { "type": "string" },
+        "preview": {},
+        "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/input" } },
+        "let": { "type": "object" },
+        "steps": { "type": "object", "additionalProperties": { "$ref": "#/$defs/step" } },
+        "outputs": {}
+      },
+      "required": ["version", "steps"],
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "ID"],
+          "x-closure": {
+            "closed": "record",
+            "reopens_if": "a recipe input needs a value type the document envelope adds",
+            "mark": "exhaustive"
+          }
+        },
+        "default": {},
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "options": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["type"]
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["mark", "item"],
+          "x-closure": {
+            "closed": "record",
+            "reopens_if": "a core release that adds a map the document holds",
+            "mark": "exhaustive"
+          }
+        },
+        "kind": { "type": "string" },
+        "params": {},
+        "at": {},
+        "repeat": {},
+        "let": { "type": "object" }
+      },
+      "required": ["op"],
+      "additionalProperties": false
+    }
+  },
+  "x-since": "R2",
+  "x-stability": "stable"
+}
