@@ -5,6 +5,8 @@
 //! place. A document that moves anything else (a line, a label, a paint) is evaluated whole every
 //! frame, which gives the same scene and allocates.
 
+use std::collections::HashMap;
+
 use deep_canvas::camera::{Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
 use deep_canvas_motion::eval::Validity;
@@ -13,7 +15,8 @@ use serde_json::{Map, Value};
 
 use crate::look::Look3;
 use crate::scene::{
-    corners_into, evaluate, local_of, matmul, near_far, num, posed, Affine3, Labels, Refused, Scene,
+    corners_into, evaluate, evaluate_compiled, local_of, matmul, near_far, num, posed, Affine3,
+    Labels, Refused, Scene,
 };
 
 /// One solid's place in the scene and what its world matrix is made of.
@@ -51,6 +54,7 @@ struct Camera {
 }
 
 pub struct Frames {
+    /// The document, kept only when every frame is evaluated whole (`fast` is `None`).
     doc: Value,
     look: Look3,
     program: Program,
@@ -65,7 +69,6 @@ pub struct Frames {
 impl Frames {
     /// Compiles `doc` (stamped) and evaluates it whole at t = 0.
     pub fn new(doc: &Value, look: &Look3, labels: &mut Labels) -> Result<Frames, Refused> {
-        let scene = evaluate(doc, 0, look, labels)?;
         let map = doc.as_object().ok_or(Refused {
             code: "out_of_range",
             path: String::new(),
@@ -74,11 +77,16 @@ impl Frames {
             code: r.code,
             path: r.path,
         })?;
+        let scene = evaluate_compiled(map, &program, 0, look, labels)?;
         let state = program.state();
         let fast = fast_path(map, &program, &scene);
         let bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
         Ok(Frames {
-            doc: doc.clone(),
+            doc: if fast.is_some() {
+                Value::Null
+            } else {
+                doc.clone()
+            },
             look: look.clone(),
             program,
             state,
@@ -268,7 +276,12 @@ fn fast_path(
         return None;
     }
     let items = map.get("items")?.as_object()?;
-    let index = |id: &str| program.items.iter().position(|i| i == id);
+    // Each item's first index in the program, looked up once per solid and parent.
+    let mut indices: HashMap<&str, usize> = HashMap::with_capacity(program.items.len());
+    for (i, id) in program.items.iter().enumerate() {
+        indices.entry(id.as_str()).or_insert(i);
+    }
+    let index = |id: &str| indices.get(id).copied();
     let camera_id = map.get("camera")?.as_str()?;
     let camera_item = index(camera_id);
     let mut overrides = Vec::new();

@@ -561,14 +561,18 @@ fn admit(
             "a writer is kind:id",
         )]
     })?;
-    let mut doc = stamp(&payload, doc_id, &w, writer)
+    let mut doc = stamp(payload, doc_id, &w, writer)
         .map_err(|issues| issues.iter().map(|i| i.to_json()).collect::<Vec<_>>())?;
-    let errors: Vec<Value> = check_in(&doc, sealed())
+    let checked = check_in(&doc, sealed());
+    let errors: Vec<Value> = checked
         .issues
         .iter()
         .filter(|i| i.severity == "error")
         .map(|i| i.to_json())
         .collect();
+    // The check's lowered copy of the document is freed off the admission path: a 10,000-item
+    // document's takes milliseconds of the 50 its check before it shows has (#386).
+    std::thread::spawn(move || drop(checked));
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -747,6 +751,9 @@ impl Live {
             .min(64);
         let frames = args.frames as usize;
         let kit = Kit::new(&device);
+        // The build's canvas modules seal once, as the window opens, not in the first revision's
+        // check.
+        sealed();
         let compile = CompileThread::new();
         // The planted swap compiles nothing ahead.
         let warming = (!plants.compiles_at_swap).then(|| {

@@ -160,13 +160,6 @@ fn check_by(
                 .iter()
                 .flat_map(|e| e.derived.keys().map(String::as_str))
                 .collect();
-            // The lowered items' IDs: the document's, and those expansion wrote.
-            let item_ids: BTreeSet<&str> = member(doc, "items")
-                .and_then(Value::as_object)
-                .into_iter()
-                .flat_map(|m| m.keys().map(String::as_str))
-                .chain(derived.iter().copied())
-                .collect();
             // The parents as written, for the cycle walk.
             let parents: BTreeMap<String, String> = items
                 .iter()
@@ -176,6 +169,18 @@ fn check_by(
                         .map(|p| (k.clone(), p.to_string()))
                 })
                 .collect();
+            // The lowered items' IDs: the document's, and those expansion wrote. Only a parent
+            // that is a string is looked up in them.
+            let item_ids: BTreeSet<&str> = if parents.is_empty() {
+                BTreeSet::new()
+            } else {
+                member(doc, "items")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flat_map(|m| m.keys().map(String::as_str))
+                    .chain(derived.iter().copied())
+                    .collect()
+            };
             let mut facts: BTreeMap<String, KindFacts<'_>> = BTreeMap::new();
             for item in items.values() {
                 if let Some(text) = kind_text(item) {

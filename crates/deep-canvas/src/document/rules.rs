@@ -226,6 +226,9 @@ fn status_roles(items: &Map<String, Value>, issues: &mut Vec<Issue>) {
         }
     }
     // A mark set whose role goes through such a scale takes the color: name it with the scale.
+    if scales.is_empty() {
+        return;
+    }
     for (id, item) in items {
         let scale = member(item, "params")
             .and_then(|p| member(p, "encode"))

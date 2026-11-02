@@ -8,13 +8,14 @@
 //! Box, cylinder and sphere are unit meshes, 1 m across and centred on the item's origin, scaled
 //! by `size`; a cylinder's axis is +Y.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Index;
 
 use deep_canvas::camera::{screen_basis, Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
 use deep_canvas::ops::{cos, rad, sin, sqrt, tan};
 use deep_canvas_motion::eval;
-use deep_canvas_motion::program::Program;
+use deep_canvas_motion::program::{Program, State, TRANSFORM};
 use deep_text::Role;
 use serde_json::{Map, Value};
 
@@ -474,32 +475,119 @@ pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Aff
 /// An item's world transform, without its size: its parents' composed over its own, in 3D. The
 /// items carry their own transforms (`Program::evaluate_local`): motion's child-of parenting
 /// turns a child only about z, and composed here again it would add the parent twice.
-fn world(items: &Map<String, Value>, id: &str) -> Affine3 {
-    let mut m = match items.get(id) {
-        Some(item) => local(item, [1.0; 3]),
-        None => {
-            return [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-            ]
-        }
+fn world(items: &Items<'_>, id: &str) -> Affine3 {
+    let Some((item, mut m)) = items.placed(id) else {
+        return [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ];
     };
-    let mut seen = vec![id.to_string()];
-    let mut at = items
-        .get(id)
-        .and_then(|i| i.get("parent"))
-        .and_then(Value::as_str);
+    // The parents passed, after `id` itself.
+    let mut seen: Vec<&str> = Vec::new();
+    let mut at = item.get("parent").and_then(Value::as_str);
     while let Some(p) = at {
-        if seen.iter().any(|s| s == p) {
+        if p == id || seen.contains(&p) {
             break;
         }
-        let Some(parent) = items.get(p) else { break };
-        m = matmul(&local(parent, [1.0; 3]), &m);
-        seen.push(p.to_string());
+        let Some((parent, local)) = items.placed(p) else {
+            break;
+        };
+        m = matmul(&local, &m);
+        seen.push(p);
         at = parent.get("parent").and_then(Value::as_str);
     }
     m
+}
+
+/// The document's items at a time, as [`eval::items`] gives them, without copying the document:
+/// an item a field names is its copy in `written`, and every other item is the document's own,
+/// its `at` the three numbers of each group in its slots.
+struct Items<'a> {
+    doc: &'a Map<String, Value>,
+    written: &'a Map<String, Value>,
+    /// Each item as evaluated, and for an object nothing writes, its index in the program: its
+    /// transform is its `TRANSFORM` slots from there.
+    entries: HashMap<&'a str, (&'a Value, Option<usize>)>,
+    slots: &'a [f64],
+}
+
+impl<'a> Items<'a> {
+    /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
+    /// program's items are the document's in its order, so item `i`'s transform is its
+    /// `TRANSFORM` slots from `i * TRANSFORM`.
+    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State) -> Self {
+        let mut entries = HashMap::with_capacity(doc.len());
+        let mut copies = written.iter().peekable();
+        for (i, (id, item)) in doc.iter().enumerate() {
+            let entry = match copies.next_if(|(w, _)| *w == id) {
+                Some((_, evaluated)) => (evaluated, None),
+                None => (item, item.is_object().then_some(i)),
+            };
+            entries.insert(id.as_str(), entry);
+        }
+        Items {
+            doc,
+            written,
+            entries,
+            slots: &state.slots,
+        }
+    }
+
+    fn get(&self, id: &str) -> Option<&'a Value> {
+        self.entries.get(id).map(|e| e.0)
+    }
+
+    fn contains_key(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+
+    /// The items in document order. `written` holds some of them in that order too.
+    fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
+        let mut written = self.written.iter().peekable();
+        self.doc
+            .iter()
+            .map(move |(id, item)| match written.next_if(|(w, _)| *w == id) {
+                Some((_, evaluated)) => (id, evaluated),
+                None => (id, item),
+            })
+    }
+
+    /// The item `id` and its [`local`] transform: an object nothing writes reads its `at` from
+    /// its slots as the evaluated item holds them, a number that isn't finite leaving its group's
+    /// default.
+    fn placed(&self, id: &str) -> Option<(&'a Value, Affine3)> {
+        let &(item, index) = self.entries.get(id)?;
+        let m = match index {
+            Some(i) => {
+                let slots = &self.slots[i * TRANSFORM..(i + 1) * TRANSFORM];
+                let group = |k: usize, default: Vec3| {
+                    let s = &slots[3 * k..3 * k + 3];
+                    if s.iter().all(|x| x.is_finite()) {
+                        [s[0], s[1], s[2]]
+                    } else {
+                        default
+                    }
+                };
+                local_of(
+                    group(0, [0.0; 3]),
+                    group(1, [0.0; 3]),
+                    group(2, [1.0; 3]),
+                    [1.0; 3],
+                )
+            }
+            None => local(item, [1.0; 3]),
+        };
+        Some((item, m))
+    }
+}
+
+impl Index<&str> for Items<'_> {
+    type Output = Value;
+
+    fn index(&self, id: &str) -> &Value {
+        self.get(id).expect("an item of the document")
+    }
 }
 
 fn origin(m: &Affine3) -> Vec3 {
@@ -553,15 +641,12 @@ fn stroke(
     }))
 }
 
-fn order_key(item: &Value) -> String {
-    item.get("order")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
+fn order_key(item: &Value) -> &str {
+    item.get("order").and_then(Value::as_str).unwrap_or("")
 }
 
 /// An entry of a line's `points`: a point, or an item's evaluated anchor (its origin).
-fn point_of(items: &Map<String, Value>, v: &Value, path: &str) -> Result<Vec3, Refused> {
+fn point_of(items: &Items<'_>, v: &Value, path: &str) -> Result<Vec3, Refused> {
     if let Some(p) = vec3(Some(v)) {
         return Ok(p);
     }
@@ -588,12 +673,7 @@ pub fn segments(mode: &str, n: usize) -> Option<Vec<(usize, usize)>> {
     }
 }
 
-fn line(
-    items: &Map<String, Value>,
-    id: &str,
-    params: &Value,
-    look: &Look3,
-) -> Result<Line, Refused> {
+fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let points = params
         .get("points")
@@ -756,9 +836,26 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         code: r.code,
         path: r.path,
     })?;
+    evaluate_compiled(map, &program, t, look, labels)
+}
+
+/// [`evaluate`] of a document whose motion program is compiled already.
+pub(crate) fn evaluate_compiled(
+    map: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+) -> Result<Scene, Refused> {
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
-    let items = eval::items(map, &program, &state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, program, &state);
+    let items = Items::new(doc_items, &written, &state);
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -772,36 +869,33 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
     };
 
     // Layers in their order; an item with no layer draws in one of its own, first.
-    let mut layer_order: Vec<(String, String)> = map
+    let mut layer_order: Vec<(&str, &str)> = map
         .get("layers")
         .and_then(Value::as_object)
         .map(|l| {
             l.iter()
-                .map(|(id, layer)| (order_key(layer), id.clone()))
+                .map(|(id, layer)| (order_key(layer), id.as_str()))
                 .collect()
         })
         .unwrap_or_default();
     layer_order.sort();
-    let mut by_layer: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
-    for (id, item) in &items {
-        let layer = item
-            .get("layer")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
+    // Each layer's items: their order keys, IDs and evaluated items.
+    let mut by_layer: BTreeMap<&str, Vec<(&str, &String, &Value)>> = BTreeMap::new();
+    for (id, item) in items.iter() {
+        let layer = item.get("layer").and_then(Value::as_str).unwrap_or("");
         by_layer
             .entry(layer)
             .or_default()
-            .push((order_key(item), id.clone()));
+            .push((order_key(item), id, item));
     }
-    let mut order: Vec<String> = Vec::new();
+    let mut order: Vec<&str> = Vec::new();
     if by_layer.contains_key("") {
-        order.push(String::new());
+        order.push("");
     }
     order.extend(layer_order.into_iter().map(|(_, id)| id));
     for id in by_layer.keys() {
         if !order.contains(id) {
-            order.push(id.clone());
+            order.push(id);
         }
     }
 
@@ -814,13 +908,13 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
         };
-        list.sort();
+        // IDs are unique, so this is the order of (order key, ID) alone.
+        list.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
         let mut layer = Layer3 {
-            id: layer_id.clone(),
+            id: layer_id.to_string(),
             ..Layer3::default()
         };
-        for (_, id) in list.iter() {
-            let item = &items[id];
+        for &(_, id, item) in list.iter() {
             let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
@@ -1010,7 +1104,7 @@ fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
 
 /// An `overlay.frame@1`: its frame's shapes, placed at its anchor's projection plus its offset.
 fn overlay(
-    items: &Map<String, Value>,
+    items: &Items<'_>,
     layer: &str,
     id: &str,
     camera: &Camera,
@@ -1043,7 +1137,7 @@ fn overlay(
         })
         .as_ref())
     .unwrap_or([0.0; 2]);
-    let mut children: Vec<(String, &String)> = items
+    let mut children: Vec<(&str, &String)> = items
         .iter()
         .filter(|(_, i)| i.get("parent").and_then(Value::as_str) == Some(frame))
         .map(|(cid, i)| (order_key(i), cid))
