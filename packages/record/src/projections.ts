@@ -320,6 +320,12 @@ export class Projector {
         if (e.writer !== 'core') break;
         this.stmt("UPDATE asks SET status = 'open', outcome = 'unanswered', answered = NULL, answer = NULL, decision = NULL, deadline = ? WHERE id = ? AND status = 'defaulted'").run(int(d.deadline), bare(e.subject));
         break;
+      case 'deadline.moved':
+        // The core moves an open ask's deadline later by time it couldn't be seen (#908). Its minimum notice once it
+        // shows holds its default back but is no deadline move, so the column keeps the deadline.
+        if (e.writer !== 'core' || d.because === 'notice') break;
+        this.stmt("UPDATE asks SET deadline = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.deadline), bare(e.subject));
+        break;
       case 'ask.escalated':
       case 'ask.cancelled':
       case 'ask.moot':
