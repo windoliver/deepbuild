@@ -4,7 +4,8 @@
 //! look's distance of a status color to the nearest allowed color and counting what it moved
 //! (the `status_guard {pixels_moved}` notice); the status colors then composite the status layer,
 //! the marks and the legend the driver rasterized, over the slot, so their pixels are exact and
-//! nothing the frame drew covers them. Neither runs in a document where status can't show: the
+//! nothing the frame drew covers them. Below internal scale 1 the guard writes the internal frame
+//! and the status colors draw after the upscale (#386). Neither runs in a document where status can't show: the
 //! driver attaches the stage only there.
 
 use std::sync::{Arc, Mutex};
@@ -310,10 +311,10 @@ impl After for Shared {
             ns_per_px,
             determinism: Determinism::SameMachine,
         };
-        vec![
-            pass(GUARD_PASS, "status_guard", 0.08),
-            pass(COLORS_PASS, "status_colors", 0.02),
-        ]
+        let mut colors = pass(COLORS_PASS, "status_colors", 0.02);
+        // Status outlines are depth-tested against the core's depth target (#386).
+        colors.reads.push("depth");
+        vec![pass(GUARD_PASS, "status_guard", 0.08), colors]
     }
 
     fn jobs(&mut self, device: &Device, frame: &AfterFrame<'_>) -> Vec<(String, Job)> {
@@ -329,7 +330,11 @@ impl After for Shared {
         });
         s.arm(device, &guard, true);
         let bind = s.guard_bind(device, frame.finished);
-        let (slot, pipeline, p) = (frame.slot.clone(), s.guard_slot.clone(), profiler.clone());
+        let (slot, pipeline, p) = (
+            frame.guarded.clone(),
+            s.guard_slot.clone(),
+            profiler.clone(),
+        );
         jobs.push((
             GUARD_PASS.into(),
             Box::new(move |encoder| {

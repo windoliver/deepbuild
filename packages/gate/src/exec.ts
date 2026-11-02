@@ -9,11 +9,12 @@ import { loadavg, availableParallelism, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SLOW_SLOT, type Lease, type LeaseTable, type Resource } from '@deepbuild/leases';
 import type { Result, RunOutcome } from '@deepbuild/verdicts';
+import { gitEnv } from './env.js';
 import { matches } from './glob.js';
 
 const SLOT: Resource = { host: 'local', kind: 'cpu.slot', key: 'slot' };
 const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): Promise<string> => new Promise((resolve, reject) => {
-  execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, ...env } }, (error, stdout, stderr) => {
+  execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...gitEnv(), ...env } }, (error, stdout, stderr) => {
     if (error) reject(Error(`git ${args[0]}: ${stderr.trim() || error.message}`));
     else resolve(stdout.trim());
   });

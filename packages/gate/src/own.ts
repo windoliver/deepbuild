@@ -4,6 +4,7 @@
 // script, Makefile or justfile target it runs, and any other file its runs read under the repo's test, fixture and
 // script folders. The code under test is an input for staleness, never an own file.
 import { execFileSync } from 'node:child_process';
+import { gitEnv } from './env.js';
 import { matches } from './glob.js';
 
 export interface ApprovedCheck {
@@ -15,7 +16,7 @@ export type SourcePlant = 'every-read-file-is-own' | 'declared-only' | 'ignores-
 
 /** The folders a read file under is the check's own. */
 const OWN_FOLDERS = new Set(['test', 'tests', '__tests__', 'fixtures', '__fixtures__', '__snapshots__', 'scripts', 'spec']);
-const gitIn = (repo: string, args: string[]): string => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+const gitIn = (repo: string, args: string[]): string => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: gitEnv() });
 const show = (repo: string, rev: string, path: string): string | null => {
   try { return gitIn(repo, ['show', `${rev}:${path}`]); } catch { return null; }
 };

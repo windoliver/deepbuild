@@ -12,8 +12,10 @@
   },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
+    "@deepbuild/conformance": "0.0.0",
     "@deepbuild/contracts": "0.0.0",
     "@deepbuild/leases": "0.0.0",
+    "@deepbuild/supervisor": "0.0.0",
     "@deepbuild/verdicts": "0.0.0"
   }
 }
