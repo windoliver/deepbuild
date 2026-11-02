@@ -27,6 +27,10 @@ const HANDLED_MS = 200;
 const ANSWER_MS = 55_000;
 const UNREACHABLE_MS = 1000;
 const line = (value: Obj): string => `${JSON.stringify({ v: 1, ...value })}\n`;
+/** A line of the hub's protocol, or nothing for one that isn't: a throw inside a socket's handler would end pi. */
+function parse(text: string): Obj | undefined {
+  try { const value = JSON.parse(text) as unknown; return typeof value === 'object' && value !== null ? value as Obj : undefined; } catch { return undefined; }
+}
 
 /** The hub's socket: `hub.address` in ~/.deepbuild/config.json, or the installed hub's; a worktree a dev hub serves reads that one. */
 function hubSocket(cwd: string): string {
@@ -129,8 +133,9 @@ function sendHook(socket: string, event: string, payload: Obj, acked: () => void
     sock.setEncoding('utf8').on('data', (chunk: string) => {
       buffer += chunk;
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-        const message = JSON.parse(buffer.slice(0, i)) as Obj;
+        const message = parse(buffer.slice(0, i));
         buffer = buffer.slice(i + 1);
+        if (!message) continue;
         if (!greeted) {
           greeted = true;
           const seq = (BigInt(Date.now()) * 1_000_000n).toString();
@@ -176,8 +181,9 @@ class Tools {
       sock.setEncoding('utf8').on('data', (chunk: string) => {
         buffer += chunk;
         for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-          const message = JSON.parse(buffer.slice(0, i)) as Obj;
+          const message = parse(buffer.slice(0, i));
           buffer = buffer.slice(i + 1);
+          if (!message) continue;
           if (!greeted) {
             greeted = true;
             void startOf(process.pid).then((start) => sock.write(line({ hello: 'mcp', parent: { pid: process.pid, start }, cwd: this.cwd })));
@@ -302,6 +308,10 @@ export default function deepbuild(pi: Pi): void {
   }
   const afterStart: (() => void)[] = [];
   let gone = false;
+  /** The person's last prompts, as pi showed them: a user message holding one of them is theirs. */
+  const personInputs: string[] = [];
+  /** User messages that started in this run and matched no answer sent nor the person's prompts: an answer an extension rewrote. */
+  let unmatchedStarts = 0;
   /**
    * What the session can take now. A tool call running takes a steer, which reaches the model after the calls' results.
    * While only a model request runs nothing goes in: it may end in an error pi retries on its own, so the answer waits
@@ -411,6 +421,7 @@ export default function deepbuild(pi: Pi): void {
     flushInput();
     // Whether a run follows shows only afterwards: an extension after this one may take the input without one.
     const payload = { prompt: String(event.text), source: String(event.source) };
+    if (payload.source !== 'extension' && payload.prompt) { personInputs.push(payload.prompt); if (personInputs.length > 8) personInputs.shift(); }
     pendingInput = { payload, timer: setTimeout(() => flushInput(ctx?.isIdle() === true ? { disposition: 'handled' } : {}), HANDLED_MS) };
     return undefined;
   });
@@ -419,7 +430,11 @@ export default function deepbuild(pi: Pi): void {
     const message = event.message as { role?: string; content?: unknown } | undefined;
     if (message?.role !== 'user') return undefined;
     const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '');
-    for (const entry of [...sent]) if (text.includes(JSON.stringify(entry.text).slice(1, -1))) reached(entry);
+    const holds = (said: string): boolean => text.includes(JSON.stringify(said).slice(1, -1));
+    let matched = false;
+    for (const entry of [...sent]) if (holds(entry.text)) { reached(entry); matched = true; }
+    // Not an answer as sent, not the person's words: an extension's input transform rewrote what went in.
+    if (!matched && sent.length && !personInputs.some(holds)) unmatchedStarts++;
     return undefined;
   });
   on('agent_start', () => {
@@ -521,9 +536,12 @@ export default function deepbuild(pi: Pi): void {
     // What pi cleared unread, as an abort clears its queue, goes again as a turn of its own.
     // An abort leaves pi's queue as it is: what's still in it goes in with its next run.
     if (ctx?.hasPendingMessages() !== true) for (const entry of sent.splice(0)) {
+      // A user message started this run that was no answer as sent and none of the person's: this one, rewritten.
+      if (unmatchedStarts > 0) { unmatchedStarts--; void report(entry.asks, entry.via, 'delivered'); continue; }
       for (const ask of entry.asks) delivered.delete(ask);
       held.push({ asks: entry.asks, text: entry.text });
     }
+    unmatchedStarts = 0;
     // pi goes idle only after its handlers for this event return, and no later event says so.
     const settle = (tries: number): void => {
       place(false);
