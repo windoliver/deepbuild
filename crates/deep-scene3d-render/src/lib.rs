@@ -19,7 +19,7 @@ use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::label::{AtlasPage, PAGE, PAGES};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{Depth, Facing, Layer3, PointShape, Scene, Shape};
+use deep_canvas_scene3d::scene::{Depth, Facing, Layer3, PointShape, Scene, Shape, Solid};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
@@ -296,6 +296,17 @@ struct TextRecord {
     pick: u32,
     flags: u32,
     pad: u32,
+}
+
+fn solid_record(s: &Solid, pick: u32) -> SolidRecord {
+    SolidRecord {
+        rows: s
+            .model
+            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
+        color: pack(s.color),
+        pick,
+        pad: [0; 2],
+    }
 }
 
 fn pack(c: [u8; 3]) -> u32 {
@@ -581,6 +592,21 @@ impl Set {
         members_changed
     }
 
+    /// Writes record `i` alone when it changed, the set's members as they were.
+    fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
+        let at = i * self.stride;
+        let Some(old) = self.records.get_mut(at..at + record.len()) else {
+            return;
+        };
+        if old != record {
+            old.copy_from_slice(record);
+            if let Some(buffer) = &self.buffer {
+                deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, at as u64, record));
+            }
+            *written += 1;
+        }
+    }
+
     fn len(&self) -> u32 {
         self.owners.len() as u32
     }
@@ -595,6 +621,9 @@ struct Batch {
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
+    /// Each solid's shape, its record's place in that shape's set, and its pick ID, in the
+    /// layer's solid order.
+    solid_slots: Vec<(Shape, u32, u32)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -1369,6 +1398,64 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.prepare_frame(device, scene, look);
+        for layer in &scene.layers {
+            self.prepare_batch(device, layer);
+        }
+        let same = self.order.len() == scene.layers.len()
+            && self
+                .order
+                .iter()
+                .zip(&scene.layers)
+                .all(|(o, l)| *o == l.id);
+        if !same {
+            self.order = scene.layers.iter().map(|l| l.id.clone()).collect();
+            let order = &self.order;
+            self.batches.retain(|id, _| order.contains(id));
+        }
+    }
+
+    /// [`Renderer::prepare`] for a scene that differs from the last one it prepared only in its
+    /// size, its camera and the solids `moved` lists (layer, index): it writes those solids'
+    /// records alone, so a frame costs what moved, and replays every batch.
+    pub fn prepare_moved(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        look: &Look3,
+        moved: &[(usize, usize)],
+    ) {
+        if self.planted.encodes_every_frame || self.order.len() != scene.layers.len() {
+            return self.prepare(device, scene, look);
+        }
+        self.prepare_frame(device, scene, look);
+        let mut written = 0;
+        for &(l, i) in moved {
+            let layer = &scene.layers[l];
+            let Some(batch) = self.batches.get_mut(&layer.id) else {
+                continue;
+            };
+            let (Some(s), Some(&(shape, at, pick))) =
+                (layer.solids.get(i), batch.solid_slots.get(i))
+            else {
+                continue;
+            };
+            if let Some(set) = batch.solids.get_mut(&shape) {
+                let record = solid_record(s, pick);
+                set.write(
+                    device,
+                    at as usize,
+                    bytemuck::bytes_of(&record),
+                    &mut written,
+                );
+            }
+        }
+        self.counts.instances_written += written;
+        self.counts.replayed += scene.layers.len() as u32;
+    }
+
+    /// The frame's uniforms, outlines and shadow, and its atlas pages.
+    fn prepare_frame(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
         // Below internal scale 1 the targets are the internal size; px-sized marks shrink with
         // them, and the upscale returns the frame to `scene.size` (#386).
@@ -1495,29 +1582,26 @@ impl Renderer {
             decode(scene.ground[2]),
             1.0,
         ];
-        for layer in &scene.layers {
-            self.prepare_batch(device, layer);
-        }
-        let same = self.order.len() == scene.layers.len()
-            && self
-                .order
-                .iter()
-                .zip(&scene.layers)
-                .all(|(o, l)| *o == l.id);
-        if !same {
-            self.order = scene.layers.iter().map(|l| l.id.clone()).collect();
-            let order = &self.order;
-            self.batches.retain(|id, _| order.contains(id));
-        }
     }
 
     fn prepare_batch(&mut self, device: &Device, layer: &Layer3) {
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
         let mut written = 0u32;
         let mut next = self.next_generation;
+        if !self.batches.contains_key(&layer.id) {
+            self.batches.insert(layer.id.clone(), Batch::default());
+        }
+        let mut slots = std::mem::take(
+            &mut self
+                .batches
+                .get_mut(&layer.id)
+                .expect("made above")
+                .solid_slots,
+        );
+        slots.clear();
         for s in &layer.solids {
             self.mesh(device, s.shape);
-            self.pick(&s.id);
+            slots.push((s.shape, 0, self.pick(&s.id)));
         }
         for l in &layer.lines {
             self.pick(&l.id);
@@ -1528,27 +1612,18 @@ impl Renderer {
         for l in &layer.labels {
             self.pick(&l.id);
         }
-        if !self.batches.contains_key(&layer.id) {
-            self.batches.insert(layer.id.clone(), Batch::default());
-        }
         let picks = &self.picks;
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         for set in batch.solids.values_mut() {
             set.begin();
         }
-        for s in &layer.solids {
-            let rows = s
-                .model
-                .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]);
-            let record = SolidRecord {
-                rows,
-                color: pack(s.color),
-                pick: picks[&s.id],
-                pad: [0; 2],
-            };
+        for (s, slot) in layer.solids.iter().zip(&mut slots) {
+            let record = solid_record(s, slot.2);
             let set = batch.solids.entry(s.shape).or_default();
+            slot.1 = set.count as u32;
             set.push(&s.id, bytemuck::bytes_of(&record));
         }
+        batch.solid_slots = slots;
         batch.solids.retain(|_, set| set.count > 0);
         for set in batch.solids.values_mut() {
             set.finish(device, &mut next, &mut written);
@@ -2517,4 +2592,85 @@ pub fn draw_offscreen(
     }
     device.queue.submit([encoder.finish()]);
     read_texture(device, &texture, size, 4)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deep_canvas_scene3d::frames::Frames;
+    use deep_canvas_scene3d::scene::Labels;
+    use deep_gpu::device::{Backend, Gpu};
+    use serde_json::json;
+
+    /// Records by shape, in each batch.
+    fn records(r: &Renderer) -> Vec<(String, Shape, Vec<u8>)> {
+        let mut out = Vec::new();
+        for (id, b) in &r.batches {
+            for (shape, set) in &b.solids {
+                out.push((id.clone(), *shape, set.records.clone()));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_frame_that_writes_what_moved_leaves_the_records_a_whole_prepare_writes() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let boxes = |id: &str, order: &str, pos: [f64; 3]| json!({"id": id, "kind": "mark.box@1", "name": id, "order": order, "layer": "main", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": pos}});
+        // Boxes in one layer; `b` slides, `c` rides it, `a` and `d` stay.
+        let mut items = serde_json::Map::new();
+        items.insert("cam".into(), json!({"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 14}, "fov": 40}}));
+        for (id, order, pos) in [
+            ("a", "b0", [-3.0, 0.5, 0.0]),
+            ("b", "b1", [0.0, 0.5, 0.0]),
+            ("c", "b2", [0.0, 1.0, 0.0]),
+            ("d", "b3", [3.0, 0.5, 0.0]),
+        ] {
+            items.insert(id.into(), boxes(id, order, pos));
+        }
+        items["c"]["parent"] = json!("b");
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [128, 96], "camera": "cam",
+            "transport": {"span": "60s"}, "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": items,
+            "channels": {
+                "slide": {"target": "items/b/at/pos/0", "type": "f32", "keys": {"k0": {"t": "0s", "value": -3, "interp": "linear"}, "k1": {"t": "60s", "value": 3, "interp": "linear"}}},
+                "orbit": {"target": "items/cam/params/orbit/azimuth", "type": "f32", "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "60s", "value": 90, "interp": "linear"}}}
+            }
+        });
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        let moved = frames
+            .moved()
+            .expect("transforms and the orbit stay on the fast path")
+            .to_vec();
+        assert_eq!(moved.len(), 2, "the sliding box and its child: {moved:?}");
+        let mut playing = Renderer::new(&device, Planted::default());
+        frames
+            .at(0, [128, 96], &Default::default(), &mut labels)
+            .unwrap();
+        playing.prepare(&device, frames.scene(), &look);
+        for n in [1i64, 17, 600] {
+            frames
+                .at(
+                    n * 705_600_000 / 60,
+                    [128, 96],
+                    &Default::default(),
+                    &mut labels,
+                )
+                .unwrap();
+            playing.prepare_moved(&device, frames.scene(), &look, &moved);
+            assert_eq!(
+                playing.counts().instances_written,
+                2,
+                "frame {n}: the two moved records alone"
+            );
+            let mut whole = Renderer::new(&device, Planted::default());
+            whole.prepare(&device, frames.scene(), &look);
+            assert_eq!(records(&playing), records(&whole), "frame {n}");
+        }
+    }
 }
