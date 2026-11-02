@@ -140,7 +140,7 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
  * can't make a client drop the deep_* tools: one finds actions and returns their schemas, one calls an action by name
  * with a request ID. An action's input travels as its JSON text, since the strict schemas take no free-form object.
  */
-export const ACTION_SCHEMAS: Readonly<Record<string, Schema>> = {
+const ACTION_SCHEMAS: Readonly<Record<string, Schema>> = {
   find_actions: object({ query: maybe(str('Words an action\'s name or its plug-in\'s must hold; null for every action.')) }),
   call_action: object({
     action: str('The action, by the name find_actions gave, ext.<plugin>.<name>.'),

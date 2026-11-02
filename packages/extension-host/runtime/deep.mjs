@@ -34,6 +34,8 @@ export const API = Object.freeze([
   { method: 'deep.provide', needs: null },
   { method: 'deep.use', needs: null },
   { method: 'deep.read', needs: null },
+  // #103: an action output a piece uses, called through its edge for the calling piece.
+  { method: 'deep.call', needs: null },
   // #363: the piece's store, its items kept in the record under kinds its manifest declares. `deep.store` comes before
   // its methods, which hang off it.
   { method: 'deep.store', needs: null },
