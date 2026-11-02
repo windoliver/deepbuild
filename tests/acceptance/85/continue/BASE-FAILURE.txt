@@ -1,0 +1,32 @@
+Acceptance tests for #85, criterion 14 and the resume-skip Scope line, on the base c69c9acf (the merge of
+origin/claude/85-network-and-slack into claude/issue-85-cbc758: criteria 1 to 12 of #85 implemented, nothing of
+criteria 13 to 15 or the Scope lines added since), run on 2026-11-01 on Linux (20 cores, 1-minute load 4.5), Node
+24.22.0, Vitest 5.0.5:
+
+  node node_modules/vitest/vitest.mjs run tests/acceptance/85/continue --no-file-parallelism --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/85/continue/tsconfig.json
+
+Trimmed to each failure's reason. Stop IDs vary by run. No local path appears in what is kept.
+
+
+== The base (0.6 s)
+
+ Test Files  3 failed (3)
+      Tests  3 failed (3)
+
+FAIL  counted.test.ts      #85.281df797  AssertionError: after a turn that ended normally, the next transient stop (…) gets one
+                                         again: expected [ '…' ] to deeply equal [ '…', …(1) ]
+  (The base passes the first three steps: the first transient stop continues, the second gets none and the row shows
+  rate_limited, the normal end isn't continued. It counts since the last prompt you typed, so the stop after the
+  normal end gets nothing.)
+FAIL  plants.test.ts       #85.281df797  AssertionError: the same, on the real program's run that must pass before the
+                                         plant's (the plant's run never starts on the base)
+FAIL  resume-skip.test.ts  (Scope)       AssertionError: the sessions still blocked by the sign-in resume; you stopped S2, S3 was
+                                         replaced and S4's task closed, so the resume skips them: expected [ 'S1', 'S2', 'S3',
+                                         'S4', 'S5' ] to deeply equal [ 'S1', 'S5' ]
+  (The base raises the one shared task and closes it on its check; it resumes every session it unblocks, the one you
+  stopped, the replaced attempt and the one whose task closed among them, and records no reason.)
+
+== tsc on the base
+
+No errors: these tests add nothing to the surface tests/acceptance/85/README.md defines.

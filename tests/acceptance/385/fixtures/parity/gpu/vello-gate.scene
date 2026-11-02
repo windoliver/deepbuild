@@ -1,0 +1,20 @@
+{
+  "scene": "vello-gate",
+  "what": "Issue #385 criterion 5: a 2D writer layer with a mask by shape, which GPUI can't draw, as render-back's headless snapshot draws it (Vello CPU) whatever the spike says.",
+  "cases": [
+    {
+      "case": "rounded",
+      "doc": "vello-gate/rounded.json",
+      "look": "vello-gate/look.json",
+      "size": [
+        240,
+        160
+      ],
+      "t": "0s",
+      "view": {
+        "zoom": 1,
+        "theme": "light"
+      }
+    }
+  ]
+}

@@ -414,6 +414,10 @@
           "spec": "0.0.0",
           "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
         },
+        "@deepbuild/checks-command": {
+          "spec": "0.0.0",
+          "why": "Issue #30: a claim's checks run through the command check kind, hermetically through host@1, and its closed run records are what the claim's verdict is made from."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
@@ -489,6 +493,10 @@
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #318: ask.created@1 and plan.proposed@1, which every raised ask and plan must pass, and the canonical hash of a plan's digest."
+        },
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #85: whether a stopped session's agent has a hook for a turn that ends in an error (its adapter's errorTurnHook); without one no automatic continue starts."
         },
         "@deepbuild/record": {
           "spec": "0.0.0",
@@ -777,6 +785,18 @@
         "skrifa": {
           "spec": "^0.44",
           "why": "Issue #140: each glyph's outline as edges for the perceptual oracle's interior mask; already in parley's tree."
+        },
+        "vello_gpu": {
+          "spec": "^0.3",
+          "why": "Issue #385: Vello GPU, the GPU renderer the 2D renderer decision names, draws a 2D writer layer on the GPU layer's device through the same painter as Vello CPU; never Vello's compute renderer."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #385: the device, queue and target views Vello GPU draws a 2D writer layer with, the GPU layer's own wgpu; already in the workspace tree."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #385: the GPUI live view opens the GPU layer's device the first time a writer layer needs Vello GPU."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -947,6 +967,10 @@
         "deep-canvas-seams": {
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #140: the network seam's suite and the backends every reply names."
+        },
+        "deep-codecs": {
+          "spec": "* path=../deep-codecs",
+          "why": "Issue #498: the decode worker and the encode tool, which this binary's copies run as, and their jobs."
         },
         "deep-relay": {
           "spec": "* path=../deep-relay",
@@ -1427,6 +1451,28 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
+        }
+      }
+    },
+    "crates/deep-codecs/Cargo.toml": {
+      "dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #498: the worker's jobs and replies, one JSON line each; already in the tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #498: every job names the file it read or wrote by its SHA-256; already in the tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #498: sysctlbyname for the platform codecs' version and the sandbox's C strings; already in the tree."
         }
       }
     },

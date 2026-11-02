@@ -106,7 +106,7 @@ fn case(call: &Value) -> Result<Case, Value> {
 
 /// Whether scene3d draws or reads an item (a 3D mark, a light, a camera); every other item is a
 /// 2D writer layer's, which marks2d draws.
-fn three_d(item: &Value) -> bool {
+pub(crate) fn three_d(item: &Value) -> bool {
     let kind = item["kind"].as_str().unwrap_or("");
     kind.starts_with("mark.") || kind.starts_with("light.") || kind.starts_with("camera@")
 }
@@ -464,7 +464,9 @@ fn gpui_layers(
     size: [u32; 2],
 ) -> Result<Vec<Value>, Value> {
     let cx = &mut app.cx;
-    layer_records(out, &ev.layers, &mut |marks| layer::gpui(cx, marks, size))
+    layer_records(out, &ev.layers, &mut |marks| {
+        layer::gpui(cx, marks, size, layer::Planted::default())
+    })
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -473,6 +475,40 @@ fn gpui_layers(_: &mut App, _: &str, _: &Evaluated, _: [u32; 2]) -> Result<Vec<V
         "unsupported_platform",
         "GPUI draws a 2D writer layer on its Metal renderer, on macOS",
     ))
+}
+
+/// The GPU layer's scene drawn into an offscreen slot at `size` on `on`'s render thread: the first
+/// frame that doesn't report settling, read back as RGBA.
+pub(crate) fn offscreen3(
+    on: &On,
+    scene: Arc<Scene>,
+    look: Look3,
+    settings: &Settings,
+    size: [u32; 2],
+) -> Result<Vec<u8>, Value> {
+    let opened = open_gpu(on, size, settings)?;
+    let started = Instant::now();
+    let drawn = (|| {
+        for n in 0.. {
+            let drawn =
+                session3::draw_on(on, &opened, scene.clone(), look.clone(), n, 0, false, false)?;
+            if !drawn.settling {
+                return Ok(drawn);
+            }
+            if started.elapsed() >= Duration::from_millis(TIMEOUT_MS) {
+                break;
+            }
+        }
+        Err(refused(
+            "not_settled",
+            "the GPU layer's uploads never finished",
+        ))
+    })();
+    session3::close_on(on.worker);
+    let bgra = drawn?
+        .bytes
+        .ok_or_else(|| refused("no_read_back", "the offscreen slot"))?;
+    Ok(rgba(bgra))
 }
 
 /// `{"call": "snapshot", "scene", "case"}` on the headless canvas worker: the case's GPU layer
@@ -490,37 +526,8 @@ pub fn snapshot(worker: &Worker, backend: Backend, out: &str, call: &Value) -> V
                     backend,
                     planted: None,
                 };
-                let opened = open_gpu(&on, case.size, settings)?;
-                let started = Instant::now();
-                let drawn = (|| {
-                    for n in 0.. {
-                        let drawn = session3::draw_on(
-                            &on,
-                            &opened,
-                            scene.clone(),
-                            look.clone(),
-                            n,
-                            0,
-                            false,
-                            false,
-                        )?;
-                        if !drawn.settling {
-                            return Ok(drawn);
-                        }
-                        if started.elapsed() >= Duration::from_millis(TIMEOUT_MS) {
-                            break;
-                        }
-                    }
-                    Err(refused(
-                        "not_settled",
-                        "the GPU layer's uploads never finished",
-                    ))
-                })();
-                session3::close_on(worker);
-                let bgra = drawn?
-                    .bytes
-                    .ok_or_else(|| refused("no_read_back", "the offscreen slot"))?;
-                Some(write_named(out, &png(&rgba(bgra), case.size)?, "png")?)
+                let rgba = offscreen3(&on, scene.clone(), look.clone(), settings, case.size)?;
+                Some(write_named(out, &png(&rgba, case.size)?, "png")?)
             }
             None => None,
         };

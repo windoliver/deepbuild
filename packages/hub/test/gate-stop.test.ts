@@ -1,7 +1,11 @@
 // The gate runner at a real hub's stop (#29), through deep-hook and a Claude Code stand-in: a claim citing a file the
 // session never read goes back naming it before any check runs; a claim's check runs in a temporary checkout of its
 // snapshot, never the live worktree, as the fast lane inside the stop's hold, and the hold's reply carries its FAIL;
-// each run records where it ran and what it needed, and each stop its held time and split.
+// each run records where it ran and what it needed, and each stop its held time and split. The check runs through the
+// command check kind (#30): hermetic, so it reads none of your files whatever the head's trust, its tests counted from
+// node:test's report, and the claim's verdict made from the run and recorded as verdict.made. A requirement a fix
+// proves needs its check's run on the merge base, which is #31's: with none, the verdict is INVALID naming it, recorded
+// and never sent back, since no agent can act on it.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,15 +16,29 @@ import {
 afterEach(cleanup);
 const CHECK = '.deepbuild/checks/rejects.sh';
 
+const SUITE = '.deepbuild/checks/auth.test.mjs';
 /**
- * A world whose BEHAVIOR ask's R1 is checked by a script that fails until `src/auth.ts` says Date.now, and first
- * writes whether it can read a file of your home folder, outside its checkout, into its output (`home: yes|no`).
+ * A world whose BEHAVIOR ask's R1 is checked by a drafted script running a node:test suite of two tests: one prints
+ * whether it can read a file of your home folder, outside its checkout (`home: yes|no`), and one fails until
+ * `src/auth.ts` says Date.now.
  */
-async function world(): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
-  const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK })], deliverables: ['src/auth.ts'] })] });
+async function world(requirement: Record<string, unknown> = {}): Promise<{ hub: Hub; s: Session; ref: string; repo: string; home: string }> {
+  const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'an expired token is rejected', { check: CHECK, ...requirement })], deliverables: ['src/auth.ts'] })] });
   const { writeFileSync, chmodSync } = await import('node:fs');
   writeFileSync(join(w.home, 'secret.txt'), 'yours\n');
-  writeFileSync(join(w.repo, CHECK), `#!/bin/sh\nif cat '${join(w.home, 'secret.txt')}' >/dev/null 2>&1; then echo home: yes; else echo home: no; fi\ngrep -q "Date.now" src/auth.ts\n`);
+  writeFileSync(join(w.repo, CHECK), `#!/bin/sh\nnode --test ${SUITE}\n`);
+  writeFileSync(join(w.repo, SUITE), `import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+test('says whether it can read your home', () => {
+  let home = 'no';
+  try { readFileSync(${JSON.stringify(join(w.home, 'secret.txt'))}, 'utf8'); home = 'yes'; } catch { /* refused */ }
+  console.log(\`home: \${home}\`);
+});
+test('an expired token is rejected', () => {
+  assert.match(readFileSync('src/auth.ts', 'utf8'), /Date\\.now/);
+});
+`);
   chmodSync(join(w.repo, CHECK), 0o755);
   const { execFileSync } = await import('node:child_process');
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: w.repo });
@@ -60,8 +78,9 @@ describe('the gate runner at a real stop', () => {
     } finally { await stopHub(hub); }
   }, 240_000);
 
-  it('a claim\'s check runs in a checkout of its snapshot, in the fast lane, and the hold replies with its result', async () => {
-    const { hub, s, ref, repo } = await world();
+  it('a claim\'s check runs in a checkout of its snapshot, in the fast lane, through the command check kind, and its verdict is recorded', async () => {
+    // Behavior that must not change: the one requirement a check can prove with no run on the merge base (#31).
+    const { hub, s, ref, repo } = await world({ on_base: 'passes' });
     try {
       await s.read('src/auth.ts');
       await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
@@ -75,7 +94,14 @@ describe('the gate runner at a real stop', () => {
       expect(started!.data.needs).toMatchObject({ cores: 1, memory_mb: 0, gpus: 0 });
       expect(started!.data.lane, 'inside the stop\'s hold').toBe('fast');
       const finished = events.find((e) => e.kind === 'run.finished' && e.data.run === started!.data.run);
-      expect(finished?.data.outcome, 'the snapshot holds the uncommitted edit: the check passes').toBe('passed');
+      expect(finished?.data.outcome, `the snapshot holds the uncommitted edit: the check passes (${JSON.stringify(finished?.data.findings)})`).toBe('passed');
+      expect(finished?.data.tests_run, 'the tests the suite ran, counted from node:test\'s report').toBe(2);
+      expect(finished?.data.passed).toBe(2);
+      const verdicts = (await settle(hub, (e) => e.some((x) => x.kind === 'verdict.made' && x.subject === `claim:${claim!.id}`), 30_000)).filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`);
+      expect(verdicts.at(-1)?.data.outcome, `the claim's verdict, made by the engine from the run: ${JSON.stringify(verdicts.at(-1)?.data.reasons)}`).toBe('PASS');
+      const [requirement] = verdicts.at(-1)!.data.requirements as { req: string; outcome: string; runs: { counted: string[] } }[];
+      expect(requirement?.outcome).toBe('PASS');
+      expect(requirement?.runs.counted, 'the run it counted').toEqual([started!.data.run]);
       expect(started!.data.commit, 'on a snapshot of the uncommitted edit, not HEAD').not.toBe(readFileSync(join(repo, '.git/refs/heads/main'), 'utf8').trim());
       const held = events.find((e) => e.kind === 'stop.held')!;
       expect(held.data.claim).toBe(`claim:${claim!.id}`);
@@ -83,7 +109,7 @@ describe('the gate runner at a real stop', () => {
       expect(d.question + d.slow + d.fast + d.snapshot_start + d.queue_wait, 'the parts sum to the hold').toBe(d.total);
       expect(d.fast, 'the check ran while the stop was held').toBeGreaterThan(0);
       expect(JSON.parse(r.stdout || '{}').decision, 'a green fast lane is no send-back').toBeUndefined();
-      expect(stdoutOf(hub, started!, events), 'a head every commit of which a session recorded runs as you').toContain('home: yes');
+      expect(stdoutOf(hub, started!, events), 'a claim\'s check is hermetic: it reads none of your files, trusted head or not (#30)').toContain('home: no');
     } finally { await stopHub(hub); }
   }, 240_000);
 
@@ -111,6 +137,24 @@ describe('the gate runner at a real stop', () => {
     } finally { await stopHub(hub); }
   }, 240_000);
 
+  it('a fix requirement with no run on the merge base is INVALID naming it, recorded for a person and never sent back', async () => {
+    const { hub, s, ref } = await world();
+    try {
+      await s.read('src/auth.ts');
+      await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > Date.now()');
+      const r = await s.stop('checkToken now compares `src/auth.ts:2` with the clock.');
+      expect(JSON.parse(r.stdout || '{}').decision, `an INVALID is no send-back: ${r.stdout}`).toBeUndefined();
+      const events = await settle(hub, (e) => e.some((x) => x.kind === 'stop.held'), HELD_WAIT);
+      const [claim] = claimsOf(events, ref);
+      const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
+      const finished = events.find((e) => e.kind === 'run.finished' && e.data.run === started?.data.run);
+      expect(finished?.data.outcome, 'the check itself passes on the snapshot').toBe('passed');
+      const verdicts = (await settle(hub, (e) => e.some((x) => x.kind === 'verdict.made' && x.subject === `claim:${claim!.id}`), 30_000)).filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`);
+      expect(verdicts.at(-1)?.data.outcome, `the verdict: ${JSON.stringify(verdicts.at(-1)?.data.reasons)}`).toBe('INVALID');
+      expect(JSON.stringify(verdicts.at(-1)?.data.reasons), 'naming the base run it lacks').toContain('no run on the merge base');
+    } finally { await stopHub(hub); }
+  }, 240_000);
+
   it('a fast-lane check that fails sends the stop back in the same reply, naming the check', async () => {
     const { hub, s, ref } = await world();
     try {
@@ -121,7 +165,11 @@ describe('the gate runner at a real stop', () => {
       expect(reply.decision, `sent back: ${r.stdout}`).toBe('block');
       expect(reply.reason).toContain(CHECK);
       const events = await allEvents(hub);
+      const [claim] = claimsOf(events, ref);
       expect(claimsOf(events, ref).length).toBe(1);
+      const verdict = events.filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`).at(-1);
+      expect(verdict?.data.outcome, `the FAIL is the engine's verdict on the run: ${JSON.stringify(verdict?.data.reasons)}`).toBe('FAIL');
+      expect(String(verdict?.data.smallest), 'its smallest failing case names the test').toContain('an expired token is rejected');
     } finally { await stopHub(hub); }
   }, 240_000);
 });

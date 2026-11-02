@@ -149,7 +149,7 @@ export function cwdOf(text: string): string | undefined {
  * (Cursor's `projects/<folder>`, #111): found by walking down from the root through the folders that fit. Undefined
  * when none does, as when the folder is gone.
  */
-export function folderNamed(name: string, dir = '/'): string | undefined {
+function folderNamed(name: string, dir = '/'): string | undefined {
   let entries: string[];
   try { entries = readdirSync(dir); } catch { return undefined; }
   for (const entry of entries) {
