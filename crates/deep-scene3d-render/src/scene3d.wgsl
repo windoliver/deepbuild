@@ -8,6 +8,10 @@ struct Frame {
     // width, height, the focal length in px (perspective) or px per m, and 1 for perspective.
     viewport: vec4<f32>,
     light: vec4<f32>,
+    // This target's px per device px (the internal scale); which lines draw (0 all, 1 those
+    // wider than 1 device px, 2 the rest: below scale 1 thin lines draw after the upscale,
+    // #386); and the core's depth target's px per px of this target.
+    px: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -129,6 +133,13 @@ fn line_vs(
     var w = vec2<f32>(a.w, b.w);
     if (flags & 1u) != 0u {
         w = w * vec2<f32>(px_per_m(ca), px_per_m(cb));
+    } else {
+        w = w * frame.px.x;
+    }
+    let thin = max(w.x, w.y) <= frame.px.x;
+    if (frame.px.y == 1.0 && thin) || (frame.px.y == 2.0 && !thin) {
+        out.pos = OFF;
+        return out;
     }
     // A width under one device px draws at one px, its alpha scaled by the width.
     out.alpha = min(w, vec2<f32>(1.0));
@@ -196,9 +207,9 @@ fn point_vs(
         out.pos = OFF;
         return out;
     }
-    var size = p.w;
+    var size = p.w * frame.px.x;
     if (flags & 1u) != 0u {
-        size = size * px_per_m(c);
+        size = p.w * px_per_m(c);
     }
     out.c = to_px(c);
     out.r = size * 0.5;
@@ -264,7 +275,7 @@ fn text_vs(
     let offset = (rect.xy + k * rect.zw) * p.w;
     if (flags & 1u) == 0u {
         // In px: the label stays its size on screen about its projection.
-        out.pos = from_px(to_px(c) + offset, c);
+        out.pos = from_px(to_px(c) + offset * frame.px.x, c);
         return out;
     }
     let facing = (flags >> 1u) & 3u;

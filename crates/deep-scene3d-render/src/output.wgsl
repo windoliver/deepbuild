@@ -91,7 +91,12 @@ fn neutral(x: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn out_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
-    let linear = textureLoad(linear_target, vec2<i32>(p.xy), 0).rgb * tone.exposure;
+    return vec4<f32>(finish(textureLoad(linear_target, vec2<i32>(p.xy), 0).rgb), 1.0);
+}
+
+// A linear value through the exposure, the tone map and the sRGB encode.
+fn finish(value: vec3<f32>) -> vec3<f32> {
+    let linear = value * tone.exposure;
     var mapped = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
     if tone.map == 1u {
         mapped = filmic(linear);
@@ -106,5 +111,5 @@ fn out_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     } else if tone.encode == 2u {
         encoded = mapped;
     }
-    return vec4<f32>(encoded, 1.0);
+    return encoded;
 }

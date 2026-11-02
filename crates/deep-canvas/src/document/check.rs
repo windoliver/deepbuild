@@ -160,13 +160,6 @@ fn check_by(
                 .iter()
                 .flat_map(|e| e.derived.keys().map(String::as_str))
                 .collect();
-            // The lowered items' IDs: the document's, and those expansion wrote.
-            let item_ids: BTreeSet<&str> = member(doc, "items")
-                .and_then(Value::as_object)
-                .into_iter()
-                .flat_map(|m| m.keys().map(String::as_str))
-                .chain(derived.iter().copied())
-                .collect();
             // The parents as written, for the cycle walk.
             let parents: BTreeMap<String, String> = items
                 .iter()
@@ -176,6 +169,18 @@ fn check_by(
                         .map(|p| (k.clone(), p.to_string()))
                 })
                 .collect();
+            // The lowered items' IDs: the document's, and those expansion wrote. Only a parent
+            // that is a string is looked up in them.
+            let item_ids: BTreeSet<&str> = if parents.is_empty() {
+                BTreeSet::new()
+            } else {
+                member(doc, "items")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flat_map(|m| m.keys().map(String::as_str))
+                    .chain(derived.iter().copied())
+                    .collect()
+            };
             let mut facts: BTreeMap<String, KindFacts<'_>> = BTreeMap::new();
             for item in items.values() {
                 if let Some(text) = kind_text(item) {
@@ -222,13 +227,37 @@ fn check_by(
         )),
     }
 
-    module_checks(&lowered, sealed, &mut issues, &mut notices);
-    budget_check(&lowered, sealed, coefficients, &mut issues);
-    check_id_maps(&lowered, &mut issues);
-    check_controls(&lowered, &mut issues);
-    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
-    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
-    super::rules::check(&lowered, &mut issues);
+    // The module checks, the budget estimate and the document checks read the lowered document
+    // alone: a big document's estimate runs on its own thread, beside the others, and the
+    // findings join in this order.
+    let big = member(&lowered, "items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.len() >= SPLIT_FROM);
+    let mut tail = [Tail::Modules, Tail::Budget, Tail::Document];
+    let threads = if big { tail.len() } else { 1 };
+    let found = in_threads(&mut tail, threads, |part| {
+        let (mut issues, mut notices) = (Vec::new(), Vec::new());
+        for step in part.iter() {
+            match step {
+                Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
+                Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
+                Tail::Document => {
+                    check_id_maps(&lowered, &mut issues);
+                    check_controls(&lowered, &mut issues);
+                    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
+                    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
+                    super::rules::check(&lowered, &mut issues, |entries, work| {
+                        in_chunks(entries, work)
+                    });
+                }
+            }
+        }
+        (issues, notices)
+    });
+    for (i, n) in found {
+        issues.extend(i);
+        notices.extend(n);
+    }
 
     sort_issues(&mut issues);
     sort_notices(&mut notices);
@@ -258,6 +287,24 @@ fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R +
     } else {
         std::thread::available_parallelism().map_or(1, |n| n.get().min(8))
     };
+    in_threads(entries, threads, work)
+}
+
+/// The steps of a check after its items, in their order.
+#[derive(Clone, Copy)]
+enum Tail {
+    Modules,
+    Budget,
+    Document,
+}
+
+/// Runs `work` over `entries` in `threads` chunks, each on a scoped thread when there are two or
+/// more, and returns each chunk's result in order.
+fn in_threads<T: Send, R: Send>(
+    entries: &mut [T],
+    threads: usize,
+    work: impl Fn(&mut [T]) -> R + Sync,
+) -> Vec<R> {
     if threads <= 1 {
         return vec![work(entries)];
     }
@@ -410,7 +457,9 @@ fn budget_check(
         return;
     };
     let coefficients = coefficients.unwrap_or(&sealed.costs);
-    let e = crate::cost::estimate(lowered, sealed, coefficients);
+    let e = crate::cost::estimate_by(lowered, sealed, coefficients, |entries, work| {
+        in_chunks(entries, work)
+    });
     let over: Vec<String> = [
         ("CPU", e.cpu_ms, limits.cpu_ms, "ms"),
         ("GPU", e.gpu_ms, limits.gpu_ms, "ms"),

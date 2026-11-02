@@ -179,7 +179,7 @@ pub fn measure(startup: &Startup) -> Value {
     let mut warm = Vec::new();
     for (segments, glyphs) in [(10, 4), (400, 4), (10, 120)] {
         let doc = match stamp(
-            &board(segments, glyphs),
+            board(segments, glyphs),
             "01jb379c057000000000000000",
             &writer,
             "Cost bench",
@@ -202,7 +202,7 @@ pub fn measure(startup: &Startup) -> Value {
     let mut fixtures = Reading::new();
     for (_, f) in &startup.sealed.fixtures {
         let Ok(doc) = stamp(
-            &f.document,
+            f.document.clone(),
             "01jb379c057000000000000001",
             &writer,
             "Cost bench",

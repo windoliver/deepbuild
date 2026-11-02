@@ -504,6 +504,17 @@
       "initialReason": "Issue #379 first measurement: the merge base has no cost model. The micro-benchmark of every shipped primitive: one process times each operator the shipped build seals over three generated boards through `deep-show run`'s costs call, and scene3d's two passes by their timestamps on the device through `deep-gpu`'s live window at two sizes and two box counts, printing the measured terms beside the build's coefficients (crates/deep-canvas/costs.json, which `--write` replaces on a reference Mac); p50 includes Node's and the binaries' start. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-upscale",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "upscale"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #386 first measurement: the merge base draws no live view through a chosen internal scale. One process draws a 1080p frame of 48 labels of 12 px text and 24 thin diagonal lines in `deep-gpu`'s live window at internal scale 0.5 through the edge-adaptive upscale and sharpen, five runs of 90 frames after a warm-up one, reading each frame's time the two passes cover by their timestamps; p50 includes Node's and the binary's start. The issue's 0.3 ms for the two passes stays in tests/acceptance/386/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-class-core-view",
       "command": [
         "node",

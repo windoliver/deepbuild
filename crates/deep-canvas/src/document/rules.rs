@@ -70,13 +70,58 @@ const NUMBER_WORDS: &[&str] = &[
     "dozen",
 ];
 
-pub(crate) fn check(doc: &Value, issues: &mut Vec<Issue>) {
+/// An item as its own rules read it: its ID and itself.
+pub(crate) type Entry<'e> = (&'e String, &'e Value);
+
+/// What a run of items' own rules found: each item's status-role issue, the IDs of the items that
+/// name a status role, and each item's number issues.
+pub(crate) struct ItemRules<'e> {
+    roles: Vec<Issue>,
+    scales: Vec<&'e str>,
+    numbers: Vec<Issue>,
+}
+
+/// The rules over `doc`, each item's own read through `split`, which runs `work` over runs of the
+/// items and returns each run's findings in order: the check splits a big document's across the
+/// cores. The issues come in the same order however the items were split.
+pub(crate) fn check(
+    doc: &Value,
+    issues: &mut Vec<Issue>,
+    split: impl for<'e> FnOnce(
+        &mut [Entry<'e>],
+        &(dyn Fn(&mut [Entry<'e>]) -> ItemRules<'e> + Sync),
+    ) -> Vec<ItemRules<'e>>,
+) {
     let items = member(doc, "items").and_then(Value::as_object);
     status_bindings(doc, items, issues);
-    if let Some(items) = items {
-        status_roles(items, issues);
-        numbers(doc, items, issues);
+    let Some(items) = items else {
+        return;
+    };
+    let texts = Texts::of(doc);
+    let mut entries: Vec<Entry<'_>> = items.iter().collect();
+    let found = split(&mut entries, &|run| {
+        let mut r = ItemRules {
+            roles: Vec::new(),
+            scales: Vec::new(),
+            numbers: Vec::new(),
+        };
+        for &(id, item) in run.iter() {
+            if status_role_of(id, item, &mut r.roles) {
+                r.scales.push(id.as_str());
+            }
+            numbers_of(doc, &texts, id, item, &mut r.numbers);
+        }
+        r
+    });
+    let mut scales = BTreeSet::new();
+    let mut numbers = Vec::new();
+    for r in found {
+        issues.extend(r.roles);
+        scales.extend(r.scales);
+        numbers.extend(r.numbers);
     }
+    scaled_status(items, &scales, issues);
+    issues.extend(numbers);
 }
 
 /// True when `text` shows a number: a digit, or a number word on its own.
@@ -87,53 +132,65 @@ fn shows_number(text: &str) -> bool {
             .any(|word| NUMBER_WORDS.contains(&word.to_lowercase().as_str()))
 }
 
-fn numbers(doc: &Value, items: &Map<String, Value>, issues: &mut Vec<Issue>) {
-    // The texts a bound value fills: each shows its reading, with its source and as-of time.
-    let sourced: BTreeSet<&str> = member(doc, "bound_values")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flat_map(|b| b.values())
-        .filter_map(|b| member(b, "target").and_then(Value::as_str))
-        .filter_map(|t| t.strip_prefix("items/")?.strip_suffix("/params/text"))
-        .collect();
-    let binds = |key: &str| {
-        member(doc, key)
+/// What the number rules read of the document as a whole.
+struct Texts<'d> {
+    /// The texts a bound value fills: each shows its reading, with its source and as-of time.
+    sourced: BTreeSet<&'d str>,
+    binds_status_or_reading: bool,
+}
+
+impl<'d> Texts<'d> {
+    fn of(doc: &'d Value) -> Self {
+        let sourced = member(doc, "bound_values")
             .and_then(Value::as_object)
-            .is_some_and(|m| !m.is_empty())
-    };
-    let binds_status_or_reading = binds("status_bindings") || binds("bound_values");
-    for (id, item) in items {
-        if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
-            continue;
-        }
-        if let Some(Value::String(t)) = member(item, "params").and_then(|p| member(p, "template")) {
-            template_numbers(doc, id, t, binds_status_or_reading, issues);
-            continue;
-        }
-        let Some(Value::String(text)) = member(item, "params").and_then(|p| member(p, "text"))
-        else {
-            continue;
+            .into_iter()
+            .flat_map(|b| b.values())
+            .filter_map(|b| member(b, "target").and_then(Value::as_str))
+            .filter_map(|t| t.strip_prefix("items/")?.strip_suffix("/params/text"))
+            .collect();
+        let binds = |key: &str| {
+            member(doc, key)
+                .and_then(Value::as_object)
+                .is_some_and(|m| !m.is_empty())
         };
-        if sourced.contains(id.as_str()) {
-            // A bound value's text is its reading's; nothing types over it (Bound value).
-            if !text.is_empty() {
-                issues.push(Issue::error(
-                    "bound_typed_over",
-                    id,
-                    format!("items/{id}/params/text"),
-                    json!(text),
-                    "a bound value fills this text; leave it empty, since its reading shows there",
-                ));
-            }
-        } else if shows_number(text) {
+        Texts {
+            sourced,
+            binds_status_or_reading: binds("status_bindings") || binds("bound_values"),
+        }
+    }
+}
+
+/// The number rules over one item.
+fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues: &mut Vec<Issue>) {
+    if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
+        return;
+    }
+    if let Some(Value::String(t)) = member(item, "params").and_then(|p| member(p, "template")) {
+        template_numbers(doc, id, t, texts.binds_status_or_reading, issues);
+        return;
+    }
+    let Some(Value::String(text)) = member(item, "params").and_then(|p| member(p, "text")) else {
+        return;
+    };
+    if texts.sourced.contains(id.as_str()) {
+        // A bound value's text is its reading's; nothing types over it (Bound value).
+        if !text.is_empty() {
             issues.push(Issue::error(
-                "number_unsourced",
+                "bound_typed_over",
                 id,
                 format!("items/{id}/params/text"),
                 json!(text),
-                "shows a number with no source or as-of time; bind it to a reading, or compute it in the document",
+                "a bound value fills this text; leave it empty, since its reading shows there",
             ));
         }
+    } else if shows_number(text) {
+        issues.push(Issue::error(
+            "number_unsourced",
+            id,
+            format!("items/{id}/params/text"),
+            json!(text),
+            "shows a number with no source or as-of time; bind it to a reading, or compute it in the document",
+        ));
     }
 }
 
@@ -208,24 +265,30 @@ fn status_role(value: &Value) -> Option<(String, String)> {
     }
 }
 
-fn status_roles(items: &Map<String, Value>, issues: &mut Vec<Issue>) {
-    let mut scales = BTreeSet::new();
-    for (id, item) in items {
-        let Some(params) = member(item, "params") else {
-            continue;
-        };
-        if let Some((path, role)) = status_role(params) {
-            scales.insert(id.as_str());
-            issues.push(Issue::error(
-                "status_color_unbound",
-                id,
-                format!("items/{id}/params{path}"),
-                json!(role),
-                "names a status color itself; a status color comes only through a status binding",
-            ));
-        }
+/// The status-role rule over one item; true when its params name a status role.
+fn status_role_of(id: &String, item: &Value, issues: &mut Vec<Issue>) -> bool {
+    let Some(params) = member(item, "params") else {
+        return false;
+    };
+    let Some((path, role)) = status_role(params) else {
+        return false;
+    };
+    issues.push(Issue::error(
+        "status_color_unbound",
+        id,
+        format!("items/{id}/params{path}"),
+        json!(role),
+        "names a status color itself; a status color comes only through a status binding",
+    ));
+    true
+}
+
+/// A mark set whose role goes through a scale in `scales`, one naming a status role, takes the
+/// color: name it with the scale.
+fn scaled_status(items: &Map<String, Value>, scales: &BTreeSet<&str>, issues: &mut Vec<Issue>) {
+    if scales.is_empty() {
+        return;
     }
-    // A mark set whose role goes through such a scale takes the color: name it with the scale.
     for (id, item) in items {
         let scale = member(item, "params")
             .and_then(|p| member(p, "encode"))
