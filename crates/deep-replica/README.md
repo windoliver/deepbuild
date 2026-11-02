@@ -21,5 +21,5 @@ A tool beside the app: deep-app through its crate root, gpui-kit with `test-supp
 - `headless.rs`: no libtest harness, since AppKit needs the main thread for the offscreen Metal renderer; outside tests/ because preflight's perf run drops a change's own tests/ files, as with deep-app's screens suite.
 - `card_size.rs`: outside tests/ and without the harness, for the same reasons as `headless.rs`.
 - `Cargo.toml`: its `acceptance_326_*` and `acceptance_327_*` test targets point into tests/acceptance, where blind-written acceptance tests live and are never edited; this crate only builds them.
-- `src/drive/plant.rs`: the wrong programs #124's criterion 2 fixture must catch, each lifting one guard, selected only by `DEEP_DRIVE_PLANT`.
+- `src/drive/plant.rs`: the wrong programs #124's criterion 2 fixture and #366's criteria 3 and 6 must catch, each lifting one guard, selected only by `DEEP_DRIVE_PLANT`.
 - `src/live.rs`: the crate's `unsafe` is the Objective-C messages that ask AppKit for the window's accessibility children and frames.

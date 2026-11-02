@@ -2,30 +2,18 @@
 // folders writes is marked a stand-in, found by a search of the source with no model. In the fixture repo the
 // check seeds `policies` from scripts/seed.ts while src/ only reads it: a stand-in. In its twin src/ inserts into
 // `policies` too: not one. That a stand-in can't pass a requirement about what real users get (it stays
-// INCONCLUSIVE) is the claim's verdict, the gate runner's (#29), in blocked.test.ts.
+// INCONCLUSIVE) is the claim's verdict, the gate runner's (#29), in claims.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCommandCheck, type CommandRun } from '../../../packages/checks-command/src/index.ts';
-import { command, openWorld, outputOf, project, VITEST, type World } from './helpers.ts';
+import { openWorld, outputOf, policiesCheck as policies, type World } from './helpers.ts';
 import { everySeededTableAStandIn } from './wrong.ts';
 
 let world: World;
 beforeAll(async () => { world = await openWorld(); });
 afterAll(async () => { await world?.close(); });
 
-/** The twin: the app itself writes the refund policy too. */
-const TWIN_SRC = `import type { Db } from '../test/db';
-
-// The app reads the refund window from the policies table, and an admin screen sets it.
-export function refundWindow(db: Db): number {
-  const row = db.get('SELECT days FROM policies WHERE name = ?', ['refunds']);
-  return Number(row?.days ?? 0);
-}
-
-export function setRefundWindow(db: Db, days: number): void {
-  db.run('INSERT INTO policies (name, days) VALUES (?, ?)', ['refunds', days]);
-}
-`;
-const policiesCheck = (twin: boolean) => command(world.sup, project('policies', twin ? { 'src/policies.ts': TWIN_SRC } : {}), VITEST, { inputs: ['src/**', 'test/**', 'scripts/**'] });
+/** The policies fixture's check, or its twin (helpers.ts, POLICIES_TWIN_SRC). */
+const policiesCheck = (twin: boolean) => policies(world.sup, twin);
 
 /** The criterion's assertion on the twin's run: its setup seeds `policies`, and the check isn't a stand-in. */
 function twinIsNoStandIn(r: CommandRun): void {

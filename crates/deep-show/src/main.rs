@@ -14,11 +14,13 @@ mod costs;
 mod efficiency;
 mod evidence;
 mod frames;
+mod gate;
 mod host;
 mod hub;
 mod input;
 mod jobs;
 mod kit;
+mod media;
 mod modes;
 mod packs;
 mod placement;
@@ -27,7 +29,9 @@ mod planted;
 mod query;
 mod ring;
 mod scene3d;
+mod seams;
 mod serve;
+mod shaper;
 mod shared;
 mod snapshot;
 mod terminal;
@@ -362,6 +366,9 @@ fn acting(c: &Map<String, Value>) -> Option<Option<Via>> {
 
 fn call(c: &Map<String, Value>) -> Option<Call> {
     let name = c.get("call")?.as_str()?;
+    if let Some(g) = gate::parse_call(name, c) {
+        return Some(Call::Gate(Box::new(g)));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -425,6 +432,24 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 agent: acting(c)?.is_some(),
             })
         }
+        "frontmost" => {
+            return Some(Call::Frontmost {
+                window: c.get("window")?.as_str()?.to_string(),
+                front: c.get("frontmost")?.as_bool()?,
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "test_window" => {
+            c.get("id")?.as_str()?;
+            match c.get("rect")? {
+                Value::Null => {}
+                r => {
+                    rect(Some(r))?;
+                }
+            }
+            return Some(Call::TestWindow);
+        }
+        "window_caps" => return Some(Call::WindowCaps),
         "windows" => return Some(Call::Windows),
         "layout" => return Some(Call::Layout),
         "card" => return Some(Call::CardState),
@@ -475,7 +500,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::RenderBack {
                 session: c.get("session")?.as_str()?.to_string(),
                 doc: doc()?,
-                t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
+                // #140: `t` in flicks, or the time grammar's text; at 0 when it is left out.
+                t: match c.get("t") {
+                    None => Some(0),
+                    Some(Value::String(text)) => hub::flicks(text),
+                    Some(t) => t.as_i64(),
+                }
+                .filter(|t| *t >= 0)?,
                 rev: c.get("rev")?.as_u64()?,
                 size: px_size(c.get("size"), |n| *n > 0)?,
             });
@@ -498,6 +529,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "fixtures" => return Some(Call::Fixtures),
+        "seam_suite" => return seams::parse(c),
+        "relay_client" => return seams::parse_client(c),
         "schedule" => return Some(Call::Schedule),
         "rate" | "time" | "export" | "play" | "determinism" => {
             return crate::time::parse_call(name, c)
@@ -689,6 +722,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(t) = capture::parse_call(name, c) {
         return Some(Call::Capture(Box::new(t)));
     }
+    if let Some(m) = media::parse_call(name, c) {
+        return Some(Call::Media(Box::new(m)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -781,6 +817,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             rect: rect(p.get("rect"))?,
             visible: optional(p.get("visible"), Value::as_bool)?.unwrap_or(true),
             html: optional(p.get("html"), |h| Some(PathBuf::from(h.as_str()?)))?,
+            // #498: a shipped panel, by its ID in the app's inventory; any other is bad input.
+            shipped: optional(p.get("shipped"), |s| {
+                let id = s.as_str()?;
+                shipped_panels().contains(&id).then(|| id.to_string())
+            })?,
         })
     })?;
     let docs = entries(input, "docs", |d| {
@@ -1067,6 +1108,21 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "keeps_asset_after_crash" => Planted::KeepsAssetAfterCrash,
                 "labels_redaction_complete" => Planted::LabelsRedactionComplete,
                 "sends_without_approval" => Planted::SendsWithoutApproval,
+                "keeps_session_open" => Planted::KeepsSessionOpen,
+                "records_for_agent" => Planted::RecordsForAgent,
+                "records_without_permission" => Planted::RecordsWithoutPermission,
+                "skips_caps" => Planted::SkipsCaps,
+                "follows_urls" => Planted::FollowsUrls,
+                "decodes_in_app" => Planted::DecodesInApp,
+                "ignores_edit_lists" => Planted::IgnoresEditLists,
+                "keeps_priming" => Planted::KeepsPriming,
+                "encodes_in_decode_worker" => Planted::EncodesInDecodeWorker,
+                "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
+                "assumes_bt601" => Planted::AssumesBt601,
+                "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
+                "comparer_matches_hash" => Planted::ComparerMatchesHash,
+                "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
+                "fades_on_close" => Planted::FadesOnClose,
                 _ => return None,
             }),
         },
@@ -1196,10 +1252,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         environment,
         commit: optional(input.get("commit"), |c| Some(c.as_str()?.to_string()))?,
         machine: optional(input.get("machine"), |m| Some(m.as_object()?.clone()))?,
+        devices: capture::Devices::parse(input)?,
+        decode_caps: media::caps(input)?,
     })
 }
 
-fn answer(command: &str, startup: &Startup, line: &str) -> Value {
+/// A line's input object and the scenario it holds; `None` for a line that isn't one.
+fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
     // A number past f64's range is the document's fault, refused at its path by the check
     // (#387: "a NaN or an infinity in a param is refused with out_of_range"), not the line's.
     let parsed = serde_json::from_str::<Value>(line).or_else(|e| match tame_overflow(line) {
@@ -1207,9 +1266,14 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
         None => Err(e),
     });
     let Ok(Value::Object(input)) = parsed else {
-        return bad_input();
+        return None;
     };
-    let Some(scenario) = scenario(&input) else {
+    let scenario = scenario(&input)?;
+    Some((input, scenario))
+}
+
+fn answer(command: &str, startup: &Startup, line: &str) -> Value {
+    let Some((input, scenario)) = read_line(line) else {
         return bad_input();
     };
     match command {
@@ -1228,7 +1292,6 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             };
             screen(&scenario, startup, out)
         }
-        "live" => live(&scenario, startup),
         _ => bad_input(),
     }
 }
@@ -1350,16 +1413,29 @@ fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
-/// `live` (#376): the screen-reader smoke run's window, on macOS.
+/// `live` (#376): the screen-reader smoke run's window, on macOS; with a `live` object (#140),
+/// the window paced, watched, read back and played to as it asks. The run keeps its scenario
+/// for the life of the process, which ends with the window.
 #[cfg(target_os = "macos")]
-fn live(scenario: &Scenario, startup: &Startup) -> Value {
-    let mut hub = hub::Hub::new(scenario, startup);
-    hub.run_calls();
-    live::show(&mut hub)
+fn live(startup: &'static Startup, line: &str) -> Value {
+    let Some((input, scenario)) = read_line(line) else {
+        return bad_input();
+    };
+    match input.get("live") {
+        None => {
+            let mut hub = hub::Hub::new(&scenario, startup);
+            hub.run_calls();
+            live::show(&mut hub)
+        }
+        Some(options) => match watch::parse(options, call) {
+            Some(options) => watch::run(Box::leak(Box::new(scenario)), startup, options),
+            None => bad_input(),
+        },
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
-fn live(_: &Scenario, _: &Startup) -> Value {
+fn live(_: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -1393,6 +1469,15 @@ fn build_set() -> BuildSet {
 /// operator makes (#387).
 const TEST_BUILD: bool = cfg!(any(
     feature = "test-a",
+    feature = "test-sim-a",
+    feature = "test-sim-b",
+    feature = "test-sim-b-f64",
+    feature = "test-sim-b-private-renamed",
+    feature = "test-sim-b-public-renamed",
+    feature = "test-sim-b-false-bit",
+    feature = "test-sim-b-off",
+    feature = "test-sim-c",
+    feature = "test-gpu-second-backend",
     feature = "test-b",
     feature = "test-b-requires-a",
     feature = "test-two-writers",
@@ -1501,11 +1586,139 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    // Issue #185: test.sim@1's implementations, and test module c.
+    #[cfg(feature = "test-sim-a")]
+    out.push(deep_canvas_test_modules::sim::a());
+    #[cfg(feature = "test-sim-b")]
+    out.push(deep_canvas_test_modules::sim::b());
+    #[cfg(feature = "test-sim-b-f64")]
+    out.push(deep_canvas_test_modules::sim::b_f64());
+    #[cfg(feature = "test-sim-b-private-renamed")]
+    out.push(deep_canvas_test_modules::sim::b_private_renamed());
+    #[cfg(feature = "test-sim-b-public-renamed")]
+    out.push(deep_canvas_test_modules::sim::b_public_renamed());
+    #[cfg(feature = "test-sim-b-false-bit")]
+    out.push(deep_canvas_test_modules::sim::b_false_bit());
+    #[cfg(feature = "test-sim-b-off")]
+    out.push(deep_canvas_test_modules::sim::b_off());
+    #[cfg(feature = "test-sim-c")]
+    out.push(deep_canvas_test_modules::sim::c());
     out.extend(kit::modules::built());
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     out
+}
+
+/// The seams' backends this build ships, each `seam.<seam>`, an implementation of its seam's
+/// interface the seal holds beside the build set's canvas modules (#185), and under
+/// `test-gpu-second-backend` a second GPU backend beside the first, which the seal refuses.
+fn seam_backends() -> Vec<Module> {
+    use deep_canvas_seams::module;
+    #[allow(unused_mut)]
+    let mut out = vec![
+        module("fonts", "seam.fonts", deep_text::FONTS),
+        module(
+            "cpu",
+            "seam.cpu",
+            deep_canvas_seams::cpu(std::env::consts::ARCH),
+        ),
+        module("headless", "seam.headless", deep_canvas_seams::HEADLESS),
+        module("gpu", "seam.gpu", deep_gpu::seam::BACKEND),
+        module("network", "seam.network", deep_relay::macos::BACKEND),
+    ];
+    #[cfg(feature = "test-gpu-second-backend")]
+    out.push(module(
+        "gpu",
+        "seam.gpu.second",
+        deep_canvas_seams::Backend {
+            name: "wgpu-metal-second",
+            version: deep_gpu::seam::BACKEND.version,
+        },
+    ));
+    out
+}
+
+/// Every canvas interface a build may hold, each with its reference implementation (#185): every
+/// shipped canvas module is its interface's reference, as each seam's shipped backend is; the
+/// test interfaces' references are their own test modules. An implementation of an interface
+/// declared here hashes to its reference's digest or the seal refuses it.
+fn interfaces() -> Vec<deep_canvas::registry::Interface> {
+    let kit = kit::interface_parts();
+    let mut out: Vec<_> = modules(BuildSet::Full)
+        .into_iter()
+        .filter(|m| !m.manifest.name.starts_with("test."))
+        .map(|m| deep_canvas::registry::Interface {
+            name: m.manifest.implements.clone(),
+            reference: m,
+            kit: kit.clone(),
+            behavior: None,
+        })
+        .collect();
+    for m in seam_backends().into_iter().filter(|m| m.manifest.name.matches('.').count() == 1) {
+        let seam = m.manifest.name.trim_start_matches("seam.").to_string();
+        out.push(deep_canvas_seams::interface(&seam, m));
+    }
+    #[cfg(feature = "test-sim")]
+    out.push(deep_canvas_test_modules::sim::interface(
+        kit,
+        cfg!(feature = "test-sim-behavior"),
+    ));
+    out
+}
+
+/// The interfaces a build of `held` seals against: every one `interfaces()` declares, and each
+/// held test module's own, with that module its reference.
+fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
+    let mut out = interfaces();
+    for m in held {
+        if !out.iter().any(|i| i.name == m.manifest.implements) {
+            out.push(deep_canvas::registry::Interface {
+                name: m.manifest.implements.clone(),
+                reference: m.clone(),
+                kit: kit::interface_parts(),
+                behavior: None,
+            });
+        }
+    }
+    out
+}
+
+/// The registry of a `set` build holding `held`: every interface it seals against, the seams'
+/// backends and its canvas modules.
+fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
+    let mut registry = Registry::new(set);
+    for interface in declared(&held) {
+        registry = registry.declare(interface);
+    }
+    for backend in seam_backends() {
+        registry = registry.backend(backend);
+    }
+    for module in held {
+        registry = registry.with(module);
+    }
+    registry
+}
+
+/// A monotonic clock for the seal's interface checks, in nanoseconds since its first reading.
+fn clock_ns() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    u64::try_from(START.get_or_init(Instant::now).elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
+
+/// The app's shipped panels, by the IDs its inventory lists (#882): the shipped plug-ins whose
+/// sound the device gate holds (#498).
+fn shipped_panels() -> Vec<&'static str> {
+    static IDS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    IDS.get_or_init(|| {
+        let inventory: Value = serde_json::from_str(include_str!("../../deep-app/inventory.json"))
+            .expect("the app's inventory is JSON");
+        (inventory["panels"].as_array().into_iter().flatten())
+            .filter_map(|p| p["panel"].as_str())
+            .map(|id| &*Box::leak(id.to_string().into_boxed_str()))
+            .collect()
+    })
+    .clone()
 }
 
 /// Every shipped canvas module's manifest, for the `module` call's dependencies (#402).
@@ -1532,18 +1745,21 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
                 modules: vec![name.to_string()],
                 arrays: Vec::new(),
                 operators: Vec::new(),
+                interface: None,
+                implementations: Vec::new(),
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
             });
         }
     }
-    let mut registry = Registry::new(build_set()).with_costs(costs);
-    for module in held {
-        registry = registry.with(module);
-    }
+    let mut registry = assemble(build_set(), held)
+        .with_costs(costs)
+        .timed(clock_ns);
     if let Some(StartPlanted::Seal(fault)) = planted {
         registry = registry.plant(fault);
     }
-    let sealed = registry.seal()?;
+    let sealed = registry.seal();
+    hub::INTERFACE_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let sealed = sealed?;
     kit::ledger::admit(&sealed)?;
     Ok(Startup {
         sealed,
@@ -1553,13 +1769,19 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
         test_build: TEST_BUILD,
         shapes_on_ui_thread: planted == Some(StartPlanted::ShapesOnUiThread),
         run_per_document: planted == Some(StartPlanted::RunPerDocument),
+        network: match planted {
+            Some(StartPlanted::Network(fault)) => Some(fault),
+            _ => None,
+        },
+        ignores_unknown_occlusion: planted == Some(StartPlanted::IgnoresUnknownOcclusion),
     })
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
 /// reads every dependency as required, #387's scheduler that orders steps at one time by
-/// canvas-module name, #388's seal that lets a build without look start, or #856's hub that
-/// shapes a long text on the UI thread and its shaped-run cache per document.
+/// canvas-module name, #388's seal that lets a build without look start, #856's hub that
+/// shapes a long text on the UI thread and its shaped-run cache per document, or #140's network
+/// backends with a fault.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
@@ -1567,6 +1789,10 @@ enum StartPlanted {
     StartsWithoutLook,
     ShapesOnUiThread,
     RunPerDocument,
+    /// #140: a network backend with one fault, run through the network seam's suite.
+    Network(seams::NetFault),
+    /// #140: the card that treats unknown occlusion as unobscured.
+    IgnoresUnknownOcclusion,
 }
 
 #[cfg(test)]
@@ -1583,6 +1809,8 @@ mod tests {
             test_build: false,
             shapes_on_ui_thread: false,
             run_per_document: false,
+            network: None,
+            ignores_unknown_occlusion: false,
         }
     }
 
@@ -1682,11 +1910,8 @@ mod tests {
             (BuildSet::Full, include_str!("../schedule/full.json")),
         ];
         for (set, snapshot) in snapshots {
-            let mut registry = Registry::new(set);
-            for module in modules(set) {
-                registry = registry.with(module);
-            }
-            let published = registry.seal().expect("the shipped set seals").schedule();
+            let published = assemble(set, modules(set))
+                .seal().expect("the shipped set seals").schedule();
             let committed: Value = serde_json::from_str(snapshot).expect("the snapshot is JSON");
             assert_eq!(
                 published,
@@ -1909,11 +2134,15 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             Ok(StartPlanted::Seal(Fault::EveryDependencyRequired))
         }
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+        "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),
         "run_per_document" => Ok(StartPlanted::RunPerDocument),
-        _ => Err(()),
+        "card_ignores_unknown_occlusion" => Ok(StartPlanted::IgnoresUnknownOcclusion),
+        _ => seams::NetFault::named(twin)
+            .map(StartPlanted::Network)
+            .ok_or(()),
     }
 }
 
@@ -1944,6 +2173,13 @@ fn main() {
     match command.as_str() {
         "serve" => std::process::exit(serve::run()),
         "host" => std::process::exit(host::run(&args)),
+        // #498: this binary's copies as the decode worker and the encode tool.
+        "decode-worker" => {
+            std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &args[1..]))
+        }
+        "encode-tool" => {
+            std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
+        }
         _ => {}
     }
     let stdout = io::stdout();
@@ -1964,10 +2200,10 @@ fn main() {
         }
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
-    let startup = match seal(fault, coefficients) {
-        Ok(startup) => startup,
+    let startup: &'static Startup = match seal(fault, coefficients) {
+        Ok(startup) => Box::leak(Box::new(startup)),
         Err(err) => {
-            let line = json!({
+            let mut line = json!({
                 "ok": false,
                 "code": "seal_refused",
                 "reason": err.code,
@@ -1976,6 +2212,13 @@ fn main() {
                 "arrays": err.arrays,
                 "what": err.what,
             });
+            // #185: the interface and the implementations a refusal involves.
+            if let Some(interface) = &err.interface {
+                line["interface"] = json!(interface);
+            }
+            if !err.implementations.is_empty() {
+                line["implementations"] = json!(err.implementations);
+            }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
             std::process::exit(2);
@@ -1990,8 +2233,9 @@ fn main() {
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         let reply = match command.as_str() {
-            "canvas" => canvas.line(&startup, &line),
-            _ => answer(&command, &startup, &line),
+            "canvas" => canvas.line(startup, &line),
+            "live" => live(startup, &line),
+            _ => answer(&command, startup, &line),
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
@@ -2003,5 +2247,7 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod live;
+#[cfg(target_os = "macos")]
+mod watch;
 #[cfg(target_os = "macos")]
 mod window;

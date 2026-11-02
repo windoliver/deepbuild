@@ -180,7 +180,6 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   // The planted wrong program hands the hub's environment to every git it runs in a claim's repository.
   const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> => runGit(cwd, args, env, input, under.getStore(), o.plant === 'git-inherits-env' && cwd !== o.store);
   await mkdir(o.store, { recursive: true });
-    await git(worktree, ['update-ref', 'refs/deep/seen', 'HEAD']);
   if (!existsSync(join(o.store, 'HEAD'))) await git(o.store, ['init', '-q', '--bare', '.']);
   await mkdir(o.root, { recursive: true });
   const root = await realpath(o.root);
@@ -261,6 +260,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   };
   const snapshotOf = async (worktree: string): Promise<Snapshot> => {
     const head = await git(worktree, ['rev-parse', 'HEAD']);
+    await git(worktree, ['update-ref', 'refs/deep/seen', 'HEAD']);
     const gitDir = await git(worktree, ['rev-parse', '--absolute-git-dir']);
     const dir = await mkdtemp(join(o.store, 'index-'));
     try {

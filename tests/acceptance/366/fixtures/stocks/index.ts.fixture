@@ -1,0 +1,91 @@
+// The test stocks plug-in (#366, README: Fixtures): the pieces of the stocks view that a runner job, a notice and a
+// panel need. Sandboxed (installed with no signed release), on the grant each test gives it.
+// - ext.stocks.price: a polled source on api.market.example (#364), the key in X-Api-Key by its handle, fresh for
+//   five minutes
+// - ext.stocks.ask (read): runs one model job through deep.runner.run with the call's prompt and input handles, and
+//   answers what came back as `got`, the JSON of { ok: true, answer } or { ok: false, error }: what the plug-in got
+// - ext.stocks.brief (send): runs the same job and sends what it answered by email to the call's address; a job that
+//   fails ends the call before anything is sent, so it sends only an answer it was given
+// - ext.stocks.notify (read): sends one ext.stocks.crossed notice citing the call's reading handles, and answers
+//   `got` as above, the notice's handle or the refusal
+// - with probe.json's `view`, the view ext.stocks.watchlist: its panel `panel/` in the sidebar, with view.json's
+//   pages and ⌘K commands, which run the four no-op actions below
+import { readFileSync } from 'node:fs';
+
+interface Probe { view?: boolean }
+interface Answer { status: number; headers: Record<string, string>; body: string }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const view = JSON.parse(readFileSync(new URL('./view.json', import.meta.url), 'utf8'));
+
+const PRICE = 'ext.stocks.price';
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+const text = { type: 'string' };
+const handles = { type: 'array', items: { type: 'string' } };
+const said = (e: any) => String(e?.message ?? e);
+
+export default async function (deep: any): Promise<void> {
+  const secret = await deep.secret('market_key');
+  await deep.registerSource(PRICE, {
+    variant: 'polled',
+    host: 'api.market.example',
+    path: '/q',
+    secret,
+    header: 'X-Api-Key',
+    quota: { per_minute: 600, per_day: 100_000 },
+    timeout: 30_000,
+    freshFor: 5 * 60_000,
+    parse(answer: Answer): { value: number; unit: string } {
+      if (answer.status !== 200) throw Error(`no price in a ${answer.status} answer`);
+      return { value: Number(JSON.parse(answer.body).price), unit: 'USD' };
+    },
+  });
+
+  const job = (input: { prompt: string; inputs: string[] }) => deep.runner.run({ prompt: input.prompt, inputs: input.inputs, budget: { usd: 0.5 }, deadline: 120_000 });
+
+  deep.registerAction('ext.stocks.ask', {
+    declares: 'read',
+    reads: [],
+    input: strict({ prompt: text, inputs: handles }),
+    output: strict({ got: text }),
+  }, async (input: { prompt: string; inputs: string[] }) => {
+    try {
+      return { got: JSON.stringify({ ok: true, answer: await job(input) }) };
+    } catch (e) {
+      return { got: JSON.stringify({ ok: false, error: said(e) }) };
+    }
+  });
+
+  deep.registerAction('ext.stocks.brief', {
+    declares: 'send',
+    input: strict({ prompt: text, inputs: handles, key: text, to: text }),
+    output: strict({ key: text }),
+  }, async (input: { prompt: string; inputs: string[]; key: string; to: string }) => {
+    const answer = await job(input);
+    await deep.send({
+      kind: 'email', key: input.key, to: [input.to], subject: input.key,
+      body: `${input.key}: ${typeof answer?.value === 'string' ? answer.value : JSON.stringify(answer)}`,
+      host: 'api.mail.example', path: '/send',
+    });
+    return { output: { key: input.key }, report: { verified: true, checked: 'the provider answered the send' } };
+  });
+
+  deep.registerAction('ext.stocks.notify', {
+    declares: 'read',
+    reads: [],
+    input: strict({ subscription: text, key: text, readings: handles }),
+    output: strict({ got: text }),
+  }, async (input: { subscription: string; key: string; readings: string[] }) => {
+    try {
+      const sent = await deep.notices.send({ kind: 'ext.stocks.crossed', subscription: input.subscription, key: input.key, readings: input.readings });
+      return { got: JSON.stringify({ ok: true, notice: String(sent) }) };
+    } catch (e) {
+      return { got: JSON.stringify({ ok: false, error: said(e) }) };
+    }
+  });
+
+  for (const name of ['ext.stocks.add_alert', 'ext.stocks.add_alert_above', 'ext.stocks.add_to_watchlist', 'ext.stocks.read_prices']) {
+    deep.registerAction(name, { declares: 'read', reads: [], input: strict({}), output: strict({}) }, async () => ({}));
+  }
+
+  if (probe.view) await deep.registerView(view.name, 'panel', 'sidebar', { pages: view.pages, commands: view.commands });
+}

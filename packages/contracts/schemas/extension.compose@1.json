@@ -1,0 +1,75 @@
+{
+  "title": "extension.compose@1",
+  "description": "What a manifest declares about its edges (#103), beside extension.manifest@1, whose frozen shape doesn't list it: each provided output's JSON Schema and the frozen digest it keeps for each minor, each use's schema at the minor it was built against, the provider it prefers and whether it is optional, and the packages it replaces, whose users it takes over.",
+  "x-since": "R2",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "provides": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "x-opaque": "the output's JSON Schema at the row's minor; digests[minor] is its d1 digest"
+          },
+          "digests": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^(0|[1-9][0-9]{0,8})$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^d1:[0-9a-f]{64}$",
+              "maxLength": 8192,
+              "description": "The frozen digest the provider keeps for that minor."
+            },
+            "description": "The frozen digest kept for each minor from 0 to the row's minor."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "description": "Beside each provides row, by its position."
+    },
+    "uses": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "x-opaque": "the interface's JSON Schema at the use's minor, as the user was built against it; its d1 digest is the use's digest"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+            "maxLength": 8192,
+            "description": "The provider it prefers when several provide the interface."
+          },
+          "optional": {
+            "type": "boolean",
+            "description": "With no provider it reads missing, and its provider is removed with no ask."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "description": "Beside each uses row, by its position."
+    },
+    "pieces": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+        "maxLength": 8192,
+        "description": "A package this one replaces: installing it removes that package and rewires its users."
+      },
+      "description": "The package IDs in the manifest's replaces."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

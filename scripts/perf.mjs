@@ -151,8 +151,8 @@ function keptCopy(side) {
   return directory;
 }
 // CARGO_TARGET_DIR names the kept build directory, so Cargo resolves it to the same path every run.
-// DEEP_OPEN_ISSUES names the open issues this checkout's catalogue drift lane fetched, cached beside the
-// kept copy, so each side's lane reads the same issues and none fetches again (#605).
+// DEEP_OPEN_ISSUES names the open issues this checkout's checks fetched (scripts/open-issues.mjs), cached beside the
+// kept copy, so each side's lanes read the same issues and none fetches again (#605, #910).
 function checkRun(directory, timeoutMs) {
   const previous = { CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR, DEEP_OPEN_ISSUES: process.env.DEEP_OPEN_ISSUES };
   process.env.CARGO_TARGET_DIR = join(dirname(directory), 'target');

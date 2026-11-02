@@ -8,7 +8,8 @@ The core's gate runner (#29): which stops and calls make a claim, the floor ever
 
 - `src/claims.ts`: claim intake; `src/floor.ts`: the validity gate and definition hash; `src/own.ts`: whose checks count; `src/head.ts`: head trust.
 - `src/scheduler.ts`: the lanes and queue, a pure function on a virtual clock; `src/exec.ts`: snapshots, checkouts and real runs; `src/stack.ts`: the tree a stack served.
-- There is no `test/` folder: its tests are the acceptance suite in `tests/acceptance/29` (never edited) and hub tests such as `packages/hub/test/gate-stop.test.ts`.
+- `src/claim.ts`: a claim's verdict from its checks' command runs (#30), the run records by their fields in, the engine's verdict out.
+- Regression tests go in `test/`; the acceptance suites are `tests/acceptance/29` and the claim halves of `tests/acceptance/30` (never edited), plus hub tests such as `packages/hub/test/gate-stop.test.ts`.
 
 ## What it may import
 

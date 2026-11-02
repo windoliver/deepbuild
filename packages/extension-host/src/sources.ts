@@ -53,7 +53,7 @@ export type Declared = Polled | { variant: 'stream'; name: string };
 /** The handle `deep.secret(name)` gives: it names the secret, never holds its value. */
 export const handleOf = (name: string): string => `secret:${name}`;
 /** Where a package's secret is kept in the secret store. */
-export const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/${name}`;
+const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/${name}`;
 
 /** The largest answer a source call takes. */
 const ANSWER = 1024 * 1024;
@@ -124,7 +124,7 @@ export const nodeHttp: HttpClient = async (request, signal) => {
   return { status: res.status, headers, body: Buffer.concat(chunks).toString('utf8') };
 };
 /** No OS secret store this host can reach: nothing is held, so what needs a secret is BLOCKED, and none can be entered. */
-export const noSecrets: SecretStore = {
+const noSecrets: SecretStore = {
   get: async () => undefined,
   set: async () => { throw Error('this host has no secret store to keep a secret in'); },
   delete: async () => undefined,
@@ -255,7 +255,12 @@ export class Sources {
           return stop('failed', `no reading: ${this.scrub(e instanceof Error ? e.message : String(e))}`);
         }
         const { value: v, unit } = (parsed ?? {}) as { value?: unknown; unit?: unknown };
-        if (typeof v !== 'number' || !Number.isFinite(v) || typeof unit !== 'string' || !unit) return stop('failed', 'no reading: the parser gave no value with a unit');
+        if (typeof v !== 'number' || !Number.isFinite(v) || typeof unit !== 'string' || !unit) {
+          // What it returned goes back scrubbed, so the plug-in's author sees what to fix (#366).
+          let returned: string;
+          try { returned = JSON.stringify(parsed) ?? String(parsed); } catch { returned = String(parsed); }
+          return stop('failed', `no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned ${this.scrub(returned.slice(0, 200))}`);
+        }
         const reading: Reading = { source: source.name, value: v, unit, as_of: now };
         const handle = `reading:${ulid(now)}`;
         await this.options.append('reading.recorded', { reading: handle, value: v, unit, as_of: now, source: source.name, n: 1, outside: false });

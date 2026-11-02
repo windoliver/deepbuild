@@ -1,8 +1,7 @@
 // AC4: staged activation and owned teardown. A package that registers a handler and an action and then fails to start
 // exposes neither, during its start or after; enabling and disabling one 20 times leaves no listener or callback it
 // owned; and a call from a removed version that finishes after its replacement is active changes no state and
-// delivers nothing through the replacement. AC9: with A using B's output, removing B detaches A's use before B's
-// handlers stop; a host that stops B first fails, naming the edge.
+// delivers nothing through the replacement. AC9's test is the blind redraft in ac9-redraft/ (#103's dispute).
 //
 // "Enabling" is a load and "disabling" the host's `disable` (README, The surface under test). What a load owned is
 // read from outside it: its handler (a hook reply's blocks, and for the hub package a counter in this process that
@@ -11,12 +10,10 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ActionResult, ExtensionHost, Plant } from '../../../packages/extension-host/src/index.ts';
-import { d1Digest } from '../../../packages/contracts/src/index.ts';
+import type { ActionResult, ExtensionHost } from '../../../packages/extension-host/src/index.ts';
 import {
-  agentSees, alive, blocksOf, HEADLESS, HOOK_GRANT, installAndLoad, openHost, openWorld, pkg, releaseEntry, report, sleep, tasksTitled, taskEvent, tempDir, toolBefore, tracked, type World,
+  agentSees, alive, blocksOf, HEADLESS, HOOK_GRANT, installAndLoad, openHost, openWorld, pkg, releaseEntry, sleep, tasksTitled, taskEvent, tempDir, toolBefore, tracked,
 } from './helpers.ts';
-import { EDGE, judgeDetach } from './judges.ts';
 
 /** This process's handles of the kinds a load could leave behind: sockets, pipes, servers, child processes, watchers. */
 function handles(): Record<string, number> {
@@ -161,39 +158,5 @@ describe('AC4 #350.43f82359 a package that registers a handler and an action and
     expect(await tasksTitled(w, (late.data as { title: string }).title), 'the removed version\'s late call changed the record').toEqual([]);
     const second = await h.callAction({ action: 'ext.acts.where', target: { handle, version: '2.0.0' }, input: {}, caller: HEADLESS });
     expect(second, 'the late call went through the replacement').toMatchObject({ status: 'done', output: { version: '2.0.0', calls: 2 } });
-  }, 120_000);
-});
-
-describe('AC9 #350.bff15b51 with A using B\'s output, removing B detaches A\'s use before B\'s handlers stop; a host that stops B first fails, naming the edge', () => {
-  /** B's reading's schema, as fixtures/provider declares it; A's use pins its d1 digest. */
-  const FEED = { type: 'object', properties: { n: { type: 'integer' } }, required: ['n'], additionalProperties: false };
-  /** The scenario: A (first-party, in the hub) reads B's feed back to back for 3 s; B (sandboxed) is removed 0.8 s in. */
-  async function scenario(plant?: Plant): Promise<{ w: World; outcomes: string[]; bPids: number[] }> {
-    const b = await pkg('provider');
-    const a = await pkg('user', { manifest: { uses: [{ interface: 'ext.b.feed@1', minor: 0, digest: d1Digest(FEED) }] }, probe: { ms: 3_000 } });
-    const w = await openWorld();
-    const h = await openHost(w, { release: [await releaseEntry(a)], ...(plant ? { plant } : {}) });
-    await installAndLoad(h, b);
-    await installAndLoad(h, a);
-    const loads = await h.loaded();
-    expect(Object.fromEntries(loads.map((l) => [l.id, l.place])), 'A in the hub, B in the sandbox').toEqual({ 'deepbuild/a': 'hub', 'test/b': 'sandbox' });
-    const bPids = await tracked(w, loads.find((l) => l.id === 'test/b')!.run);
-    const reading = report<{ outcomes: string[] }>(h, 'ext.a.report');
-    await sleep(800);
-    await h.disable('test/b');
-    const { outcomes } = await reading;
-    return { w, outcomes, bPids };
-  }
-
-  it('AC9 A reads B\'s value until its use is detached and reads missing after, never through a stopped B; B\'s process is gone after', async () => {
-    const { outcomes, bPids } = await scenario();
-    expect(judgeDetach(outcomes), `A's reads: ${outcomes.length}`).toEqual([]);
-    await gone(bPids, 'B, removed');
-  }, 120_000);
-
-  it('AC9 (wrong program) a host that stops B first fails, naming the edge', async () => {
-    const { outcomes } = await scenario('stop-provider-first');
-    const problems = judgeDetach(outcomes);
-    expect(problems.some((p) => p.startsWith(`the edge ${EDGE}`) && p.includes('after B\'s handlers stopped')), JSON.stringify(problems)).toBe(true);
   }, 120_000);
 });

@@ -281,6 +281,14 @@ impl Mesh {
     }
 
     /// Each triangle's three corners, in u.
+    /// Adds `other`'s triangles after its own.
+    pub fn append(&mut self, other: Mesh) {
+        let base = self.vertices.len() as u32;
+        self.vertices.extend(other.vertices);
+        self.indices
+            .extend(other.indices.into_iter().map(|i| i + base));
+    }
+
     pub fn triangles(&self) -> impl Iterator<Item = [[f32; 2]; 3]> + '_ {
         self.indices.as_chunks::<3>().0.iter().map(|t| {
             [
