@@ -21,7 +21,7 @@ import { openRecord, RecordError, type Connection, type EventInput, type Message
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { slot, validityGate, type SessionLog } from '@deepbuild/gate';
+import { openCheckouts, slot, validityGate, type Checkouts, type SessionLog } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -305,6 +305,7 @@ export class Core {
   private readonly confirmer: Confirmer;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  private checkouts!: Checkouts;
   /** The kernel's lease table (#237), read by deep env down for who holds a port now, and the gate runner's cpu.slot. */
   private leases!: LeaseTable;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
@@ -478,6 +479,7 @@ export class Core {
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run), judged: (claim) => this.judged(claim),
+      checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       slots: () => ({ free: Math.max(0, Math.floor(availableParallelism() / 2) - this.runs.size) }),
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined),
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
@@ -592,12 +594,18 @@ export class Core {
       // the sandbox profile itself keeps every project's agent hook and MCP files. The runner's jobs/ is left to
       // each run's own grant: a job's checkout writes only its own folder.
       guarded: [
-        { path: this.root.dir, except: [join(this.root.dir, 'jobs')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
+        { path: this.root.dir, except: [join(this.root.dir, 'jobs'), join(this.root.dir, 'checkouts')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
         join(homedir(), 'Library', 'LaunchAgents'),
         process.execPath, resolve(process.execPath, '../../lib/node_modules'),
         ...[process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME].filter((p): p is string => !!p && isAbsolute(p)),
         ...compose.guarded,
       ],
+    });
+    // The base-commit service (#31), its checkouts under the hub's root: opening removes what a crash left, whose
+    // processes the supervisor has just reaped; no run writes the store, each only its own checkout.
+    this.checkouts = await openCheckouts({
+      store: join(this.root.dir, 'objects'), root: join(this.root.dir, 'checkouts'), kinds: [], host: this.supervisor, leases, now: this.now,
+      ...(this.options.plant === 'git-inherits-env' ? { plant: 'git-inherits-env' } : {}),
     });
     // The keys a stack leased per session before this start (#332): its processes were reaped as the supervisor opened,
     // so each ends now that the record proves them gone.
@@ -4405,13 +4413,13 @@ export class Core {
     return fromCredential;
   }
   /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */
-  private async invalid(claim: string, commit: string, reason: string): Promise<void> {
+  private async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID'): Promise<void> {
     const ts = this.now();
     const id = ulid(ts);
     await this.append(this.connection('core'), {
       v: 1, id, kind: 'verdict.made', ts, subject: claim,
       data: {
-        outcome: 'INVALID', verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
+        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], requirements: [], smallest: null, points_to: null, commit,
         key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
       },
     });
@@ -4449,7 +4457,7 @@ export class Core {
         const deepest = covered.map((q) => DEPTHS.indexOf(depth(q.depth))).reduce((a, b) => Math.max(a, b), 0);
         return { ...c, command: `sh '${c.check.replaceAll("'", "'\\''")}'`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]! };
       });
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, requirements, checks, stopAt: at });
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at });
       await this.judged(r.claim);
       return { ...ran, findings };
     })();
@@ -4786,6 +4794,13 @@ export class Core {
       // Its processes were reaped when the supervisor opened.
       if (await recorded('run.started', run.run)) await this.finish(run, 'stopped', ['hub restarted'], []);
       else this.writeJournal((runs) => { delete runs[run.run]; });
+      // Its checkout went as the service opened, so it isn't run again where nothing is left: what it would have shown stays unknown.
+      if (run.cwd && isUnder(run.cwd, realpathSync(join(this.root.dir, 'checkouts')))) {
+        const [claim] = (await this.record.raw(`SELECT commit_sha, verdict_id FROM claims WHERE id = '${sql(run.claim.slice(6))}'`)) as { commit_sha: string | null; verdict_id: string | null }[];
+        // A verdict it already has stands.
+        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart`, 'INCONCLUSIVE');
+        continue;
+      }
       // Its claim's check runs again.
       await this.launch({ ...run, run: `run:${ulid(this.now())}`, cwd: run.cwd ?? process.cwd(), grant: run.grant ?? RUN_AS_YOU });
     }
@@ -5128,6 +5143,23 @@ export class Core {
     const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);
     const { removed } = await this.store.retain({ cited, archived });
     for (const sha256 of removed) await this.appendCore('evidence.removed', { sha256 }).catch(() => undefined);
+    await this.pruneSnapshots(cited).catch(() => undefined);
+  }
+  /**
+   * Lets go of the snapshots nothing holds (#31): an open claim's (no verdict, its task not closed), an open ask's, and
+   * any with evidence a verdict or decision cites. Empty output is one hash for every run, so it holds none.
+   */
+  private async pruneSnapshots(cited: ReadonlySet<string>): Promise<void> {
+    const open = (await this.record.raw('SELECT DISTINCT r.commit_sha AS sha FROM runs r JOIN claims c ON c.id = r.claim_id LEFT JOIN tasks t ON t.task_ref = c.subject_ref WHERE c.verdict_id IS NULL AND t.closed IS NULL')) as { sha: string | null }[];
+    const asks = (await this.record.raw("SELECT pinned_to FROM asks WHERE status IN ('open', 'later')")) as { pinned_to: string | null }[];
+    const runs = (await this.record.raw('SELECT commit_sha AS sha, evidence FROM runs WHERE evidence IS NOT NULL')) as { sha: string | null; evidence: string }[];
+    const verdicts = (await this.record.raw("SELECT json_extract(data, '$.commit') AS sha, evidence FROM events WHERE kind = 'verdict.made' AND evidence IS NOT NULL")) as { sha: string | null; evidence: string }[];
+    const empty = sha256Hex(new Uint8Array());
+    const pins = asks.flatMap((a) => { const pin = JSON.parse(a.pinned_to ?? 'null') as { kind: string; ref: string } | null; return pin?.kind === 'commit' ? [pin.ref] : []; });
+    await this.checkouts.prune({
+      open_claims: open.flatMap((r) => (r.sha ? [r.sha] : [])), open_asks: pins,
+      kept_evidence: [...runs, ...verdicts].flatMap((r) => (r.sha && (JSON.parse(r.evidence) as string[]).some((sha) => sha !== empty && cited.has(sha)) ? [{ snapshot: r.sha, behind_decision: true }] : [])),
+    });
   }
 
   /** The GitHub repos (owner/name) whose worktrees sessions worked in over the last 90 days, GitHub's default log retention. */
@@ -5233,6 +5265,7 @@ export class Core {
     await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
     await this.runner.close();
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
+    await this.checkouts.close().catch(() => undefined);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
     await this.extensions?.close();
     await this.supervisor.close();
