@@ -60,3 +60,41 @@ AC5 stop 1: line "says done · 1 check waits for the loop · npm run e2e in the 
 AC5 woken at 20 minutes, stop 2: line "says done · 1 check waits for the loop · npm run e2e in the background"; journeys: none; held: .deepbuild/checks/journey.sh on bd61f79 held at 1793618198038 (npm run e2e in the background): started never, replaced by 5975ed3; .deepbuild/checks/journey.sh on 5975ed3 held at 1793619401519 (npm run e2e in the background): started never
 AC5 stop 1: line "says done · 1 check waits for the loop · npm run e2e in the background"; journeys: none; held: .deepbuild/checks/journey.sh on 8a208b1 held at 1793618225654 (npm run e2e in the background): started never
 AC5 process group ended at 4 minutes: journeys: none; held: .deepbuild/checks/journey.sh on 8a208b1 held at 1793618225654 (npm run e2e in the background): started never
+
+== After merging origin/main at fd952b1c (#39 Codex adapter), 2026-11-02 11:50-13:40Z, load averages 35-163 (other sessions).
+One run of the blind suite and the two hub tests with --no-file-parallelism (the lane's way): 17 of 25 passed. The
+other eight: seven BLOCKED at setup (a lost Stop hook, "could not spool ... within the hook's 50 ms", or the typed ask's
+definition not locked within 180 s), and one real failure in a hub test of an answer delivered, dropped since (the
+commit "tests(965): ..." says why). Each test not yet passed after the merge was then run alone until it passed;
+BLOCKED runs were retried, and none failed at an assertion:
+PASS [1, load 95.52 63.08 60.07] packages/hub/test/loop-starters.test.ts :: your words sent from the app
+BLOCKED [1, load 92.21 85.49 70.75] packages/hub/test/loop-starters.test.ts :: counts your words only
+BLOCKED [2, load 86.22 75.63 68.82] packages/hub/test/loop-starters.test.ts :: counts your words only
+PASS [3, load 96.30 79.51 70.55] packages/hub/test/loop-starters.test.ts :: counts your words only
+PASS [1, load 101.26 82.13 71.76] packages/hub/test/loop-starters.test.ts :: session that ends
+PASS [1, load 106.68 84.72 72.94] packages/hub/test/loop-transcript.test.ts :: wake-up the hub heard
+PASS [1, load 81.69 80.85 72.00] tests/acceptance/965/starts.test.ts :: the second turn calls deep_claim
+PASS [1, load 64.26 76.49 70.80] tests/acceptance/965/starts.test.ts :: the second turn runs gh pr create
+PASS [1, load 60.39 74.25 70.22] tests/acceptance/965/background.test.ts :: the end notice wakes the agent
+BLOCKED [1, load 80.40 74.06 70.80] tests/acceptance/965/background.test.ts :: rechecks facts only at stops
+PASS [2, load 83.94 76.29 71.82] tests/acceptance/965/background.test.ts :: rechecks facts only at stops
+BLOCKED [1, load 163.27 117.21 89.78] tests/acceptance/965/grace.test.ts :: starts-on-every-green-stop
+BLOCKED [2, load 62.95 99.76 89.58] tests/acceptance/965/grace.test.ts :: starts-on-every-green-stop
+BLOCKED [3, load 38.97 66.38 77.33] tests/acceptance/965/grace.test.ts :: starts-on-every-green-stop
+PASS [4] tests/acceptance/965/grace.test.ts :: starts-on-every-green-stop
+-- readings of those runs
+AC2 deep_claim, stop 1: line "says done · 1 check waits for the loop · wake-up · next: DeepBuild · receipt"; journeys: none; held: .deepbuild/checks/journey.sh on 4748e51 held at 1793653218177 (wake-up): started never
+AC2 deep_claim, stop 2: line "says done · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S2 (slow lane) at 1793653274511; held: .deepbuild/checks/journey.sh on 4748e51 held at 1793653218177 (wake-up): started at 1793653274075 by claim
+AC2 deep_claim, stop 3: line "says done · 1 check waits for the loop · wake-up · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S2 (slow lane) at 1793653274511; held: .deepbuild/checks/journey.sh on 4748e51 held at 1793653218177 (wake-up): started at 1793653274075 by claim; .deepbuild/checks/journey.sh on 3f08aae held at 1793653330926 (wake-up): started never
+AC2 gh pr create, stop 1: line "says done · 1 check waits for the loop · wake-up · next: DeepBuild · receipt"; journeys: none; held: .deepbuild/checks/journey.sh on 258d689 held at 1793653257795 (wake-up): started never
+AC2 gh pr create, stop 2: line "says done · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S2 (slow lane) at 1793653314163; held: .deepbuild/checks/journey.sh on 258d689 held at 1793653257795 (wake-up): started at 1793653313744 by claim
+AC2 gh pr create, stop 3: line "says done · 1 check waits for the loop · wake-up · next: DeepBuild · receipt"; journeys: .deepbuild/checks/journey.sh on S2 (slow lane) at 1793653314163; held: .deepbuild/checks/journey.sh on 258d689 held at 1793653257795 (wake-up): started at 1793653313744 by claim; .deepbuild/checks/journey.sh on cf8dc38 held at 1793653370198 (wake-up): started never
+AC5 stop 1: line "says done · 1 check waits for the loop · npm run e2e in the background"; journeys: none; held: .deepbuild/checks/journey.sh on 27656de held at 1793653296218 (npm run e2e in the background): started never
+AC5 woken at 20 minutes, stop 2: line "says done · 1 check waits for the loop · npm run e2e in the background"; journeys: none; held: .deepbuild/checks/journey.sh on 27656de held at 1793653296218 (npm run e2e in the background): started never, replaced by c236f3e; .deepbuild/checks/journey.sh on c236f3e held at 1793654499592 (npm run e2e in the background): started never
+AC5 woken at 20 minutes, 50.5 minutes on: journeys: .deepbuild/checks/journey.sh on S2 (slow lane) at 1793656326564; held: .deepbuild/checks/journey.sh on 27656de held at 1793653296218 (npm run e2e in the background): started never, replaced by c236f3e; .deepbuild/checks/journey.sh on c236f3e held at 1793654499592 (npm run e2e in the background): started at 1793656326004 by cap
+AC5 stop 1: line "says done · 1 check waits for the loop · npm run e2e in the background"; journeys: none; held: .deepbuild/checks/journey.sh on f2e0db5 held at 1793653515814 (npm run e2e in the background): started never
+AC5 process group ended at 4 minutes: journeys: none; held: .deepbuild/checks/journey.sh on f2e0db5 held at 1793653515814 (npm run e2e in the background): started never
+
+== The hub tests' wrong program for the session's end (no plant: the fix reverted): with this.gate.ended removed from
+SessionEnd, "a session that ends while its journey waits for the loop starts the journey" fails at its named assertion:
+  AssertionError: the session ended, and its wake-up with it: the journey starts on S1: expected [] to deeply equal [ 'slow' ]
