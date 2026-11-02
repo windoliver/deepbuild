@@ -972,6 +972,28 @@
       "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then runs a schedule every second on the real clock until its job ran three times. The issue's 1 s from slot to start stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "reading-batch-refresh",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "batch-refresh"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #262 first measurement: the merge base has no series sources. One process opens a record with its evidence store, the asks core, the supervisor and project trust and loads one package in the hub, then lands 20 batches of a 500-series source against a server on 127.0.0.1, reading the 500 bound values live after each; it reports the reads alone. The issue's 1 ms for all 500 stays in tests/acceptance/262/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "reading-value-at-position",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "value-at-position"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #262 first measurement: the merge base has no series sources. One process opens a record with its evidence store, the asks core, the supervisor and project trust and loads one package in the hub, lands 360 batches of a 500-series source, then resolves 200 bound values each pinned to an earlier batch's log position; it reports the resolutions alone. The issue's 1 ms at p50 stays in tests/acceptance/262/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "seam-suites",
       "command": [
         "node",

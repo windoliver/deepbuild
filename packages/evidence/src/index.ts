@@ -78,6 +78,8 @@ export interface RetainInput {
   archived: ReadonlySet<string>;
   /** Ids of the map layers installed now. */
   installed?: ReadonlySet<string>;
+  /** Only files of these kinds are considered: a series' own pass on the hub's timer (#262). Default: every kind. */
+  kinds?: ReadonlySet<string>;
 }
 export interface RetainResult { removed: string[] }
 export interface SendRequest { files: readonly string[]; via: ShareVia; destination: string }
@@ -278,7 +280,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       await read(sha).catch((error: Error) => { throw new EvidenceError('refused', `${error.message}, so it can't be a baseline`, sha); });
     },
 
-    async retain({ cited, archived, installed = new Set() }) {
+    async retain({ cited, archived, installed = new Set(), kinds }) {
       const at = now();
       // The newest rows file of each installed layer, parent and level stays while the layer is installed (#259).
       const newest = new Map<string, number>();
@@ -289,7 +291,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       }
       const expired = (sha: string) => {
         const record = index.get(sha);
-        if (!record || cited.has(sha) || archived.has(sha)) return false;
+        if (!record || cited.has(sha) || archived.has(sha) || (kinds && !kinds.has(record.kind))) return false;
         const key = slotOf(record);
         return (key === undefined || newest.get(key) !== record.storedAt) && at - record.storedAt > (KEPT_MS[record.kind] ?? RETENTION_MS);
       };
