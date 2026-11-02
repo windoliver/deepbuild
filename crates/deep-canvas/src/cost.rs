@@ -493,6 +493,14 @@ mod tests {
                 feature: "tick".into(),
                 license: "Apache-2.0".into(),
                 implements: "tick@1".into(),
+                implementation: crate::registry::Implementation::reference(
+                    "tick",
+                    Semver {
+                        major: 1,
+                        minor: 0,
+                        patch: 0,
+                    },
+                ),
             },
             register: register_tick,
         }
