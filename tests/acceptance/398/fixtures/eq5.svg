@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80" width="300" height="80">
+  <!-- Five parts, each named by the typeset job's id for its term; t-b_5e2 holds two paths. -->
+  <path id="t-a_1" d="M 10 20 L 50 20 L 50 60 L 10 60 Z" fill="#000000"/>
+  <g id="t-b_5e2">
+    <path d="M 70 20 L 100 20 L 100 60 L 70 60 Z" fill="#000000"/>
+    <path d="M 106 20 L 120 20 L 120 60 L 106 60 Z" fill="#000000"/>
+  </g>
+  <path id="t-c_7" d="M 140 20 L 180 20 L 180 60 L 140 60 Z" fill="#000000"/>
+  <path id="t-d_3f" d="M 200 20 L 240 20 L 240 60 L 200 60 Z" fill="#000000"/>
+  <path id="t-e_9" d="M 256 20 L 290 20 L 290 60 L 256 60 Z" fill="#000000"/>
+</svg>
