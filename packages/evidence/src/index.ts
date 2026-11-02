@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
-import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -78,6 +78,8 @@ export interface RetainInput {
   archived: ReadonlySet<string>;
   /** Ids of the map layers installed now. */
   installed?: ReadonlySet<string>;
+  /** Only files of these kinds are considered: a series' own pass on the hub's timer (#262). Default: every kind. */
+  kinds?: ReadonlySet<string>;
 }
 export interface RetainResult { removed: string[] }
 export interface SendRequest { files: readonly string[]; via: ShareVia; destination: string }
@@ -137,6 +139,7 @@ const RETENTION_MS = 30 * DAY;
 const KEPT_MS: Readonly<Record<string, number>> = { 'reading.batch': DAY, 'reading.rollup.minute': 7 * DAY };
 // The archive's transcript copies are kept compressed (#20): a heavy month of them fits in under 2 GB on disk.
 const PACKED: ReadonlySet<string> = new Set(['transcript-copy']);
+const JOURNAL_IDLE_MS = 1000;
 const pack = promisify(zstdCompress);
 const unpack = promisify(zstdDecompress);
 const REDACTIONS: readonly unknown[] = ['complete', 'incomplete', 'unknown'];
@@ -172,6 +175,21 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const kept = [...index.values(), ...[...approved].map(([pair, reasons]): Approval => ({ approved: pair, reasons: [...reasons] }))];
     await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''));
   }
+  // The journal stays open while lines come, and closes once they stop for a second: opening it for each line cost
+  // more than writing it (8 to 22 ms on a Mac whose scanner reads a file each time it is closed after a write).
+  let held: Promise<FileHandle> | undefined;
+  let idle: NodeJS.Timeout | undefined;
+  let journaled: Promise<void> = Promise.resolve();
+  const note = (entry: object): Promise<void> => (journaled = journaled.catch(() => undefined).then(async () => {
+    clearTimeout(idle);
+    try {
+      await (await (held ??= open(journal, 'a'))).appendFile(`${JSON.stringify(entry)}\n`);
+    } catch (error) {
+      held = undefined;
+      throw error;
+    }
+    idle = setTimeout(() => { void held?.then((h) => h.close()).catch(() => undefined); held = undefined; }, JOURNAL_IDLE_MS).unref();
+  }));
 
   // Writes and removals of one hash run one at a time; a put waits on its hook outside this queue.
   const queues = new Map<string, Promise<unknown>>();
@@ -203,7 +221,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const steps = request.steps?.map(({ step, startMs, endMs }) => ({ step, startMs, endMs }));
     // An input that is gone or unknown might have been an agent's, so it counts as one.
     const fromAgent = derivedFrom.some((input) => (index.get(input)?.origin ?? 'agent') === 'agent');
-    const existed = await onDisk(sha);
+    // A hash the index has never held is written without asking the disk: rewriting the same bytes is harmless.
+    const existed = index.has(sha) && await onDisk(sha);
     await options.hooks?.afterExistsCheck?.(sha);
     return serial(sha, async () => {
       if (!existed || !(await onDisk(sha))) await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(bytes)) : writeAtomic(fileOf(sha), bytes));
@@ -217,7 +236,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         ...(request.layer && { layer: request.layer }), ...(steps && { steps }), storedAt: now(),
       };
       index.set(sha, record);
-      await appendFile(journal, `${JSON.stringify(record)}\n`);
+      await note(record);
       const { storedAt: _, ...evidence } = record;
       return { status: 'stored', evidence, slot: missing ? { state: 'truncated', missing } : { state: 'captured' } };
     });
@@ -278,7 +297,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       await read(sha).catch((error: Error) => { throw new EvidenceError('refused', `${error.message}, so it can't be a baseline`, sha); });
     },
 
-    async retain({ cited, archived, installed = new Set() }) {
+    async retain({ cited, archived, installed = new Set(), kinds }) {
       const at = now();
       // The newest rows file of each installed layer, parent and level stays while the layer is installed (#259).
       const newest = new Map<string, number>();
@@ -289,7 +308,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       }
       const expired = (sha: string) => {
         const record = index.get(sha);
-        if (!record || cited.has(sha) || archived.has(sha)) return false;
+        if (!record || cited.has(sha) || archived.has(sha) || (kinds && !kinds.has(record.kind))) return false;
         const key = slotOf(record);
         return (key === undefined || newest.get(key) !== record.storedAt) && at - record.storedAt > (KEPT_MS[record.kind] ?? RETENTION_MS);
       };
@@ -298,7 +317,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (!expired(sha)) return; // stored again since the pass began
         index.delete(sha);
         await Promise.all([rm(fileOf(sha), { force: true }), rm(packedOf(sha), { force: true })]);
-        await appendFile(journal, `${JSON.stringify({ removed: sha })}\n`);
+        await note({ removed: sha });
         removed.push(sha);
       })));
       return { removed };
@@ -334,7 +353,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
           }
           for (const reason of reasons) yes.add(reason);
           approved.set(pair, yes);
-          await appendFile(journal, `${JSON.stringify({ approved: pair, reasons } satisfies Approval)}\n`);
+          await note({ approved: pair, reasons } satisfies Approval);
         }
         await boundary.deliver({ sha256: sha, bytes }, destination);
         receipt.sent.push({ sha256: sha, destination });

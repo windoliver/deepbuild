@@ -156,7 +156,7 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#366",
-    "digest": "d1:229b6e15fbbc0e66f687dc4b56b394c2e4aa7c35fe0e00e27a42fa32e8df417a",
+    "digest": "d1:f678797e9208a811d87f8c281fcb0a814d57cce7f0073a68471d77d9a85e98f8",
     "params": {
       "type": "object",
       "properties": {
@@ -230,6 +230,13 @@
                   "action"
                 ],
                 "additionalProperties": false
+              }
+            },
+            "binds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^reading:[a-z][a-z0-9_.-]*(#.+)?$"
               }
             }
           },

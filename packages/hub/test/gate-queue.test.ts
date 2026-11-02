@@ -27,7 +27,7 @@ describe('the slow lane', () => {
       ended: () => new Promise<string>(() => undefined),
       slots: () => ({ free: 4 }), budget_ms: 0, hold_ms: 0,
       checkouts: () => checkouts as unknown as ReturnType<GateOptions['checkouts']>,
-      invalid: async () => undefined, stopping: () => false,
+      invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
     });
     const check = (name: string) => ({ check: name, approved: 'a', command: `sh '${name}'`, covers: ['R1'], depth: 'unit' as const, on_base: 'passes' as const, asserts: [] });
     await gate.stop({ session: 's', claim: 'claim:1', task: 'task:1', cwd: '/w', base: 'b', requirements: [], checks: [check('e1'), check('e2')], stopAt: 0 });
@@ -39,5 +39,37 @@ describe('the slow lane', () => {
     release();
     await tick();
     expect(started.sort()).toEqual(['e1', 'e2']);
+  });
+});
+
+// #874: a fix check whose requirement declares a command the base has no entry for runs there with the command's
+// stand-in found by name, and failing on it records the stand-in's hash for the requirement.
+describe('a fix check on a base with nothing to start', () => {
+  it('runs on the base with its command\'s stand-in, and records the stand-in\'s hash', async () => {
+    const starts: { commit: string; standIns?: string[] }[] = [];
+    const stood: unknown[] = [];
+    const checkouts = {
+      budget: () => ({ since: 0 }),
+      snapshot: async () => ({ commit: 'c1', wrote: true }),
+      checkout: async () => ({ dir: '/x', commit: 'c1' }),
+      baseCheckout: async (r: { surfaces: { check: string; kind: string; name: string }[] }) => ({
+        dir: '/b', commit: 'b0', standIns: r.surfaces.map((s) => ({ check: s.check, kind: s.kind, hash: 'h-greet', bin: `/b/.deep-stand-in/bin/${s.name}` })),
+      }),
+      ended: async () => undefined,
+    };
+    const gate = new GateRunner({
+      raw: async () => [], now: () => 0, append: async () => undefined, core: {} as GateOptions['core'],
+      start: async (r) => { starts.push({ commit: r.commit, ...(r.standIns ? { standIns: r.standIns } : {}) }); return `run:${starts.length}`; },
+      ended: async (run) => (run === 'run:1' ? 'passed' : 'failed'),
+      slots: () => ({ free: 4 }), budget_ms: 0, hold_ms: 0,
+      checkouts: () => checkouts as unknown as ReturnType<GateOptions['checkouts']>,
+      invalid: async () => undefined, stopping: () => false, stoodIn: async (r) => { stood.push(r); },
+    });
+    const surface = { kind: 'command', name: 'deep-greet' };
+    await gate.stop({ session: 's', claim: 'claim:1', task: 'task:1', cwd: '/w', base: 'b', requirements: [], stopAt: 0,
+      checks: [{ check: '.deepbuild/checks/greet.sh', approved: 'a', command: 'sh .deepbuild/checks/greet.sh', covers: ['R1'], depth: 'unit', on_base: 'fails', req: 'R1', surface }] });
+    for (let i = 0; i < 20 && stood.length === 0; i++) await tick();
+    expect(starts).toEqual([{ commit: 'c1' }, { commit: 'b0', standIns: ['deep-greet'] }]);
+    expect(stood).toEqual([{ task: 'task:1', req: 'R1', surface, hash: 'h-greet' }]);
   });
 });

@@ -19,7 +19,7 @@ import { segmentsOf } from '@deepbuild/gate';
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { absent, filtersIn, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
+import { absent, DOES_NOTHING, filtersIn, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -40,6 +40,8 @@ export interface CommandCheck {
   secrets?: Record<string, string>;
   /** Hosts the run's grant names, "127.0.0.1:<port>". */
   hosts?: string[];
+  /** Commands a base has no entry for (#874): each is on the run's PATH as a program that does nothing, exits 0 and prints nothing. */
+  standIns?: string[];
   /** A numeric contract (#28, the verdict engine's NumericContract): the outputs whose counts the report gives. */
   contract?: { tolerances: { output: string; size: number }[] };
   /** A timing check (#87): how many timed repeats it runs, numbered 1 to `repeats`; each says in the report whether its caches were flushed. */
@@ -246,6 +248,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const bin = join(temp, 'bin');
     mkdirSync(bin);
     for (const [tool, real] of tools()) symlinkSync(real, join(bin, tool));
+    for (const name of check.standIns ?? []) if (/^[\w.+@-]+$/.test(name) && !existsSync(join(bin, name))) symlinkSync(DOES_NOTHING, join(bin, name));
     const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);

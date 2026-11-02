@@ -68,6 +68,9 @@ export type Plant =
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
   | 'fills-every-slot' | 'background-subagents-only'
+  // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
+  // where the part already starts, and a pass on a stand-in taken as proof.
+  | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves'
   // #965's: slow checks started at every green stop, every loop check held, a loop's claim or your words mid-turn
   // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
@@ -112,6 +115,7 @@ const PLANTS: readonly string[] = [
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
   'any-nonzero-base-exit',
+  'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
 ];

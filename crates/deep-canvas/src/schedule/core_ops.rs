@@ -163,6 +163,8 @@ pub enum Datum {
     Nums(Vec<f64>),
     Bool(bool),
     Typed(Val),
+    /// An enum channel's value: a vector part's role (#398).
+    Text(String),
 }
 
 impl PartialEq for Datum {
@@ -171,6 +173,7 @@ impl PartialEq for Datum {
             (Datum::Num(a), Datum::Num(b)) => a == b,
             (Datum::Nums(a), Datum::Nums(b)) => a == b,
             (Datum::Bool(a), Datum::Bool(b)) => a == b,
+            (Datum::Text(a), Datum::Text(b)) => a == b,
             (Datum::Typed(a), Datum::Typed(b)) => a.bytes() == b.bytes(),
             _ => false,
         }
@@ -192,6 +195,10 @@ impl Canonical for Datum {
                 out.push(2);
                 b.encode(out);
             }
+            Datum::Text(t) => {
+                out.push(4);
+                t.encode(out);
+            }
             Datum::Typed(v) => {
                 out.push(3);
                 v.bytes().encode(out);
@@ -208,6 +215,7 @@ impl Datum {
             Datum::Num(x) => json!(x),
             Datum::Nums(xs) => json!(xs),
             Datum::Bool(b) => json!(b),
+            Datum::Text(t) => json!(t),
             Datum::Typed(_) => Value::Null,
         }
     }
