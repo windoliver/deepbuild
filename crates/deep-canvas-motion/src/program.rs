@@ -118,9 +118,10 @@ fn number(v: Option<&Value>) -> Option<f64> {
 }
 
 /// The authored value at `path` inside `item`, `width` components wide.
-fn authored(item: &Value, path: &[String], width: usize, out: &mut [f64]) {
+fn authored(item: &Value, path: &[impl AsRef<str>], width: usize, out: &mut [f64]) {
     let mut at = Some(item);
     for name in path {
+        let name = name.as_ref();
         at = at.and_then(|v| match v {
             Value::Array(list) => name.parse::<usize>().ok().and_then(|i| list.get(i)),
             other => other.get(name),
@@ -152,14 +153,17 @@ impl Program {
             .unwrap_or(&empty);
         let items: Vec<String> = items_json.keys().cloned().collect();
         let mut base = vec![0.0; items.len() * TRANSFORM];
-        for (i, id) in items.iter().enumerate() {
+        for (i, item) in items_json.values().enumerate() {
+            let at = item.get("at");
             for (k, (name, fill)) in [("pos", 0.0), ("rot", 0.0), ("scale", 1.0)]
                 .iter()
                 .enumerate()
             {
                 let run = &mut base[i * TRANSFORM + 3 * k..i * TRANSFORM + 3 * k + 3];
                 run.fill(*fill);
-                authored(&items_json[id], &["at".into(), (*name).into()], 3, run);
+                if let Some(at) = at {
+                    authored(at, &[name], 3, run);
+                }
             }
         }
         let mut program = Program {
