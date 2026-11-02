@@ -11,7 +11,7 @@
 //! `ns_per_glyph_warm`: a frame is charged the warm cost, since a text is shaped once and its run
 //! reused from the shaped-run cache, and the cold cost decides whether shaping leaves the UI thread.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde_json::{json, Map, Value};
 
@@ -235,13 +235,10 @@ impl Estimate {
 
 /// The items a warm frame evaluates (canvas primitives: Invalidation and damage, "CPU O(dirty)"):
 /// those an item operator reading the time applies to, as a channel moves them, with the items
-/// whose params name one of them or that hang from one. `None` when nothing moves: a still
-/// document draws only when it shows or changes, and that frame evaluates every item.
-fn moving<'d>(
-    doc: &Value,
-    items: &'d Map<String, Value>,
-    sealed: &Sealed,
-) -> Option<BTreeSet<&'d str>> {
+/// whose params name one of them or that hang from one, as a flag per item in item order. `None`
+/// when nothing moves: a still document draws only when it shows or changes, and that frame
+/// evaluates every item.
+fn moving(doc: &Value, items: &Map<String, Value>, sealed: &Sealed) -> Option<Vec<bool>> {
     let timed: Vec<_> = sealed
         .ops
         .iter()
@@ -252,34 +249,35 @@ fn moving<'d>(
                 && o.op.reads.iter().any(|r| r == "t")
         })
         .collect();
-    let mut dirty: BTreeSet<&str> = items
+    let mut dirty: Vec<bool> = items
         .iter()
-        .filter(|(id, item)| {
+        .map(|(id, item)| {
             timed
                 .iter()
                 .any(|o| o.op.applies.is_none_or(|f| f(doc, id, item)))
         })
-        .map(|(id, _)| id.as_str())
         .collect();
-    if dirty.is_empty() {
+    if !dirty.contains(&true) {
         return None;
     }
     // Each item an item names in its params or hangs from, with the items that do.
-    let mut readers: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for (id, item) in items {
+    let ids: Vec<&str> = items.keys().map(String::as_str).collect();
+    let mut readers: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (i, item) in items.values().enumerate() {
         let mut named = Vec::new();
         if let Some(p) = item.get("parent").and_then(Value::as_str) {
             named.push(p);
         }
         item_ids_in(&item["params"], items, &mut named);
         for n in named {
-            readers.entry(n).or_default().push(id);
+            readers.entry(n).or_default().push(i);
         }
     }
-    let mut next: Vec<&str> = dirty.iter().copied().collect();
-    while let Some(id) = next.pop() {
-        for r in readers.get(id).into_iter().flatten() {
-            if dirty.insert(r) {
+    let mut next: Vec<usize> = (0..ids.len()).filter(|&i| dirty[i]).collect();
+    while let Some(i) = next.pop() {
+        for &r in readers.get(ids[i]).into_iter().flatten() {
+            if !dirty[r] {
+                dirty[r] = true;
                 next.push(r);
             }
         }
@@ -317,8 +315,20 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
     let mut cpu_ns = 0.0;
     let mut gpu_ns = 0.0;
     let mut bytes = 0.0;
-    let mut by_item: BTreeMap<&str, f64> = BTreeMap::new();
-    let moving = moving(doc, items, sealed);
+    // Each item's family and name, counts and share, in item order: read once, not once per
+    // operator, pass and module.
+    let fulls: Vec<&str> = items
+        .values()
+        .map(|item| {
+            item.get("kind")
+                .and_then(Value::as_str)
+                .and_then(|k| k.split('@').next())
+                .unwrap_or("")
+        })
+        .collect();
+    let item_counts: Vec<Counts> = items.values().map(counts).collect();
+    let mut by_item = vec![0.0; items.len()];
+    let evaluated = moving(doc, items, sealed);
     for op in &sealed.ops {
         if op.op.run.is_none() || is_check_phase(&op.op.phase) {
             continue;
@@ -329,19 +339,19 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
         if document && op.op.applies.is_some_and(|f| !f(doc, "", &Value::Null)) {
             continue;
         }
-        for (id, item) in items {
+        for (i, (id, item)) in items.iter().enumerate() {
             if !document && op.op.applies.is_some_and(|f| !f(doc, id, item)) {
                 continue;
             }
             bytes += t.bytes_per_item;
-            if moving.as_ref().is_some_and(|m| !m.contains(id.as_str())) {
+            if evaluated.as_ref().is_some_and(|e| !e[i]) {
                 continue;
             }
-            let c = counts(item);
+            let c = item_counts[i];
             let ns =
                 t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_frame_glyph() * c.glyphs;
             cpu_ns += ns;
-            *by_item.entry(id).or_default() += ns;
+            by_item[i] += ns;
         }
     }
     for m in &sealed.modules {
@@ -351,14 +361,8 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
             .iter()
             .map(|k| format!("{}.{}", k.entry.family, k.entry.name))
             .collect();
-        let drawn: Vec<(&String, &Value)> = items
-            .iter()
-            .filter(|(_, i)| {
-                i.get("kind")
-                    .and_then(Value::as_str)
-                    .and_then(|k| k.split('@').next())
-                    .is_some_and(|k| kinds.iter().any(|x| x == k))
-            })
+        let drawn: Vec<usize> = (0..fulls.len())
+            .filter(|&i| kinds.iter().any(|x| x == fulls[i]))
             .collect();
         if drawn.is_empty() {
             continue;
@@ -367,33 +371,29 @@ pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Es
             let t = coefficients.get(&pass.name);
             gpu_ns += t.ns_per_px * px;
             bytes += t.bytes_per_px * px;
-            for (id, item) in &drawn {
-                let ns = t.ns_per_vertex * counts(item).vertices + t.ns_per_item;
+            for &i in &drawn {
+                let ns = t.ns_per_vertex * item_counts[i].vertices + t.ns_per_item;
                 gpu_ns += ns;
                 bytes += t.bytes_per_item;
-                *by_item.entry(id.as_str()).or_default() += ns;
+                by_item[i] += ns;
             }
         }
     }
-    for (id, item) in items {
-        let full = item
-            .get("kind")
-            .and_then(Value::as_str)
-            .and_then(|k| k.split('@').next())
-            .unwrap_or("");
-        for c in sealed.costs_for(full) {
+    let mut costs: BTreeMap<&str, Vec<_>> = BTreeMap::new();
+    for (i, item) in items.values().enumerate() {
+        let registered = costs
+            .entry(fulls[i])
+            .or_insert_with(|| sealed.costs_for(fulls[i]));
+        for c in registered.iter() {
             let ns = c(item) * 1e6;
             cpu_ns += ns;
-            *by_item.entry(id).or_default() += ns;
+            by_item[i] += ns;
         }
     }
     out.cpu_ms = cpu_ns / 1e6;
     out.gpu_ms = gpu_ns / 1e6;
     out.gpu_mb = bytes / 1e6;
-    out.by_item = items
-        .keys()
-        .map(|id| (id.clone(), by_item.get(id.as_str()).copied().unwrap_or(0.0)))
-        .collect();
+    out.by_item = items.keys().cloned().zip(by_item).collect();
     out
 }
 
