@@ -97,7 +97,7 @@ export interface AskTaskOptions {
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
    * it takes the claim's snapshot and checkout, and starts the fast lane's checks.
    */
-  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms'>[] }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms'>[] }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
@@ -342,7 +342,7 @@ export class AskTasks {
       // Its checks start last, so a slow start holds up neither the claim nor its proposals.
       const onBase = (r: Requirement) => (r.on_base === 'passes' ? 'passes' as const : 'fails' as const);
       // Each with the requirement it judges and the surface it declares, for a stand-in on the base (#874).
-      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: onBase(r), req: r.id, surface: r.surface ?? null, ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}) }] : []));
+      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: onBase(r), asserts: r.asserts, req: r.id, surface: r.surface ?? null, ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}) }] : []));
       // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
       const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));
       await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, requirements: handles, checks });

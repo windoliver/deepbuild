@@ -11,7 +11,7 @@
 // snapshot, every checkout and a fix check's run on the merge base come from the base-commit service (#31). Pure rules
 // live in @deepbuild/gate; this module drives them with the hub's runs and record.
 import { basename } from 'node:path';
-import { claimVerdict, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
+import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
 import type { Plant } from './plant.js';
@@ -20,10 +20,10 @@ import type { Plant } from './plant.js';
 export type Surface = { kind: string } & Record<string, unknown>;
 /**
  * A check of a claim, as the definition locks it: its approved bytes, the command its run is, the requirements it
- * covers, and its lane facts; with them the requirement it judges and the surface it declares, for a stand-in on a base
+ * covers, its lane facts and the assertions it names; with them the requirement it judges and the surface it declares, for a stand-in on a base
  * with nothing to start (#874).
  */
-export interface ClaimCheck { check: string; approved: string; command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes'; expected_ms?: number; deadline_ms?: number; req?: string; surface?: Surface | null }
+export interface ClaimCheck { check: string; approved: string; command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes'; asserts: string[]; expected_ms?: number; deadline_ms?: number; req?: string; surface?: Surface | null }
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
@@ -96,15 +96,23 @@ export class GateRunner {
   recorded(run: string, record: RecordedRun): void {
     this.records.set(run, record);
   }
+  /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
+  private ownOf(e: Entry): string[] {
+    const head = e.runs.length ? this.records.get(e.runs[e.runs.length - 1]!) : undefined;
+    return head?.read.filter(ownRead) ?? [];
+  }
   /**
-   * How a fix check ran on the merge base (#31), from that run's record: it proves the fix only when it failed there on
-   * an assertion; a base run that never ended as a run (missing, stopped, uncounted) is no run on the base.
+   * How a fix check ran on the merge base (#31), from that run's record, and why a failure there proves nothing: it
+   * proves the fix only by failing at an assertion its check names (#875), never before its tests ran or elsewhere. A
+   * base run that never ended as a run (missing, stopped, uncounted) is no run on the base.
    */
-  private baseOf(e: Entry): BaseResult | undefined {
+  private baseOf(e: Entry): { base: BaseResult; why: string | null } | undefined {
     const r = e.base === null ? undefined : this.records.get(e.base);
     if (!r || (r.outcome !== 'passed' && r.outcome !== 'failed' && r.outcome !== 'overran')) return undefined;
-    if (e.standIn && r.outcome === 'passed' && this.o.plant === 'stand-in-pass-proves') return { outcome: 'failed', on_assertion: true, failed_tests: [] };
-    return { outcome: r.outcome === 'passed' ? 'passed' : 'failed', on_assertion: r.outcome === 'failed' && r.failures.some((f) => f.assertion), failed_tests: [...new Set(r.failures.map((f) => f.test))] };
+    if (e.standIn && r.outcome === 'passed' && this.o.plant === 'stand-in-pass-proves') return { base: { outcome: 'failed', on_assertion: true, failed_tests: [] }, why: null };
+    const outcome = r.outcome === 'passed' ? 'passed' : 'failed';
+    const proof = baseProof(r, { own: this.ownOf(e), asserts: e.check.asserts }, this.o.plant === 'any-nonzero-base-exit' ? this.o.plant : undefined);
+    return { base: { outcome, on_assertion: proof.on_assertion, failed_tests: [...new Set(r.failures.map((f) => f.test))] }, why: outcome === 'failed' ? proof.why : null };
   }
   /**
    * The claim's verdict as it stands: its checks' recorded runs judged by the verdict engine through the gate's
@@ -115,10 +123,13 @@ export class GateRunner {
     const c = this.claimOf(claim);
     if (!c) return undefined;
     const queued = new Set(this.queue.values());
-    return claimVerdict({
+    // What a base run failed to prove, by name: the engine says only that it failed off its named assertions.
+    const whys: string[] = [];
+    const v = claimVerdict({
       claim: c.claim, agent: `session:${c.session.replace(/[^0-9A-Za-z]/g, '')}`, repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(),
       checks: [...c.entries.values()].map((e) => {
-        const base = this.baseOf(e);
+        const { base, why } = this.baseOf(e) ?? {};
+        if (why) whys.push(`${e.check.check} ${why}`);
         return {
           check: e.check.check, command: e.check.command, source: 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           runs: e.runs.flatMap((run) => { const r = this.records.get(run); return r ? [r] : []; }),
@@ -128,6 +139,7 @@ export class GateRunner {
         };
       }),
     });
+    return v.outcome === 'INVALID' && whys.length ? { ...v, reasons: [...whys, ...v.reasons] } : v;
   }
   private claimOf(claim: string): Claim | undefined {
     for (const list of this.claims.values()) { const c = list.find((x) => x.claim === claim); if (c) return c; }
@@ -218,8 +230,9 @@ export class GateRunner {
   }
   /**
    * A fix check that passed on the snapshot runs on the merge base, in a temporary checkout from the service (#31),
-   * through the same command check kind; its record is what the verdict engine judges the fix by: passing there, or
-   * failing off its assertions, makes the claim INVALID. A base run that can't be made is no run on the base, which
+   * through the same command check kind, with the files its run read under the test, fixture and script folders taken
+   * from the snapshot (#875); its record is what the verdict engine judges the fix by: passing there, or failing off
+   * the assertions it names, makes the claim INVALID. A base run that can't be made is no run on the base, which
    * the engine names the same way; what the hub's stopping cuts short says nothing.
    *
    * On a base with nothing to start, the surface the check declares gets the service's stand-in (#874), a program that
@@ -234,7 +247,7 @@ export class GateRunner {
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;
     try {
       const surfaces = surface ? [{ ...surface, check } as DeclaredSurface] : [];
-      const base = await this.o.checkouts().baseCheckout({ worktree: c.cwd, onto: c.base, claim: c.snapshot, own: [], dependencies: DEPENDENCIES, surfaces, runs: [token] });
+      const base = await this.o.checkouts().baseCheckout({ worktree: c.cwd, onto: c.base, claim: c.snapshot, own: this.ownOf(e), dependencies: DEPENDENCIES, surfaces, runs: [token] });
       try {
         const standIn = base.standIns.find((s) => s.check === check);
         const reach = standIn?.port ? { env: { DEEP_SURFACE_URL: `http://127.0.0.1:${standIn.port}` }, hosts: [`127.0.0.1:${standIn.port}`] }
