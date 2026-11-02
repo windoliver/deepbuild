@@ -13,6 +13,8 @@
 //! Everything is ordinary data over `BTreeMap`s and sorted `Vec`s: no static, no hash-map order,
 //! nothing read from the machine, as the canvas lint requires.
 
+pub mod core_lists;
+pub mod lists;
 mod semver;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -564,6 +566,8 @@ pub struct Pass {
     /// returns the item's color: only a GPU can make its pixels.
     pub kind: String,
     pub shader: &'static str,
+    /// The `gpu.step@1` steps it compiles from, each resolved at the seal (#200).
+    pub steps: Vec<String>,
 }
 
 /// A document check kind a canvas module registers, which joins the core's in the document
@@ -647,6 +651,10 @@ pub struct Registrar {
     pub costs: Vec<(String, Cost)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
+    /// The registries it declares (#200).
+    pub registries: Vec<lists::RegistryDef>,
+    /// The entries it fills at the seal, into its own registries or the core's (#200).
+    pub entries: Vec<lists::EntryDef>,
 }
 
 impl Registrar {
@@ -867,6 +875,34 @@ impl Registrar {
             place: place.into(),
             kind: String::new(),
             shader: "",
+            steps: Vec::new(),
+        });
+        self
+    }
+
+    /// The `gpu.step@1` steps the last pass registered compiles from; the seal refuses a step
+    /// no entry in the build fills (#200).
+    pub fn pass_steps(&mut self, steps: &[&str]) -> &mut Self {
+        if let Some(last) = self.passes.last_mut() {
+            last.steps = steps.iter().map(|s| s.to_string()).collect();
+        }
+        self
+    }
+
+    /// Declares a registry this module owns, which it, packs or plug-ins fill (#200).
+    pub fn registry(&mut self, def: lists::RegistryDef) -> &mut Self {
+        self.registries.push(def);
+        self
+    }
+
+    /// Fills an entry into a registry at the seal: one this module declares, or one the core
+    /// declares (#200).
+    pub fn entry(&mut self, registry: &str, name: &str, value: Value, since: &str) -> &mut Self {
+        self.entries.push(lists::EntryDef {
+            registry: registry.into(),
+            name: name.into(),
+            value,
+            since: since.into(),
         });
         self
     }
@@ -939,13 +975,20 @@ pub enum Fault {
     AdmitsFrameJson,
     /// Hashes private arrays into an interface's digest (#185).
     DigestHashesPrivate,
+    /// Hashes every entry of a core registry into each filler's digest (#200).
+    HashesEveryEntry,
+    /// Takes a module's entry in another module's registry into the declaring module's digest
+    /// instead of refusing it (#200).
+    TakesForeignEntry,
+    /// Leaves the op table's base steps to a canvas module to fill (#200).
+    BaseStepsElsewhere,
 }
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
 pub const JSON: &str = "json";
 
 /// Why the seal refused the set. `modules` and `arrays` name what is involved, sorted.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SealError {
     pub code: &'static str,
     pub modules: Vec<String>,
@@ -956,7 +999,20 @@ pub struct SealError {
     pub interface: Option<String>,
     /// The implementations involved, by name, sorted; empty where none is.
     pub implementations: Vec<String>,
+    /// The registry, entries, kit rules and passes involved (#200).
+    pub registry: Option<Box<RegistryRefusal>>,
     pub what: String,
+}
+
+/// What a refusal of the seal's registry checks names (#200).
+#[derive(Debug, Default)]
+pub struct RegistryRefusal {
+    /// `name@major`.
+    pub name: String,
+    /// Each an entry's name, or a planted entry as `{name, value}`.
+    pub entries: Vec<Value>,
+    pub rules: Vec<String>,
+    pub passes: Vec<String>,
 }
 
 impl SealError {
@@ -980,7 +1036,19 @@ impl SealError {
             interface: None,
             implementations: Vec::new(),
             what,
+            ..SealError::default()
         }
+    }
+
+    /// The same refusal, naming the registry, its entries and the kit rules involved.
+    fn at(mut self, registry: &str, entries: Vec<Value>, rules: &[&str]) -> SealError {
+        self.registry = Some(Box::new(RegistryRefusal {
+            name: registry.to_string(),
+            entries,
+            rules: rules.iter().map(|r| r.to_string()).collect(),
+            passes: Vec::new(),
+        }));
+        self
     }
 
     /// The same refusal, naming the interface and the implementations involved.
@@ -1064,6 +1132,10 @@ pub struct Sealed {
     /// The cost model's coefficients every check in this process estimates with: the build's
     /// own, unless the process read another file (#855).
     pub costs: crate::cost::Coefficients,
+    /// Every registry the core and the canvas modules declare, by name, with its entries (#200).
+    pub registries: Vec<lists::SealedRegistry>,
+    /// The time the seal's registry checks took, in nanoseconds of the registry's clock.
+    pub registry_ns: u64,
 }
 
 impl Sealed {
@@ -1108,6 +1180,16 @@ impl Sealed {
             "phases": phases,
             "contributions": self.contributions,
         })
+    }
+
+    /// Where the sealed registries are published: `deep://registries/<core version>` (#200).
+    pub fn registries_uri(&self) -> String {
+        format!("deep://registries/{}", core_name())
+    }
+
+    /// The registry `name@major`, if the build declares it.
+    pub fn registry(&self, name: &str) -> Option<&lists::SealedRegistry> {
+        self.registries.iter().find(|r| r.def.name == name)
     }
 
     /// The interface the module `name` implements in this build.
@@ -1341,6 +1423,31 @@ impl Sealed {
     }
 }
 
+/// The core's closed lists, each as packages/contracts/canvas-schemas/canvas.lists@1.json lists
+/// it with its closure (#200): the phases, the places in the frame, the read-set terms, the array
+/// domains, when a table builds, the carried-state kinds, the check machine classes and the
+/// determinism classes.
+pub fn closed_lists() -> Vec<(&'static str, Vec<&'static str>)> {
+    vec![
+        (
+            "phase",
+            CHECK_PHASES
+                .iter()
+                .chain(FRAME_PHASES)
+                .chain(AUDIO_PHASES)
+                .copied()
+                .collect(),
+        ),
+        ("place", PLACES.to_vec()),
+        ("read_term", READ_TERMS.to_vec()),
+        ("domain", DOMAINS.to_vec()),
+        ("table_build", TABLE_BUILDS.to_vec()),
+        ("carried_kind", CARRIED_KINDS.to_vec()),
+        ("machines", MACHINES.to_vec()),
+        ("determinism", CLASSES.to_vec()),
+    ]
+}
+
 /// The registry while it registers.
 pub struct Registry {
     build_set: BuildSet,
@@ -1356,6 +1463,10 @@ pub struct Registry {
     clock: Option<fn() -> u64>,
     fault: Option<Fault>,
     costs: Option<crate::cost::Coefficients>,
+    /// Registries the core declares beside its own: a test build's (#200).
+    declared: Vec<lists::RegistryDef>,
+    /// The registry whose kit the planted wrong kit replaces with one admitting every entry.
+    admits_all: Option<String>,
 }
 
 impl Registry {
@@ -1368,7 +1479,21 @@ impl Registry {
             clock: None,
             fault: None,
             costs: None,
+            declared: Vec::new(),
+            admits_all: None,
         }
+    }
+
+    /// A registry the core declares in this build beside its own (#200).
+    pub fn declares(mut self, def: lists::RegistryDef) -> Registry {
+        self.declared.push(def);
+        self
+    }
+
+    /// Plants the kit that admits every entry in the registry `name`; test builds only.
+    pub fn plant_admits_all(mut self, name: &str) -> Registry {
+        self.admits_all = Some(name.to_string());
+        self
     }
 
     /// The coefficients the sealed set's checks estimate with, in place of the build's own.
@@ -2547,6 +2672,23 @@ impl Registry {
             }
         }
 
+        // Registries (#200): every one the core and the modules declare, every entry a module
+        // or the core fills, and every step a pass compiles from.
+        let started = self.clock.map(|c| c());
+        let mut core_registries = core_lists::registries();
+        core_registries.extend(self.declared.iter().cloned());
+        let (registries, parts) = lists::seal(
+            core_registries,
+            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere)),
+            &shapes,
+            self.admits_all.as_deref(),
+            self.fault,
+        )?;
+        let registry_ns = match (self.clock, started) {
+            (Some(clock), Some(t0)) => clock().saturating_sub(t0),
+            _ => 0,
+        };
+
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -2555,7 +2697,14 @@ impl Registry {
         let mut interfaces = Vec::new();
         let mut interface_ns = 0;
         for ((name, shapes), module) in shapes.into_iter().skip(1).zip(&self.modules) {
-            let (digest, interface) = self.implementation_of(&name, &module.manifest, &shapes, private, &mut interface_ns)?;
+            let (digest, interface) = self.implementation_of(
+                &name,
+                &module.manifest,
+                &shapes,
+                parts.get(&name),
+                private,
+                &mut interface_ns,
+            )?;
             interfaces.extend(interface);
             modules.push(SealedModule {
                 name,
@@ -2571,7 +2720,7 @@ impl Registry {
             let mut shapes = Registrar::default();
             (backend.register)(&mut shapes);
             let m = &backend.manifest;
-            self.implementation_of(&m.name, m, &shapes, private, &mut interface_ns)?;
+            self.implementation_of(&m.name, m, &shapes, None, private, &mut interface_ns)?;
         }
         interfaces.sort_by(|a, b| a.name.cmp(&b.name));
         let set_digest = d1(&Value::Array(
@@ -2595,6 +2744,8 @@ impl Registry {
             set_digest,
             interfaces,
             interface_ns,
+            registries,
+            registry_ns,
             costs: self
                 .costs
                 .take()
@@ -2613,11 +2764,12 @@ impl Registry {
         name: &str,
         m: &Manifest,
         shapes: &Registrar,
+        lists: Option<&Value>,
         private: bool,
         ns: &mut u64,
     ) -> Result<(String, Option<SealedInterface>), SealError> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
-        let (digest, listed) = module_shapes(shapes, private).map_err(bad)?;
+        let (digest, listed) = module_shapes(shapes, lists, private).map_err(bad)?;
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
         let reference = declared.map_or(&m.implementation.name, |i| {
@@ -2626,7 +2778,8 @@ impl Registry {
         if let Some(i) = declared.filter(|_| *reference != m.implementation.name) {
             let mut r = Registrar::default();
             (i.reference.register)(&mut r);
-            let (want, want_listed) = module_shapes(&r, private).map_err(bad)?;
+            let own = own_lists(&r);
+            let (want, want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             if want != digest {
                 let differs = want_listed
                     .iter()
@@ -2881,6 +3034,7 @@ fn phase_index(phase: &str) -> Option<usize> {
 /// digest that lets private arrays in.
 fn module_shapes(
     r: &Registrar,
+    lists: Option<&Value>,
     hash_private: bool,
 ) -> Result<(String, BTreeMap<String, String>), CanonError> {
     // A private array is the implementation's own, so neither its entry nor its name in a
@@ -2986,15 +3140,55 @@ fn module_shapes(
             list(format!("{what} {}", name.join(" ")), v)?;
         }
     }
-    let digest = d1(&json!({
+    let mut whole = json!({
         "arrays": arrays,
         "carried": carried,
         "checks": checks,
         "kinds": kinds,
         "tables": tables,
         "tool_entries": tools,
-    }))?;
+    });
+    // The registries it declares and the entries it fills at the seal (#200), only when it has
+    // any, so a module with none keeps the digest it had.
+    if let Some(l) = lists {
+        for r in l["registries"].as_array().into_iter().flatten() {
+            list(
+                format!("registry {}", r["name"].as_str().unwrap_or_default()),
+                r,
+            )?;
+        }
+        for e in l["entries"].as_array().into_iter().flatten() {
+            list(
+                format!(
+                    "entry {} {}",
+                    e["registry"].as_str().unwrap_or_default(),
+                    e["name"].as_str().unwrap_or_default()
+                ),
+                e,
+            )?;
+        }
+        whole["registries"] = l.clone();
+    }
+    let digest = d1(&whole)?;
     Ok((digest, listed))
+}
+
+/// What a module's own registrar puts in its digest of registries: the registries it declares
+/// and the entries it fills, as the seal's own computes them for an interface's reference.
+fn own_lists(r: &Registrar) -> Option<Value> {
+    let regs: Vec<&lists::RegistryDef> = r.registries.iter().collect();
+    let entries: Vec<(&str, &str, String)> = r
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.registry.as_str(),
+                e.name.as_str(),
+                lists::entry_digest(&e.registry, &e.name, &e.value, &e.since),
+            )
+        })
+        .collect();
+    lists::digest_part(&regs, &entries)
 }
 
 fn sorted(list: &[String]) -> Vec<String> {
