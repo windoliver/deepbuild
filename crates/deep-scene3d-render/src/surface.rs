@@ -16,6 +16,8 @@ pub const SHARPEN_PASS: &str = "surface.sharpen";
 pub const OUTLINE_PASS: &str = "scene3d.outlines";
 
 const SHADER: &str = include_str!("upscale.wgsl");
+/// The upscaled frame's format: the compute upscale at half size writes it as storage.
+const UPSCALED: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// How a view returns to full size below scale 1 (frame history's `temporal` lands in R6).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -96,8 +98,11 @@ pub struct Planted {
 pub struct Upscale {
     source: wgpu::BindGroupLayout,
     amount: wgpu::BindGroupLayout,
+    out: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     edge: wgpu::RenderPipeline,
+    /// The edge-adaptive upscale at exactly half size, four pixels an invocation.
+    half: wgpu::ComputePipeline,
     bilinear: wgpu::RenderPipeline,
     /// The planted upscale that blends into the previous frame.
     blended: wgpu::RenderPipeline,
@@ -116,7 +121,7 @@ impl Upscale {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         view_dimension: wgpu::TextureViewDimension::D2,
@@ -140,13 +145,26 @@ impl Upscale {
                 wgpu::BufferBindingType::Uniform,
             )],
         });
+        let out = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("surface upscaled"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: UPSCALED,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                count: None,
+            }],
+        });
         let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("surface upscale"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let srgb = FORMAT.add_srgb_suffix();
+        let srgb = UPSCALED.add_srgb_suffix();
         let make = |entry: &str, groups: &[Option<&wgpu::BindGroupLayout>], format, blend| {
             let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(entry),
@@ -170,9 +188,22 @@ impl Upscale {
         };
         Upscale {
             // The edge-adaptive upscale works in linear light and writes the upscaled frame
-            // through its sRGB view, which encodes; the bilinear stretch stays in sRGB values.
+            // through its sRGB view, which encodes (at exactly half size, as storage, encoding
+            // itself); the bilinear stretch stays in sRGB values.
             edge: make("upscale", &[Some(&source)], srgb, None),
-            bilinear: make("bilinear", &[Some(&source)], FORMAT, None),
+            half: d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("upscale_half"),
+                layout: Some(&d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("upscale_half"),
+                    bind_group_layouts: &[Some(&source), Some(&out)],
+                    immediate_size: 0,
+                })),
+                module: &module,
+                entry_point: Some("upscale_half"),
+                compilation_options: Default::default(),
+                cache: None,
+            }),
+            bilinear: make("bilinear", &[Some(&source)], UPSCALED, None),
             blended: make(
                 "upscale",
                 &[Some(&source)],
@@ -185,6 +216,7 @@ impl Upscale {
             sharpen: make("sharpen", &[Some(&source), Some(&amount)], FORMAT, None),
             source,
             amount,
+            out,
             sampler,
         }
     }
@@ -206,6 +238,8 @@ pub struct Low {
     up_bind: wgpu::BindGroup,
     amount: wgpu::Buffer,
     amount_bind: wgpu::BindGroup,
+    /// At exactly half size, the upscaled frame as the compute upscale's storage.
+    half_bind: Option<wgpu::BindGroup>,
     held: f64,
     /// Whether the upscale's output holds a frame yet (the planted blend reads it).
     filled: bool,
@@ -215,8 +249,7 @@ impl Low {
     pub fn new(device: &Device, up: &Upscale, internal: [u32; 2], size: [u32; 2]) -> Low {
         let d = &device.device;
         let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        let srgb = FORMAT.add_srgb_suffix();
-        let texture = |label, size: [u32; 2]| {
+        let texture = |label, size: [u32; 2], format: wgpu::TextureFormat, usage| {
             d.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
                 size: wgpu::Extent3d {
@@ -227,20 +260,28 @@ impl Low {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: FORMAT,
+                format,
                 usage,
-                view_formats: &[srgb],
+                view_formats: &[format.add_srgb_suffix()],
             })
         };
-        let low = texture("surface low", internal);
-        let upscaled = texture("surface upscaled", size);
+        let low = texture("surface low", internal, FORMAT, usage);
+        let half = internal.map(|n| n * 2) == size;
+        let storage = if half {
+            wgpu::TextureUsages::STORAGE_BINDING
+        } else {
+            wgpu::TextureUsages::empty()
+        };
+        let upscaled = texture("surface upscaled", size, UPSCALED, usage | storage);
+        // An sRGB view can't be storage.
         let up_srgb = upscaled.create_view(&wgpu::TextureViewDescriptor {
-            format: Some(srgb),
+            format: Some(UPSCALED.add_srgb_suffix()),
+            usage: Some(usage),
             ..Default::default()
         });
         let view = low.create_view(&Default::default());
         let linear = low.create_view(&wgpu::TextureViewDescriptor {
-            format: Some(srgb),
+            format: Some(FORMAT.add_srgb_suffix()),
             ..Default::default()
         });
         let up_view = upscaled.create_view(&Default::default());
@@ -274,6 +315,14 @@ impl Low {
                 [amount.as_entire_binding()],
             ),
             amount,
+            half_bind: half.then(|| {
+                bind_group(
+                    d,
+                    "surface upscaled",
+                    &up.out,
+                    [wgpu::BindingResource::TextureView(&up_view)],
+                )
+            }),
             held: f64::NAN,
             filled: false,
             view,
@@ -311,12 +360,16 @@ impl Low {
             let blend = planted.reads_previous_frame && self.filled;
             self.filled = true;
             let bilinear = surface.upscale == Filter::Bilinear || planted.bilinear_only;
-            let pipeline = if blend {
-                &up.blended
+            let draw = if blend {
+                Draw::Render(up.blended.clone())
             } else if bilinear {
-                &up.bilinear
+                Draw::Render(up.bilinear.clone())
+            } else if let Some(out) = &self.half_bind {
+                // One invocation per texel from -1, each writing the four pixels past it.
+                let groups = self.internal.map(|n| (n + 1).div_ceil(8));
+                Draw::Compute(up.half.clone(), out.clone(), groups)
             } else {
-                &up.edge
+                Draw::Render(up.edge.clone())
             };
             let source = if bilinear && !blend {
                 &self.low_bind
@@ -330,7 +383,7 @@ impl Low {
                 } else {
                     self.up_srgb.clone()
                 },
-                pipeline: pipeline.clone(),
+                draw,
                 groups: [Some(source.clone()), None],
                 blend,
                 reps,
@@ -339,7 +392,7 @@ impl Low {
             Step {
                 name: SHARPEN_PASS,
                 target: slot.clone(),
-                pipeline: up.sharpen.clone(),
+                draw: Draw::Render(up.sharpen.clone()),
                 groups: [Some(self.up_bind.clone()), Some(self.amount_bind.clone())],
                 blend: false,
                 reps,
@@ -348,11 +401,18 @@ impl Low {
     }
 }
 
+/// A pass's pipeline: a draw into its target, or the half-size upscale's dispatch over that many
+/// workgroups, with the storage it writes.
+enum Draw {
+    Render(wgpu::RenderPipeline),
+    Compute(wgpu::ComputePipeline, wgpu::BindGroup, [u32; 2]),
+}
+
 /// One of the upscale's passes, holding what it binds.
 pub struct Step {
     name: &'static str,
     target: wgpu::TextureView,
-    pipeline: wgpu::RenderPipeline,
+    draw: Draw,
     /// Its bind groups in order; the upscale binds one.
     groups: [Option<wgpu::BindGroup>; 2],
     /// The planted blend into the previous frame.
@@ -370,6 +430,27 @@ impl Step {
         encoder: &mut wgpu::CommandEncoder,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
+        let pipeline = match &self.draw {
+            Draw::Render(p) => p,
+            Draw::Compute(p, out, groups) => {
+                return outside(|| {
+                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some(self.name),
+                        timestamp_writes: timestamps.map(|t| wgpu::ComputePassTimestampWrites {
+                            query_set: t.query_set,
+                            beginning_of_pass_write_index: t.beginning_of_pass_write_index,
+                            end_of_pass_write_index: t.end_of_pass_write_index,
+                        }),
+                    });
+                    pass.set_pipeline(p);
+                    pass.set_bind_group(0, self.groups[0].as_ref(), &[]);
+                    pass.set_bind_group(1, out, &[]);
+                    for _ in 0..self.reps {
+                        pass.dispatch_workgroups(groups[0], groups[1], 1);
+                    }
+                });
+            }
+        };
         outside(|| {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(self.name),
@@ -389,7 +470,7 @@ impl Step {
                 timestamp_writes: timestamps,
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(pipeline);
             if self.blend {
                 pass.set_blend_constant(wgpu::Color {
                     r: 0.5,
