@@ -30,6 +30,7 @@ pub mod question;
 pub mod record;
 pub mod setup;
 pub mod show;
+pub mod shown;
 pub mod states;
 pub mod text;
 pub mod views;
