@@ -37,6 +37,7 @@
   "capability.refused@1": "d1:58b1bc494f3e12c48305fb46d5f27e8a2f93287d379ebefade87a1deea69ad2a",
   "card_rule.set@1": "d1:b0d0f3ff9a803f01af46f187bcc2ccee9cc2bde5453755a25afad82e4f29c520",
   "check.code@1": "d1:1242f3a95f88d0b8578884e72baf0c2828f7ccfa46e27c5ad910ee2080b51e23",
+  "check.held@1": "d1:e70a8131a29b84eaac4905d10c812115c952b2cfd6c0356f6f26d09ab1b423b4",
   "check.kind@1": "d1:c505f1d8c1d2822a08035ba38996ecc7def244746128eadd3970a4d32261a7c7",
   "check@1": "d1:a03991e1499e75f1ab18c4b366cbaa80d646f89eeef676f46422f30432c0bc75",
   "ci.archived@1": "d1:f9c22e55341f9d9accac9ae382b59b4348c074704814c4a3d4d1b3161015a5fd",
