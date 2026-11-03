@@ -231,3 +231,5 @@ Two tests in `hub.test.ts` were disputed and went to one blind redraft, `../45-r
 - AC11 `#45.eb25cf40`, deep_search over MCP: its seed leaves out `subject`, which `turn.usage@1` requires (`RecordError: required at /subject`). The redraft's test carries the tag, as does `search.test.ts`.
 
 The redraft's two tests first carried tags of its own, which named no criterion of #45, and its AC6 test needed a hook no proof lane's checkout has. The owner approved both corrections on PR #844: the criterion's tags, and a build when the hook is missing. Nothing it asserts changed.
+
+AC16 `#45.5f772137`, in `lifecycle.test.ts`, was disputed later and went to a second blind redraft, `../45-redraft/lifecycle.test.ts`. The first draft seeds `check.held@1` and `check.held_start@1` in the shape this README's table defines. Main's #965 then published its own `check.held@1`, a whole record appended again on each change, with no separate start record, so the work reads 0 places from the first draft's seed. The redraft seeds main's record and passes. The owner chose it on PR #844. Its twins went with it, and the table's two `check.held` rows describe only the retired draft.

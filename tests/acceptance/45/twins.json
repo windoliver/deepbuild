@@ -52,10 +52,6 @@
     "stale-no-origin",
     "stale-per-day"
   ],
-  "#45.5f772137": [
-    "places-as-runs",
-    "wait-from-first"
-  ],
   "#45.bad9c34a": [
     "cache-never-low",
     "cache-ignores-floor"
