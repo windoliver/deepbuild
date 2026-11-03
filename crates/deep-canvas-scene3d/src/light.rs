@@ -420,7 +420,7 @@ pub struct Policy {
 }
 
 /// The light policy at a view: each light scored by its estimated illuminance at the eye
-/// (power ÷ max(d², r²) inside its range, nothing when its range misses the frustum) times
+/// (power ÷ max(d², r²), nothing when its range misses the frustum, wherever the eye is) times
 /// 2^priority; the top [`SHADED`] by (score bucket, ID); a light within the margin of the cut
 /// shaded at a weight that ramps with its score, so the set and weights at a view are the same
 /// however the view got there.
@@ -454,7 +454,7 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
                 let inside = planes
                     .iter()
                     .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * dot(*n, *n).sqrt());
-                if !inside || d2.sqrt() > l.range + l.radius {
+                if !inside {
                     0.0
                 } else {
                     l.intensity * 4.0 * PI / d2.max(l.radius * l.radius)
@@ -709,7 +709,8 @@ mod tests {
             .collect();
         lights.push(point("b-near", [0.0, 1.0, 0.0], 860.0));
         lights.push(point("c-cut", [0.0, 1.0, 0.0], 800.0));
-        lights.push(point("far", [0.0, 1.0, -500.0], 800.0));
+        // Behind the camera, its 36 m range misses the frustum.
+        lights.push(point("far", [0.0, 1.0, 500.0], 800.0));
         let p = policy(&lights, &cam);
         assert_eq!(p.left_out, vec!["b-near".to_string(), "c-cut".to_string()]);
         let mut lights = lights;
@@ -722,5 +723,12 @@ mod tests {
             .map(|x| x.1);
         assert!(w.is_some_and(|w| (w - 0.75).abs() < 1e-9), "{w:?}");
         assert_eq!(p.left_out, vec!["c-cut".to_string()]);
+    }
+
+    #[test]
+    fn a_light_whose_range_reaches_the_view_but_not_the_eye_is_shaded() {
+        // 12 lm: an auto range of 4.4 m, 10 m from the eye at the scene's centre.
+        let p = policy(&[point("candle", [0.0, 0.0, 0.0], 12.0)], &camera());
+        assert_eq!(p.shaded, vec![(0, 1.0)]);
     }
 }
