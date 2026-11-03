@@ -231,6 +231,24 @@ impl crate::schedule::Canonical for Edit {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Edits(pub Vec<Edit>);
 
+impl Edits {
+    /// `item` with every edit applied, as a reader that builds from the item's own fields at t
+    /// takes it (#420: a builder's params a channel drives).
+    pub fn applied(&self, item: &Value) -> Value {
+        let mut out = item.clone();
+        for e in &self.0 {
+            let slot = super::view::slot_at(&mut out, &e.path);
+            let value = e.value.to_json();
+            if e.add {
+                super::view::add_into(slot, &value);
+            } else {
+                *slot = value;
+            }
+        }
+        out
+    }
+}
+
 impl crate::schedule::Canonical for Edits {
     fn encode(&self, out: &mut Vec<u8>) {
         crate::schedule::Canonical::encode(&self.0, out);

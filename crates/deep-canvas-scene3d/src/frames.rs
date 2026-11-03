@@ -111,7 +111,7 @@ impl Frames {
             code: "out_of_range",
             path: String::new(),
         })?;
-        let scene = evaluate_compiled(map, &program, 0, look, labels)?;
+        let scene = evaluate_compiled(map, &program, 0, look, labels, None)?;
         let state = program.state();
         let fast = fast_path(map, &program, &scene);
         let mut bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
@@ -320,6 +320,8 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     if !scene.overlays.is_empty()
         || scene.sun.is_some()
         || !scene.others.is_empty()
+        // A builder's solid isn't a unit mesh its size scales (#420).
+        || scene.layers.iter().any(|l| l.solids.iter().any(|s| s.mesh.is_some()))
         || scene
             .layers
             .iter()
