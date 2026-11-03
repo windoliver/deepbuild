@@ -78,10 +78,15 @@ fn mesh_vs(
     @location(4) r2: vec4<f32>,
     @location(5) color: u32,
     @location(6) pick: u32,
+    @location(7) flags: u32,
 ) -> MeshOut {
     var out: MeshOut;
     let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
+    // The shadow pass (light.w < 0) leaves out a solid with `cast_shadow: false` (#420).
+    if frame.light.w < 0.0 && (flags & 1u) != 0u {
+        out.pos = OFF;
+    }
     out.normal = vec3<f32>(dot(r0.xyz, n), dot(r1.xyz, n), dot(r2.xyz, n));
     out.color = color;
     out.pick = pick;

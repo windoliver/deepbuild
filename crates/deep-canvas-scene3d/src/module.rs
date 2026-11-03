@@ -179,6 +179,9 @@ fn register(r: &mut Registrar) {
             let name = &spec.kind[..spec.kind.len() - "@1".len()];
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
         }
+        if spec.kind == "mesh.asset@1" {
+            r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
+        }
     }
     crate::build::register_scene3d(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
