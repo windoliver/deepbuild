@@ -853,7 +853,10 @@ class Hub {
     // A delete whose reach can't be worked out is staged or asked about at the gate (#347), never blocked outright.
     const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (entries[n]?.match === STAGED_MATCH && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
-    if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    if (blocks.length) {
+      meta.blockedBy = blocks;
+      return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    }
     if (this.off) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
