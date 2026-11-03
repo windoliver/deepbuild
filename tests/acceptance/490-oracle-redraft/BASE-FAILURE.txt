@@ -1,0 +1,29 @@
+Base run of tests/acceptance/490-oracle-redraft at db09e652 ("Merge pull request #1148 ..."), no implementation of
+#490, on this worktree (CARGO_TARGET_DIR inside it):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/490-oracle-redraft --no-file-parallelism
+
+The build succeeds; every test fails for the expected reason: the base's `deep-show run` has no `fn` call, so it
+refuses the scenario with {"ok":false,"code":"bad_input"} and no ease value is read.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/490-oracle-redraft
+
+ ❯ eases-bevy.test.ts (7 tests | 7 failed) 575ms
+   ❯ criterion 1, Oracle lane: bevy easing.rs (12a94e0cd6) as the formula source (5)
+     × every name bevy pins equals bevy's formula in f64 within 1e-12 at the 999 interior samples 33ms
+     × ease_functions_zero_to_one in f64: every closed name reads exactly 0 at 0 and exactly 1 at 1 21ms
+     × ease_function_inout_deciles in f64: in_out(x) < x and = in(2x) ÷ 2 at 0.1…0.4, > x and = out(2x − 1) ÷ 2 + ½ at 0.6…0.9, within 1e-12 12ms
+     × ease_function_midpoints in f64: in(½) < ½ − 1e-6, out(½) > ½ + 1e-6, in_out(½) = ½ within 1e-12 22ms
+     × bounce's structure as bevy builds it: in_bounce(x) = 1 − out_bounce(1 − x) and in_out_bounce from out_bounce, within 1e-12 at 1,001 samples 26ms
+   ❯ criterion 1: the identities bevy's tests extend to, in f64 over 1,001 samples (2)
+     × the symmetry of in-out: in_out(x) + in_out(1 − x) = 1 within 1e-12 for every in_out_<f>, smoothstep and smootherstep 20ms
+     × monotonicity over 1,001 samples: bevy's monotonic families and our monotone eases never decrease 33ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+Each of the 7 fails with the same assertion (the first shown; the others differ only in the calling line):
+
+ FAIL  eases-bevy.test.ts > criterion 1, Oracle lane: bevy easing.rs (12a94e0cd6) as the formula source > every name bevy pins equals bevy's formula in f64 within 1e-12 at the 999 interior samples
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ easeRuns eases-bevy.test.ts:59:114
+
+      Tests  7 failed (7)
