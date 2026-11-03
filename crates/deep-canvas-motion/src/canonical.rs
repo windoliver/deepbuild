@@ -3,11 +3,12 @@
 
 use deep_canvas::schedule::Canonical;
 
-use crate::curve::{Curve, Interp, Key};
+use crate::curve::{Curve, Ease, Interp, Key};
 use crate::doc::{
-    Binding, Channel, Clip, Cut, Driver, Extend, Limit, Marker, Motion, Placement, Target,
-    Transport, ValueType,
+    Binding, Channel, Clip, Control, Cut, Driver, Extend, Follow, Limit, Marker, Motion, Placement,
+    Shot, Target, Transport, ValueType,
 };
+use crate::input::{Change, Inputs, Moves};
 use crate::program::{Field, Op, Program, Write};
 
 impl Canonical for Interp {
@@ -27,6 +28,55 @@ impl Canonical for Interp {
                 (freq_hz, damping_ratio).encode(out);
             }
         }
+    }
+}
+
+impl Canonical for Ease {
+    fn encode(&self, out: &mut Vec<u8>) {
+        match *self {
+            Ease::Linear => out.push(0),
+            Ease::InCubic => out.push(1),
+            Ease::OutCubic => out.push(2),
+            Ease::InOutCubic => out.push(3),
+            Ease::Bezier(b) => {
+                out.push(4);
+                [b.x1, b.y1, b.x2, b.y2].encode(out);
+            }
+        }
+    }
+}
+impl Canonical for Control {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, self.kind, &self.options, &self.default).encode(out);
+        self.shots.encode(out);
+    }
+}
+impl Canonical for Follow {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.target, &self.control, &self.values).encode(out);
+        (&self.span, &self.ease).encode(out);
+    }
+}
+impl Canonical for Shot {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.camera, &self.target, &self.glide).encode(out);
+        self.ease.encode(out);
+    }
+}
+impl Canonical for Change {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.t, &self.from, &self.to, &self.span).encode(out);
+        self.ease.encode(out);
+    }
+}
+impl Canonical for Moves {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.start, &self.changes).encode(out);
+    }
+}
+impl Canonical for Inputs {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.follows, &self.cameras).encode(out);
     }
 }
 
@@ -154,6 +204,10 @@ impl deep_canvas::schedule::Canonical for Motion {
             ),
             out,
         );
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.follows, &self.controls, &self.shots, &self.cameras),
+            out,
+        );
     }
 }
 impl deep_canvas::schedule::Canonical for Field {
@@ -222,5 +276,6 @@ impl deep_canvas::schedule::Canonical for Program {
             out,
         );
         deep_canvas::schedule::Canonical::encode(&(&self.drivers, &self.limits), out);
+        deep_canvas::schedule::Canonical::encode(&(&self.follows, &self.inputs), out);
     }
 }

@@ -211,6 +211,12 @@ impl Canonical for TextSpec {
     fn encode(&self, out: &mut Vec<u8>) {
         self.text.encode(out);
         self.font.encode(out);
+        self.family.unwrap_or("").encode(out);
+        self.fallback.len().encode(out);
+        for family in &self.fallback {
+            family.encode(out);
+        }
+        self.lang.as_deref().unwrap_or("").encode(out);
         self.size.encode(out);
         self.weight.encode(out);
         self.width.encode(out);
