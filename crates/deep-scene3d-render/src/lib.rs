@@ -257,8 +257,15 @@ struct SolidRecord {
     rows: [[f32; 4]; 3],
     color: u32,
     pick: u32,
-    pad: [u32; 2],
+    /// Object's shadow flags: [`NO_CAST`] and [`NO_RECEIVE`] (#420).
+    flags: u32,
+    pad: u32,
 }
+
+/// A solid the shadow pass leaves out (`cast_shadow: false`).
+const NO_CAST: u32 = 1;
+/// A solid no shadow falls on (`receive_shadow: false`), for the passes that shade one.
+const NO_RECEIVE: u32 = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -305,7 +312,9 @@ fn solid_record(s: &Solid, pick: u32) -> SolidRecord {
             .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
         color: pack(s.color),
         pick,
-        pad: [0; 2],
+        flags: if s.cast_shadow { 0 } else { NO_CAST }
+            | if s.receive_shadow { 0 } else { NO_RECEIVE },
+        pad: 0,
     }
 }
 
@@ -791,13 +800,14 @@ fn shape_code(s: Shape) -> u64 {
         Shape::Box => 1,
         Shape::Cylinder => 2,
         Shape::Sphere => 3,
+        Shape::Built(h) => 4 | (h << 3),
     }
 }
 
 const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-const SOLID: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-    2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32
+const SOLID: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
+    2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32, 7 => Uint32
 ];
 const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
@@ -1377,6 +1387,14 @@ impl Renderer {
         }
     }
 
+    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420).
+    fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
+        if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
+            e.insert(Mesh::of(device, m));
+            self.counts.meshes_built += 1;
+        }
+    }
+
     /// Uploads each atlas page whose generation the GPU doesn't hold.
     fn upload_pages(&mut self, device: &Device, pages: &[AtlasPage]) {
         for (i, page) in pages.iter().enumerate().take(PAGES) {
@@ -1547,6 +1565,8 @@ impl Renderer {
                     light_frame.clip[c][r] = m[c * 4 + r] as f32;
                 }
             }
+            // The shadow pass's mark (scene3d.wgsl's `mesh_vs`): it leaves out what casts none.
+            light_frame.light[3] = -1.0;
             deep_gpu::alloc::outside(|| {
                 device
                     .queue
@@ -1600,7 +1620,10 @@ impl Renderer {
         );
         slots.clear();
         for s in &layer.solids {
-            self.mesh(device, s.shape);
+            match &s.mesh {
+                Some(m) => self.built_mesh(device, s.shape, m),
+                None => self.mesh(device, s.shape),
+            }
             slots.push((s.shape, 0, self.pick(&s.id)));
         }
         for l in &layer.lines {
@@ -1636,7 +1659,11 @@ impl Renderer {
                     b: v4(seg.b, seg.wb),
                     color: pack(l.color),
                     pick: picks[&l.id],
-                    flags: u32::from(l.world),
+                    // A mesh-edge line sits a hair toward the camera, so the faces whose
+                    // edges it draws don't hide it; one drawn over everything skips depth.
+                    flags: u32::from(l.world)
+                        | (u32::from(l.edges.is_some()) << 1)
+                        | (u32::from(l.over) << 2),
                     pad: 0,
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));

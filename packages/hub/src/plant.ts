@@ -38,6 +38,9 @@ export type Plant =
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
+  // #1106's: the stand-in's value in the stack's environment too, an environment that loads by value, a filter that
+  // substitutes on every allowed host, and the run's CA added to the login keychain.
+  | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
   | 'runs-disk-bytes'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
   | 'line-at-stop'
@@ -130,6 +133,7 @@ const PLANTS: readonly string[] = [
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
+  'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

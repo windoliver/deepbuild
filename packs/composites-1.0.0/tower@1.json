@@ -1,0 +1,175 @@
+{
+  "id": "composites.tower",
+  "version": "1.0",
+  "title": "Tower",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A square stone tower with crenellations along its four parapets, a merlon count fixed by its input.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "unit": "m",
+      "default": 3,
+      "min": 1,
+      "max": 20,
+      "about": ""
+    },
+    "height": {
+      "type": "number",
+      "unit": "m",
+      "default": 8,
+      "min": 2,
+      "max": 60,
+      "about": ""
+    },
+    "merlons": {
+      "type": "integer",
+      "default": 4,
+      "min": 1,
+      "max": 12,
+      "about": "merlons along each side"
+    }
+  },
+  "steps": {
+    "body": {
+      "op": "builder",
+      "kind": "slab@1",
+      "params": {
+        "size": [
+          "width",
+          "height",
+          "width"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "north": {
+      "op": "builder",
+      "kind": "slab@1",
+      "repeat": {
+        "count": "merlons",
+        "as": "i"
+      },
+      "params": {
+        "size": [
+          "width / (2 * merlons)",
+          0.5,
+          0.3
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "width * ((i + 0.5) / merlons - 0.5)",
+          "height",
+          "0.15 - width / 2"
+        ]
+      }
+    },
+    "south": {
+      "op": "builder",
+      "kind": "slab@1",
+      "repeat": {
+        "count": "merlons",
+        "as": "i"
+      },
+      "params": {
+        "size": [
+          "width / (2 * merlons)",
+          0.5,
+          0.3
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "width * ((i + 0.5) / merlons - 0.5)",
+          "height",
+          "width / 2 - 0.15"
+        ]
+      }
+    },
+    "west": {
+      "op": "builder",
+      "kind": "slab@1",
+      "repeat": {
+        "count": "merlons",
+        "as": "i"
+      },
+      "params": {
+        "size": [
+          0.3,
+          0.5,
+          "width / (2 * merlons)"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "0.15 - width / 2",
+          "height",
+          "width * ((i + 0.5) / merlons - 0.5)"
+        ]
+      }
+    },
+    "east": {
+      "op": "builder",
+      "kind": "slab@1",
+      "repeat": {
+        "count": "merlons",
+        "as": "i"
+      },
+      "params": {
+        "size": [
+          0.3,
+          0.5,
+          "width / (2 * merlons)"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "width / 2 - 0.15",
+          "height",
+          "width * ((i + 0.5) / merlons - 0.5)"
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "body",
+      "north",
+      "south",
+      "west",
+      "east"
+    ]
+  }
+}

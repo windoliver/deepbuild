@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8J3",
+  "kind": "credential.loaded",
+  "subject": "run:01K74FMXR4T6V8X0Z2B4D6F8J2",
+  "data": {
+    "run": "run:01K74FMXR4T6V8X0Z2B4D6F8J2",
+    "env": "LEGACY_TOKEN",
+    "by": "value"
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}
