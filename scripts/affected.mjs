@@ -342,11 +342,14 @@ export function classify(failures, findings, baseline) {
   return { known, fresh, unsure };
 }
 
+// Each job runs through the machine's throttle table (docs/parallel-proof.md, section 6): the workspace build, clippy and
+// cargo test as build, the vitest and node --test blocks as test, waiting at most 30 minutes for its grant.
 function run(logs, label, command, args, env = {}) {
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const descriptor = openSync(log, 'w');
+  const cls = /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   return new Promise((done) => {
-    const child = spawn(command, args, { cwd: root, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
+    const child = spawn(process.execPath, ['scripts/throttle.mjs', cls, '--wait', '30', '--', command, ...args], { cwd: root, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     child.on('error', (error) => { closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
     child.on('close', (status) => { closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
   });
@@ -391,6 +394,13 @@ async function main(args) {
 
   const failures = [], passed = [], findings = [];
   for (const job of jobs) {
+    // A job the throttle didn't run, for want of a grant or of its table, ran nothing, so none of its results is read:
+    // it is unrun, never a failure on main.
+    const [, state, message] = job.output.match(/^(INCONCLUSIVE|BLOCKED) (no grant|throttle): (.*)/) ?? [];
+    if (state) {
+      failures.push({ id: `${job.label} job`, state, message });
+      continue;
+    }
     if (job.label === 'build' && job.status !== 0) failures.push({ id: 'npm run build --workspaces', state: 'FAIL', message: job.output.split('\n').find((line) => /error/.test(line)) ?? '' });
     if (job.label.startsWith('lint')) findings.push(...lintFindings(root, job.label.slice(5), job.output, job.status));
     if (job.label === 'cargo') { const results = cargoResults(job.output, job.status, workspace); failures.push(...results.failures); passed.push(...results.passed); }

@@ -5,6 +5,9 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compare, fingerprint, judgeInstructions, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
+// The machine's throttle table, beside this script in a checkout; a copy of perf alone, as a test's fixture holds, has
+// no table to wait on.
+const throttle = existsSync(new URL('./throttle.mjs', import.meta.url)) ? await import('./throttle.mjs') : null;
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
@@ -21,7 +24,8 @@ const counter = process.platform === 'darwin' ? '/usr/bin/time -l: instructions 
 // workspace moved, so absolute paths baked into earlier builds (CARGO_MANIFEST_DIR, CARGO_BIN_EXE_*)
 // would point at a deleted copy. Nothing removes a checkout's directory; deleting it only makes the
 // next preflight build cold.
-let kept, lock;
+// owner is the run whose number the lock holds: this one, or an ancestor that named its lock in DEEP_PERF_LOCK.
+let kept, lock, owner = process.pid;
 function keptRoot() {
   if (kept) return kept;
   const cache = process.env.XDG_CACHE_HOME || join(homedir(), process.platform === 'darwin' ? 'Library/Caches' : '.cache');
@@ -40,6 +44,7 @@ function keptRoot() {
     throw blocked(`${directory} is not a directory only this user can use`, `Remove it and perf makes a new one: rm -rf ${directory}`);
   }
   lock = takeLock(join(directory, 'lock'));
+  process.env.DEEP_PERF_LOCK = String(owner);
   return (kept = directory);
 }
 // One perf run per checkout at a time: a second would delete the first's copies under it. The lock
@@ -70,6 +75,9 @@ function takeLock(file) {
         const holder = Number(content);
         // A killed run's number can come back as this run's own.
         if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) {
+          // An ancestor's lock it named to this run is this run's to use and the ancestor's to release; a number
+          // named by no live ancestor is not trusted.
+          if (throttle && holder === Number(process.env.DEEP_PERF_LOCK) && throttle.ancestors().includes(holder)) return (owner = holder), true;
           throw blocked(`another perf run (process ${holder}) is using ${dirname(file)}`, `Wait for that preflight to finish. If none is running, the process took over a killed run's number: rm ${file}`);
         }
         renameSync(mine, file);
@@ -127,7 +135,7 @@ function underTakeover(file, act) {
 // believe they took it; checking before each deletion keeps one from removing the other's copy.
 function ownsLock() {
   try {
-    return readFileSync(lock, 'utf8') === String(process.pid);
+    return readFileSync(lock, 'utf8') === String(owner);
   } catch {
     return false;
   }
@@ -187,6 +195,14 @@ function checkCopy(directory, timeoutMs) {
   warm(directory);
   return measureOnce([process.execPath, 'scripts/checks.mjs'], directory, false, timeoutMs);
 }
+// perf is a measured run: it holds timed from before its timer to its end, so its
+// kept copies and lock are taken only under timed. Under a preflight's grant it passes through on it.
+const grant = throttle?.acquire('timed', { wait: 60 });
+if (throttle && !grant) {
+  console.log('INCONCLUSIVE no grant: no timed grant came within 60 min, so perf did not run\n  Fix: Wait for the other sessions\' builds and proofs on this machine, then run perf again.');
+  process.exit(3);
+}
+if (grant) process.env.DEEP_THROTTLE = grant.token;
 const verdicts = [];
 const started = performance.now();
 console.log('RUN perf');
@@ -324,7 +340,7 @@ try {
 } finally {
   // A side that built nothing (a checkout without Rust, or a test fixture) leaves nothing behind. This
   // runs before the lock goes, so no other run is using the sides.
-  if (lock && ownsLock()) {
+  if (lock && owner === process.pid && ownsLock()) {
     for (const directory of [archive, without]) if (directory) rmSync(directory, { recursive: true, force: true });
     for (const side of ['base', 'without-tests']) {
       const target = join(kept, side, 'target');
@@ -340,3 +356,4 @@ try {
 for (const [state, message, fix] of verdicts) console.log(`${state} perf: ${message}\n  Fix: ${fix}`);
 if (verdicts.length) process.exitCode = 1;
 else console.log(`PASS perf (${((performance.now() - started) / 1000).toFixed(2)} s)`);
+throttle?.release(grant);
