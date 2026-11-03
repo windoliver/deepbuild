@@ -1,0 +1,42 @@
+Base commit 881e2ed4 (origin/main, unmodified but for this folder), November 2, 2026, on Linux arm64 with Node 24.22.0,
+after `npm ci`, `npm run build --workspaces` and `cargo build -p deep-hook`:
+
+  npx vitest run --root tests/acceptance/993 --no-file-parallelism
+  Test Files  3 failed (3)
+       Tests  4 failed (4)
+    Duration  34.92s
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/993/tsconfig.json   -> no errors
+
+Why each test fails at the base (the first failing assertion's message, shortened; temp paths elided):
+
+AC1 doctor.test.ts
+  x  removed: setup ran, the twin passed (no hook_program_missing with the program in place), the program was removed,
+     then "AC1 #993.8355427d with the deep-hook program removed (/tmp/dh993-…/s/target/debug/deep-hook), deep doctor
+     must fail claude.hooks with hook_program_missing; its claude.hooks items were:
+     {"item":"claude.hooks","agent":"claude-code","code":"healthy","level":"ok","evidence":"DeepBuild's entries for
+     SessionStart, UserPromptSubmit, PreToolUse, … are in /tmp/dh993-…/h/.claude/settings.json","fix":"Nothing to do."}"
+     The base doctor checks only that the command strings are present, and reports healthy.
+  x  not executable (mode 0644): the same message, "deep-hook program not executable": claude.hooks healthy, ok.
+
+AC2 hub-check.test.ts
+  x  Both sessions opened through the copy's deep-hook and have rows; the twin passed (no row says hooks can't run);
+     the program was removed and the hub's clock stepped 10 min 1 s (test.clock answered); after 30 s of reading,
+     "AC2 #993.e11861a0 10 minutes on the hub's clock after the program was removed, with no hook since, session …'s
+     row must read watch-only, BLOCKED, hooks can't run:
+     {"id":"…","repo":"w…","agent":"claude-code","state":"quiet","why":"last seen 0s ago"}"
+     expected { watchOnly: true, blocked: true, cantRun: true }, received all false. The base hub never checks the
+     program; with no hook arriving it shows nothing.
+
+AC3 nested-caller.test.ts
+  x  Every replayed hook ran (exit 0) and was recorded, then "AC3 #993.b40b1853 every event of the Grok run started
+     from a Claude Code shell is recorded under grok; these were not (hooks replayed: SessionStart, UserPromptSubmit,
+     PreToolUse, PostToolUse, Stop)":
+       "session.start (agent claude-code)", "user.ask (agent claude-code)", "tool.before (agent claude-code)",
+       "tool.after (agent claude-code)", "agent.stop (agent claude-code)"
+     The base deep-hook returns claude-code whenever CLAUDECODE is set (crates/deep-hook/src/main.rs, `caller`).
+
+Can the tests pass? A throwaway check (not kept): the base deep-hook run as `deep-hook grok <Event>` in a shell with
+CLAUDECODE=1 has its session.start and user.ask recorded with agent "grok" and its sessions.read row's agent "grok",
+so AC3 needs only deep-hook to name its caller right. AC1 and AC2 need the new doctor item and hub check; no sample
+implementation of them was written.

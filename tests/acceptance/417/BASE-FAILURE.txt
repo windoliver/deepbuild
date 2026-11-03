@@ -4,7 +4,7 @@ Run in a worktree at the base commit with only tests/acceptance/417/ added (untr
 Date: 2026-11-02  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
 Exit code: 1
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/tests/acceptance/417
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/tests/acceptance/417
 
  ❯ fonts.test.ts (6 tests | 3 failed) 111624ms
    ❯ #417 AC4 every bundled font's licence allows embedding, recorded beside it (4)
@@ -63,12 +63,12 @@ AssertionError: budgets.json has the task canvas-look-switch: expected undefined
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
 
  FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 look-switch times every switch between shipped looks on the fixture film until the new look is on screen
-AssertionError: node benchmarks/canvas.mjs look-switch exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+AssertionError: node benchmarks/canvas.mjs look-switch exits 0; stderr: file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
                             ^
 
 Error: Unknown task look-switch; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
     at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
@@ -95,12 +95,12 @@ Node.js v23.9.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
 
  FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 the measure sees the new look: a clock that stops at the request (planted stops_at_request) fails the check above
-AssertionError: node benchmarks/canvas.mjs look-switch --planted stops_at_request exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+AssertionError: node benchmarks/canvas.mjs look-switch --planted stops_at_request exits 0; stderr: file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
                             ^
 
 Error: Unknown task look-switch; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
     at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
@@ -127,12 +127,12 @@ Node.js v23.9.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
 
  FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 switching looks takes under 100 ms: each run's slowest switch, in five runs
-AssertionError: node benchmarks/canvas.mjs look-switch exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+AssertionError: node benchmarks/canvas.mjs look-switch exits 0; stderr: file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
                             ^
 
 Error: Unknown task look-switch; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
     at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
@@ -159,12 +159,12 @@ Node.js v23.9.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
 
  FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 look-frames plays each shipped look's fixture film for at least 300 frames, every frame drawn and timed
-AssertionError: node benchmarks/canvas.mjs look-frames exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+AssertionError: node benchmarks/canvas.mjs look-frames exits 0; stderr: file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
                             ^
 
 Error: Unknown task look-frames; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
     at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
@@ -191,12 +191,12 @@ Node.js v23.9.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
 
  FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 every look stays within the figure class's frame budget on its fixture film: p95 GPU and CPU ms a frame, worst look per run, in five runs
-AssertionError: node benchmarks/canvas.mjs look-frames exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+AssertionError: node benchmarks/canvas.mjs look-frames exits 0; stderr: file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
                             ^
 
 Error: Unknown task look-frames; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at file://~/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
     at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)

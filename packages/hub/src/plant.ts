@@ -92,7 +92,12 @@ export type Plant =
   | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
   // #992's: a reading that checks waiting before gone, an adapter that opens an ask from a Notification hook, and an
   // app that reads a session waiting on you as working.
-  | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working';
+  | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working'
+  // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
+  // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
+  // only looks for a number, and a gate that runs no check before the definition locks.
+  | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -140,6 +145,8 @@ const PLANTS: readonly string[] = [
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
   'waiting-first', 'ask-from-notification', 'waiting-as-working',
+  'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
+  'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
