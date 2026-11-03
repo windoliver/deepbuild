@@ -207,6 +207,8 @@ export interface CoreOptions {
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
   drafts?: string;
+  /** The changes you accepted, a file named by DEEP_HUB_TEST_ACCEPTED: by repo, kind, base and commit; only tests set it (#324). */
+  accepted?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
   /** The GitHub API's recorded answers, a file named by DEEP_HUB_TEST_GITHUB; only tests set it (#322). */
