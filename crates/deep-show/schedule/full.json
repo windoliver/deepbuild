@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "019b358fe4f0928c9dd36181ed1889bbe91bfd4b037a4832e2197555337bec43",
+  "set_digest": "26747d57c194c9ee8e1ff1f768f98c089ebfdae3c1fafa7cca9ae1f9175551e0",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -232,6 +232,46 @@
         "name": "record",
         "version": "1.0.0",
         "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "sandbox@1": {
+      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "reference": "sandbox",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit",
+        "sandbox"
+      ],
+      "behavior": "none",
+      "module": "sandbox",
+      "implementation": {
+        "name": "sandbox",
+        "version": "1.0.0",
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.2",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
         "equivalence": "bit",
         "state": "canonical"
       }
