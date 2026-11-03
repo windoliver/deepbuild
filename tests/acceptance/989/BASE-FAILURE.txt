@@ -1,0 +1,74 @@
+The #989 acceptance tests at the base, 881e2ed4 ("Merge pull request #1136 from
+windoliver/worktree-github-issue-415-d2e96c"), on Linux 7.0.0-1024-nvidia (Ubuntu 24.04, aarch64), Node 24.22.0,
+bubblewrap at /usr/bin/bwrap, after `npm ci` and `npm run build --workspaces`:
+
+  npx vitest run --root tests/acceptance/989 --no-file-parallelism
+
+ Test Files  4 failed (4)
+      Tests  16 failed (16)
+
+Every test fails. None passes. On Linux the base's native helper (helper-linux.c) has no `pty` mode, so no hosted
+terminal starts: every scenario but AC7's throws at its first `deep.terminal.open`, before its criterion can be
+reached (the scenario can't run, so it fails; it never passes). AC7's fails first on the missing TERMINAL_PROTOCOL
+export. The type check (`npx tsc -p tests/acceptance/989/tsconfig.json`) fails too, on the missing surface only:
+TerminalTab, ExtensionHost.tab and .resize, the `terminalProtocol` option and the nine new Plant values. On macOS the
+base's helper does run a hosted terminal; there each scenario would get past its open and fail at `ExtensionHost.tab`
+or `.resize` (not functions), at `deep.terminal.close` (not in the API), or, for AC5, with the program reading
+"echo planted" through the base's FIFO; that run was not made here.
+
+resize.test.ts (AC1, AC2)
+ x AC1 a tab grown from 80x24 to 200x50 and back shows a full-screen program redrawn at each size within 100 ms, and a
+   program printing its size on each change prints 200x50 then 80x24
+ x AC1 (wrong program) keeps-start-size: a host that signals the program but keeps the start size prints 80x24 twice
+   and fails, naming the terminal
+   each: Error: the approved piece couldn't open its fullscreen terminal: fullscreen's terminal didn't start
+   ~/.local/opt/node-v24.22.0-linux-arm64/bin/node
+ x AC2 a 50-row terminal whose program printed 200 numbered lines, shrunk to 20 rows, shows lines 181 to 200 with the
+   cursor after them and lines 1 to 180 in the scrollback in order
+ x AC2 (wrong program) resize-drops-bottom-rows: a resize that drops the bottom rows shows 151 to 170 and fails, naming
+   the first missing line
+   each: Error: the approved piece couldn't open its lines terminal: lines's terminal didn't start /bin/sh
+
+log.test.ts (AC3, AC4)
+ x AC3 204.8 MB of numbered lines leave at most 8 MiB of log plus one checkpoint, both 0600 in a 0700 folder; after the
+   hub restarts the tab shows the last screen and its scrollback in order within 500 ms
+ x AC3 (wrong program) replays-from-first-byte: a host that keeps every byte and replays from the first takes over
+   500 ms or exceeds the cap, and fails naming the file
+   each: Error: the approved piece couldn't open its busy terminal: busy's terminal didn't start
+   ~/.local/opt/node-v24.22.0-linux-arm64/bin/node
+ x AC4 closing a terminal whose host wrote a log and a checkpoint removes both
+ x AC4 (wrong program) leaves-files-on-close: a host that leaves them fails, naming the files
+   each: Error: the approved piece couldn't open its closing terminal: closing's terminal didn't start
+   ~/.local/opt/node-v24.22.0-linux-arm64/bin/node
+
+input.test.ts (AC5, AC6)
+ x AC5 a shell an agent in another session started opens the terminal's input and writes "echo planted": it is
+   refused, the program reads nothing, and the record names the writer's process; the hub's own write of a focused-tab
+   key goes through
+ x AC5 (wrong program) input-through-fifo: a host that also reads a FIFO in the terminal's folder, as the base does,
+   fails, naming the writer's process
+   each: Error: the approved piece couldn't open its reader terminal: reader's terminal didn't start
+   ~/.local/opt/node-v24.22.0-linux-arm64/bin/node
+ x AC6 a 4 MiB paste into a program that reads slowly arrives whole and in order, and while it drains the program's
+   output keeps reaching the tab
+ x AC6 (wrong program) input-blocks-output: a host whose input write blocks its output loop shows no output for the
+   drain and fails
+ x AC6 (wrong program) hub-throws-when-full: a hub that throws when the pipe fills delivers part of the paste and
+   fails, naming the byte where it stopped
+   each: Error: the approved piece couldn't open its slow terminal: slow's terminal didn't start
+   ~/.local/opt/node-v24.22.0-linux-arm64/bin/node
+
+version.test.ts (AC7)
+ x AC7 restarting the hub at the newer version leaves the older host's program running (same PID, lines advancing);
+   the tab names both versions, shows the last screen read-only and keeps input off
+ x AC7 (wrong program) stops-older-host: a hub that stops the older host fails, naming the host's PID and the session
+ x AC7 (wrong program) older-host-reads-ended: a hub that reads the session as ended and offers Resume while its
+   program runs fails, naming the host's PID and the session
+   each: Error: the extension host exports no TERMINAL_PROTOCOL, the terminal host protocol version this build speaks:
+   undefined
+
+Checked outside the suite, on this machine, with the suite's own program sources on a plain pseudo-terminal (no
+host, no hub): the sizes program prints `size 200x50`, `size 80x24` for two size changes and `size 80x24` again for a
+bare SIGWINCH (what keeps-start-size gives it); the full-screen program redraws at 200x50; the numbered writer puts
+3,200,000 lines through a pseudo-terminal in 2.6 s; the slow reader drains a 4 MiB paste in 4.3 s, byte for byte,
+beating meanwhile.

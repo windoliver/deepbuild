@@ -25,6 +25,8 @@
 //                               --log-fd as {"operation","target"}, which the supervisor records as sandbox.denied; the
 //                               program's own end goes there too, as {"exit","signal"}. It ends with the program's
 //                               status once nothing of the run's is left running (it reaps what the run leaves).
+//   helper pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]
+//                               a hosted terminal's host process (#104, #989), in pty.c, which the macOS helper shares.
 #define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <dirent.h>
@@ -39,6 +41,7 @@
 #include <linux/seccomp.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pty.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stddef.h>
@@ -48,6 +51,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/prctl.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -981,11 +985,14 @@ static int confine(void) {
   return serve(&spec, listener, child);
 }
 
+#include "pty.c"
+
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
   if (argc >= 2 && strcmp(argv[1], "landlock") == 0) { printf("%d\n", landlock_abi()); return 0; }
   if (argc >= 2 && strcmp(argv[1], "confine") == 0) return confine();
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | landlock | confine (DEEP_CONFINE) | probe <file> <op> <arg>... | devices <file>\n"); return 2; }
+  if (argc >= 9 && strcmp(argv[1], "pty") == 0) return host(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6], argv[7], argv + 8);
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | landlock | confine (DEEP_CONFINE) | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();
