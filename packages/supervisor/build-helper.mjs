@@ -8,5 +8,7 @@ import { fileURLToPath } from 'node:url';
 const source = process.platform === 'darwin' ? 'native/helper.c' : process.platform === 'linux' ? 'native/helper-linux.c' : undefined;
 if (source) {
   mkdirSync(fileURLToPath(new URL('dist/', import.meta.url)), { recursive: true });
-  execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', fileURLToPath(new URL('dist/helper', import.meta.url)), fileURLToPath(new URL(source, import.meta.url))], { stdio: 'inherit' });
+  // forkpty (native/pty.c, which both include) is in libutil on Linux before glibc 2.34.
+  const libs = process.platform === 'linux' ? ['-lutil'] : [];
+  execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', fileURLToPath(new URL('dist/helper', import.meta.url)), fileURLToPath(new URL(source, import.meta.url)), ...libs], { stdio: 'inherit' });
 }
