@@ -28,7 +28,9 @@ The `?? target` in the three impl/39 worktrees was a symlink, unlinked before th
   agent-a367b84c3ec0c1b93/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
   agent-a65e859048883de67/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
   agent-ad05b8765cc5b9e8a/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
-issue-22's target/ itself is untouched (still listed after the unlink).
+issue-22's target/ itself is untouched; read right after the three unlinks:
+  $ ls -d ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+  ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
 
 `git worktree prune -v` then dropped admin entries only (metadata under .git/worktrees, no files).
 base21 was in the before list as "prunable" (its gitdir pointed nowhere, so its porcelain reads
@@ -56,7 +58,7 @@ Kept, listed for the owner:
   agent-* with untracked tests/acceptance/<n>/ (blind drafts): a02a6b7e, a201604a, a5248a97, a5a1aa40,
     a6c5fa28, a82eaf08, a884ad18, a91442a6, a926336e, a941a951, adadec93, af731015
   agent-* with tracked edits: aa4208f6 (modified crates/deep-replica/Cargo.toml, untracked tests),
-    abcd69cb (staged tests/acceptance/332/), aca6492c (modified and deleted tests/acceptance/331/ files)
+    abcd69cb (staged tests/acceptance/332/), aca6492c (modified, deleted and untracked tests/acceptance/331/ files)
   agent-* clean but with commits not in origin/main and no PR: a0a70551, a2dd046b, a7f6dff7 (blind/39-acceptance),
     a95c2444, aab08fb2, ac7f89f1, add91173
   issue-45-implementation-e83eea   detached, not in main, target/ 10.7 GiB (large target listed, not touched)
@@ -74,7 +76,7 @@ Large targets, listed for the owner and never deleted by an agent:
   issue-22-implementation-14b8cf 7.7 GiB (also the target the three impl/39 symlinks pointed at)
 
 ## Orphaned proof-run copies under $TMPDIR
-Seven deep-proof-run-* folders (about 2.4 GiB, 50 to 215 hours old). For each, `lsof +D` found no
+Seven deep-proof-run-* folders (2,424,652 KiB = 2.3 GiB, 50 to 215 hours old). For each, `lsof +D` found no
 process holding a file or cwd inside it and no running command line named it, read twice (before
 the go-ahead and again just before deleting). All seven were removed with rm -rf.
 
@@ -83,7 +85,8 @@ the go-ahead and again just before deleting). All seven were removed with rm -rf
   right after the proof copies went (01:38Z)            39Gi available
     $ df -h /System/Volumes/Data
     /dev/disk3s5   460Gi   360Gi    39Gi    91%    5.8M  408M    1%   /System/Volumes/Data
-  at 01:50Z (mac-after.txt), other sessions still building  38Gi available
+  at 01:50Z (mac-after.txt)                             38Gi available
+    (the 1 GiB drop has no recorded cause; other sessions kept writing in the meantime)
 
 ## Resident sessions and swap
 Before: swap 37,308 of 37,888 MiB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
@@ -95,7 +98,7 @@ They were listed for the owner to close by hand:
     the two log streams keep diagnosticd at about 120% CPU
   - a deep-hook `claude-code waiter` from the deleted issue-376 worktree (4 days old)
   - a floor/run.sh worker from a deleted worktree's scratchpad (11 days old)
-  - eight codex app-server-broker processes (7 to 13 days old)
+  - eight codex app-server-broker processes (about 6.8 to 13 days old)
   - ChatGPT with Codex Computer Use, openclaw-gateway
 At 01:50Z (mac-after.txt) they were all still running: swap 37,237 of 37,888 MiB (98%), load 34.7.
 The owner chose to ship these readings now and take the idle readings later, so the first acceptance
