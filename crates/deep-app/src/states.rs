@@ -2,7 +2,7 @@
 //! with its extra (the round a claim was sent back in, the checks' expected time, when a quiet session was last
 //! seen), and draws the look's status-map entry and glyph for it. The state comes from the record alone.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use serde_json::Value;
@@ -195,16 +195,6 @@ pub fn is_open(events: &[Value], handle: &str) -> bool {
     reading(events, handle).open()
 }
 
-/// The asks the events close, as the core reads the record, in one pass: any other ask is open, as [`is_open`]
-/// reads it, whether or not the events hold its creation.
-pub fn closed_asks(events: &[Value]) -> BTreeSet<&str> {
-    readings(events)
-        .into_iter()
-        .filter(|(_, reading)| !reading.open())
-        .map(|(handle, _)| handle)
-        .collect()
-}
-
 /// When the ask's default applies: the deadline the core last gave it, by an undo of its default or a move (#908),
 /// else its own.
 pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
@@ -215,21 +205,26 @@ pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
 
 /// An ask as the core reads the record in order: the first close decides, only the core's undo of a default opens it
 /// again, and the core moves an open ask's deadline.
-#[derive(Default)]
-struct Reading<'a> {
-    closed: Option<&'a str>,
+#[derive(Clone, Debug, Default)]
+struct Reading {
+    closed: Option<&'static str>,
     deadline: Option<u64>,
 }
 
-impl<'a> Reading<'a> {
+impl Reading {
     fn open(&self) -> bool {
         self.closed.is_none()
     }
 
+    /// Whether no event can open it again: closed other than by its default.
+    fn done(&self) -> bool {
+        self.closed.is_some_and(|kind| kind != "ask.defaulted")
+    }
+
     /// One event about this ask, in log order.
-    fn read(&mut self, event: &'a Value, handle: &str) {
+    fn read(&mut self, event: &Value, handle: &str) {
         if self.closed.is_none() && closes(event, handle) {
-            self.closed = event["kind"].as_str();
+            self.closed = CLOSING.into_iter().find(|kind| event["kind"] == *kind);
         } else if self.closed.is_none()
             && event["kind"] == "deadline.moved"
             && event["writer"] == "core"
@@ -250,7 +245,7 @@ impl<'a> Reading<'a> {
 }
 
 /// The ask `handle`, read from every event.
-fn reading<'a>(events: &'a [Value], handle: &str) -> Reading<'a> {
+fn reading(events: &[Value], handle: &str) -> Reading {
     let mut reading = Reading::default();
     for event in events {
         reading.read(event, handle);
@@ -260,87 +255,298 @@ fn reading<'a>(events: &'a [Value], handle: &str) -> Reading<'a> {
 
 /// Every ask an event names, each read from the events about it alone: what [`reading`] gives each, in one pass.
 /// Only an event about an ask can change one's reading, so the others are passed over.
-fn readings(events: &[Value]) -> BTreeMap<&str, Reading<'_>> {
-    let mut out: BTreeMap<&str, Reading<'_>> = BTreeMap::new();
+fn readings(events: &[Value]) -> BTreeMap<&str, Reading> {
+    let mut out: BTreeMap<&str, Reading> = BTreeMap::new();
     for event in events {
-        // The one ask an event can be about: a decision applied names its ask in its data, any other its subject.
-        let about = if event["kind"] == "decision.applied" {
-            &event["data"]["ask"]
-        } else {
-            &event["subject"]
-        };
-        if let Some(handle) = about.as_str().filter(|handle| handle.starts_with("ask:")) {
+        if let Some(handle) = about(event) {
             out.entry(handle).or_default().read(event, handle);
         }
     }
     out
 }
 
-/// The sessions in the record, in the order they first appear.
-pub fn sessions(events: &[Value]) -> Vec<String> {
-    let mut sessions: Vec<String> = Vec::new();
-    for session in events.iter().filter_map(|event| event["session"].as_str()) {
-        if !sessions.iter().any(|known| known == session) {
-            sessions.push(session.to_owned());
+/// The one ask an event can be about: a decision applied names its ask in its data, any other its subject.
+fn about(event: &Value) -> Option<&str> {
+    let about = if event["kind"] == "decision.applied" {
+        &event["data"]["ask"]
+    } else {
+        &event["subject"]
+    };
+    about.as_str().filter(|handle| handle.starts_with("ask:"))
+}
+
+/// Issue #1141: the record folded as its events arrive, in log order, each once: what the app shows of it, each
+/// session's title, the inputs of its state and its open asks, and each ask's reading, not the events themselves.
+/// A read costs what it shows, whatever the record's length, and gives what reading every event would.
+#[derive(Clone, Debug, Default)]
+pub struct Table {
+    /// The sessions, in the order each first appears.
+    order: Vec<String>,
+    sessions: HashMap<String, Session>,
+    /// Each thread's title, from the first task.created that names it.
+    titles: HashMap<String, Option<String>>,
+    /// Every ask an event is about, read as the core reads it.
+    readings: HashMap<String, Reading>,
+    /// The ask.created events, in log order, of every ask some event could still leave open.
+    asks: Vec<Value>,
+}
+
+/// What a session's state is read from: of its own events, only the newest of each kind it reads, and each claim's
+/// verdict, send-back and checks.
+#[derive(Clone, Debug, Default)]
+struct Session {
+    /// The newest time its events give.
+    last_seen: Option<u64>,
+    /// The state its newest session.attention gives.
+    attention: Option<String>,
+    /// The `log_pos` of its newest activity: an attention, a tool call or a prompt.
+    activity: Option<u64>,
+    /// Its newest claim.made: the claim's handle and its `log_pos`.
+    claim: Option<(String, u64)>,
+    /// Each claim's newest verdict: its outcome and the verdict's handle.
+    verdicts: HashMap<String, (String, String)>,
+    /// The verdicts a verdict.stale names.
+    stale: BTreeSet<String>,
+    /// The round each claim's newest send-back names.
+    rounds: HashMap<String, Option<u64>>,
+    /// The checks each claim's runs ran.
+    checks: HashMap<String, BTreeSet<String>>,
+    /// Each run's first start of each check, with its time; a run as its JSON.
+    starts: HashMap<String, Vec<(String, Option<u64>)>>,
+    /// The times each run finished clean.
+    passed: HashMap<String, Vec<Option<u64>>>,
+    /// How long each check's clean runs took, shortest first.
+    took: HashMap<String, Vec<u64>>,
+}
+
+impl Table {
+    /// Folds one event in, the next in log order.
+    pub fn apply(&mut self, event: &Value) {
+        if cfg!(feature = "plant-drops-close") && event["kind"] == "ask.moot" {
+            return;
         }
-    }
-    sessions
-}
-
-/// The title of the session's task.
-pub fn title(events: &[Value], session: &str) -> String {
-    events
-        .iter()
-        .find(|event| event["kind"] == "task.created" && event["data"]["thread"] == session)
-        .and_then(|event| event["data"]["title"].as_str())
-        .map_or_else(|| untitled(session), str::to_owned)
-}
-
-/// A session's state, from the record's events.
-pub fn state(events: &[Value], session: &str) -> State {
-    let mine: Vec<&Value> = events
-        .iter()
-        .filter(|event| event["session"] == session)
-        .collect();
-    state_of(&mine, &readings(events))
-}
-
-/// Every session in the record, in the order each first appears, with its task's title and its state: what
-/// [`sessions`], [`title`] and [`state`] give each, read in one pass over the events, not three per session.
-pub fn every_session(events: &[Value]) -> Vec<(String, String, State)> {
-    let mut order: Vec<&str> = Vec::new();
-    let mut by: BTreeMap<&str, Vec<&Value>> = BTreeMap::new();
-    let mut titles: BTreeMap<&str, Option<&str>> = BTreeMap::new();
-    for event in events {
-        if let Some(session) = event["session"].as_str() {
-            by.entry(session)
-                .or_insert_with(|| {
-                    order.push(session);
-                    Vec::new()
-                })
-                .push(event);
-        }
-        // The first task.created that names a thread titles it, as `title` reads it, whichever session's event it is.
-        if event["kind"] == "task.created" {
-            if let Some(thread) = event["data"]["thread"].as_str() {
-                titles
-                    .entry(thread)
-                    .or_insert(event["data"]["title"].as_str());
+        if let Some(handle) = about(event) {
+            let reading = self.readings.entry(handle.to_owned()).or_default();
+            let done = reading.done();
+            reading.read(event, handle);
+            if !done && reading.done() {
+                self.asks.retain(|ask| self::handle(ask) != handle);
             }
         }
+        let kind = event["kind"].as_str().unwrap_or_default();
+        if kind == "ask.created" && !self.readings.get(&handle(event)).is_some_and(Reading::done) {
+            self.asks.push(event.clone());
+        }
+        if kind == "task.created" {
+            if let Some(thread) = event["data"]["thread"].as_str() {
+                self.titles
+                    .entry(thread.to_owned())
+                    .or_insert_with(|| event["data"]["title"].as_str().map(str::to_owned));
+            }
+        }
+        let Some(session) = event["session"].as_str() else {
+            return;
+        };
+        if !self.sessions.contains_key(session) {
+            self.order.push(session.to_owned());
+        }
+        self.sessions
+            .entry(session.to_owned())
+            .or_default()
+            .apply(event, kind);
     }
-    let readings = readings(events);
-    order
-        .into_iter()
-        .map(|session| {
-            let title = titles
-                .get(session)
-                .copied()
-                .flatten()
-                .map_or_else(|| untitled(session), str::to_owned);
-            (session.to_owned(), title, state_of(&by[session], &readings))
-        })
-        .collect()
+
+    /// The sessions in the record, in the order they first appear.
+    pub fn sessions(&self) -> &[String] {
+        &self.order
+    }
+
+    /// The title of the session's task.
+    pub fn title(&self, session: &str) -> String {
+        self.titles
+            .get(session)
+            .cloned()
+            .flatten()
+            .unwrap_or_else(|| untitled(session))
+    }
+
+    /// A session's state.
+    pub fn state(&self, session: &str) -> State {
+        // An ask the session raised, still open, leaves it needing you.
+        if !self.open_asks(Some(session)).is_empty() {
+            return State::NeedsYou;
+        }
+        self.sessions
+            .get(session)
+            .map_or(State::Queued, Session::state)
+    }
+
+    /// Every session in the record, in the order each first appears, with its task's title and its state.
+    pub fn every_session(&self) -> Vec<(String, String, State)> {
+        self.order
+            .iter()
+            .map(|session| (session.clone(), self.title(session), self.state(session)))
+            .collect()
+    }
+
+    /// The open asks, oldest first; of one session when `session` names one.
+    pub fn open_asks(&self, session: Option<&str>) -> Vec<&Value> {
+        self.asks
+            .iter()
+            .filter(|ask| session.is_none_or(|session| ask["session"] == session))
+            .filter(|ask| self.is_open(&handle(ask)))
+            .collect()
+    }
+
+    /// Whether the ask `handle` is open: any ask no event closed is, whether or not the record holds its creation.
+    pub fn is_open(&self, handle: &str) -> bool {
+        self.readings.get(handle).is_none_or(Reading::open)
+    }
+
+    /// When the ask's default applies: the deadline the core last gave it, else its own.
+    pub fn deadline(&self, ask: &Value) -> Option<u64> {
+        self.readings
+            .get(&handle(ask))
+            .and_then(|reading| reading.deadline)
+            .or_else(|| ask["data"]["deadline"].as_u64())
+    }
+}
+
+impl Session {
+    /// One of the session's events, the next in log order.
+    fn apply(&mut self, event: &Value, kind: &str) {
+        let data = &event["data"];
+        let text = |value: &Value| value.as_str().map(str::to_owned);
+        let pos = event["log_pos"].as_u64().unwrap_or(0);
+        if let Some(ts) = event["ts"].as_u64() {
+            self.last_seen = Some(self.last_seen.map_or(ts, |seen| seen.max(ts)));
+        }
+        if kind == "session.attention" {
+            self.attention = Some(data["state"].as_str().unwrap_or_default().to_owned());
+        }
+        if [
+            "session.attention",
+            "tool.before",
+            "tool.after",
+            "prompt.submitted",
+        ]
+        .contains(&kind)
+        {
+            self.activity = Some(pos);
+        }
+        match kind {
+            "claim.made" => {
+                let id = event["id"].as_str().unwrap_or_default();
+                self.claim = Some((format!("claim:{id}"), pos));
+            }
+            "verdict.made" => {
+                if let Some(claim) = text(&data["claim"]) {
+                    let outcome = data["outcome"].as_str().unwrap_or_default().to_owned();
+                    let verdict = data["verdict"].as_str().unwrap_or_default().to_owned();
+                    self.verdicts.insert(claim, (outcome, verdict));
+                }
+            }
+            "verdict.stale" => self.stale.extend(text(&data["verdict"])),
+            "claim.sent_back" => {
+                if let Some(claim) = text(&data["claim"]) {
+                    self.rounds.insert(claim, data["round"].as_u64());
+                }
+            }
+            "run.started" => {
+                let Some(check) = text(&data["check"]) else {
+                    return;
+                };
+                if let Some(claim) = text(&data["claim"]) {
+                    self.checks.entry(claim).or_default().insert(check.clone());
+                }
+                let run = data["run"].to_string();
+                let starts = self.starts.entry(run.clone()).or_default();
+                if starts.iter().any(|(known, _)| *known == check) {
+                    return;
+                }
+                let at = event["ts"].as_u64();
+                starts.push((check.clone(), at));
+                for finished in self.passed.get(&run).into_iter().flatten() {
+                    took(&mut self.took, &check, at, *finished);
+                }
+            }
+            "run.finished" if data["outcome"] == "passed" => {
+                let run = data["run"].to_string();
+                let at = event["ts"].as_u64();
+                self.passed.entry(run.clone()).or_default().push(at);
+                for (check, started) in self.starts.get(&run).into_iter().flatten() {
+                    took(&mut self.took, check, *started, at);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Its state, with no ask of it open.
+    fn state(&self) -> State {
+        if let Some((claim, _)) = self
+            .claim
+            .as_ref()
+            .filter(|(_, at)| self.activity.is_none_or(|activity| activity < *at))
+        {
+            let Some((outcome, verdict)) = self.verdicts.get(claim) else {
+                return State::SaysDone {
+                    expected_ms: self.expected(claim),
+                };
+            };
+            if self.stale.contains(verdict) {
+                return State::Stale;
+            }
+            return match outcome.as_str() {
+                "PASS" => State::Pass,
+                "FAIL" => State::SentBack {
+                    round: self.rounds.get(claim).copied().flatten().unwrap_or(1),
+                },
+                "BLOCKED" => State::Blocked,
+                "INVALID" => State::Invalid,
+                _ => State::Inconclusive,
+            };
+        }
+        match self.attention.as_deref() {
+            Some("unknown") => State::Quiet {
+                last_seen: self.last_seen.unwrap_or(0),
+            },
+            Some(_) => State::Working,
+            None if self.activity.is_some() => State::Working,
+            None => State::Queued,
+        }
+    }
+
+    /// How long the claim's checks are expected to take: for each check it runs, the median of that check's clean
+    /// runs, the longest of them.
+    fn expected(&self, claim: &str) -> Option<u64> {
+        self.checks
+            .get(claim)
+            .into_iter()
+            .flatten()
+            .filter_map(|check| {
+                let took = self.took.get(check)?;
+                took.get(took.len() / 2).copied()
+            })
+            .max()
+    }
+}
+
+/// A clean run of `check` that started at `started` and finished at `finished` took the time between, kept in order.
+fn took(
+    took: &mut HashMap<String, Vec<u64>>,
+    check: &str,
+    started: Option<u64>,
+    finished: Option<u64>,
+) {
+    if let Some(ms) = finished
+        .zip(started)
+        .and_then(|(finished, started)| finished.checked_sub(started))
+    {
+        let took = took.entry(check.to_owned()).or_default();
+        let at = took.partition_point(|known| *known <= ms);
+        took.insert(at, ms);
+    }
 }
 
 /// A session's title when no task names it.
@@ -348,131 +554,24 @@ fn untitled(session: &str) -> String {
     format!("Session {}", &session[..session.len().min(8)])
 }
 
-/// A session's state from its own events, in log order, and every ask's reading.
-fn state_of(mine: &[&Value], readings: &BTreeMap<&str, Reading<'_>>) -> State {
-    // An ask the session raised, still open, leaves it needing you.
-    if mine.iter().any(|event| {
-        event["kind"] == "ask.created"
-            && readings
-                .get(handle(event).as_str())
-                .is_none_or(Reading::open)
-    }) {
-        return State::NeedsYou;
-    }
-    let pos = |event: &Value| event["log_pos"].as_u64().unwrap_or(0);
-    let newest = |kinds: &[&str]| {
-        mine.iter()
-            .rev()
-            .find(|event| kinds.contains(&event["kind"].as_str().unwrap_or_default()))
-            .copied()
-    };
-    let attention = newest(&["session.attention"]);
-    let activity = newest(&[
-        "session.attention",
-        "tool.before",
-        "tool.after",
-        "prompt.submitted",
-    ]);
-    if let Some(claim) =
-        newest(&["claim.made"]).filter(|claim| activity.is_none_or(|a| pos(a) < pos(claim)))
-    {
-        let handle = format!("claim:{}", claim["id"].as_str().unwrap_or_default());
-        let of = |kind: &str, field: &str, value: &str| {
-            mine.iter()
-                .rev()
-                .find(|event| event["kind"] == kind && event["data"][field] == value)
-                .copied()
-        };
-        let Some(verdict) = of("verdict.made", "claim", &handle) else {
-            return State::SaysDone {
-                expected_ms: expected(mine, &handle),
-            };
-        };
-        if of(
-            "verdict.stale",
-            "verdict",
-            verdict["data"]["verdict"].as_str().unwrap_or_default(),
-        )
-        .is_some()
-        {
-            return State::Stale;
-        }
-        return match verdict["data"]["outcome"].as_str().unwrap_or_default() {
-            "PASS" => State::Pass,
-            "FAIL" => State::SentBack {
-                round: of("claim.sent_back", "claim", &handle)
-                    .and_then(|sent| sent["data"]["round"].as_u64())
-                    .unwrap_or(1),
-            },
-            "BLOCKED" => State::Blocked,
-            "INVALID" => State::Invalid,
-            _ => State::Inconclusive,
-        };
-    }
-    match attention.map(|event| event["data"]["state"].as_str().unwrap_or_default()) {
-        Some("unknown") => State::Quiet {
-            last_seen: mine
-                .iter()
-                .filter_map(|event| event["ts"].as_u64())
-                .max()
-                .unwrap_or(0),
-        },
-        Some(_) => State::Working,
-        None if activity.is_some() => State::Working,
-        None => State::Queued,
-    }
-}
-
-/// How long the claim's checks are expected to take: for each check it runs, the median of that check's clean
-/// runs before, the longest of them.
-fn expected(events: &[&Value], claim: &str) -> Option<u64> {
-    let checks: Vec<&str> = events
-        .iter()
-        .filter(|event| event["kind"] == "run.started" && event["data"]["claim"] == claim)
-        .filter_map(|event| event["data"]["check"].as_str())
-        .collect();
-    checks
-        .into_iter()
-        .filter_map(|check| {
-            let mut took: Vec<u64> = events
-                .iter()
-                .filter(|event| {
-                    event["kind"] == "run.finished" && event["data"]["outcome"] == "passed"
-                })
-                .filter_map(|finished| {
-                    let started = events.iter().find(|event| {
-                        event["kind"] == "run.started"
-                            && event["data"]["run"] == finished["data"]["run"]
-                            && event["data"]["check"] == check
-                    })?;
-                    finished["ts"]
-                        .as_u64()?
-                        .checked_sub(started["ts"].as_u64()?)
-                })
-                .collect();
-            took.sort_unstable();
-            took.get(took.len() / 2).copied()
-        })
-        .max()
-}
-
 /// The verdict line the app sends to the session's chat.
-pub fn verdict_line(events: &[Value], session: &str, now: u64) -> String {
+pub fn verdict_line(table: &Table, session: &str, now: u64) -> String {
     format!(
         "DeepBuild {} · {}",
-        mark(&state(events, session), now),
-        title(events, session)
+        mark(&table.state(session), now),
+        table.title(session)
     )
 }
 
 /// The one count of what needs you: every open ask in the record, the same on every device.
-pub fn count(events: &[Value]) -> usize {
-    open_asks(events, None).len()
+pub fn count(table: &Table) -> usize {
+    table.open_asks(None).len()
 }
 
 /// The menu bar's menu under the count: a line per session, its task and its status mark.
-pub fn menu(events: &[Value], now: u64) -> Vec<String> {
-    every_session(events)
+pub fn menu(table: &Table, now: u64) -> Vec<String> {
+    table
+        .every_session()
         .into_iter()
         .map(|(_, title, state)| format!("{title} · {}", mark(&state, now)))
         .collect()
@@ -482,6 +581,14 @@ pub fn menu(events: &[Value], now: u64) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn table(events: &[Value]) -> Table {
+        let mut table = Table::default();
+        for event in events {
+            table.apply(event);
+        }
+        table
+    }
 
     fn ask(id: &str) -> Value {
         json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
@@ -540,9 +647,9 @@ mod tests {
             json!({"kind": "tool.before", "session": "s1", "writer": "hook", "log_pos": 2, "data": {}}),
             json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a1", "data": {}}),
         ];
-        assert_eq!(state(&events, "s1"), State::Working);
-        assert_eq!(state(&events[..2], "s1"), State::NeedsYou);
-        assert_eq!(every_session(&events)[0].2, State::Working);
+        assert_eq!(table(&events).state("s1"), State::Working);
+        assert_eq!(table(&events[..2]).state("s1"), State::NeedsYou);
+        assert_eq!(table(&events).every_session()[0].2, State::Working);
     }
 
     #[test]
@@ -638,26 +745,11 @@ mod tests {
     }
 
     #[test]
-    fn every_session_read_in_one_pass_is_each_sessions_own_title_and_state() {
-        // The reference: each session's title and state read alone over every event.
-        for seed in 0..2_000 {
-            let events = drawn(seed);
-            let want: Vec<(String, String, State)> = sessions(&events)
-                .into_iter()
-                .map(|session| {
-                    let (title, state) = (title(&events, &session), state(&events, &session));
-                    (session, title, state)
-                })
-                .collect();
-            assert_eq!(every_session(&events), want, "seed {seed}: {events:#?}");
-        }
-    }
-
-    #[test]
-    fn the_open_asks_read_in_one_pass_are_those_each_asks_own_reading_leaves_open() {
+    fn the_open_asks_read_in_one_pass_and_folded_are_those_each_asks_own_reading_leaves_open() {
         // The reference: each ask read alone over every event, as the core reads it.
         for seed in 0..2_000 {
             let events = drawn(seed);
+            let folded = table(&events);
             for session in [None, Some("s0"), Some("s1")] {
                 let want: Vec<&Value> = events
                     .iter()
@@ -670,15 +762,25 @@ mod tests {
                     want,
                     "seed {seed}, session {session:?}: {events:#?}"
                 );
+                assert_eq!(
+                    folded.open_asks(session),
+                    want,
+                    "folded, seed {seed}, session {session:?}: {events:#?}"
+                );
             }
-            // Every ask the events name, created in them or not, reads closed in one pass exactly when it reads closed
-            // alone.
-            let closed = closed_asks(&events);
+            // Every ask the events name, created in them or not, reads open folded exactly when it reads open alone,
+            // with the same deadline.
             for n in 0..7 {
                 let handle = format!("ask:a{n}");
                 assert_eq!(
-                    closed.contains(handle.as_str()),
-                    !is_open(&events, &handle),
+                    folded.is_open(&handle),
+                    is_open(&events, &handle),
+                    "seed {seed}, {handle}: {events:#?}"
+                );
+                let ask = json!({"id": format!("a{n}"), "data": {"deadline": 99}});
+                assert_eq!(
+                    folded.deadline(&ask),
+                    deadline(&events, &ask),
                     "seed {seed}, {handle}: {events:#?}"
                 );
             }

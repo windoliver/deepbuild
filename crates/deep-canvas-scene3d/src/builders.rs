@@ -12,7 +12,8 @@ use crate::curve::{self, Sampled};
 use crate::geom::{add, area2, cross, dot, length, scale, sub, triangulate, unit, Mesh, V2, V3};
 
 /// The builder kinds, as documents name them.
-pub const KINDS: [&str; 8] = [
+pub const KINDS: [&str; 9] = [
+    "hull@1",
     "slab@1",
     "lathe@1",
     "extrude@1",
@@ -21,6 +22,17 @@ pub const KINDS: [&str; 8] = [
     "coil@1",
     "plate@1",
     "display@1",
+];
+
+/// The builders with known charts, which emit uv1 analytically (Builder: uv; #440).
+const CHARTED: [&str; 7] = [
+    "slab@1",
+    "lathe@1",
+    "extrude@1",
+    "plate@1",
+    "ball@1",
+    "tube@1",
+    "coil@1",
 ];
 
 /// The most vertices one builder makes (Builder: "exceed its declared vertex count").
@@ -41,6 +53,8 @@ pub struct Plants {
     pub flat_as_smooth: bool,
     /// #441's plants in the sweep and the curve it reads.
     pub sweep: crate::sweep::Plants,
+    /// #440's plants in the hull builder.
+    pub hull: crate::hull::Plants,
 }
 
 impl Plants {
@@ -57,6 +71,8 @@ impl Plants {
             "corner_square" => p.sweep.square_corners = true,
             "u_by_span" => p.sweep.u_by_span = true,
             "seam_twist_left" => p.sweep.seam_twist = true,
+            "hull_keeps_face_points" => p.hull.keeps_face_points = true,
+            "hull_fan_input_order" => p.hull.fan_input_order = true,
             _ => return None,
         }
         Some(p)
@@ -141,8 +157,39 @@ fn holes(p: &Value, name: &str) -> Result<Vec<Vec<V2>>, Fault> {
     }
 }
 
+/// Builder: shading's `shade`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Shade {
+    Smooth,
+    Flat,
+    ByAngle(f64),
+}
+
+fn shading(p: &Value) -> Result<Shade, Fault> {
+    match p.get("shade") {
+        Some(Value::Object(o)) => {
+            let a = o.get("by_angle").ok_or_else(|| bad("shade"))?;
+            let angle = match a.get("angle") {
+                None => 30.0,
+                Some(v) => v
+                    .as_f64()
+                    .filter(|x| (0.0..=180.0).contains(x))
+                    .ok_or_else(|| bad("shade"))?,
+            };
+            Ok(Shade::ByAngle(angle))
+        }
+        _ => Ok(
+            match text(p, "shade", "smooth", &["smooth", "flat", "by_angle"])? {
+                "flat" => Shade::Flat,
+                "by_angle" => Shade::ByAngle(30.0),
+                _ => Shade::Smooth,
+            },
+        ),
+    }
+}
+
 fn shade_flat(p: &Value) -> Result<bool, Fault> {
-    Ok(text(p, "shade", "smooth", &["smooth", "flat"])? == "flat")
+    Ok(shading(p)? != Shade::Smooth)
 }
 
 /// A point on a vertex's ring: the normal `n` it should face, from `a`, `b`, `c`.
@@ -192,14 +239,159 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         "coil@1" => coil(params)?,
         "plate@1" => plate(params)?,
         "display@1" => display(params)?,
+        "hull@1" => crate::hull::hull(&hull_points(params, ctx)?, ctx.plants.hull)
+            .map_err(|code| code.to_string())?,
         _ => return Err("kind".into()),
     };
     m.orient();
-    if shade_flat(params)? && !ctx.plants.flat_as_smooth {
-        m = m.flat();
+    if kind == "slab@1" {
+        slab_parts(&mut m);
+    }
+    match shading(params)? {
+        Shade::Flat if !ctx.plants.flat_as_smooth => m = m.flat(),
+        Shade::ByAngle(angle) => m = by_angle(&m, angle),
+        _ => {}
     }
     annotate(&mut m, kind, params, ctx)?;
     Ok(m)
+}
+
+/// The positions a hull takes: its `points`, or the built positions of the item (or the part)
+/// `of` names, welded at 1e-6 m; never more than 4,096.
+fn hull_points(p: &Value, ctx: &Ctx<'_>) -> Result<Vec<V3>, Fault> {
+    let pts: Vec<V3> = match (p.get("points"), p.get("of").and_then(Value::as_str)) {
+        (Some(list), None) => list
+            .as_array()
+            .and_then(|a| {
+                a.iter()
+                    .map(|q| {
+                        let q = q.as_array().filter(|q| q.len() == 3)?;
+                        let v = [q[0].as_f64()?, q[1].as_f64()?, q[2].as_f64()?];
+                        v.iter().all(|x| x.is_finite()).then_some(v)
+                    })
+                    .collect::<Option<Vec<V3>>>()
+            })
+            .ok_or_else(|| bad("points"))?,
+        (None, Some(of)) => {
+            let (id, part) = match of.split_once('#') {
+                Some((i, q)) => (i, Some(q)),
+                None => (of, None),
+            };
+            let item = ctx
+                .doc
+                .get("items")
+                .and_then(|i| i.get(id))
+                .filter(|i| KINDS.contains(&i.get("kind").and_then(Value::as_str).unwrap_or("")))
+                .filter(|_| id != ctx.id)
+                .ok_or_else(|| bad("of"))?;
+            let built = crate::build::built(ctx.doc, id, item, &Default::default(), 0.0)
+                .map_err(|_| bad("of"))?;
+            let m = built.mesh.ok_or_else(|| bad("of"))?;
+            let tris: Vec<u32> = match part {
+                None => (0..m.triangles() as u32).collect(),
+                Some(q) => m
+                    .parts
+                    .get(q)
+                    .or_else(|| m.closed.get(q).map(|c| &c.0))
+                    .cloned()
+                    .ok_or_else(|| bad("of"))?,
+            };
+            let w = m.welded();
+            let mut seen = std::collections::BTreeMap::new();
+            for t in tris {
+                for j in 0..3 {
+                    let v = m.indices[3 * t as usize + j] as usize;
+                    seen.entry(w[v]).or_insert(m.positions[v]);
+                }
+            }
+            seen.into_values().collect()
+        }
+        _ => return Err(bad("points")),
+    };
+    if pts.len() > crate::hull::MAX_POINTS {
+        return Err(bad(if p.get("of").is_some() {
+            "of"
+        } else {
+            "points"
+        }));
+    }
+    Ok(pts)
+}
+
+/// The positions a hull declares it takes, from its params: its points, or the vertices the
+/// item `of` names declares.
+fn hull_count(p: &Value, ctx: &Ctx<'_>) -> Result<u64, Fault> {
+    let n = match (p.get("points"), p.get("of").and_then(Value::as_str)) {
+        (Some(Value::Array(a)), None) => a.len() as u64,
+        (None, Some(of)) => {
+            let id = of.split('#').next().unwrap_or("");
+            let item = ctx
+                .doc
+                .get("items")
+                .and_then(|i| i.get(id))
+                .filter(|_| id != ctx.id)
+                .ok_or_else(|| bad("of"))?;
+            let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+            if kind == "hull@1" || !KINDS.contains(&kind) {
+                return Err(bad("of"));
+            }
+            let params = item.get("params").cloned().unwrap_or(json!({}));
+            let sub = Ctx { id, ..*ctx };
+            counts(kind, &params, &sub)?.0
+        }
+        _ => return Err(bad("points")),
+    };
+    if n > crate::hull::MAX_POINTS as u64 {
+        return Err(bad(if p.get("of").is_some() {
+            "of"
+        } else {
+            "points"
+        }));
+    }
+    Ok(n)
+}
+
+/// A slab's parts: `top` its faces facing up, `bottom` those facing down, `side` the rest, so
+/// every face is in exactly one.
+fn slab_parts(m: &mut Mesh) {
+    let mut normal: std::collections::BTreeMap<u32, V3> = std::collections::BTreeMap::new();
+    for t in 0..m.triangles() {
+        let [a, b, c] = [0, 1, 2].map(|j| m.positions[m.indices[3 * t + j] as usize]);
+        let e = normal.entry(m.faces[t]).or_insert([0.0; 3]);
+        *e = add(*e, cross(sub(b, a), sub(c, a)));
+    }
+    for t in 0..m.triangles() {
+        let n = normal[&m.faces[t]];
+        let name = if n[1] > 0.9 * length(n) {
+            "top"
+        } else if n[1] < -0.9 * length(n) {
+            "bottom"
+        } else {
+            "side"
+        };
+        m.parts.entry(name.into()).or_default().push(t as u32);
+    }
+}
+
+/// `shade: by_angle`: each triangle its own three vertices, as flat, each corner's normal smooth
+/// across the edges at it no sharper than `angle` (Modifier: normals, by_angle).
+fn by_angle(m: &Mesh, angle: f64) -> Mesh {
+    let mut out = m.flat();
+    let p = crate::poly::Poly::triangles_of(m);
+    let opts = crate::bevel::Normals {
+        by_angle: true,
+        angle,
+        area: true,
+        corner_angle: false,
+        keep_sharp: false,
+    };
+    let n = crate::bevel::normals(&p, &opts, &[], &std::collections::BTreeMap::new(), 1);
+    for (t, row) in n.iter().enumerate() {
+        for (k, q) in row.iter().enumerate() {
+            out.normals[3 * t + k] = *q;
+        }
+    }
+    out
 }
 
 /// The vertices `kind` builds from `params`, counted without building it.
@@ -230,6 +422,12 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
         "display@1" => {
             display_size(params)?;
             (28, 14)
+        }
+        // A bound, as an implicit surface's: n points make at most n corners and 2n − 4
+        // triangles (Builder `hull`).
+        "hull@1" => {
+            let n = hull_count(params, ctx)?;
+            (n, (2 * n).saturating_sub(4))
         }
         _ => return Err("kind".into()),
     };
@@ -1206,6 +1404,16 @@ fn tube(p: &Value, path: &Sampled) -> Result<Mesh, Fault> {
         ));
     }
     m.outputs.insert("rings".into(), Value::Array(rows));
+    // The tube's own layout (Builder: uv, natural): round its rings by arc, along its path by length.
+    let around = 2.0 * core::f64::consts::PI * s.radius;
+    let mut lay: Vec<(u32, f64)> = Vec::with_capacity(pts.len());
+    let mut run = 0.0;
+    for (i, base) in rings.iter().enumerate() {
+        if i > 0 {
+            run += length(sub(pts[i], pts[i - 1]));
+        }
+        lay.push((*base, run));
+    }
     let spans = if path.closed {
         pts.len()
     } else {
@@ -1254,12 +1462,21 @@ fn tube(p: &Value, path: &Sampled) -> Result<Mesh, Fault> {
                             tri_facing(&mut m, last + k, base + k + 1, base + k, dir, face + k);
                         }
                         last = base;
+                        let along = lay.iter().find(|r| r.0 == rings[end]).map_or(0.0, |r| r.1);
+                        lay.push((base, along + sign * s.radius * a));
                     }
                 }
                 _ => {}
             }
         }
     }
+    let mut natural = vec![[f64::NAN; 2]; m.positions.len()];
+    for (base, v) in lay {
+        for k in 0..=s.segments {
+            natural[base as usize + k] = [around * k as f64 / s.segments as f64, v];
+        }
+    }
+    m.uv0 = natural;
     if path.closed {
         m.close("solid", 0, 1);
     } else if s.caps != "none" {
@@ -1643,22 +1860,20 @@ fn annotate(m: &mut Mesh, kind: &str, p: &Value, ctx: &Ctx<'_>) -> Result<(), Fa
         m.values.insert("volume".into(), v);
     }
     m.true_shape = true_shape(kind, p, lo, hi)?;
-    // Box projection: each vertex's two coordinates across its normal's main axis, in metres.
-    m.uv0 = m
-        .positions
-        .iter()
-        .zip(&m.normals)
-        .map(|(q, n)| {
-            let (ax, ay, az) = (n[0].abs(), n[1].abs(), n[2].abs());
-            if ay >= ax && ay >= az {
-                [q[0], q[2]]
-            } else if ax >= az {
-                [q[2], q[1]]
-            } else {
-                [q[0], q[1]]
-            }
-        })
-        .collect();
+    // uv0 in metres (Builder: uv); uv1 from the builder's own charts where it has known ones.
+    let (proj, uv_scale) = crate::uv::read(p)?;
+    let natural = (m.uv0.len() == m.positions.len()).then(|| m.uv0.clone());
+    let fallback = match kind {
+        "lathe@1" => crate::uv::Projection::Cylinder(1),
+        "ball@1" if p.get("tessellation").and_then(Value::as_str) != Some("geodesic") => {
+            crate::uv::Projection::Sphere
+        }
+        _ => crate::uv::Projection::Box(1.0),
+    };
+    m.uv0 = crate::uv::uv0(m, proj, uv_scale, natural.as_deref(), fallback);
+    if CHARTED.contains(&kind) {
+        m.uv1 = crate::uv::uv1(m, natural.as_deref());
+    }
     let span = (hi[1] - lo[1]).max(1e-12);
     let height = m.positions.iter().map(|q| (q[1] - lo[1]) / span).collect();
     m.attributes.insert("height".into(), height);

@@ -463,6 +463,9 @@ impl Interner {
     }
 }
 
+/// The sealed registries and, per canvas module, what its digest holds of them.
+type Sealing = (Vec<SealedRegistry>, BTreeMap<String, Value>);
+
 /// The seal's registry checks (Registry and seal: registries): every registry the core and the
 /// canvas modules declare is complete (a kit, a planted wrong entry and `since`) and its kit
 /// refuses every planted entry; every entry a canvas module or the core fills is in a registry
@@ -477,7 +480,7 @@ pub(super) fn seal(
     shapes: &[(String, super::Registrar)],
     admits: Option<&str>,
     fault: Option<super::Fault>,
-) -> Result<(Vec<SealedRegistry>, BTreeMap<String, Value>), super::SealError> {
+) -> Result<Sealing, Box<super::SealError>> {
     use super::{Fault, SealError};
     let modules = || shapes.iter().filter(|(n, _)| n != super::CORE);
     let mut declared: Vec<(String, RegistryDef)> = core
