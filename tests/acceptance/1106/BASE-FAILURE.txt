@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/tests/acceptance/1106
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/tests/acceptance/1106
 
  ❯ ca.test.ts (2 tests | 2 failed) 4029ms
    ❯ AC4 #1106.70f52264 the run's certificate authority is trusted in no process outside the run's sandbox; a planted setup that adds it to the login keychain fails, naming the store (2)
@@ -43,15 +43,15 @@ AssertionError: deep env up in /private/tmp/dh1106-pvleWs/wt-a exits 0 (stdout {
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
 
  FAIL  ca.test.ts > AC4 #1106.70f52264 the run's certificate authority is trusted in no process outside the run's sandbox; a planted setup that adds it to the login keychain fails, naming the store > AC4 (wrong program) a setup that adds the run's CA to the login keychain (DEEP_HUB_PLANT=run-ca-in-login-keychain) fails the reading, naming the store
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-IlqYLu/root): file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-IlqYLu/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=run-ca-in-login-keychain names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -85,15 +85,15 @@ Received: "missing"
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
 
  FAIL  evidence.test.ts > AC2 #1106.ef5f04c9 the app writes its variable reversed and XOR'd into test output and into a file in its checkout, and neither holds the value; a planted environment that loads by value fails, naming the evidence file > AC2 (wrong program) an environment that loads SHOP_API_KEY by value (DEEP_HUB_PLANT=env-loads-by-value) fails the reading, naming the evidence file
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-wOAS0r/root): file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-wOAS0r/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=env-loads-by-value names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -132,15 +132,15 @@ AssertionError: deep env up in /private/tmp/dh1106-ZpeSEG/wt-a exits 0 (stdout {
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
 
  FAIL  refusals.test.ts > AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host > AC3 (wrong program) a filter that substitutes on every allowed host (DEEP_HUB_PLANT=standin-every-host) fails the reading, naming the host
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-yPBKBZ/root): file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-yPBKBZ/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=standin-every-host names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -180,15 +180,15 @@ AssertionError: deep env up in /private/tmp/dh1106-eqo6X6/wt-a exits 0 (stdout {
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
 
  FAIL  standin.test.ts > AC1 #1106.ef63d06f a test app sends its stand-in to the sample API's host and gets 200; a planted filter that puts the value into the process environment fails, naming the variable > AC1 (wrong program) a filter that puts the value into the process environment (DEEP_HUB_PLANT=standin-value-in-env) fails the reading, naming the variable
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-N93sMU/root): file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-N93sMU/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=standin-value-in-env names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 

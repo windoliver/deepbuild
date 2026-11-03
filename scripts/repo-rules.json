@@ -1294,6 +1294,12 @@
           "spec": "^0.28",
           "why": "Issue #380: times scene3d's own passes (shadow map, geometry, output) in the same frame as the effects."
         }
+      },
+      "dev-dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #386: the renderer's tests build their scene documents as JSON; already in the tree."
+        }
       }
     },
     "crates/deep-canvas-effects/Cargo.toml": {
@@ -1435,6 +1441,14 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #31: a base-commit or snapshot run returns the conformance kit's CheckResult and Failure, and its runners fill CheckRunnerFill."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #31: a checkout starts and cleans up the stand-ins for its checks' declared services and pages through the supervisor host."
         }
       }
     },
@@ -1491,6 +1505,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #185: each seam registers as a canvas interface and each backend as an implementation through deep-canvas's registry (Manifest, Interface, Implementation)."
         }
       }
     },
@@ -1657,6 +1675,18 @@
       "kind": "home path",
       "sha256": "1ee1a19bd298057a7a90734bccee13976a34914fd0c29fda5aebc848bbfd7961",
       "why": "Issue #20: the generated sessions' working folder under the placeholder user dev, a made-up cwd written into seeded transcripts for the budgets; no real home."
+    },
+    {
+      "path": "tests/acceptance/39/helpers.ts",
+      "kind": "API key",
+      "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
+      "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
+    },
+    {
+      "path": "tests/acceptance/39/fixtures/fake-codex.pl",
+      "kind": "API key",
+      "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
+      "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
     }
   ]
 }
