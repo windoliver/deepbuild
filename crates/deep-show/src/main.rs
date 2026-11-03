@@ -1601,6 +1601,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-text",
     feature = "test-check-kind",
     feature = "test-leave-out-logic",
+    feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
     feature = "test-prog-registry",
@@ -1750,6 +1751,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
+    // #489: a build without the data module, whose motion@1 digest equals the full set's.
+    #[cfg(feature = "test-leave-out-data")]
+    out.retain(|m| m.manifest.name != "data");
     out
 }
 
@@ -1919,6 +1923,12 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             *m = deep_canvas_marks::modules::marks2d_planted(p);
         }
     }
+    // #489: motion with a planted constraint solve, whose entry the constraint kit refuses.
+    if let Some(StartPlanted::Constraints(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "motion") {
+            *m = deep_canvas_motion::module::planted(p);
+        }
+    }
     // Every build set holds text and look, since a status mark needs text's shaper and look's
     // status map; the planted seal lets a build without look start (#388).
     for name in deep_canvas::registry::CORE_MODULES {
@@ -2027,6 +2037,8 @@ enum StartPlanted {
     Listing(registries::Listing),
     /// #221: marks2d's relations solved by a planted program.
     Relations(deep_canvas_marks::relations::Planted),
+    /// #489: motion's constraint kinds solved by a planted program.
+    Constraints(deep_canvas_motion::kit::Planted),
     /// #412: a wrong deep_kinds listing, sheet, dump, diff or gallery.
     Kinds(kinds::Planted),
     /// #415: a wrong first-party layout's cap or validator.
@@ -2391,6 +2403,12 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         )),
         "relation_reads_previous_place" => Ok(StartPlanted::Relations(
             deep_canvas_marks::relations::Planted::PreviousPlace,
+        )),
+        "constraint_iterates_to_convergence" => Ok(StartPlanted::Constraints(
+            deep_canvas_motion::kit::Planted::Iterates,
+        )),
+        "constraint_reads_previous_output" => Ok(StartPlanted::Constraints(
+            deep_canvas_motion::kit::Planted::PreviousFrame,
         )),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
