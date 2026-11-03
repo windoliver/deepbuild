@@ -1088,6 +1088,27 @@
     }
   },
   {
+    "method": "deep.terminal.close",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#989",
+    "digest": "d1:ecde3b67d6d77ef94056c6bc407e13d4801c3b05b0e72b0825cb147397c6e802",
+    "params": {
+      "type": "object",
+      "properties": {
+        "terminal": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "terminal"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.canvas.read",
     "variants": null,
     "since": "R6",
