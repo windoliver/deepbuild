@@ -181,16 +181,21 @@ interface Session {
   /** The queue's drafts in order, until the prompt hook that takes each. */
   queuedTasks?: Draft[];
 }
+/** The watches of monitors a session armed that still run, as its row names them (#997). */
+const watching = (live: Live): string[] => [...live.background.values()].filter((b) => b.watch).map((b) => b.what);
 /** Background work as a session's row names it: each command in backticks, cut at 80 characters (#907). */
 const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length > 80 ? `${w.slice(0, 80)}…` : w}\``).join(', ');
 /**
  * What the core follows of every session by its hooks, checked or not: its attention, its open calls, the commit
- * its worktree had, and its loop: wake-ups and crons it scheduled, and background subagents and commands still to report, by call.
+ * its worktree had, and its loop: wake-ups and crons it scheduled, background subagents and commands still to report, by call,
+ * and the watches of monitors it armed, by their ID, each until its stop call, its process group ending or its timeout (#997).
  */
 interface Live {
   agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined;
   calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
-  from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number }>; looping: boolean;
+  from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number; watch?: { expires: number | null } }>; looping: boolean;
+  /** The IDs of every watch it armed, running or ended: an event naming one is its monitor's, never another's report (#997). */
+  armed?: Set<string>;
   /**
    * What a green stop hands the gate runner with its loop reading (#965): the origin of the prompt that opened the
    * turn (a message typed mid-turn is your words, not the turn's origin), the soonest wake-up or cron job due at the
@@ -614,13 +619,18 @@ export class Core {
     for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.every('leases', 1000, () => leases.tick());
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
-    // ends mid-turn leaves them to the turn's stop. An idle session whose facts have emptied starts what they held, and
+    // ends mid-turn leaves them to the turn's stop. A monitor's watch ends the same way, or at its timeout, and an idle
+    // session's row then reads its stop again (#997). An idle session whose facts have emptied starts what they held, and
     // the gate runner's timers come due on the hub's clock (#965). The planted wrong program reads the facts only at stops.
     this.every('background', 2000, async () => {
       for (const [id, live] of this.live) {
         for (const [call, b] of live.background) {
-          if (!b.group) continue;
-          try { process.kill(-b.group, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') live.background.delete(call); }
+          let ended = b.watch?.expires != null && this.now() >= b.watch.expires ? 'its timeout passed' : undefined;
+          if (!ended && b.group) try { process.kill(-b.group, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') ended = 'its process ended'; }
+          if (!ended) continue;
+          // Off the poll's path: the stop it makes final is judged, with its fast lane, while other sessions are read.
+          if (b.watch) void this.watchEnded(id, call, ended).catch(() => undefined);
+          else live.background.delete(call);
         }
         if (live.state !== 'working' && this.options.plant !== 'rechecks-facts-at-stops-only') this.gate.idle(id, { background: live.background.size, crons: live.crons.size });
       }
@@ -1114,7 +1124,8 @@ export class Core {
     // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record; the
     // agent's final message is what the claim cites, for the validity gate (#29).
     if (claimed) this.lastMessage.set(meta.session, meta.fields?.last_assistant_message ?? '');
-    if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
+    // A stop while a monitor's watch runs isn't final (#997): its claims are made once the watch ends.
+    if (claimed && !watching(live).length) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
     if (session && call) {
@@ -1185,11 +1196,13 @@ export class Core {
           const item = await this.tasks.itemOf(String(data.text));
           if (item) this.items.set(draft, item);
         }
-        // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest;
-        // a scheduled prompt fires its one-shot crons.
-        if (from === 'subagent') {
+        // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest
+        // that isn't a monitor's watch; a monitor's event, naming a watch the session armed, ends none (#997). A
+        // scheduled prompt fires its one-shot crons.
+        const watch = /<task-id>([^<]+)<\/task-id>/.exec(String(data.text))?.[1];
+        if (from === 'subagent' && !(watch && live.armed?.has(watch))) {
           const named = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(String(data.text))?.[1];
-          live.background.delete(named && live.background.has(named) ? named : [...live.background.keys()][0] ?? '');
+          live.background.delete(named && live.background.has(named) ? named : [...live.background].find(([, b]) => !b.watch)?.[0] ?? '');
         }
         if (from === 'scheduled') for (const [id, cron] of live.crons) if (!cron.recurring) live.crons.delete(id);
       } else if (draft.kind === 'tool.after' && meta.loop) {
@@ -1197,7 +1210,18 @@ export class Core {
         if ('scheduled' in fact) { if (fact.scheduled !== null) live.wakeups.push(draft.ts + this.stepped + fact.scheduled); }
         else if ('cron' in fact) live.crons.set(fact.cron, { due: fact.due, recurring: fact.recurring });
         else if ('cancelled' in fact) live.crons.delete(fact.cancelled);
-        else if (fact.background === 'subagent' || this.options.plant !== 'background-subagents-only') {
+        else if ('monitor' in fact || 'stopped' in fact) {
+          // A monitor's watch holds the session looping until its stop call, its process group ending or its timeout
+          // (#997). The planted wrong program reads no monitor, as the merge base did.
+          if (this.options.plant === 'monitor-unread') continue;
+          if ('stopped' in fact) void this.watchEnded(meta.session, fact.stopped, 'a stop call named it');
+          else {
+            const id = fact.monitor;
+            (live.armed ??= new Set()).add(id);
+            live.background.set(id, { what: fact.what, watch: { expires: fact.timeout === null ? null : draft.ts + this.stepped + fact.timeout } });
+            void groupUnder(meta.ppid, fact.command).then((group) => { const b = live.background.get(id); if (b && group) b.group = group; });
+          }
+        } else if (fact.background === 'subagent' || this.options.plant !== 'background-subagents-only') {
           live.background.set(fact.call, { what: fact.what });
           // A command also ends when its process group does, read off the agent's process tree.
           if (fact.background === 'command') void groupUnder(meta.ppid, fact.what).then((group) => { const b = live.background.get(fact.call); if (b && group) b.group = group; });
@@ -1723,7 +1747,11 @@ export class Core {
     if (state && !statusQuestion) live.state = state;
     clearTimeout(live.quiet);
     live.quiet = undefined;
-    if (meta.event === 'SessionEnd') { this.live.delete(meta.session); this.gate.ended(meta.session); this.askingSoon(); }
+    if (meta.event === 'SessionEnd') {
+      // A watch ends with its session, whose last stop is then judged (#997), before the session is let go.
+      const ends = [...live.background].filter(([, b]) => b.watch).map(([id]) => this.watchEnded(meta.session, id, 'its session ended'));
+      void Promise.all(ends).finally(() => { this.live.delete(meta.session); this.gate.ended(meta.session); this.askingSoon(); });
+    }
     else if (state === 'working' && !statusQuestion && !this.stopping) {
       live.quiet = setTimeout(() => void this.queue(() => this.quiet(meta.session, now)).catch(() => undefined), QUIET_MS);
       live.quiet.unref();
@@ -2740,6 +2768,9 @@ export class Core {
       const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
       await this.gate.turnEnded(lane && judged?.claim ? judged.claim : null, background, stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
       if (live) live.words = undefined;
+      // Its row reads waiting on its monitor until the watch ends (#997): its events are the session's next turns.
+      const watches = live ? watching(live) : [];
+      if (watches.length) await this.appendReading(meta.session, meta.agent, `Waiting on its monitor ${backgrounded(watches)}: each event wakes it, and its stop is judged once the watch ends.`).catch(() => undefined);
       if (lane && judged?.claim && background.length && lane.slow.length) await this.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
     }
     // The verdict in the chat: one line at every judged stop, as the verdict stands once the hold is over, first in a send-back's reason too (#83).
@@ -3039,6 +3070,8 @@ export class Core {
   private async judging(meta: HookMeta): Promise<Live | undefined> {
     const live = this.live.get(meta.session);
     if (!live?.judged) return undefined;
+    // A stop while a monitor's watch runs isn't final (#997): the turn is judged at the first stop after the watch ends.
+    if (watching(live).length) return undefined;
     // The claims the rule made at this stop, for the locked ask-tasks (#303): the newest is the one the line reads.
     const made = (await live.claiming) ?? [];
     live.claiming = undefined;
@@ -3062,6 +3095,25 @@ export class Core {
     // recorded again after them, or an unclean restart would read the idle session as active and its claim as lost.
     if (live.state === 'finished' || live.state === 'failed') await this.attention(meta.session, live.agent, live.state);
     return live;
+  }
+  /**
+   * A monitor's watch ended (#997). Mid-turn, the turn's stop reads it; at an idle session the stop that went before is
+   * final now: its row reads it again, and it is judged as it would have been with no watch, its claim made and its
+   * checks started.
+   */
+  private async watchEnded(session: string, id: string, why: string): Promise<void> {
+    const live = this.live.get(session);
+    const b = live?.background.get(id);
+    if (!live || !b?.watch) return;
+    live.background.delete(id);
+    if (live.state === 'working') return;
+    await this.queue(() => this.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`)).catch(() => undefined);
+    if (!live.judged || watching(live).length) return;
+    live.claiming ??= this.tasks.claim(session, live.agent, live.cwd).catch((): string[] => []);
+    const judged = await this.queue(() => this.judging({ session, cwd: live.cwd } as HookMeta)).catch(() => undefined);
+    if (!judged?.claim) return;
+    await this.laneOf(judged.claim, Date.now() + STOP_HOLD_MS);
+    await this.gate.turnEnded(judged.claim, [...live.background.values()].map((x) => x.what), this.now(), { session, origin: live.turnFrom, due: null, starter: 'claim' }).catch(() => undefined);
   }
   /**
    * A session whose turn this hub's restart interrupted, with work the stop rule would read as a claim, is judged
