@@ -26,12 +26,14 @@
       "-c",
       "npm test"
     ],
-    "cwd": "/Users/you/work/app",
-    "env": {},
+    "cwd": "/tmp/you/src/app",
+    "env": {
+      "CI": "1"
+    },
     "grant": {
       "run_as_you": true
     },
     "deadline_ms": 600000,
-    "env_withheld": []
+    "withheld": []
   }
 }

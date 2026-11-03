@@ -89,7 +89,7 @@ describe('the gate runner at a real stop', () => {
       const [claim] = claimsOf(events, ref);
       const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
       expect(started, 'the claim\'s check ran').toBeDefined();
-      expect(started!.v, 'as run.started@2').toBe(2);
+      expect(started!.v, 'as run.started@3').toBe(3);
       expect(started!.data.host).toBe('local');
       expect(started!.data.needs).toMatchObject({ cores: 1, memory_mb: 0, gpus: 0 });
       expect(started!.data.lane, 'inside the stop\'s hold').toBe('fast');

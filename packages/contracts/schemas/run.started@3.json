@@ -154,9 +154,9 @@
           "maxItems": 65536,
           "items": {
             "type": "string",
-            "maxLength": 1048576
+            "maxLength": 8192
           },
-          "description": "Its program and arguments."
+          "description": "Its program and arguments, each cut at the read cap when `withheld` names argv."
         },
         "cwd": {
           "type": "string",
@@ -171,9 +171,9 @@
           },
           "additionalProperties": {
             "type": "string",
-            "maxLength": 1048576
+            "maxLength": 8192
           },
-          "description": "What the caller added to its environment, but each value the evidence store would scrub; the run token is never in it."
+          "description": "What the caller added to its environment, but each variable `withheld` names; the run token is never in it."
         },
         "grant": {
           "type": "object",
@@ -250,8 +250,8 @@
         "command": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 1048576,
-          "description": "A claim's check (#30): the command line the command check kind runs."
+          "maxLength": 8192,
+          "description": "A claim's check (#30): the command line the command check kind runs, cut at the read cap when `withheld` names command."
         },
         "stand_ins": {
           "type": "array",
@@ -263,7 +263,7 @@
           },
           "description": "The commands a base run of it finds as stand-ins by name (#874)."
         },
-        "env_withheld": {
+        "withheld": {
           "type": "array",
           "maxItems": 65536,
           "items": {
@@ -271,7 +271,7 @@
             "minLength": 1,
             "maxLength": 8192
           },
-          "description": "The variables of its environment whose values the record doesn't keep: a run rebuilt from it can't run again as it was."
+          "description": "What of it the record doesn't keep, so a run rebuilt from the record can't run again as it was: each variable whose value the evidence store would scrub or that is past the read cap, as $NAME, and argv or command when past the read cap."
         }
       },
       "required": [
@@ -287,7 +287,7 @@
         "env",
         "grant",
         "deadline_ms",
-        "env_withheld"
+        "withheld"
       ],
       "additionalProperties": false
     },

@@ -4687,7 +4687,7 @@ export interface RunStartedV3 {
     environment?: boolean;
     command?: string;
     stand_ins?: Array<string>;
-    env_withheld: Array<string>;
+    withheld: Array<string>;
   };
   evidence?: Array<string>;
 }
