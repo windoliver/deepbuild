@@ -1229,8 +1229,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let at = list
         .iter()
         .map(|c| {
-            // deep_query's `at` is the times it reads (#411): on the clock it arrives at `arrives`.
-            let arrives = if c.get("call") == Some(&json!("deep_query")) {
+            // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
+            // reads (#441): on the clock either arrives at `arrives`.
+            let arrives = if c.get("call") == Some(&json!("deep_query"))
+                || c.get("call") == Some(&json!("geometry"))
+            {
                 "arrives"
             } else {
                 "at"
@@ -1421,7 +1424,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" {
                     "arrives"
                 } else {
                     "at"

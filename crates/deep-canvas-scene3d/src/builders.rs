@@ -39,6 +39,8 @@ pub struct Plants {
     pub ball_scaled: bool,
     /// `shade: flat` builds the smooth mesh (AC4's mutant).
     pub flat_as_smooth: bool,
+    /// #441's plants in the sweep and the curve it reads.
+    pub sweep: crate::sweep::Plants,
 }
 
 impl Plants {
@@ -51,6 +53,10 @@ impl Plants {
             "cap_left_open" => p.cap_left_open = true,
             "ball_scaled" => p.ball_scaled = true,
             "flat_as_smooth" => p.flat_as_smooth = true,
+            "sweep_frenet" => p.sweep.frenet = true,
+            "corner_square" => p.sweep.square_corners = true,
+            "u_by_span" => p.sweep.u_by_span = true,
+            "seam_twist_left" => p.sweep.seam_twist = true,
             _ => return None,
         }
         Some(p)
@@ -161,10 +167,7 @@ pub fn path(doc: &Value, v: Option<&Value>) -> Option<Sampled> {
         }
         v => {
             let points = curve::points(v).filter(|p| p.len() >= 2)?;
-            Some(Sampled {
-                points,
-                closed: false,
-            })
+            Some(Sampled::bare(points, false))
         }
     }
 }
@@ -182,6 +185,7 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
     let mut m = match kind {
         "slab@1" => slab(params, ctx)?,
         "lathe@1" => lathe(params, ctx.plants)?,
+        "extrude@1" if params.get("along").is_some() => sweep_of(params, ctx)?.build(),
         "extrude@1" => extrude(params)?,
         "tube@1" => tube_item(params, ctx)?,
         "ball@1" => ball(params, ctx.plants)?,
@@ -211,6 +215,7 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
             SlabShape::Along(section, path) => sweep_count(&section, &path),
         },
         "lathe@1" => lathe_count(params, ctx.plants)?,
+        "extrude@1" if params.get("along").is_some() => sweep_of(params, ctx)?.counts(),
         "extrude@1" => layered_count(&extrude_shape(params)?.0),
         "tube@1" => {
             let p = tube_path(params, ctx)?;
@@ -218,10 +223,7 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
         }
         "ball@1" => ball_count(params)?,
         "coil@1" => {
-            let p = Sampled {
-                points: coil_path(params)?,
-                closed: false,
-            };
+            let p = Sampled::bare(coil_path(params)?, false);
             tube_count(&coil_tube(params)?, &p)?
         }
         "plate@1" => plate_count(params)?,
@@ -608,6 +610,12 @@ fn sweep_count(section: &[V2], path: &[V3]) -> (u64, u64) {
     let (s, n) = (section.len() as u64, path.len() as u64);
     let caps = 2 * triangulate(section, &[]).len() as u64;
     (n * s + 2 * s, 2 * s * (n - 1) + caps)
+}
+
+/// An `extrude@1` with `along`: its outline and holes swept along the curve it names.
+fn sweep_of(p: &Value, ctx: &Ctx<'_>) -> Result<crate::sweep::Sweep, Fault> {
+    let (o, h) = oriented(&outline(p, "outline")?, &holes(p, "holes")?);
+    crate::sweep::Sweep::new(p, o, h, ctx.doc, ctx.plants.sweep)
 }
 
 /// An extrusion's levels from `from` to `to` along `up`, its far edge bevelled, their places
@@ -1127,10 +1135,7 @@ fn tube_path(p: &Value, ctx: &Ctx<'_>) -> Result<Sampled, Fault> {
             out.push(q);
         }
     }
-    Ok(Sampled {
-        points: out,
-        closed: path.closed,
-    })
+    Ok(Sampled::bare(out, path.closed))
 }
 
 /// Segments in a bent tube's corner.
@@ -1152,7 +1157,16 @@ fn tube_item(p: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
 fn tube(p: &Value, path: &Sampled) -> Result<Mesh, Fault> {
     let s = tube_spec(p)?;
     let pts = &path.points;
-    let fr = frames(pts, path.closed, s.z_up);
+    let mut fr = frames(pts, path.closed, s.z_up);
+    if !s.z_up && path.normals.len() == pts.len() {
+        // Along a curve@1, its own rotation-minimizing frames, so a closed tube has no seam.
+        for (k, ((t, n), cn)) in fr.iter_mut().zip(&path.normals).enumerate() {
+            if let Some(ct) = path.tangents.get(k) {
+                *t = *ct;
+            }
+            *n = unit(sub(*cn, scale(*t, dot(*cn, *t))));
+        }
+    }
     let mut m = Mesh::default();
     let ring_at = |m: &mut Mesh, centre: V3, t: V3, n: V3, r: f64| -> u32 {
         let b = cross(t, n);
@@ -1169,6 +1183,29 @@ fn tube(p: &Value, path: &Sampled) -> Result<Mesh, Fault> {
         .zip(&fr)
         .map(|(c, (t, n))| ring_at(&mut m, *c, *t, *n, s.radius))
         .collect();
+    // Each ring as the `geometry` call reports it, at its point's u along the path.
+    let total = path.length().max(1e-15);
+    let mut run = 0.0;
+    let mut rows = Vec::with_capacity(pts.len());
+    for (i, ((c, (t, n)), base)) in pts.iter().zip(&fr).zip(&rings).enumerate() {
+        if i > 0 {
+            run += length(sub(*c, pts[i - 1]));
+        }
+        let u = path.us.get(i).copied().unwrap_or(run / total);
+        let f = crate::curve::Frame {
+            point: *c,
+            tangent: *t,
+            normal: *n,
+        };
+        rows.push(crate::sweep::ring_row(
+            u,
+            1.0,
+            0.0,
+            &f,
+            (*base..base + s.segments as u32).collect(),
+        ));
+    }
+    m.outputs.insert("rings".into(), Value::Array(rows));
     let spans = if path.closed {
         pts.len()
     } else {
@@ -1254,10 +1291,7 @@ fn coil_tube(p: &Value) -> Result<Value, Fault> {
 }
 
 fn coil(p: &Value) -> Result<Mesh, Fault> {
-    let path = Sampled {
-        points: coil_path(p)?,
-        closed: false,
-    };
+    let path = Sampled::bare(coil_path(p)?, false);
     tube(&coil_tube(p)?, &path)
 }
 
@@ -1703,7 +1737,7 @@ fn true_shape(kind: &str, p: &Value, lo: V3, hi: V3) -> Result<Vec<Value>, Fault
         "lathe@1" => {
             json!({"revolved": {"outline": p.get("outline"), "axis": p.get("axis").cloned().unwrap_or(json!("y"))}})
         }
-        "extrude@1" if p.get("bevel").is_none() => {
+        "extrude@1" if p.get("bevel").is_none() && p.get("along").is_none() => {
             json!({"prism": {"outline": p.get("outline"), "holes": p.get("holes").cloned().unwrap_or(json!([])), "depth": p.get("depth")}})
         }
         "tube@1" | "coil@1" => {
