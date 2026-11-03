@@ -108,15 +108,23 @@ fn adaptive(
     let mut segs: Vec<(f64, f64, bool)> = vec![(a, b, settled(a, b))];
     let mut breaks: Vec<f64> = Vec::new();
     loop {
-        let open = segs.iter().filter(|s| !s.2).count();
-        // Splitting every open segment adds one point each.
-        if open == 0 || segs.len() + 1 + open > MAX_POINTS {
+        let open: Vec<usize> = (0..segs.len()).filter(|&i| !segs[i].2).collect();
+        // Each split adds one point; past the budget, the last level splits the widest open
+        // segments it still can.
+        let room = MAX_POINTS.saturating_sub(segs.len() + 1);
+        if open.is_empty() || room == 0 {
             break;
         }
-        let mut next = Vec::with_capacity(segs.len() + open);
-        for &(lo, hi, done) in &segs {
-            if done {
-                next.push((lo, hi, true));
+        let mut split = vec![false; segs.len()];
+        let mut widest = open.clone();
+        widest.sort_by(|&i, &j| (segs[j].1 - segs[j].0).total_cmp(&(segs[i].1 - segs[i].0)));
+        for &i in widest.iter().take(room) {
+            split[i] = true;
+        }
+        let mut next = Vec::with_capacity(segs.len() + room.min(open.len()));
+        for (i, &(lo, hi, done)) in segs.iter().enumerate() {
+            if !split[i] {
+                next.push((lo, hi, done));
                 continue;
             }
             let mid = 0.5 * (lo + hi);
@@ -130,6 +138,10 @@ fn adaptive(
             next.push((lo, mid, settled(lo, mid)));
             next.push((mid, hi, settled(mid, hi)));
         }
+        if open.len() > room {
+            segs = next;
+            break;
+        }
         segs = next;
     }
     let mut xs = vec![a];
@@ -139,6 +151,11 @@ fn adaptive(
             match estimates.last_mut() {
                 Some(e) if e[1] == lo => e[1] = hi,
                 _ => estimates.push([lo, hi]),
+            }
+            // A stretch whose bound is unbounded may hold a pole between its samples: it
+            // breaks the curve rather than drawing a wall across it.
+            if !bound(lo, hi).is_bounded() {
+                breaks.push(hi);
             }
         }
         if breaks.contains(&hi) {
@@ -174,6 +191,25 @@ mod tests {
         let d = draw(&json!({"y": "1 / x", "over": [-3, 3]})).unwrap();
         assert_eq!(d.subpaths.len(), 2, "{:?}", d.subpaths.iter().map(Vec::len).collect::<Vec<_>>());
         assert!(d.subpaths.iter().all(|s| s.len() > 100));
+    }
+
+    #[test]
+    fn a_pole_off_the_samples_breaks_the_curve() {
+        let d = draw(&json!({"y": "1 / (x - 0.1)", "over": [-3, 3]})).unwrap();
+        assert!(d.subpaths.len() >= 2);
+        // No drawn segment jumps across the pole.
+        for s in &d.subpaths {
+            assert!(s.windows(2).all(|w| (w[0][0] - 0.1) * (w[1][0] - 0.1) >= 0.0), "a wall across x = 0.1");
+        }
+    }
+
+    #[test]
+    fn a_curve_spends_its_whole_budget() {
+        let d = draw(&json!({"y": "x", "over": [-300, 300]})).unwrap();
+        let points: usize = d.subpaths.iter().map(Vec::len).sum();
+        assert!(points > 1900, "{points}");
+        let unsettled: f64 = d.estimates.iter().map(|e| e[1] - e[0]).sum();
+        assert!(unsettled < 600.0, "{unsettled}");
     }
 
     #[test]
