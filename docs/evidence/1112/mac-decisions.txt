@@ -124,7 +124,7 @@ At 01:50Z (mac-after.txt) every one of these PIDs except openclaw-gateway (68762
 before file's top-CPU list) and the db39A hub 40417 (in neither file) is still listed: swap 37,237 of
 37,888 MiB (98%), load 34.7.
 
-Around 02:25Z the owner stopped them by hand (this session's own attempt was refused by its permission
+Before 02:30Z the owner stopped them by hand (this session's own attempt was refused by its permission
 classifier). Read at 02:30Z: gone except 17029 (the issue-44 hub, whose log stream 17036 did end) and
 the db39A hub 40417 with its log stream 40503, left to the live Issue 39 session. ChatGPT had quit.
 Nine Claude Code sessions stayed resident (eight before plus one new).
