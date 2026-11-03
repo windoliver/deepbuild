@@ -33,6 +33,9 @@
         "additionalProperties": false
       }
     },
+    "assets": { "type": "array", "description": "Files the pack's programs and entries read (#238)." },
+    "providers": { "type": "object", "description": "Programs the sandbox module admits and runs (#238)." },
+    "layouts": { "type": "object", "description": "Layouts whose validators are sandbox programs (#238)." },
     "entries": {
       "type": "object",
       "additionalProperties": {
@@ -103,7 +106,8 @@
         "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/input" } },
         "let": { "type": "object" },
         "steps": { "type": "object", "additionalProperties": { "$ref": "#/$defs/step" } },
-        "outputs": {}
+        "outputs": {},
+        "channels": { "type": "object" }
       },
       "required": ["version", "steps"],
       "additionalProperties": false
@@ -132,7 +136,7 @@
       "properties": {
         "op": {
           "type": "string",
-          "enum": ["mark", "item"],
+          "enum": ["mark", "item", "builder", "recipe"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a core release that adds a map the document holds",
@@ -143,7 +147,8 @@
         "params": {},
         "at": {},
         "repeat": {},
-        "let": { "type": "object" }
+        "let": { "type": "object" },
+        "when": {}
       },
       "required": ["op"],
       "additionalProperties": false

@@ -15,6 +15,7 @@ mod efficiency;
 mod evidence;
 mod frames;
 mod gate;
+mod geometry;
 mod host;
 mod hub;
 mod input;
@@ -519,6 +520,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
+        "kinds" => return Some(Call::KindSchemas),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -532,6 +535,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
+        "validate" => {
+            return Some(Call::Validate {
+                layout: c.get("layout")?.as_str()?.to_string(),
+                path: PathBuf::from(c.get("path")?.as_str()?),
+            })
+        }
         "resolve" if c.get("registry").is_some() => {
             return Some(Call::Lookup {
                 doc: doc()?,
@@ -1026,9 +1035,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }),
     };
     let mut placement_planted = placement::Planted::default();
+    // #420's wrong programs live in scene3d's and the building module's operators.
+    let module_planted = input
+        .get("planted")
+        .and_then(Value::as_str)
+        .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
+        .map(str::to_string);
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(None) => return None,
+        Some(Some(_)) if module_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
             // #400's wrong programs live in the placement.
             Some(flag) => {
@@ -1309,6 +1325,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         placement_planted,
         fault,
         planted,
+        module_planted,
         calls,
         at,
         seeds,
@@ -1584,6 +1601,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-text",
     feature = "test-check-kind",
     feature = "test-leave-out-logic",
+    feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
     feature = "test-prog-registry",
@@ -1627,6 +1645,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #398: SVG import and formulas, drawn as marks2d's items.
         out.push(deep_canvas_vector::module::module());
+    }
+    if set >= BuildSet::Full {
+        // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
+        out.push(deep_canvas_scene3d::building::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -1724,6 +1746,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
+    // #489: a build without the data module, whose motion@1 digest equals the full set's.
+    #[cfg(feature = "test-leave-out-data")]
+    out.retain(|m| m.manifest.name != "data");
     out
 }
 
@@ -1885,6 +1910,12 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             *m = deep_canvas_marks::modules::marks2d_planted(p);
         }
     }
+    // #489: motion with a planted constraint solve, whose entry the constraint kit refuses.
+    if let Some(StartPlanted::Constraints(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "motion") {
+            *m = deep_canvas_motion::module::planted(p);
+        }
+    }
     // Every build set holds text and look, since a status mark needs text's shaper and look's
     // status map; the planted seal lets a build without look start (#388).
     for name in deep_canvas::registry::CORE_MODULES {
@@ -1964,6 +1995,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             Some(StartPlanted::Kinds(k)) => Some(k),
             _ => None,
         },
+        layouts: match planted {
+            Some(StartPlanted::Layouts(l)) => l,
+            _ => Default::default(),
+        },
     })
 }
 
@@ -1989,8 +2024,12 @@ enum StartPlanted {
     Listing(registries::Listing),
     /// #221: marks2d's relations solved by a planted program.
     Relations(deep_canvas_marks::relations::Planted),
+    /// #489: motion's constraint kinds solved by a planted program.
+    Constraints(deep_canvas_motion::kit::Planted),
     /// #412: a wrong deep_kinds listing, sheet, dump, diff or gallery.
     Kinds(kinds::Planted),
+    /// #415: a wrong first-party layout's cap or validator.
+    Layouts(deep_canvas_sandbox::layouts::Planted),
 }
 
 #[cfg(test)]
@@ -2011,6 +2050,7 @@ mod tests {
             ignores_unknown_occlusion: false,
             listing: None,
             kinds: None,
+            layouts: Default::default(),
         }
     }
 
@@ -2351,10 +2391,24 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "relation_reads_previous_place" => Ok(StartPlanted::Relations(
             deep_canvas_marks::relations::Planted::PreviousPlace,
         )),
+        "constraint_iterates_to_convergence" => Ok(StartPlanted::Constraints(
+            deep_canvas_motion::kit::Planted::Iterates,
+        )),
+        "constraint_reads_previous_output" => Ok(StartPlanted::Constraints(
+            deep_canvas_motion::kit::Planted::PreviousFrame,
+        )),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
+            pages_pack_cap: true,
+            ..Default::default()
+        })),
+        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
+            trusts_link_count: true,
+            ..Default::default()
+        })),
         _ if kinds::Planted::named(twin).is_some() => {
             Ok(StartPlanted::Kinds(kinds::Planted::named(twin).ok_or(())?))
         }

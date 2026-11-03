@@ -1,0 +1,15 @@
+{
+  "name": "openrows",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #420 acceptance suite: the rows fence with a repeat that names no count, list, part, curve or span at all. The pack check must refuse it.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "building": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "openrows.fence@1": "openrows.fence@1.json"
+  }
+}

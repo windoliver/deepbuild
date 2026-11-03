@@ -40,7 +40,75 @@ pub fn module() -> Module {
     }
 }
 
+/// The motion module with a planted constraint solve, whose `constraint@1` entry the
+/// constraint kit must refuse at the seal, naming the kind.
+pub fn planted(planted: crate::kit::Planted) -> Module {
+    Module {
+        register: match planted {
+            crate::kit::Planted::None => register,
+            crate::kit::Planted::Iterates => |r| register_with(r, crate::kit::Planted::Iterates),
+            crate::kit::Planted::PreviousFrame => {
+                |r| register_with(r, crate::kit::Planted::PreviousFrame)
+            }
+        },
+        ..module()
+    }
+}
+
+/// A two-item cycle through constraint kind `kind`, compiled for real: items `a` and `b`, each
+/// reading the other's position, one of them through the kind; a kind that reads no other item
+/// closes the loop through two drivers. The check's answer, as the kit reads it.
+pub fn cycle_through(kind: &str) -> Value {
+    let item = |id: &str, x: f64| json!({"id": id, "kind": "rect@1", "params": {"box": [0, 0, 4, 4]}, "at": {"pos": [x, 0, 0]}});
+    let mut constraints = serde_json::Map::new();
+    let mut drivers = serde_json::Map::new();
+    let reads_other = !matches!(kind, "limit" | "follow_path" | "spring_chain" | "rest_on");
+    let constraint = |owner: &str, other: &str| match kind {
+        "child_of" => json!({"owner": owner, "kind": kind, "parent": other}),
+        "copy" => json!({"owner": owner, "kind": kind, "what": "location", "target": other}),
+        "reach2" => json!({"owner": owner, "kind": kind, "chain": [owner, other, other], "target": other}),
+        "follow_tip" => json!({"owner": owner, "kind": kind, "item": other}),
+        "limit" => json!({"owner": owner, "kind": kind, "what": "location", "bounds": [[0, 10], null, null]}),
+        "follow_path" => json!({"owner": owner, "kind": kind, "path": [[0, 0], [10, 0]], "fraction": 0.5}),
+        "spring_chain" => json!({"owner": owner, "kind": kind, "bones": [owner]}),
+        "rest_on" => json!({"owner": owner, "kind": kind}),
+        _ => json!({"owner": owner, "kind": kind, "target": other}),
+    };
+    // b's position follows what a's constraint writes, so the constraint's read of b (or, for
+    // a kind that reads no other item, a's position a third driver sets from b) closes a loop.
+    let written = if matches!(kind, "look_at" | "reach2") { "rot/2" } else { "pos/0" };
+    constraints.insert("a".into(), constraint("a", "b"));
+    drivers.insert("b".into(), json!({"target": "items/b/at/pos/0", "expr": "v + 1", "vars": {"v": format!("items/a/at/{written}")}}));
+    if !reads_other {
+        drivers.insert("c".into(), json!({"target": "items/a/at/pos/1", "expr": "v", "vars": {"v": "items/b/at/pos/0"}}));
+    }
+    let doc = json!({"items": {"a": item("a", 1.0), "b": item("b", 2.0)},
+                     "constraints": constraints, "drivers": drivers});
+    let Value::Object(doc) = doc else { return json!({}) };
+    match Program::compile(&doc) {
+        Err(r) if r.code == "cycle" => {
+            // Each step reads `<entry> (<item>)`: the chain is its items.
+            let chain: Vec<&str> = r
+                .path
+                .split(" → ")
+                .filter_map(|e| e.rsplit_once(" (")?.1.strip_suffix(')'))
+                .collect();
+            json!({"code": r.code, "chain": chain})
+        }
+        Err(r) => json!({"code": r.code, "chain": []}),
+        Ok(_) => json!({"code": null, "chain": []}),
+    }
+}
+
 fn register(r: &mut Registrar) {
+    register_with(r, crate::kit::Planted::None);
+}
+
+fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
+    // #489: motion's kinds in the core's `constraint@1`, each with its kit fixture.
+    for (name, value) in crate::kit::entries(planted, cycle_through) {
+        r.entry("constraint@1", name, value, "R6");
+    }
     r.array("motion.program", "program", "document", "geometry", "plan");
     r.contribution(
         "motion.at",

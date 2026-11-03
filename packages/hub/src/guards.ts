@@ -4,6 +4,8 @@
 // over both; an entry whose planted call goes through, or whose twin is matched, is refused, naming it and the call.
 // Then it rewrites rules.json with every installed entry, its mode included, and what each tool counts as, so
 // deep-hook matches a call the same way with the hub up or down. The hub never reads an entry's `match` itself.
+// A fail_closed entry that names a program or an effect class must also deny its planted call with the program
+// computed by the line (#1097).
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -19,6 +21,14 @@ interface Call { tool_name: string; tool_input: Obj; cwd?: string }
 const isCall = (v: unknown): v is Call => isObj(v) && typeof v.tool_name === 'string' && isObj(v.tool_input);
 /** A call as a person reads it: a shell call's command, or the tool and its input. */
 const shown = (c: Call): string => (c.tool_name === 'Bash' && typeof c.tool_input.command === 'string' ? c.tool_input.command : `${c.tool_name} ${JSON.stringify(c.tool_input)}`);
+
+/** A shell call with its program computed by the line, `"$(printf git)" push`; none for a call that runs no program. */
+function computed(c: Call): Call | undefined {
+  const command = c.tool_name === 'Bash' && typeof c.tool_input.command === 'string' ? c.tool_input.command : '';
+  const found = /^((?:\s*\w+=\S*\s+)*)\s*([\w.+-]+)(?=\s|$)/.exec(command);
+  if (!found) return undefined;
+  return { ...c, tool_input: { ...c.tool_input, command: `${found[1]}"$(printf ${found[2]})"${command.slice(found[0].length)}` } };
+}
 
 /** Whether deep-hook's matcher reads `c` under `entry`, through its check mode. */
 function matches(deepHook: string, entry: unknown, c: Call, classes: Obj): Promise<boolean> {
@@ -41,6 +51,8 @@ export type Added = { status: 'installed'; names: string[] } | { status: 'refuse
  * and installs none of them.
  */
 export async function addGuards(dir: string, given: unknown, o: { deepHook: string; classes: Obj; plant?: Plant | undefined }): Promise<Added> {
+  // Only tests set it: the deep-hook whose check mode the install runs, such as a planted twin (#1097's AC4).
+  o = { ...o, deepHook: process.env.DEEP_HUB_TEST_DEEP_HOOK || o.deepHook };
   const refused = (reason: string): Added => ({ status: 'refused', reason });
   if (!isObj(given) || !isObj(given.entries) || !Object.keys(given.entries).length) {
     return refused('Give a file of {"v": 1, "entries": {<name>: guard@1}, "proofs": {<name>: {"planted": <call>, "twin": <call>}}}.');
@@ -58,6 +70,8 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
     try {
       if (!(await matches(o.deepHook, entry, proof.planted, o.classes))) return refused(`${name}: its planted call \`${shown(proof.planted)}\` goes through its match ${match}, so it guards nothing.`);
       if (await matches(o.deepHook, entry, proof.twin, o.classes)) return refused(`${name}: its twin \`${shown(proof.twin)}\` is matched by ${match}, so it would deny a call it must allow.`);
+      const form = (entry as Obj).fail_closed === true && /^(run|effect):/.test(match) ? computed(proof.planted) : undefined;
+      if (form && !(await matches(o.deepHook, entry, form, o.classes))) return refused(`${name}: its planted call with the program computed, \`${shown(form)}\`, goes through its match ${match}, so a line that computes the program gets past it.`);
     } catch (error) {
       return refused(`${name}: ${error instanceof Error ? error.message : String(error)}`);
     }

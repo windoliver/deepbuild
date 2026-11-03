@@ -1,0 +1,15 @@
+{
+  "name": "timedrows",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #420 acceptance suite: the rows fence with a repeat whose count reads the time, so it is not fixed at check. The pack check must refuse it.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "building": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "timedrows.fence@1": "timedrows.fence@1.json"
+  }
+}
