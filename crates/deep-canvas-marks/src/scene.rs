@@ -18,11 +18,12 @@
 //! span or a step by position reads boxes, so a frame that has one is built twice: once for every
 //! item's box, then with them.
 
-use std::cell::Cell;
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use crate::data;
 use crate::key::{ContentKey, KeyBuilder};
@@ -461,9 +462,9 @@ fn text_runs(
     Ok(out)
 }
 
-/// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width and
-/// alignment, and (#417) the family its font sets it in, the look's fallback families and its
-/// language.
+/// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width, line
+/// limit, overflow and alignment, and (#417) the family its font sets it in, the look's fallback
+/// families and its language.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextSpec {
     pub text: String,
@@ -476,6 +477,10 @@ pub struct TextSpec {
     pub size: f64,
     pub weight: u16,
     pub width: Option<f64>,
+    /// `max_lines`: lines past it are cut with an ellipsis, or masked.
+    pub max_lines: Option<u16>,
+    /// `overflow: mask`: text that doesn't fit draws whole, clipped to its box.
+    pub mask: bool,
     pub align: Align,
     /// A bound value: tabular figures, never cut short.
     pub bound: bool,
@@ -504,6 +509,11 @@ impl TextSpec {
             None => k.text("auto"),
         };
         k.text(if self.bound { "bound" } else { "free" });
+        match self.max_lines {
+            Some(n) => k.text("lines").int(i64::from(n)),
+            None => k.text("all"),
+        };
+        k.text(if self.mask { "mask" } else { "ellipsis" });
         k.int(self.align as i64);
         k.finish()
     }
@@ -568,6 +578,19 @@ pub fn text_spec_in(
             .and_then(|w| u16::try_from(w).ok())
             .unwrap_or(400),
         width: params.get("box").and_then(|b| num(b.get("w"))),
+        max_lines: match params.get("max_lines") {
+            None => None,
+            Some(n) => match n.as_u64().and_then(|n| u16::try_from(n).ok()) {
+                Some(n) => Some(n),
+                None => return refuse("bad_doc", format!("{path}/params/max_lines")),
+            },
+        },
+        mask: match params.get("overflow") {
+            None => false,
+            Some(Value::String(o)) if o == "ellipsis" => false,
+            Some(Value::String(o)) if o == "mask" => true,
+            Some(_) => return refuse("bad_doc", format!("{path}/params/overflow")),
+        },
         bound: shown.is_some() || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
         align: match params.get("align").and_then(Value::as_str) {
             None | Some("start") => Align::Start,
@@ -590,7 +613,7 @@ impl TextSpec {
             weight: self.weight,
             line_height: None,
             width: self.width.map(|w| w as f32),
-            max_lines: None,
+            max_lines: self.max_lines,
             align: match self.align {
                 Align::Start => deep_text::Align::Start,
                 Align::Center => deep_text::Align::Center,
@@ -598,7 +621,7 @@ impl TextSpec {
             },
             bound: self.bound,
             tabular: self.bound,
-            mask: false,
+            mask: self.mask,
         })
     }
 }
@@ -2440,6 +2463,59 @@ fn cover(built: &mut [(&str, Placed)], items: &Map<String, Value>) {
     }
 }
 
+thread_local! {
+    /// The shaper auto layout measures text leaves with (#375).
+    static LAYOUT_SHAPER: RefCell<deep_text::Shaper> = RefCell::new(deep_text::Shaper::new());
+}
+
+/// `items` with their frames' auto layout applied (#375): each frame that lays out, and each item
+/// one lays out, moved to its solved box, and a frame or a boxed mark sized to it. A text keeps its
+/// own box, which the layout measured it by.
+fn laid_out<'a>(
+    doc: &Map<String, Value>,
+    items: &'a Map<String, Value>,
+) -> Result<Cow<'a, Map<String, Value>>, Refused> {
+    let lays_out = |id: &str| {
+        items.get(id).is_some_and(|i| {
+            i.get("kind").and_then(Value::as_str) == Some("frame@1")
+                && i.get("params")
+                    .and_then(|p| p.get("layout"))
+                    .is_some_and(|l| l.as_str() != Some("none"))
+        })
+    };
+    if !items.keys().any(|id| lays_out(id)) {
+        return Ok(Cow::Borrowed(items));
+    }
+    let input = json!({"items": items, "bound_values": doc.get("bound_values")});
+    let boxes = LAYOUT_SHAPER
+        .with(|s| crate::layout::solve(&input, &mut s.borrow_mut()))
+        .map_err(|r| Refused {
+            code: r.code,
+            path: format!("items/{}", r.item),
+        })?;
+    let mut out = items.clone();
+    for (id, [x, y, w, h]) in boxes {
+        let parent = items
+            .get(&id)
+            .and_then(|i| i.get("parent"))
+            .and_then(Value::as_str);
+        let Some(item) = out.get_mut(&id).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        if !lays_out(&id) && !parent.is_some_and(lays_out) {
+            continue;
+        }
+        let at = item.entry("at").or_insert_with(|| json!({}));
+        let z = num(at.get("pos").and_then(|p| p.get(2))).unwrap_or(0.0);
+        at["pos"] = json!([x, y, z]);
+        if item.get("kind").and_then(Value::as_str) != Some("text@1") {
+            let params = item.entry("params").or_insert_with(|| json!({}));
+            params["box"] = json!([0.0, 0.0, w, h]);
+        }
+    }
+    Ok(Cow::Owned(out))
+}
+
 /// The rect a mark's scissors leave it, for a renderer that clips only by rect.
 fn clip_of(scopes: &[Scope]) -> Option<[f64; 4]> {
     scopes.iter().fold(None, |acc, s| {
@@ -2640,11 +2716,15 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let adjust = Adjust::read(item, ctx.palette, id)?;
     let mut marks: Vec<Mark> = match kind {
-        // A scale, a mask and a group draw nothing themselves, and a camera is the view a
-        // document is seen through, not a mark (#378: a 3D figure's camera). A graph, a
-        // salience level and a sheet are the graph, record and sheet modules' (#388), which
-        // lay them out and draw nothing yet.
-        "scale@1" | "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
+        // A scale draws only its legend. A mask and a group draw nothing themselves, and a
+        // camera is the view a document is seen through, not a mark (#378: a 3D figure's
+        // camera). A graph, a salience level and a sheet are the graph, record and sheet
+        // modules' (#388), which lay them out and draw nothing yet.
+        "scale@1" => match data::legend(id, item, ctx.items, ctx.palette, pos)? {
+            legend if legend.is_empty() => return Ok(None),
+            legend => legend,
+        },
+        "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
             return Ok(None)
         }
         "star@1" => {
@@ -2659,6 +2739,12 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 polygon: params.get("polygon") == Some(&Value::Bool(true)),
             };
             let verbs = star.verbs(&format!("{path}/params"))?;
+            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
+        }
+        "frame@1" if stroke.is_some() => {
+            // A stroked frame draws as a stroked rect does.
+            let radius = num(params.get("radius")).unwrap_or(0.0);
+            let verbs = outline::rect(frame_box(id, item)?, radius);
             vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
         }
         "frame@1" => {
@@ -2878,6 +2964,21 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     };
     let order = item.get("order").and_then(Value::as_str).unwrap_or("");
     let mut scopes = ctx.scopes.get(id).cloned().unwrap_or_default();
+    // Masked text draws whole, clipped to its box: its width, and its height or its line limit's.
+    if let [Mark::Text { spec, origin, .. }] = marks.as_slice() {
+        let side = |k: &str| params.get("box").and_then(|b| num(b.get(k)));
+        let lines = spec
+            .max_lines
+            .zip(spec.shaper_spec())
+            .map(|(n, s)| f64::from(n) * f64::from(s.line_height()));
+        if let (true, Some(w), Some(h)) = (spec.mask, side("w"), side("h").or(lines)) {
+            scopes.push(Scope::Clip {
+                item: format!("{id}#box"),
+                rect: [origin[0], origin[1], w, h],
+                radius: 0.0,
+            });
+        }
+    }
     if adjust.opacity < 1.0 {
         scopes.push(Scope::Opacity {
             item: format!("{id}#adjust"),
@@ -3018,6 +3119,7 @@ fn build(
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
+    let items = &*laid_out(doc, items)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
