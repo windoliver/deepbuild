@@ -1,6 +1,39 @@
 {
   "module": "marks2d",
   "phases": {
+    "items": [
+      {
+        "operator": "marks2d.relations",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "core.world",
+          "core.transform",
+          "core.fields",
+          "text.run",
+          "text.counter",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "marks2d.places"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "marks2d.place",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.world",
+          "marks2d.places"
+        ],
+        "writes": [
+          "marks2d.at"
+        ],
+        "per": "item"
+      }
+    ],
     "extract": [
       {
         "operator": "marks2d.item",
@@ -9,6 +42,7 @@
         "reads": [
           "core.fields",
           "core.world",
+          "marks2d.at",
           "text.counter",
           "look.palette",
           "view(locale)"
@@ -26,6 +60,7 @@
           "refs",
           "reading",
           "core.world",
+          "marks2d.at",
           "core.fields",
           "text.counter",
           "text.run",

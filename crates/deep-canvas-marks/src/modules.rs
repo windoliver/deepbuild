@@ -25,6 +25,7 @@ use deep_text::{Role, Shaped, Shaper};
 use serde_json::{json, Map, Value};
 
 use crate::look::Status;
+use crate::relations;
 use crate::scene::{
     self, object_or_empty, Frame, Mark, Palette, Record, Refused, Rgb, Shown, StatusMark, TextSpec,
 };
@@ -122,13 +123,69 @@ fn placed_items(v: &mut View<'_>) -> Result<Map<String, Value>, OpError> {
     Ok(items)
 }
 
-/// An item as the marks read it: its fields, at its world transform.
+/// An item as the marks read it: its fields, at its world transform, keeping its relations and
+/// a box-point pivot, which a transform doesn't hold, with what channels write on them (#221).
 fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
     let mut item = fields.to_json();
-    if let (Some(map), Some(at)) = (item.as_object_mut(), world) {
-        map.insert("at".into(), at.to_json());
+    let Some(map) = item.as_object_mut() else {
+        return item;
+    };
+    // `to_json` leaves `at` out but for what an edit wrote on it.
+    let edited = map.remove("at");
+    let Some(at) = world else {
+        if let Some(e) = edited {
+            map.insert("at".into(), e);
+        }
+        return item;
+    };
+    let mut placed = at.to_json();
+    if let (Some(own), Some(out)) = (fields.lowered.get("at"), placed.as_object_mut()) {
+        for k in ["place", "align"] {
+            if let Some(v) = own.get(k) {
+                let mut v = v.clone();
+                if let Some(e) = edited.as_ref().and_then(|e| e.get(k)) {
+                    overlay(&mut v, e);
+                }
+                out.insert(k.into(), v);
+            }
+        }
+        if let Some(p) = own.get("pivot").filter(|p| p.is_string()) {
+            out.insert("pivot".into(), p.clone());
+        }
     }
+    map.insert("at".into(), placed);
     item
+}
+
+/// `edit`'s members written over `base`, object by object and list by list.
+fn overlay(base: &mut Value, edit: &Value) {
+    match (base, edit) {
+        (Value::Object(b), Value::Object(e)) => {
+            for (k, v) in e {
+                match b.get_mut(k) {
+                    Some(slot) => overlay(slot, v),
+                    None => {
+                        b.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        (Value::Array(b), Value::Array(e)) => {
+            for (slot, v) in b.iter_mut().zip(e) {
+                if !v.is_null() {
+                    overlay(slot, v);
+                }
+            }
+        }
+        (slot, v) => *slot = v.clone(),
+    }
+}
+
+/// Each item's world transform: where its relations placed it (#221), else the core's.
+fn worlds_of<'a>(v: &mut View<'a>) -> Result<BTreeMap<&'a str, Val>, OpError> {
+    let mut worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
+    worlds.extend(v.every("marks2d.at")?);
+    Ok(worlds)
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -939,6 +996,23 @@ pub fn marks2d() -> Module {
     }
 }
 
+/// The marks2d module with a planted relation solve (#221), whose `constraint@1` entries' fixtures
+/// the constraint kit must refuse at the seal.
+pub fn marks2d_planted(planted: relations::Planted) -> Module {
+    Module {
+        register: match planted {
+            relations::Planted::None => register_marks2d,
+            relations::Planted::Iterates => {
+                |r| register_marks2d_with(r, relations::Planted::Iterates)
+            }
+            relations::Planted::PreviousPlace => {
+                |r| register_marks2d_with(r, relations::Planted::PreviousPlace)
+            }
+        },
+        ..marks2d()
+    }
+}
+
 /// What the frame draws: the draw list, each text's shaped run and each animated text's units as
 /// `[lift, opacity]`. The status marks are the text module's (`text.status`).
 #[derive(Debug)]
@@ -991,6 +1065,49 @@ impl deep_canvas::schedule::Canonical for Drawing {
 }
 
 fn register_marks2d(r: &mut Registrar) {
+    register_marks2d_with(r, relations::Planted::None);
+}
+
+fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
+    // #221: placement by relation, the module's entries in the core's `constraint@1`.
+    for (name, value) in relations::entries(planted) {
+        r.entry("constraint@1", name, value, "R2");
+    }
+    // Each frame, every placed item's world position from its relations, solved in one order
+    // over the evaluated boxes; then each placed item's own transform there.
+    r.array("marks2d.places", "places", "document", "transform", "items");
+    r.operator(
+        "relations",
+        "items",
+        &[
+            "refs",
+            "core.world",
+            "core.transform",
+            "core.fields",
+            "text.run",
+            "text.counter",
+            "table:text.fonts",
+        ],
+        &["marks2d.places"],
+    )
+    .document()
+    .applies(has_relations)
+    .run(relations_op);
+    r.array("marks2d.at", "transform", "item", "transform", "items");
+    r.operator(
+        "place",
+        "items",
+        &["core.world", "marks2d.places"],
+        &["marks2d.at"],
+    )
+    .applies(is_placed)
+    .run(place_op);
+    r.code(
+        relations::CYCLE,
+        "Items placed by relation that read each other back, through relations or parents.",
+        "Place one item of the chain by something outside it, so no relation reads back.",
+        false,
+    );
     r.array(
         "marks2d.frame",
         "draw_list",
@@ -1007,6 +1124,7 @@ fn register_marks2d(r: &mut Registrar) {
         &[
             "core.fields",
             "core.world",
+            "marks2d.at",
             "text.counter",
             "look.palette",
             "view(locale)",
@@ -1027,6 +1145,7 @@ fn register_marks2d(r: &mut Registrar) {
             "refs",
             "reading",
             "core.world",
+            "marks2d.at",
             "core.fields",
             "text.counter",
             "text.run",
@@ -1154,12 +1273,179 @@ fn register_marks2d(r: &mut Registrar) {
     }));
 }
 
+/// Whether `item` holds a relation.
+fn holds_relation(item: &Value) -> bool {
+    item.get("at")
+        .is_some_and(|a| a.get("place").is_some() || a.get("align").is_some())
+}
+
+fn has_relations(doc: &Value, _: &str, _: &Value) -> bool {
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.values().any(holds_relation))
+}
+
+/// Whether a relation moves `item`: its own, or an ancestor's, which carries it.
+fn is_placed(doc: &Value, _: &str, item: &Value) -> bool {
+    let items = doc.get("items").and_then(Value::as_object);
+    let mut at = Some(item);
+    for _ in 0..=items.map_or(0, Map::len) {
+        let Some(i) = at else { break };
+        if holds_relation(i) {
+            return true;
+        }
+        at = i
+            .get("parent")
+            .and_then(Value::as_str)
+            .and_then(|p| items?.get(p));
+    }
+    false
+}
+
+/// Every placed item's world position, by ID.
+#[derive(Debug, PartialEq)]
+pub struct Places(pub BTreeMap<String, [f64; 3]>);
+
+impl Canonical for Places {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.len().encode(out);
+        for (id, p) in &self.0 {
+            (id, p[0], p[1], p[2]).encode(out);
+        }
+    }
+}
+
+/// The boxes items take in the frame: marks2d's geometry, and each text's shaped run (a bound
+/// value's at its `widest`).
+struct Runs<'a> {
+    runs: BTreeMap<&'a str, Arc<Run>>,
+    bound: std::collections::BTreeSet<String>,
+    fonts: Arc<Shapers>,
+}
+
+impl Runs<'_> {
+    fn shaped(&self, id: &str, item: &Value) -> Option<Arc<Shaped>> {
+        let run = self.runs.get(id)?;
+        let widest = item
+            .get("params")
+            .and_then(|p| p.get("widest"))
+            .and_then(Value::as_str);
+        match widest {
+            Some(w) if self.bound.contains(id) => {
+                let spec = TextSpec {
+                    text: w.to_string(),
+                    ..run.spec.clone()
+                };
+                Some(self.fonts.lock()?.shape(&spec.shaper_spec()?))
+            }
+            _ => Some(Arc::clone(&run.shaped)),
+        }
+    }
+}
+
+impl relations::Bounds for Runs<'_> {
+    fn own(&mut self, id: &str, item: &Value, part: Option<&str>) -> Option<relations::Box4> {
+        if part.is_some() {
+            return None;
+        }
+        let kind = item.get("kind").and_then(Value::as_str)?;
+        let params = object_or_empty(item.get("params"));
+        if kind == "text@1" {
+            let shaped = self.shaped(id, item)?;
+            let w = params
+                .get("box")
+                .and_then(|b| b.get("w"))
+                .and_then(Value::as_f64)
+                .unwrap_or(f64::from(shaped.width));
+            let local = [0.0, 0.0, w, f64::from(shaped.height)];
+            return Some(relations::placed(local, relations::place_of(item, None)));
+        }
+        let local = relations::own_box(kind, params)?;
+        Some(relations::placed(
+            local,
+            relations::place_of(item, Some(local)),
+        ))
+    }
+
+    fn baseline(&mut self, id: &str, item: &Value) -> Option<f64> {
+        let shaped = self.shaped(id, item)?;
+        let (_, offset) = relations::place_of(item, None);
+        Some(offset[1] + f64::from(shaped.glyphs.first()?.y))
+    }
+}
+
+/// The relations solved over the frame's evaluated items (#221).
+fn relations_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let doc = v.document()?;
+    let frame = relations::Frame::of(object_or_empty(Some(doc)));
+    let mut items = placed_items(v)?;
+    // Each item's own `at.pos`, before its parents: what a relation adds after it.
+    let offsets: BTreeMap<String, [f64; 2]> = v
+        .every("core.transform")?
+        .into_iter()
+        .filter_map(|(id, t)| {
+            let t = t.as_typed::<Transform>()?;
+            Some((id.to_string(), [t.pos[0], t.pos[1]]))
+        })
+        .collect();
+    let runs = v
+        .every("text.run")?
+        .into_iter()
+        .filter_map(|(id, r)| r.as_typed::<Run>().map(|r| (id, r)))
+        .collect();
+    let bound = v
+        .every("text.counter")?
+        .into_iter()
+        .filter(|(_, s)| s.as_typed::<Option<Shown>>().is_some_and(|s| s.is_some()))
+        .map(|(id, _)| id.to_string())
+        .collect();
+    let fonts = v.table::<Shapers>("text.fonts")?;
+    let before: BTreeMap<String, Value> = items
+        .iter()
+        .map(|(id, i)| (id.clone(), i["at"]["pos"].clone()))
+        .collect();
+    let mut runs = Runs { runs, bound, fonts };
+    relations::place(
+        &mut items,
+        &offsets,
+        frame,
+        &mut runs,
+        &mut relations::Ops::default(),
+    )
+    .map_err(|r| OpError::new(r.code, r.path))?;
+    let mut places = BTreeMap::new();
+    for (id, item) in &items {
+        let pos = &item["at"]["pos"];
+        if before.get(id) != Some(pos) {
+            let n = |i: usize| pos[i].as_f64().unwrap_or(0.0);
+            places.insert(id.clone(), [n(0), n(1), n(2)]);
+        }
+    }
+    v.write("marks2d.places", Val::typed(Places(places)))
+}
+
+/// A placed item's world transform at its place (#221).
+fn place_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let id = v.id().unwrap_or_default();
+    let world = v.typed::<Transform>("core.world")?;
+    let places = v.typed::<Places>("marks2d.places")?;
+    let placed = match (world, places.as_ref().and_then(|p| p.0.get(id))) {
+        (Some(w), Some(pos)) => Transform { pos: *pos, ..*w },
+        (Some(w), None) => *w,
+        _ => return Ok(()),
+    };
+    v.write("marks2d.at", Val::typed(placed))
+}
+
 /// One item's marks, built from the item alone (#857); `None` for an item the frame builds
 /// itself.
 fn item(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or("");
     let fields = v.typed::<Fields>("core.fields")?;
-    let world = v.typed::<Transform>("core.world")?;
+    let world = match v.typed::<Transform>("marks2d.at")? {
+        Some(placed) => Some(placed),
+        None => v.typed::<Transform>("core.world")?,
+    };
     let shown = v
         .typed::<Option<Shown>>("text.counter")?
         .and_then(|s| (*s).clone());
@@ -1299,13 +1585,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let record = record_of(v.outside()?);
     // Each item's transform, looked up only for the items the frame builds itself.
-    let worlds = v.every("core.world")?;
-    let by_id = std::cell::OnceCell::new();
-    let world = |id: &str| {
-        let by_id: &BTreeMap<&str, &Val> =
-            by_id.get_or_init(|| worlds.iter().map(|(i, w)| (*i, w)).collect());
-        by_id.get(id).and_then(|w| w.as_typed::<Transform>())
-    };
+    let worlds = worlds_of(v)?;
+    let world = |id: &str| worlds.get(id).and_then(|w| w.as_typed::<Transform>());
     let fields: Vec<(&str, Arc<Fields>)> = v
         .every("core.fields")?
         .into_iter()
