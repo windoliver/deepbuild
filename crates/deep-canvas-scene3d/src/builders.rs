@@ -1998,6 +1998,36 @@ mod tests {
     }
 
     #[test]
+    fn a_swept_square_shades_each_side_flat_with_hard_corners() {
+        // An off-centre bar with a hole, swept along a straight line: every side is flat.
+        let doc = json!({"items": {"c": {"kind": "curve@1",
+            "params": {"points": [[0, 0, 0], [0, 0, 1]], "mode": "linear"}}}});
+        let p = json!({"outline": [[0, 0], [0.1, 0], [0.1, 0.04], [0, 0.04]],
+            "holes": [[[0.02, 0.01], [0.04, 0.01], [0.04, 0.03], [0.02, 0.03]]],
+            "along": {"curve": "c", "rings": 4}});
+        let ctx = Ctx {
+            doc: &doc,
+            id: "bar",
+            plants: Plants::default(),
+        };
+        let m = build("extrude@1", &p, &ctx).unwrap();
+        assert_eq!(estimate("extrude@1", &p, &ctx).unwrap(), m.positions.len() as u64);
+        for t in 0..m.triangles() {
+            let ids = [0, 1, 2].map(|j| m.indices[3 * t + j] as usize);
+            let [a, b, c] = ids.map(|i| m.positions[i]);
+            let face = unit(cross(sub(b, a), sub(c, a)));
+            for i in ids {
+                let n = m.normals[i];
+                assert!(
+                    dot(n, face) > 1.0 - 1e-9,
+                    "triangle {t}: vertex {i} at {:?} has normal {n:?}, its face {face:?}",
+                    m.positions[i]
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_uv_ball_of_32_has_561_vertices_and_a_geodesic_icosahedron_at_detail_2_has_540() {
         assert_eq!(both("ball@1", json!({"radius": 1, "segments": 32})).1, 561);
         assert_eq!(
