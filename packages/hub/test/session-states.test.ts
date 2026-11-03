@@ -77,3 +77,22 @@ it('a permission prompt with no hook for 5 minutes reads quiet, as the hub that 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('a row only an archived transcript made, naming the session by its handle, is no session of its own', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-states-'));
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  try {
+    const S = '7c4d5e60-1111-4222-8333-44445555e992';
+    const handle = S.replace(/-/g, '');
+    const hook = { writer: 'hook', actor: 'you', scope: 'you', session: S };
+    const at = Date.now();
+    const data = (kind: string) => (fixtures(kind)[0] as { data: Record<string, JsonValue> }).data;
+    await record.append(hook, { v: 1, id: ulid(at), kind: 'session.start', ts: at, data: data('session.start@1') });
+    await record.append({ writer: 'app', actor: 'you', scope: 'you' }, { v: 1, id: ulid(at + 1), kind: 'transcript.archived', ts: at + 1, data: { ...data('transcript.archived@1'), session: `session:${handle}` } });
+    const ids = (await sessionStates((sql) => record.raw(sql), at + 2)).map((r) => r.id).filter((id) => id.replace(/-/g, '') === handle);
+    expect(ids, 'one reading, of the session itself').toEqual([S]);
+  } finally {
+    await record.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

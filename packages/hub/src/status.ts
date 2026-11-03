@@ -41,7 +41,9 @@ export interface Reading { id: string; project_id: string | null; agent: string 
 export async function sessionStates(query: (sql: string) => Promise<unknown[]>, now: number): Promise<Reading[]> {
   // A database the hub hasn't opened since the stop's cause joined the table (#85) has no cause column yet.
   const causes = (await query("SELECT 1 AS c FROM pragma_table_info('sessions') WHERE name = 'cause'")).length > 0;
-  const sessions = (await query(`SELECT id, project_id, agent, status, last_seen, worktree, ${causes ? 'cause' : 'NULL AS cause'} FROM sessions`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null }[];
+  // A row no event of its own made is no session: as the row a transcript.archived makes, which names the session by
+  // its handle, its letters and digits, and so not by its ID.
+  const sessions = (await query(`SELECT id, project_id, agent, status, last_seen, worktree, ${causes ? 'cause' : 'NULL AS cause'} FROM sessions WHERE last_seen IS NOT NULL`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null }[];
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   // A process gone, unless the session started again since, as a resume does in a new process.
   const gone = new Set(((await query("SELECT DISTINCT g.session_id FROM events g WHERE g.kind = 'session.gone' AND g.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events s WHERE s.session_id = g.session_id AND s.kind = 'session.start' AND s.log_pos > g.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
