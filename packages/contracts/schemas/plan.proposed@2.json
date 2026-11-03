@@ -1,0 +1,275 @@
+{
+  "title": "plan.proposed@2",
+  "description": "A plan was proposed for an authority ask: each step with the targets it goes to, and where each target came from, placed by the core from the record.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [
+    "plans"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "plan.proposed"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection, never the payload."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "ask": {
+          "type": "string",
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "description": "An ask: handle.",
+          "maxLength": 8192
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "does": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                }
+              },
+              "undo": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "public": {
+                "type": "boolean"
+              },
+              "cost": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "targets": {
+                "type": "array",
+                "description": "Every place the step goes to that leaves the machine, as its raiser names it.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "address",
+                        "host",
+                        "remote",
+                        "repo",
+                        "channel",
+                        "payee"
+                      ],
+                      "description": "What a target is: a recipient address, a host, a git remote as the command names it, an owner/repo, a channel or a payee.",
+                      "x-closure": {
+                        "closed": "each value is a kind of place a step that leaves the machine goes, which the core places by its own rule, so a value outside the list has no meaning",
+                        "reopens": "a new major of this schema",
+                        "mark": "exhaustive"
+                      }
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "does",
+              "changes",
+              "undo",
+              "public",
+              "cost"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "diff": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
+        },
+        "targets": {
+          "type": "array",
+          "description": "Every target of every step, in step order, normalized, with the origin the core placed it at from the record; the agent's words never set it.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "address",
+                  "host",
+                  "remote",
+                  "repo",
+                  "channel",
+                  "payee"
+                ],
+                "description": "What a target is: a recipient address, a host, a git remote as the command names it, an owner/repo, a channel or a payee.",
+                "x-closure": {
+                  "closed": "each value is a kind of place a step that leaves the machine goes, which the core places by its own rule, so a value outside the list has no meaning",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "you",
+                  "decision",
+                  "repo",
+                  "read",
+                  "unknown"
+                ],
+                "description": "you: a prompt a person typed names it; decision: a saved decision covering the ask names it; repo: the repo's own configuration names it; read: only text the session read names it; unknown: none of these.",
+                "x-closure": {
+                  "closed": "each value is a rule the core places a target by, and whether a decision can cover it rests on the value, so a value outside the list has no meaning",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "first": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 8192,
+                "description": "For read, the session: or ev: handle of the first place that holds it; for decision, the decision's handle; null otherwise."
+              },
+              "warning": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 8192,
+                "description": "For read or unknown, the words the card shows before it arms; null otherwise."
+              },
+              "rule": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 8192,
+                "description": "For read or unknown, the decision that would have covered the step; null otherwise."
+              }
+            },
+            "required": [
+              "step",
+              "kind",
+              "ref",
+              "origin",
+              "first",
+              "warning",
+              "rule"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "ask",
+        "steps",
+        "diff",
+        "hash",
+        "targets"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
