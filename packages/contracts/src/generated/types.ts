@@ -2529,6 +2529,27 @@ export interface CompositionUsed {
   };
 }
 
+/** credential.loaded@1 */
+export interface CredentialLoaded {
+  v: 1;
+  id: string;
+  kind: "credential.loaded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    env: string;
+    by: "value" | "stand-in";
+    hosts?: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** deadline.moved@1 */
 export interface DeadlineMoved {
   v: 1;

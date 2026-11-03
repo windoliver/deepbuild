@@ -1,0 +1,20 @@
+{
+  "name": "composites",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "Composites as recipes (#420): a house, a tower, a lamp, an island and a cloud bank, built from scene3d's builders and the building module's kinds. Expanded at check; every repeat counts by an input, fixed at check.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0",
+      "building": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "composites.house@1": "house@1.json",
+    "composites.tower@1": "tower@1.json",
+    "composites.lamp@1": "lamp@1.json",
+    "composites.island@1": "island@1.json",
+    "composites.cloud_bank@1": "cloud_bank@1.json"
+  }
+}

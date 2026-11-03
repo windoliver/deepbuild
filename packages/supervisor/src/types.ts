@@ -45,6 +45,11 @@ export interface StartSpec {
    */
   input?: Buffer | (() => Buffer | undefined);
   grant?: Grant;
+  /**
+   * Credentials for its environment (#1106): one with `hosts` reaches it only as a stand-in, which the run's egress
+   * filter swaps for the value in one header of an HTTPS request to those hosts (and `methods`); one without, by value.
+   */
+  credentials?: { env: string; value: string; hosts?: string[]; methods?: string[] }[];
   /** No key: any free key of that kind's pool. `env`: the variable its key is passed to the process in. */
   leases?: { kind: string; key?: string; env?: string }[];
   /** Who holds the run's leases, as their events name the holder: a writer such as the session's deep mcp (`mcp:<session>`) whose call started the run; the core unless given. */
@@ -96,7 +101,9 @@ export interface Cleanup {
 }
 export interface RunStatus { run: string; state: 'held' | 'running' | 'exited' | 'cleaned' | 'BLOCKED'; on?: string[] }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask' | 'holds-lease-while-taken';
+export type Plant = 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask' | 'holds-lease-while-taken'
+  // #1106's: the stand-in's value in the run's environment too, a filter that substitutes on every allowed host, the run's CA in the login keychain.
+  | 'standin-value-in-env' | 'standin-every-host' | 'run-ca-in-login-keychain';
 export interface SupervisorOptions {
   /** Ownership records, leases, denials and cleanup outcomes go here, written as `core`. */
   record: RecordStore;

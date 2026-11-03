@@ -7,6 +7,8 @@
 //   guards     (issue #304) 200 forwarded PreToolUse calls with rules.json holding every shipped default entry, and
 //              200 with it empty, interleaved, each from spawn to exit: the p95 matching every entry adds; then
 //              `deep-hook check` on one default's planted call and on its twin, 200 each: their p95s
+//   unread     (issue #1097) the same, for two calls the reader can't read whole: a program the line computes and a
+//              nesting past the reader's depth, each denied by the shipped defaults: the p95 matching them adds
 //   backup     (issue #572) a 100 MB record, then 200 forwarded PreToolUse calls interleaved with a native no-op, each
 //              from spawn to exit and each answered while `deep backup` copies the record: the p95 overhead
 //   day-overhead   (issue #21) a day of 1,000 real tool calls, the hub up: p95 of the 2,000 hooks (spawn to exit)
@@ -103,6 +105,41 @@ const modes = {
         if (r.status !== 0) throw Error(`deep-hook didn't allow ls with the hub stopped: exit ${r.status}`);
       }
       return { failOpenP95Ms: p95(samples) };
+    } finally {
+      await stop(hub);
+    }
+  },
+
+  async unread(home) {
+    const { hub, cwd, call } = await setUp(home);
+    const defaults = JSON.parse(readFileSync(join(REPO, 'crates/deep-hook/default-rules.json'), 'utf8'));
+    const bare = join(home, 'bare');
+    mkdirSync(join(bare, '.deepbuild'), { recursive: true });
+    writeFileSync(join(bare, '.deepbuild', 'rules.json'), '{"v":1,"entries":{}}');
+    writeFileSync(join(bare, '.deepbuild', 'config.json'), JSON.stringify({ hub: { address: `unix:${join(home, '.deepbuild', 'hub.sock')}` } }));
+    writeFileSync(join(home, '.deepbuild', 'rules.json'), JSON.stringify(defaults));
+    let nested = 'pkill node';
+    for (let i = 0; i < 13; i++) nested = `sh -c "${nested.replace(/[\\"$`]/g, (c) => `\\${c}`)}"`;
+    const lines = { computed: '"$(printf rm)" -rf "$OUT"/*', nested };
+    const timed = (line, env) => {
+      const input = JSON.stringify({ ...JSON.parse(call), tool_input: { command: line } });
+      const t0 = performance.now();
+      const r = spawnSync(HOOK, ['claude-code', 'PreToolUse'], { cwd, env: { ...process.env, ...env }, input });
+      if (r.status !== 0 && r.status !== 2) throw Error(`deep-hook exited ${r.status} on ${line}: ${r.stderr}`);
+      return performance.now() - t0;
+    };
+    try {
+      const out = {};
+      for (const [name, line] of Object.entries(lines)) {
+        const all = [];
+        const none = [];
+        for (let i = 0; i < 200; i++) {
+          all.push(timed(line, { HOME: home }));
+          none.push(timed(line, { HOME: bare }));
+        }
+        out[`${name}MatchP95Ms`] = p95(all) - p95(none);
+      }
+      return out;
     } finally {
       await stop(hub);
     }
