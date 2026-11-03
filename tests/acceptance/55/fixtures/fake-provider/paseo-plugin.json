@@ -1,0 +1,5 @@
+{
+  "id": "dh55-fake",
+  "description": "#55's acceptance suite: a stand-in agent for the model and the agent's own CLI, the boundaries this repo doesn't own",
+  "requirements": { "paseo": ">=0.15.0" }
+}
