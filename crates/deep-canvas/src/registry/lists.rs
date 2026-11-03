@@ -52,6 +52,9 @@ pub struct RegistryDef {
     /// For a registry whose entries carry a planted twin (`gpu.step@1`): the entry's own fixture
     /// run on its twin, which must fail naming the entry.
     pub twin: Option<fn(&str, &Value) -> KitResult>,
+    /// For a registry of timed entries (cue kinds, shot moves, transitions): an entry's moves at
+    /// its defaults, printed from the same expansion the check runs (#412), never stored.
+    pub moves: Option<fn(&Value) -> Vec<Value>>,
     /// For a registry whose entries are programs (#238): the role they run in. Each entry names
     /// its program's asset by sha256 in `program`; its kit reads the program's bytes, in hex, in
     /// `wasm`, and only a build with the sandbox module, which admits and runs it, takes one.
@@ -74,6 +77,7 @@ impl RegistryDef {
             deprecated_since: None,
             replaced_by: None,
             twin: None,
+            moves: None,
             program: None,
         }
     }
