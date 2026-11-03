@@ -31,17 +31,18 @@ impl Hub<'_> {
     /// Every entry admitted packs fill, as each is listed: origin `agent` for a pack the working
     /// agent installed through its session, else `pack`.
     fn pack_entries(&self) -> Vec<SealedEntry> {
+        // #415: a pack's admitted layouts are data.layout@1 entries beside its `entries`.
+        let layouts = self.sandbox.layout_entries.iter().filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
         self.packs
             .all()
-            .flat_map(|p| {
-                let agent = self.pack_authors.contains_key(&p.id.text());
-                p.entries.iter().map(move |e| {
-                    let mut e = e.clone();
-                    if agent {
-                        e.origin = "agent";
-                    }
-                    e
-                })
+            .flat_map(|p| p.entries.iter())
+            .chain(layouts)
+            .map(|e| {
+                let mut e = e.clone();
+                if self.pack_authors.contains_key(&e.pack) {
+                    e.origin = "agent";
+                }
+                e
             })
             .collect()
     }

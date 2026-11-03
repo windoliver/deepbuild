@@ -88,12 +88,14 @@ pub fn has_shading(_: &Value, _: &str, item: &Value) -> bool {
     spec_of(kind_of(item)).is_some_and(|s| s.params.iter().any(|p| p.class != "geometry"))
 }
 
-/// The items a builder reads: a tube's curve, and each enabled modifier's (Modifier: "A
+/// The items a builder reads: a tube's curve, a sweep's, and each enabled modifier's (Modifier: "A
 /// disabled modifier reads nothing").
 fn refs(item: &Value, planted: Option<&str>) -> Vec<String> {
     let mut out = stack::refs(item, planted);
-    if let Some(p) = item.pointer("/params/path").and_then(Value::as_str) {
-        out.push(p.to_string());
+    for at in ["/params/path", "/params/along/curve"] {
+        if let Some(p) = item.pointer(at).and_then(Value::as_str) {
+            out.push(p.to_string());
+        }
     }
     out.sort();
     out.dedup();

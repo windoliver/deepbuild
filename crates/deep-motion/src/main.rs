@@ -1,7 +1,8 @@
 //! `deep-motion <eval|insert|run>`: JSON lines in, one JSON line out per input line, in order,
 //! exit 0; a line that can't be read, lacks a required field or names an unknown `planted` value
-//! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's, and
-//! `eval`'s `look`, `track`, `cameras` and `hash` the #417 one's.
+//! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's,
+//! `eval`'s `look`, `track`, `cameras` and `hash` the #417 one's, and its `input`, `view`,
+//! `unwrap`, `timing`, `order` and `constraints` the #489 one's.
 
 use std::io::{self, BufRead, Write};
 
@@ -11,10 +12,11 @@ use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas_motion::clock::{run, Mode};
 use deep_canvas_motion::curve::Ease;
 use deep_canvas_motion::doc::{feel_of, Feel, Refused};
-use deep_canvas_motion::eval::{frame, position, Validity};
+use deep_canvas_motion::eval::{frame_with, position, Validity};
+use deep_canvas_motion::follow::Source;
 use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
-use deep_canvas_motion::program::Program;
+use deep_canvas_motion::program::{track_hash, Options, Planted, Program};
 use serde_json::{json, Map, Value};
 
 fn bad_input() -> Value {
@@ -29,7 +31,24 @@ fn flicks(value: Option<&Value>) -> Option<i64> {
     value.and_then(Value::as_i64)
 }
 
-/// The request's input track, or `None` for an entry that isn't `{t, seq, control, value}`.
+/// The eval line's planted program (the #489 acceptance README: Planted programs).
+fn planted_of(v: Option<&Value>) -> Option<Planted> {
+    Some(match v {
+        None => Planted::None,
+        Some(Value::String(p)) => match p.as_str() {
+            "follow_steps_from_previous_frame" => Planted::FollowStepsFromPreviousFrame,
+            "schedules_whole_items" => Planted::SchedulesWholeItems,
+            "spring_drops_velocity" => Planted::SpringDropsVelocity,
+            "per_loop_rounds_period_to_flick" => Planted::PerLoopRoundsPeriod,
+            "transition_restarts_from_old_target" => Planted::TransitionRestarts,
+            _ => return None,
+        },
+        Some(_) => return None,
+    })
+}
+
+/// A request's input track (#417 `track`, #489 `input`), or `None` for an entry that isn't
+/// `{t, seq, control, value}`; #489's entries also carry their `writer`.
 fn track_of(value: Option<&Value>) -> Option<Vec<Entry>> {
     let Some(value) = value else {
         return Some(Vec::new());
@@ -80,16 +99,28 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     else {
         return bad_input();
     };
-    // The planted twin (#417 AC10) reads time.state's ease as linear.
-    let linear = match input.get("planted") {
+    let flag = |k: &str| input.get(k).and_then(Value::as_bool);
+    let reduced_motion = match input.get("view") {
         None => false,
-        Some(Value::String(p)) if p == "state_ease_linear" => true,
-        Some(_) => return bad_input(),
+        Some(v) => match v.get("reduced_motion") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return bad_input(),
+        },
     };
-    let Some(track) = track_of(input.get("track")) else {
+    // The planted twin (#417 AC10) reads time.state's ease as linear; #489's plants are motion's.
+    let linear = input.get("planted").and_then(Value::as_str) == Some("state_ease_linear");
+    let planted = if linear { Some(Planted::None) } else { planted_of(input.get("planted")) };
+    let (Some(planted), Some(track), Some(entries)) = (planted, track_of(input.get("track")), track_of(input.get("input"))) else {
         return bad_input();
     };
-    let program = match Program::compile(doc) {
+    let options = Options {
+        input: entries,
+        reduced_motion,
+        planted,
+        unwrap: flag("unwrap").unwrap_or(false),
+    };
+    let program = match Program::compile_with(doc, options) {
         Ok(p) => p,
         Err(r) => return refusal(r),
     };
@@ -113,10 +144,27 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         Err(e) => return json!({"ok": false, "code": "out_of_range", "path": e.path}),
     };
     let motion = &program.motion;
+    let mut state = program.state();
+    if flag("timing") == Some(true) {
+        // Each frame's own evaluation, the document compiled before the first.
+        let frames: Vec<Value> = times
+            .iter()
+            .map(|&t| {
+                let started = std::time::Instant::now();
+                program.evaluate(t, Validity::Full, &mut state);
+                let ms = started.elapsed().as_secs_f64() * 1e3;
+                json!({"t": t, "eval_ms": ms})
+            })
+            .collect();
+        return json!({"ok": true, "frames": frames});
+    }
+    let track = input.contains_key("input").then(|| {
+        json!({"hash": track_hash(&program.options.input), "entries": program.options.input.len()})
+    });
     let mut frames = Vec::with_capacity(times.len());
     let mut previous: Option<i64> = None;
     for &t in &times {
-        let f = frame(doc, &program, t, Validity::Full);
+        let f = frame_with(doc, &program, t, Validity::Full, &mut state);
         let passes = previous.map_or(0, |p| {
             let (_, before) = position(motion, p);
             (f.pass - before).max(0)
@@ -124,15 +172,41 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         let channels: Map<String, Value> = f
             .channels
             .iter()
-            .map(|(id, s)| {
+            .enumerate()
+            .map(|(c, (id, s))| {
                 let value = match s.value.as_slice() {
                     [one] => json!(one),
                     many => json!(many),
                 };
-                (
-                    id.clone(),
-                    json!({"value": value, "iterations": s.iterations}),
-                )
+                let mut out = json!({"value": value, "iterations": s.iterations});
+                // #417's follows come after the channels in the frame; only #489's report more.
+                let spec = motion.channels.get(c).and_then(|ch| ch.follow.as_ref());
+                if let (Some(spec), Some(Some(follow))) = (spec, program.channel_follows.get(c)) {
+                    let o = state.follow[c];
+                    if spec.rate {
+                        out["rate"] = json!(o.rate);
+                    }
+                    if spec.integral {
+                        out["integral"] = json!(o.integral);
+                    }
+                    if matches!(spec.source, Source::Control(_)) {
+                        // Built once per input track: every segment is solved before the first frame.
+                        out["segments"] = json!(follow.segments.len());
+                        out["solves"] = json!(follow.segments.len());
+                    }
+                }
+                (id.clone(), out)
+            })
+            .collect();
+        let ids = motion.limits.iter().map(|l| &l.id).chain(motion.constraints.iter().map(|c| &c.id));
+        let constraints: Map<String, Value> = ids
+            .zip(&state.reports)
+            .map(|(id, (ops, scale))| {
+                let mut r = json!({"ops": ops});
+                if scale.is_finite() {
+                    r["scale"] = json!(scale);
+                }
+                (id.clone(), r)
             })
             .collect();
         let placements: Map<String, Value> = motion
@@ -152,17 +226,22 @@ fn eval_line(input: &Map<String, Value>) -> Value {
                 )
             })
             .collect();
-        frames.push(json!({
+        let mut frame = json!({
             "t": f.t,
             "doc_t": f.doc_t,
             "pass": f.pass,
             "passes": passes,
             "items": f.items,
             "channels": channels,
+            "constraints": constraints,
             "placements": placements,
             "cameras": f.cameras.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect::<Map<String, Value>>(),
             "valid_until": f.valid_until,
-        }));
+        });
+        if let Some(track) = &track {
+            frame["input"] = track.clone();
+        }
+        frames.push(frame);
         previous = Some(t);
     }
     let markers: Map<String, Value> = motion
@@ -180,7 +259,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .iter()
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
-    json!({"ok": true, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash})
+    json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash})
 }
 
 fn insert_line(input: &Map<String, Value>) -> Value {

@@ -232,10 +232,12 @@ pub fn material<'a>(
     };
     let base = match p.get("base_color") {
         None => [0.8, 0.8, 0.8, 1.0],
-        Some(Value::String(role)) => match look.role(role) {
-            Some(c) => [srgb_decode(c[0]), srgb_decode(c[1]), srgb_decode(c[2]), 1.0],
-            None => return Err(bad("ref_unresolved", "base_color")),
-        },
+        Some(v @ (Value::String(_) | Value::Object(_))) => {
+            match role_of(Some(v)).and_then(|r| look.role(r)) {
+                Some(c) => [srgb_decode(c[0]), srgb_decode(c[1]), srgb_decode(c[2]), 1.0],
+                None => return Err(bad("ref_unresolved", "base_color")),
+            }
+        }
         Some(v) => {
             let c = color3(Some(v)).unwrap_or([0.8; 3]);
             let a = v.get(3).and_then(Value::as_f64).unwrap_or(1.0);
@@ -266,6 +268,15 @@ pub fn material<'a>(
         unlit: flag("unlit"),
         double_sided: flag("double_sided"),
     }))
+}
+
+/// A color field's role: a bare name, or `{role}` as #418 reads it.
+fn role_of(v: Option<&Value>) -> Option<&str> {
+    match v? {
+        Value::String(r) => Some(r),
+        Value::Object(o) => o.get("role")?.as_str(),
+        _ => None,
+    }
 }
 
 /// A pattern seed's 32-bit hash: FNV-1a over its JSON text, so any value seeds it.

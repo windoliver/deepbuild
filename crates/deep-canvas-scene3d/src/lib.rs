@@ -5,6 +5,8 @@ pub mod builders;
 pub mod building;
 pub mod curve;
 pub mod frames;
+/// The look's finish in f64, which the look module owns (#418).
+pub use deep_canvas_marks::finish;
 pub mod geom;
 pub mod gltf;
 pub mod label;
@@ -17,10 +19,11 @@ pub mod scene;
 pub mod spatial;
 pub mod spec;
 pub mod stack;
+pub mod sweep;
 
-/// The wrong programs #420's criteria plant in scene3d's and the building module's operators,
-/// each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 7] = [
+/// The wrong programs #420's and #441's criteria plant in scene3d's and the building module's
+/// operators, each reachable only through a proof surface's `planted`.
+pub const PLANTED: [&str; 11] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -28,4 +31,8 @@ pub const PLANTED: [&str; 7] = [
     "flat_as_smooth",
     "slab_size_as_shading",
     "keeps_disabled_refs",
+    "seam_twist_left",
+    "sweep_frenet",
+    "corner_square",
+    "u_by_span",
 ];

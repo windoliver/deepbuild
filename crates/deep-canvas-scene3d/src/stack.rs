@@ -921,14 +921,15 @@ fn bevel(m: &Mesh, width: f64, segments: usize) -> Mesh {
 fn curve_deform(m: &Mesh, curve: &crate::curve::Sampled, axis: usize) -> Mesh {
     let low = m.bounds()[0][axis];
     let (o1, o2) = ((axis + 1) % 3, (axis + 2) % 3);
+    // The curve's own frames where it has them (curve@1's, rotation-minimizing), else up.
     let frame = |s: f64| -> (V3, V3, V3, V3) {
-        let (c, t) = curve.at(s);
+        let (c, t, own) = curve.framed(s);
         let up = if t[1].abs() < 0.9 {
             [0.0, 1.0, 0.0]
         } else {
             [0.0, 0.0, 1.0]
         };
-        let n = unit(sub(up, scale(t, dot(up, t))));
+        let n = own.unwrap_or_else(|| unit(sub(up, scale(t, dot(up, t)))));
         (c, t, n, cross(t, n))
     };
     // Along x the frame's normal is the item's y and its binormal z; the other axes turn with it.

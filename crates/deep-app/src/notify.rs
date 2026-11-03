@@ -113,11 +113,28 @@ impl Notifier {
         looking_at: Option<&str>,
         sounds: bool,
     ) -> Vec<Notification> {
+        // The asks are read only on a tick that can change what is shown: one with a notification to withdraw, a
+        // notice to post or an ask come due. An idle tick reads nothing.
+        let (due, waiting): (Vec<_>, Vec<_>) =
+            self.waiting.drain(..).partition(|(_, at)| *at <= now);
+        self.waiting = waiting;
+        if self
+            .delivered
+            .iter()
+            .all(|notification| notification.ask.is_none())
+            && self.notices.is_empty()
+            && due.is_empty()
+        {
+            return Vec::new();
+        }
+        // An ask stays shown until the events close it, whether or not they hold its creation: one raised before the
+        // app started is read from the inbox, never from the events.
+        let closed = states::closed_asks(events);
         self.delivered.retain(|notification| {
             notification
                 .ask
                 .as_ref()
-                .is_none_or(|ask| states::is_open(events, ask))
+                .is_none_or(|ask| !closed.contains(ask.as_str()))
         });
         let mut out = Vec::new();
         for session in self.notices.drain(..) {
@@ -129,10 +146,12 @@ impl Notifier {
                 sound: None,
             });
         }
-        let (due, waiting): (Vec<_>, Vec<_>) =
-            self.waiting.drain(..).partition(|(_, at)| *at <= now);
-        self.waiting = waiting;
-        let open = states::open_asks(events, None);
+        // The open asks are read only for a tick with an ask come due.
+        let open = if due.is_empty() {
+            Vec::new()
+        } else {
+            states::open_asks(events, None)
+        };
         for (handle, _) in due {
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
                 continue;
@@ -231,6 +250,34 @@ fn clock_time(at: u64, now: u64) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_notification_held_from_before_the_app_started_stays_until_its_ask_closes() {
+        // The ask was raised before the app started: its creation is in the inbox, not among the events streamed since.
+        let held = Notification {
+            ask: Some("ask:a1".into()),
+            session: "s1".into(),
+            title: String::new(),
+            text: String::new(),
+            sound: None,
+        };
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&[], vec![held]);
+        let unrelated =
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a2", "data": {}});
+        notifier.notices.push("s2".into());
+        notifier.due(std::slice::from_ref(&unrelated), 1_000, None, false);
+        assert_eq!(notifier.delivered().len(), 2, "{:?}", notifier.delivered());
+        let closed =
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a1", "data": {}});
+        notifier.due(&[unrelated, closed], 2_000, None, false);
+        let left: Vec<&str> = notifier
+            .delivered()
+            .iter()
+            .map(|n| n.session.as_str())
+            .collect();
+        assert_eq!(left, ["s2"]);
+    }
 
     #[test]
     fn a_notification_says_when_the_default_applies_after_its_undo() {

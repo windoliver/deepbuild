@@ -85,6 +85,11 @@ pub struct Solid {
     pub material: Option<Material>,
     /// Object: see-through order's `sort_bias`, in m along the view axis (#421).
     pub sort_bias: f64,
+    /// Its coverage (#418): its material's alpha (1 opaque, 0 or 1 under a mask) times the item's
+    /// `adjust.opacity`. Below 1 it draws see-through and writes no ambient-occlusion depth.
+    pub alpha: f64,
+    /// Its material's emission × emission_strength, linear RGB.
+    pub emission: [f64; 3],
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -421,6 +426,9 @@ pub struct Scene {
     pub sun: Option<Sun>,
     /// Every light, in layer and item order (#421): what shades the solids that name a material.
     pub lights: Vec<Light>,
+    /// The first `sky@1`'s ambient light from above and below, linear RGB (#418); with none, the
+    /// solids keep the fixed ambient term.
+    pub sky: Option<[[f64; 3]; 2]>,
     pub others: Vec<Other>,
     /// Each curve item's samples in world metres, closed ones back to their start (#420).
     pub curves: BTreeMap<String, Vec<Vec3>>,
@@ -656,20 +664,6 @@ impl Index<&str> for Items<'_> {
 
 fn origin(m: &Affine3) -> Vec3 {
     [m[0][3], m[1][3], m[2][3]]
-}
-
-/// A linear color's 8-bit sRGB encoding.
-fn encode(c: [f64; 4]) -> [u8; 3] {
-    let e = |v: f64| {
-        let v = v.clamp(0.0, 1.0);
-        let s = if v <= 0.003_130_8 {
-            v * 12.92
-        } else {
-            1.055 * v.powf(1.0 / 2.4) - 0.055
-        };
-        (s * 255.0).round() as u8
-    };
-    [e(c[0]), e(c[1]), e(c[2])]
 }
 
 fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
@@ -1068,6 +1062,114 @@ fn edge_line(
 }
 
 /// A solid's color: its paint's role, or the look's `muted` when it names none.
+/// A linear RGB value: three (or four, alpha last) finite numbers at least 0.
+fn linear3(v: &Value) -> Option<[f64; 3]> {
+    let a = v.as_array().filter(|a| a.len() == 3 || a.len() == 4)?;
+    let mut out = [0.0; 3];
+    for (o, x) in out.iter_mut().zip(a) {
+        *o = num(Some(x)).filter(|x| *x >= 0.0)?;
+    }
+    Some(out)
+}
+
+fn encode8(v: f64) -> u8 {
+    let v = v.clamp(0.0, 1.0);
+    let e = if v <= 0.0031308 {
+        v * 12.92
+    } else {
+        1.055 * deep_canvas::ops::pow(v, 1.0 / 2.4) - 0.055
+    };
+    (e * 255.0).round() as u8
+}
+
+/// What an object's material and `adjust` give its surface (#418; Material: alpha_mode, alpha,
+/// emission; Item: adjust.opacity): its base color when the material sets one, its coverage and
+/// its emission.
+struct Surface {
+    color: Option<[u8; 3]>,
+    alpha: f64,
+    emission: [f64; 3],
+}
+
+fn surface(items: &Items<'_>, look: &Look3, id: &str, item: &Value) -> Result<Surface, Refused> {
+    let mut out = Surface {
+        color: None,
+        alpha: 1.0,
+        emission: [0.0; 3],
+    };
+    if let Some(o) = item.get("adjust").and_then(|a| a.get("opacity")) {
+        out.alpha = num(Some(o))
+            .filter(|o| (0.0..=1.0).contains(o))
+            .ok_or(Refused {
+                code: "out_of_range",
+                path: format!("items/{id}/adjust/opacity"),
+            })?;
+    }
+    let Some(material) = item.get("material").filter(|m| !m.is_null()) else {
+        return Ok(out);
+    };
+    let unresolved = || Refused {
+        code: "ref_unresolved",
+        path: format!("items/{id}/material"),
+    };
+    let mid = material.as_str().ok_or_else(unresolved)?;
+    let m = items
+        .get(mid)
+        .filter(|m| m.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .ok_or_else(unresolved)?;
+    let empty = Value::Object(Map::new());
+    let params = m.get("params").unwrap_or(&empty);
+    let path = format!("items/{mid}/params");
+    let bad = |k: &str| Refused {
+        code: "out_of_range",
+        path: format!("{path}/{k}"),
+    };
+    let mut alpha = 1.0;
+    out.color = match params.get("base_color") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(o)) => {
+            let role = o.get("role").and_then(Value::as_str);
+            Some(role.and_then(|r| look.role(r)).ok_or(Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/base_color/role"),
+            })?)
+        }
+        Some(v) => {
+            let c = linear3(v).ok_or_else(|| bad("base_color"))?;
+            if let Some(a) = v.as_array().and_then(|a| a.get(3)) {
+                alpha = num(Some(a)).ok_or_else(|| bad("base_color"))?;
+            }
+            Some(c.map(encode8))
+        }
+    };
+    if let Some(a) = params.get("alpha") {
+        alpha *= num(Some(a))
+            .filter(|a| (0.0..=1.0).contains(a))
+            .ok_or_else(|| bad("alpha"))?;
+    }
+    let coverage = match params.get("alpha_mode").and_then(Value::as_str) {
+        None | Some("opaque") => 1.0,
+        Some("blend" | "add") => alpha,
+        // A mask keeps a fragment whole or cuts it.
+        Some("mask") => {
+            let cutoff = num(params.get("alpha_cutoff")).unwrap_or(0.5);
+            if alpha >= cutoff {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        Some(_) => return Err(bad("alpha_mode")),
+    };
+    out.alpha *= coverage;
+    if let Some(e) = params.get("emission") {
+        let e = linear3(e).ok_or_else(|| bad("emission"))?;
+        let k = num(params.get("emission_strength")).unwrap_or(1.0);
+        out.emission = e.map(|c| c * k);
+    }
+    Ok(out)
+}
+
 fn paint_or_muted(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     if params.pointer("/paint/fill/role").is_none() {
         if let Some(c) = look.role("muted") {
@@ -1426,6 +1528,7 @@ pub(crate) fn evaluate_compiled(
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
     let mut lights = Vec::new();
+    let mut sky = None;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
     for layer_id in &order {
@@ -1464,13 +1567,17 @@ pub(crate) fn evaluate_compiled(
                     );
                     bounds.extend(corners(&model));
                     let material = light::material(item, |m| items.get(m), look, id)?;
+                    let surface = surface(&items, look, id, item)?;
+                    if surface.alpha <= 0.0 {
+                        continue;
+                    }
                     layer.solids.push(Solid {
                         id: id.clone(),
                         shape,
                         model,
-                        color: match &material {
-                            Some(m) if params.pointer("/paint/fill").is_none() => encode(m.base),
-                            _ => paint(look, params, &path)?,
+                        color: match surface.color {
+                            Some(c) => c,
+                            None => paint(look, params, &path)?,
                         },
                         stroke: inked(stroke(look, params, shape, &path)?, &material, shape, &path)?,
                         mesh: None,
@@ -1478,6 +1585,8 @@ pub(crate) fn evaluate_compiled(
                         receive_shadow: shadows(item, "receive_shadow"),
                         material,
                         sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
+                        alpha: surface.alpha,
+                        emission: surface.emission,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -1520,13 +1629,17 @@ pub(crate) fn evaluate_compiled(
                     let hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
+                    let surface = surface(&items, look, id, item)?;
+                    if surface.alpha <= 0.0 {
+                        continue;
+                    }
                     layer.solids.push(Solid {
                         id: id.clone(),
                         shape: Shape::Built(hash),
                         model,
-                        color: match &material {
-                            Some(m) if params.pointer("/paint/fill").is_none() => encode(m.base),
-                            _ => paint_or_muted(look, params, &path)?,
+                        color: match surface.color {
+                            Some(c) => c,
+                            None => paint_or_muted(look, params, &path)?,
                         },
                         stroke: inked(None, &material, Shape::Built(hash), &path)?,
                         mesh: Some(Arc::new(mesh)),
@@ -1534,6 +1647,8 @@ pub(crate) fn evaluate_compiled(
                         receive_shadow: shadows(item, "receive_shadow"),
                         material,
                         sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
+                        alpha: surface.alpha,
+                        emission: surface.emission,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -1637,13 +1752,26 @@ pub(crate) fn evaluate_compiled(
                             .unwrap_or(false),
                     });
                 }
+                "sky@1" if sky.is_none() => {
+                    let rgb = |k: &str| -> Result<[f64; 3], Refused> {
+                        match params.get(k) {
+                            None => Ok([0.0; 3]),
+                            Some(v) => linear3(v).ok_or(Refused {
+                                code: "out_of_range",
+                                path: format!("{path}/{k}"),
+                            }),
+                        }
+                    };
+                    sky = Some([rgb("ambient_top")?, rgb("ambient_low")?]);
+                }
                 "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
                     lights.extend(light::light(id, kind, params, origin(&m), dir, axes(&m), flicker));
                 }
-                "material@1" | "camera@1" => {}
+                // A material draws nothing itself; the objects naming it read it (#418).
+                "camera@1" | "sky@1" | "material@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -1703,6 +1831,7 @@ pub(crate) fn evaluate_compiled(
         overlays,
         sun,
         lights,
+        sky,
         others,
         curves,
         pages: labels.pages(),
