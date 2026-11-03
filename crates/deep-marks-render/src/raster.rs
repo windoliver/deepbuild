@@ -385,7 +385,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     .is_some_and(|(set, _)| self.text_sets.iter().any(|s| s == set));
                 if !item.contains('#') || row_of_set {
                     self.texts
-                        .insert(item.clone(), json!({"shown": spec.text, "glyphs": glyphs}));
+                        .insert(item.clone(), json!({"shown": shaped.shown, "glyphs": glyphs}));
                 }
             }
             Mark::Image {
