@@ -158,6 +158,14 @@ fn line_vs(
     let end = select(pa - dir * reach, pb + dir * reach, k.x > 0.5);
     let side = select(-reach, reach, k.y > 0.5);
     out.pos = from_px(end + nrm * side, select(ca, cb, k.x > 0.5));
+    // A mesh-edge line (#420): a hair toward the camera under reversed Z, so the faces it
+    // outlines don't hide it while a face in front still does; the planted one skips depth.
+    if (flags & 2u) != 0u {
+        out.pos.z = out.pos.z * 1.01;
+    }
+    if (flags & 4u) != 0u {
+        out.pos.z = out.pos.w;
+    }
     return out;
 }
 

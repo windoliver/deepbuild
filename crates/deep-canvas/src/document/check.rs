@@ -155,6 +155,7 @@ fn check_by(
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
+            issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
             let derived: BTreeSet<&str> = expansions
                 .iter()
@@ -2122,6 +2123,28 @@ pub(crate) fn resolve(
                     .is_some_and(|p| p.contains_key(*name)),
             };
             if known {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
+        // A param of one of the item's modifiers (Modifier; #420): it must reach a value the
+        // modifier holds, as a param's parts do.
+        ["modifiers", k, "params", rest @ ..] if !rest.is_empty() => {
+            let mut cursor = member(target, "modifiers")
+                .and_then(Value::as_array)
+                .and_then(|list| k.parse::<usize>().ok().and_then(|i| list.get(i)))
+                .and_then(|m| member(m, "params"));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
                 Ok(())
             } else {
                 unreachable()

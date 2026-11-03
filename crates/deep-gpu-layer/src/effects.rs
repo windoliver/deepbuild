@@ -642,7 +642,7 @@ fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Tex
     })
 }
 
-fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
+pub(crate) fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
     // The error scope resolves at once on a device whose work is polled.
     let waker = std::task::Waker::noop();
     let mut cx = std::task::Context::from_waker(waker);

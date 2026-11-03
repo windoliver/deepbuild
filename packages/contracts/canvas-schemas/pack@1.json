@@ -79,7 +79,7 @@
       "properties": {
         "op": {
           "type": "string",
-          "enum": ["mark", "item"],
+          "enum": ["mark", "item", "builder"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a core release that adds a map the document holds",

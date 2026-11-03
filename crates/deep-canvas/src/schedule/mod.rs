@@ -415,6 +415,9 @@ pub struct Planted {
     /// changed items' part of its last result rebuilds all of it (#896's planted
     /// `marks2d.frame`).
     pub forgets_changes: bool,
+    /// A canvas module's own wrong program by name, which its operators and keys read through
+    /// [`View::planted`] (#420's builders, dirty maps and disabled modifiers).
+    pub module: Option<String>,
 }
 
 /// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
@@ -2451,8 +2454,23 @@ impl Session {
             // A step's state is what every step up to t left.
             h.text("t").int(self.t);
         }
+        // A keyed operator's node holds exactly what it reads of its item and the document.
+        let keyed = sop.op.keyed.zip(node.item);
+        if let Some((keyed, i)) = keyed {
+            let item = &l.items[i];
+            let value = keyed(
+                &l.doc,
+                &item.id,
+                &item.value,
+                s.options.planted.module.as_deref(),
+            );
+            h.text("keyed").bytes(&canonical(&value));
+        }
         for (r, (term, b)) in sop.op.reads.iter().zip(&node.reads).enumerate() {
             h.text(term);
+            if keyed.is_some() && matches!(b, Bound::SelfItem(_) | Bound::Refs) {
+                continue;
+            }
             let planted_hash = s.options.planted.key_hashes.as_deref() == Some(term.as_str());
             match b {
                 // Under `hash@2`, many writers enter by their count and the root of the tree over
@@ -2615,6 +2633,7 @@ impl Session {
             s.options.access_log,
             step,
             forgets,
+            s.options.planted.module.as_deref(),
         );
         let item = node.item.map(|i| l.items[i].id.as_str());
         if let Some(timing) = s.options.timing {

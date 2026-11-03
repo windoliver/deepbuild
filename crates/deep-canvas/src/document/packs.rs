@@ -15,7 +15,7 @@
 //! The planted wrong programs the acceptance suite names are runtime variants on
 //! [`Planted`], never features: this crate has none.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
@@ -137,7 +137,7 @@ pub struct Pack {
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
-const STEP_OPS: &[&str] = &["mark", "item"];
+const STEP_OPS: &[&str] = &["mark", "item", "builder"];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
     "number", "integer", "bool", "choice", "vec3", "range", "text", "ID",
@@ -621,7 +621,7 @@ fn check_recipe(
                     let what = if op == "recipe" {
                         "a recipe step nests, which lands with 3D scenes; nothing recurses here"
                     } else {
-                        "not a step op of this slice (mark, item)"
+                        "not a step op of this slice (mark, item, builder)"
                     };
                     issues.push(bad(&format!("{at}/op"), json!(op), what));
                     continue;
@@ -670,6 +670,20 @@ fn check_recipe(
                             continue;
                         }
                         match (count, as_) {
+                            // A count is fixed at check (Recipe: "repeats have counts fixed at
+                            // check"): it reads only the recipe's inputs and lets, never `t`.
+                            (Some(c), Some(_))
+                                if Template::of(&c).names().iter().any(|n| {
+                                    !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n)
+                                }) =>
+                            {
+                                issues.push(bad(
+                                    &format!("{at}/repeat/count"),
+                                    c.clone(),
+                                    &format!("step `{step_id}` repeats by a count that reads more than the recipe's inputs and lets, so no check can fix it"),
+                                ));
+                                continue;
+                            }
                             (Some(c), Some(a)) if well_named(a) => {
                                 Some((Template::of(&c), a.to_string()))
                             }
@@ -677,7 +691,7 @@ fn check_recipe(
                                 issues.push(bad(
                                     &format!("{at}/repeat"),
                                     r.clone(),
-                                    "a repeat is `{count, as}`",
+                                    &format!("step `{step_id}`'s repeat is `{{count, as}}`: one without a count has no count fixed at check"),
                                 ));
                                 continue;
                             }
@@ -1110,6 +1124,57 @@ pub fn expand(
             continue;
         };
         out.push(expansion);
+    }
+    out
+}
+
+/// A channel or driver of `doc` on an instance's input that one of its recipe's repeat counts
+/// reads: the count would change while playing, so it is no longer fixed at check (Recipe:
+/// "repeats have counts fixed at check"; #420).
+pub fn driven_counts(
+    doc: &Value,
+    items: &Map<String, Value>,
+    resolved: &Resolved<'_>,
+) -> Vec<Issue> {
+    let mut out = Vec::new();
+    if resolved.is_empty() {
+        return out;
+    }
+    for (id, item) in items {
+        let Some((_, recipe)) = super::kind_text(item).and_then(|k| resolved.recipe(k)) else {
+            continue;
+        };
+        let counted: BTreeSet<String> = recipe
+            .steps
+            .iter()
+            .filter_map(|s| s.repeat.as_ref())
+            .flat_map(|(count, _)| count.names())
+            .filter(|n| recipe.inputs.contains_key(n))
+            .collect();
+        for section in ["channels", "drivers"] {
+            for (cid, c) in member(doc, section)
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+            {
+                let Some(target) = member(c, "target").and_then(Value::as_str) else {
+                    continue;
+                };
+                let hit = counted.iter().find(|n| {
+                    let at = format!("items/{id}/params/{n}");
+                    target == at || target.starts_with(&format!("{at}/"))
+                });
+                if let Some(n) = hit {
+                    out.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        format!("{section}/{cid}/target"),
+                        json!(target),
+                        &format!("`{target}` drives `{n}`, which a repeat of `{}` counts by: a count is fixed at check, so no channel or driver may move it", recipe.id),
+                    ));
+                }
+            }
+        }
     }
     out
 }
@@ -1585,6 +1650,30 @@ impl Template {
     /// The value as the recipe wrote it.
     pub fn source(&self) -> &Value {
         &self.source
+    }
+
+    /// The names its expressions read.
+    pub fn names(&self) -> Vec<String> {
+        fn walk(e: &Expr, out: &mut Vec<String>) {
+            match e {
+                Expr::Num(_) => {}
+                Expr::Name(n) => out.push(n.clone()),
+                Expr::Neg(a) => walk(a, out),
+                Expr::Bin(_, a, b) => {
+                    walk(a, out);
+                    walk(b, out);
+                }
+                Expr::Call(_, args) => args.iter().for_each(|a| walk(a, out)),
+            }
+        }
+        let mut out = Vec::new();
+        match &self.form {
+            Form::Expr(e) => walk(e, &mut out),
+            Form::Literal => {}
+            Form::List(l) => l.iter().for_each(|t| out.extend(t.names())),
+            Form::Map(m) => m.iter().for_each(|(_, t)| out.extend(t.names())),
+        }
+        out
     }
 
     pub fn eval(&self, scope: &[(String, Value)]) -> Result<Value, String> {
