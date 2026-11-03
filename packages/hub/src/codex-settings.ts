@@ -272,6 +272,11 @@ export function recordedServer(root: string): { node: string; cli: string } | un
 }
 /** Your `hooks = false` under [features], which setup never flips. */
 export const hooksDisabled = (root: string): boolean => configTables(join(recordedHome(root), 'config.toml'))?.get('features')?.get('hooks') === 'false';
+/** Whether Codex's trusted projects hold one of a folder's paths (#322): its `[projects."<path>"]` table says `trust_level = "trusted"`. */
+export function codexTrusted(paths: string[]): boolean {
+  const tables = configTables();
+  return paths.some((p) => /^["']trusted["']$/.test(tables?.get(`projects.${p}`)?.get('trust_level') ?? ''));
+}
 /** The `tool_timeout_sec` Codex gives DeepBuild's MCP server, in seconds. */
 export function toolTimeoutS(file = codexConfig()): number {
   const set = configTables(file)?.get(`mcp_servers.${MCP_SERVER}`)?.get('tool_timeout_sec');
