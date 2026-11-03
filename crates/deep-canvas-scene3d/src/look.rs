@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use deep_canvas::ops;
 use serde_json::Value;
 
-pub use deep_canvas_marks::finish::ToneMap;
 pub use deep_canvas_marks::finish::exposure_scale;
+pub use deep_canvas_marks::finish::ToneMap;
 use deep_canvas_marks::finish::{read_grade, read_tone_map, Grade, DEBAND_MAX_LSB};
 
 /// The look's basis: physical looks deband by default, drawings don't.
@@ -69,7 +69,6 @@ pub fn unit_ev100() -> f64 {
     -ops::log2(1.2)
 }
 
-
 fn hex(text: &str) -> Option<[u8; 3]> {
     let h = text.strip_prefix('#')?;
     if h.len() != 6 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -123,7 +122,11 @@ impl Look3 {
             None | Some("drawing") => Basis::Drawing,
             Some("physical") => Basis::Physical,
             Some("indexed") => Basis::Indexed,
-            Some(other) => return Err(format!("basis: {other} is not physical, drawing or indexed")),
+            Some(other) => {
+                return Err(format!(
+                    "basis: {other} is not physical, drawing or indexed"
+                ))
+            }
         };
         out.grade = read_grade(look.get("grade"))?;
         out.ao = match look.get("ao") {
@@ -140,7 +143,9 @@ impl Look3 {
                 let half = match o.get("resolution").and_then(Value::as_str) {
                     None | Some("half") => true,
                     Some("full") => false,
-                    Some(other) => return Err(format!("ao.resolution: {other} is not half or full")),
+                    Some(other) => {
+                        return Err(format!("ao.resolution: {other} is not half or full"))
+                    }
                 };
                 Some(Ao {
                     radius: num("radius", d.radius),
@@ -158,7 +163,9 @@ impl Look3 {
             Some(v) => v.as_f64().ok_or("deband_lsb is a number of 8-bit steps")?,
         };
         if !(0.0..=DEBAND_MAX_LSB).contains(&lsb) {
-            return Err(format!("deband_lsb: {lsb} is outside [0, {DEBAND_MAX_LSB}]"));
+            return Err(format!(
+                "deband_lsb: {lsb} is outside [0, {DEBAND_MAX_LSB}]"
+            ));
         }
         let spatial = match look.get("deband").and_then(Value::as_str) {
             None => out.basis == Basis::Physical,
@@ -184,9 +191,14 @@ mod tests {
     #[test]
     fn studio_looks_carry_their_defaults() {
         let read = |text: &str| Look3::read(&serde_json::from_str(text).unwrap()).unwrap();
-        let neutral = read(include_str!("../../../packs/studio-1.0.0/looks/physical_neutral.json"));
+        let neutral = read(include_str!(
+            "../../../packs/studio-1.0.0/looks/physical_neutral.json"
+        ));
         assert_eq!(neutral.tone_map, ToneMap::Neutral);
-        assert_eq!((neutral.basis, neutral.deband), (Basis::Physical, Some(1.0)));
+        assert_eq!(
+            (neutral.basis, neutral.deband),
+            (Basis::Physical, Some(1.0))
+        );
         assert!((neutral.exposure - 1.0).abs() < 1e-12);
         for text in [
             include_str!("../../../packs/studio-1.0.0/looks/physical_film.json"),
@@ -196,8 +208,13 @@ mod tests {
             assert!(matches!(l.tone_map, ToneMap::Agx { .. }));
             assert!(l.ao.is_some() && l.deband.is_some());
         }
-        let ink = read(include_str!("../../../packs/studio-1.0.0/looks/drawing_ink.json"));
-        assert_eq!((ink.tone_map, ink.basis, ink.deband), (ToneMap::None, Basis::Drawing, None));
+        let ink = read(include_str!(
+            "../../../packs/studio-1.0.0/looks/drawing_ink.json"
+        ));
+        assert_eq!(
+            (ink.tone_map, ink.basis, ink.deband),
+            (ToneMap::None, Basis::Drawing, None)
+        );
         assert!(ink.grade.is_identity());
     }
 }

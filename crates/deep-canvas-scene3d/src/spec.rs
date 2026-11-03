@@ -76,15 +76,31 @@ fn paint() -> P {
 /// A light's color as a blackbody temperature, in place of `color` (#421).
 fn temperature() -> P {
     ranged(
-        p("temperature", "K", "K", Value::Null, S, json!(6500), json!(2700)),
+        p(
+            "temperature",
+            "K",
+            "K",
+            Value::Null,
+            S,
+            json!(6500),
+            json!(2700),
+        ),
         1000.0,
         40000.0,
     )
 }
 
-/// The channel whose value at t scales a light's power (#421).
+/// What scales a light's power at t (#421): a gain, or the channel whose value is one.
 fn flicker() -> P {
-    p("flicker", "channel", "", Value::Null, S, Value::Null, Value::Null)
+    p(
+        "flicker",
+        "f32 | channel",
+        "",
+        json!(1),
+        S,
+        json!(1),
+        json!(0.5),
+    )
 }
 
 fn shade() -> P {
@@ -494,7 +510,15 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             ),
             temperature(),
             p("priority", "integer", "", json!(0), S, json!(0), json!(1)),
-            p("shadow", "bool", "", json!(false), S, json!(false), json!(true)),
+            p(
+                "shadow",
+                "bool",
+                "",
+                json!(false),
+                S,
+                json!(false),
+                json!(true),
+            ),
             flicker(),
         ];
         if kind == "light.area@1" {
@@ -545,7 +569,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         )
     };
     let flag = |name| p(name, "bool", "", json!(false), S, json!(false), json!(true));
-    let material = || Spec {
+    let material = || {
+        Spec {
         kind: "material@1",
         module: "scene3d",
         params: vec![
@@ -596,7 +621,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!(1),
                 json!(2),
             ),
-            p("from", "material name", "", Value::Null, S, Value::Null, Value::Null),
+            p("from", "material name", "", Value::Null, S, json!("steel"), json!("glass")),
             unit("alpha", 1.0, 1.0, 0.5),
             p(
                 "alpha_mode",
@@ -653,6 +678,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         ],
         reads: None,
         fixture: json!({"it": item("material@1", json!({"roughness": 0.4}))}),
+    }
     };
     let rect = json!([[0, 0], [2, 0], [2, 1], [0, 1]]);
     Some(match kind {

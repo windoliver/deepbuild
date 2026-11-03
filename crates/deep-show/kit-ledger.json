@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "be6dad6ee4d3245e4cc8405e650f5da55c8a9f60a56f2534b648b50672b10816",
+    "digest": "61895e892184e0916e2b909a8919b39f75b859592b93b687981dbecaa65673ac",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -173,7 +173,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "5194b9cfd720f89e3b8d171d5dd10c535f41ca92ffb86860e0948be83ce6c77a",
+    "digest": "b3f57480060935f79cff082656dd45b00aeb2e6f2c1dc73a60770396e3ea6f37",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
