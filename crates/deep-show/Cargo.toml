@@ -58,6 +58,15 @@ test-json = []
 test-debug-alt = []
 test-debug-digest = []
 test-peek = ["dep:deep-canvas-test-modules"]
+# Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
+# kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
+# fixture digests A and B, and a kind whose one-liner overruns the sheet.
+test-preview = ["dep:deep-canvas-test-modules"]
+test-cue = ["dep:deep-canvas-test-modules"]
+test-cue-span = ["dep:deep-canvas-test-modules"]
+test-ring-a = ["dep:deep-canvas-test-modules"]
+test-ring-b = ["dep:deep-canvas-test-modules"]
+test-sheet-wordy = ["dep:deep-canvas-test-modules"]
 test-up-1-0 = ["dep:deep-canvas-test-modules"]
 test-up-1-1 = ["dep:deep-canvas-test-modules"]
 test-nudge = ["dep:deep-canvas-test-modules"]

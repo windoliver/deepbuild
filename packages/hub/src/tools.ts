@@ -128,6 +128,16 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
       state: maybe(str('Such as enabled, disabled, focused or checked.')),
     })),
   }),
+  deep_kinds: object({
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page.' },
+    registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
+    cursor: maybe(str('The next an earlier page gave; null for the first page.')),
+    word: maybe(str('word: the word, as the other tool spells it.')),
+    query: maybe(str('search: words every hit must hold.')),
+    example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
+    guide: maybe(str('read: a guide, by the name a hit gave.')),
+    offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
+  }),
   deep_env: object({ action: { type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),

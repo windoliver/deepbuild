@@ -134,6 +134,9 @@ pub struct Pack {
     /// The entries it fills into registries the build declares, each admitted by its registry's
     /// kit at the pack check (#200).
     pub entries: Vec<registry::lists::SealedEntry>,
+    /// A familiar-names pack's words (Pack: math@1's `aliases`): each word, the kind it maps to
+    /// and the conversion the pack states for it, `{target, conversion, renamed_from?}`, by word.
+    pub aliases: BTreeMap<String, Value>,
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
@@ -303,6 +306,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => Vec::new(),
         Some(e) => check_entries(&id, e, sealed, &mut issues),
     };
+    let aliases = match fields.get("aliases") {
+        None => BTreeMap::new(),
+        Some(a) => check_aliases(a, &mut issues),
+    };
     for key in fields.keys() {
         if !PACK_KEYS.contains(&key.as_str()) {
             issues.push(Issue::envelope(
@@ -322,7 +329,43 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         recipes,
         digest: digest(manifest),
         entries,
+        aliases,
     })
+}
+
+/// A pack's `aliases`: each word maps to a kind as `name@major`, with the conversion the pack
+/// states as text; anything else is refused at `aliases/<word>`, so no mapping is inferred.
+fn check_aliases(aliases: &Value, issues: &mut Vec<Issue>) -> BTreeMap<String, Value> {
+    let mut out = BTreeMap::new();
+    let Some(words) = aliases.as_object() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "aliases".into(),
+            aliases.clone(),
+            "not an object",
+        ));
+        return out;
+    };
+    for (word, alias) in words {
+        let target = alias.get("target").and_then(Value::as_str);
+        let conversion = alias.get("conversion").and_then(Value::as_str);
+        let keys_ok = alias.as_object().is_some_and(|a| {
+            a.keys()
+                .all(|k| matches!(k.as_str(), "target" | "conversion" | "renamed_from"))
+        });
+        match (target.and_then(crate::kinds::parse_kind), conversion) {
+            (Some(_), Some(_)) if keys_ok => {
+                out.insert(word.clone(), alias.clone());
+            }
+            _ => issues.push(Issue::envelope(
+                "out_of_range",
+                format!("aliases/{word}"),
+                alias.clone(),
+                "an alias is {target: name@major, conversion: text, renamed_from?}",
+            )),
+        }
+    }
+    out
 }
 
 /// A pack's registry entries (Registry and seal: registries), each checked at the pack check: in
@@ -457,6 +500,7 @@ const PACK_KEYS: &[&str] = &[
     "requires",
     "recipes",
     "entries",
+    "aliases",
 ];
 
 /// The recipe's keys.

@@ -4053,11 +4053,12 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'find_actions'));
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
+        case 'deep_kinds': return await this.kinds(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -4236,6 +4237,18 @@ export class Core {
     if (this.options.plant === 'deep-show-waits-for-app' && reply.outcome === 'presented' && !(await waitForApp(this.appOpen))) {
       return { ...reply, outcome: 'not_presented', reason: 'timeout', snapshots: [] };
     }
+    return reply;
+  }
+  /**
+   * deep_kinds (#412): the canvas core's listing, words, guides and gallery. It reads and changes nothing, so it needs
+   * no session; a refusal is the canvas core's error@2, at its path under the call's arguments.
+   */
+  private async kinds(args: Obj): Promise<Obj> {
+    const call: Obj = { call: 'deep_kinds' };
+    for (const [k, v] of Object.entries(args)) if (v !== null) call[k] = v;
+    const reply = await this.canvasCall(call);
+    const e = reply.error;
+    if (isObj(e)) throw refuse(String(e.code), `/params/arguments${String(e.path)}`, String(e.remediation), e.actual);
     return reply;
   }
   /** A revision the canvas core made current: recorded by its hash, its canonical document in evidence, and presented to the app. */
