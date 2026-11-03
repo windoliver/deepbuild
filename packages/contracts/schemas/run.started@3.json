@@ -156,7 +156,7 @@
             "type": "string",
             "maxLength": 8192
           },
-          "description": "Its program and arguments, each cut at the read cap when `withheld` names argv."
+          "description": "Its program and arguments, as the evidence store would scrub them and cut at the read cap when `withheld` names argv."
         },
         "cwd": {
           "type": "string",
@@ -271,7 +271,7 @@
             "minLength": 1,
             "maxLength": 8192
           },
-          "description": "What of it the record doesn't keep, so a run rebuilt from the record can't run again as it was: each variable whose value the evidence store would scrub or that is past the read cap, as $NAME, and argv or command when past the read cap."
+          "description": "What of it the record doesn't keep as it was, so a run rebuilt from the record can't run again: each variable whose value the evidence store would scrub, past the read cap or whose name no environment takes, as $NAME; and argv, cwd, command, stand_ins, deadline or a grant list (grant.<name>) when scrubbed, cut or out of bounds."
         }
       },
       "required": [

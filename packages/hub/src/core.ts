@@ -311,6 +311,44 @@ const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.
   + `"data":${r.data},"evidence":${r.evidence ?? '[]'}${r.subject === null ? '' : `,"subject":${q(r.subject)}`}${r.seq === null ? '' : `,"seq":${q(r.seq)}`}`
   + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
 
+/**
+ * What the record keeps of a run's spec in its run.started@3 (#996): each text as the evidence store would scrub it and
+ * within the read cap, each list within its bound. What that changed is named in `withheld` ($NAME for a variable), and
+ * a run rebuilt from the record with any of it withheld can't run again as it was.
+ */
+function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] } {
+  const CAP = 8192;
+  const MANY = 65536;
+  const withheld: string[] = [];
+  const clean = (v: string): string => scrubText(v, { env: run.env, held }).slice(0, CAP);
+  const list = (name: string, values: string[], max: number, empty = true): string[] => {
+    const kept = values.slice(0, max).map(clean).filter((v) => empty || v);
+    if (kept.length !== values.length || kept.some((v, i) => v !== values[i])) withheld.push(name);
+    return kept;
+  };
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(run.env)) {
+    if (/^[^=]+$/.test(k) && k.length <= CAP && clean(v) === v) env[k] = v;
+    else withheld.push(`$${k.slice(0, CAP - 1)}`);
+  }
+  const argv = list('argv', run.argv, MANY);
+  const cwd = clean(run.cwd);
+  if (cwd !== run.cwd) withheld.push('cwd');
+  const grant = Object.fromEntries(Object.entries(run.grant).map(([k, v]) => [k, Array.isArray(v) ? list(`grant.${k}`, v, MANY) : v]));
+  const command = run.command === undefined ? undefined : clean(run.command);
+  if (run.command !== undefined && command !== run.command) withheld.push('command');
+  const stand_ins = run.stand_ins && list('stand_ins', run.stand_ins, 1024, false);
+  const deadline = run.deadline !== undefined && Number.isFinite(run.deadline) && run.deadline >= 0 ? run.deadline : null;
+  if (run.deadline !== undefined && deadline === null) withheld.push('deadline');
+  return {
+    spec: {
+      argv: argv.length ? argv : ['-'], cwd: cwd || '/', env, grant: grant as JsonValue, deadline_ms: deadline,
+      ...(command ? { command } : {}), ...(stand_ins ? { stand_ins } : {}),
+    },
+    withheld: [...new Set(withheld)].slice(0, MANY),
+  };
+}
+
 export class Core {
   private readonly root: Root;
   private readonly now: () => number;
@@ -5074,6 +5112,12 @@ export class Core {
     // other writer's start or finish counts.
     const rows = (await this.record.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
       (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
+    // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
+    const now = this.now();
+    await this.appendCore('reading.recorded', {
+      reading: `reading:${ulid(now)}`, value: rows.length, unit: 'runs rebuilt from the record', as_of: now,
+      source: `${basename(this.root.runs)} couldn't be read, so it was kept aside as ${basename(aside)}`, n: 1, outside: false,
+    });
     this.writeJournal((runs) => {
       for (const row of rows) {
         const d = JSON.parse(row.data) as Obj;
@@ -5086,11 +5130,6 @@ export class Core {
           ...(Array.isArray(d.withheld) && d.withheld.length ? { withheld: d.withheld as string[] } : {}),
         };
       }
-    });
-    const now = this.now();
-    await this.appendCore('reading.recorded', {
-      reading: `reading:${ulid(now)}`, value: rows.length, unit: 'runs rebuilt from the record', as_of: now,
-      source: `${basename(this.root.runs)} couldn't be read, so it was kept aside as ${basename(aside)}`, n: 1, outside: false,
     });
   }
   /** Changes the journal and writes it whole: a temp file, synced, renamed and its folder synced, one numbered point. */
@@ -5145,28 +5184,18 @@ export class Core {
     const lease = await slot(this.leases, holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.now();
-    // The record keeps no value the evidence store would scrub, nor text past its read cap: each such variable ($NAME)
-    // or field is named as withheld instead, and a rebuild can't run it again.
-    const fits = (v: string): boolean => v.length <= 8192;
-    const kept = (k: string, v: string): boolean => fits(k) && fits(v) && scrubText(v, { env: run.env, held: this.options.held }) === v;
-    const recorded = Object.fromEntries(Object.entries(run.env).filter(([k, v]) => kept(k, v)));
-    const withheld = [
-      ...Object.keys(run.env).filter((k) => !(k in recorded)).map((k) => `$${k.slice(0, 8191)}`),
-      ...(run.argv.every(fits) ? [] : ['argv']), ...(run.command === undefined || fits(run.command) ? [] : ['command']),
-    ];
+    const { spec, withheld } = recordable(run, this.options.held);
     await this.append(this.connection('core'), {
       v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
       data: {
         run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
         // What it runs (#996): a journal that can't be read is rebuilt from it.
-        argv: run.argv.map((a) => a.slice(0, 8192)), cwd: run.cwd, env: recorded, withheld,
-        grant: run.grant as JsonValue, deadline_ms: run.deadline ?? null, ...(run.environment ? { environment: true } : {}),
-        ...(run.command !== undefined ? { command: run.command.slice(0, 8192) } : {}), ...(run.stand_ins ? { stand_ins: run.stand_ins } : {}),
+        ...spec, withheld, ...(run.environment ? { environment: true } : {}),
       },
     }).catch(async (error: unknown) => {
-      // A start the record refused never ran: it leaves neither the journal nor its slot.
-      this.writeJournal((runs) => { delete runs[run.run]; });
+      // A start the record refused never ran: it leaves neither its slot nor the journal, and the refusal is what's thrown.
       await this.leases.release(lease.id, []).catch(() => undefined);
+      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
       throw error;
     });
     const token = randomBytes(24).toString('base64url');

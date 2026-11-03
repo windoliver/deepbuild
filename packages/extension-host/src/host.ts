@@ -840,7 +840,7 @@ class Host implements ExtensionHost {
         void options.record.append(CORE, { v: 1, id: ulid(now), kind: 'terminal.refused', ts: now, data: { terminal, pid } }).catch(() => undefined);
       },
       ...((TERMINAL_PLANTS as readonly string[]).includes(plant as string) ? { plant: plant as TerminalPlant } : {}),
-      ...(options.point ? { point: options.point } : {}),
+      ...(options.point ? { point: options.point } : {}), now: options.now,
     });
     const series = this.series = options.evidence ? new SeriesStore({
       record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
@@ -1224,7 +1224,8 @@ class Host implements ExtensionHost {
       }
       return;
     }
-    await Promise.all(owned.map((t) => this.terminals.stop(t)));
+    // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
+    await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
   }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
@@ -3517,6 +3518,7 @@ class Host implements ExtensionHost {
   async opened(): Promise<void> {
     const damaged = this.terminals.damaged;
     if (!damaged) return;
+    // The reading first, then the index written again: a cut in between finds the index damaged and reads it again.
     const now = this.options.now();
     await this.options.record.append(CORE, {
       v: 1, id: ulid(now), kind: 'reading.recorded', ts: now,
@@ -3525,6 +3527,7 @@ class Host implements ExtensionHost {
         source: `terminals.json couldn't be read whole, so it was kept aside as ${basename(damaged.aside)}; lost: ${damaged.lost.slice(0, 50).join(', ') || 'none'}${damaged.lost.length > 50 ? ` and ${damaged.lost.length - 50} more` : ''}`,
       },
     });
+    this.terminals.settle();
   }
 
   async close(): Promise<void> {
