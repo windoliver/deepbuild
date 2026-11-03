@@ -31,7 +31,7 @@ import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
-import type { ClaimCheck, Surface } from './gate-runner.js';
+import type { ClaimCheck, DefinitionState, Surface } from './gate-runner.js';
 import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
 import { headOf } from './session-facts.js';
 import { derivedId, type Plant } from './wire.js';
@@ -129,12 +129,6 @@ interface Pending { session: string; agent: string; definition: Definition; hand
 interface Opening { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: WorkItem }
 /** A claim made on a task before its definition locked (#322): judged against the definition once the lock lands. */
 interface Early { claim: string; session: string; agent: string; cwd: string }
-/**
- * How a claim's definition stands when its checks start: locked; waiting, a lock expected soon (your answer, or the
- * drafting still running), which the stop's hold waits for; pending, with nothing on its way; or held by a cause
- * outside the code.
- */
-export type DefinitionState = 'locked' | 'waiting' | 'pending' | { blocked: string };
 
 /** The roles whose text can remove or waive a requirement; an automated account's never does, whatever its membership. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
@@ -260,9 +254,11 @@ export class AskTasks {
     process.stderr.write(`deep hub: the definition of ${task_ref} was not locked: ${error instanceof Error ? error.message : String(error)}\n`);
   }
 
-  /** The plan window changed: each definition whose drafting waited at your reserve is locked again, or waits on. */
+  /** The plan window changed: each definition whose drafting waited at your reserve is locked once the window clears, and waits on, told once, while it doesn't. */
   windowChanged(): void {
     for (const [task_ref, w] of [...this.waiting]) {
+      const why = this.o.atReserve?.(w.opening.agent);
+      if (why) { w.why = why; continue; }
       this.waiting.delete(task_ref);
       void this.lock(w.opening).catch((error: unknown) => this.unlocked(task_ref, error));
     }

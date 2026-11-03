@@ -36,13 +36,13 @@ import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, 
 import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
-import { AskTasks, type DefinitionState, type WorkItem } from './ask-tasks.js';
+import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { GateRunner, type ClaimCheck } from './gate-runner.js';
+import { GateRunner, type ClaimCheck, type DefinitionState } from './gate-runner.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
