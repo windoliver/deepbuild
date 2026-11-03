@@ -461,6 +461,35 @@ const cachedBytes = new WeakMap<Transcripts, Map<string, number>>();
  * A transcript in the store, parsed once by hash, the least recently read dropped first past the byte bound. Only a
  * parsed one is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
  */
+/**
+ * Transcript copies as an ask placing its plan's targets reads them (#1098), by SHA-256: each read as it is archived,
+ * so a raise finds it parsed. Kept apart from the learned layer's, which reads a copy again when it couldn't.
+ */
+export type Placing = Map<string, { bytes: number; messages: Promise<Message[] | undefined> }>;
+/** The placing copy of `sha`, read now when it isn't kept; the oldest go past TRANSCRIPT_BYTES_KEPT. */
+export function placingTranscript(store: EvidenceStore | undefined, placing: Placing, sha: string): Promise<Message[] | undefined> {
+  const kept = placing.get(sha);
+  if (kept) {
+    placing.delete(sha);
+    placing.set(sha, kept);
+    return kept.messages;
+  }
+  const entry = { bytes: 0, messages: Promise.resolve<Message[] | undefined>(undefined) };
+  entry.messages = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
+    if (!b) { placing.delete(sha); return undefined; }
+    entry.bytes = b.length;
+    let total = 0;
+    for (const e of placing.values()) total += e.bytes;
+    for (const [oldest, e] of placing) {
+      if (total <= TRANSCRIPT_BYTES_KEPT || oldest === sha) break;
+      total -= e.bytes;
+      placing.delete(oldest);
+    }
+    return [...readTranscript(b)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+  }, () => { placing.delete(sha); return undefined; });
+  placing.set(sha, entry);
+  return entry.messages;
+}
 function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcripts, sha: string): Promise<Map<string, Entry> | undefined> {
   let sizes = cachedBytes.get(transcripts);
   if (!sizes) cachedBytes.set(transcripts, (sizes = new Map()));
