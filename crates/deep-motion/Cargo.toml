@@ -1,0 +1,20 @@
+[package]
+name = "deep-motion"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# The motion module's proof binary (#391, #489): JSON lines in, one answer per line. Outside the
+# deep-canvas* crates because `eval`'s `timing` reads the clock, which the canvas lint keeps out of
+# checked code; nothing a check reads is computed here.
+[[bin]]
+name = "deep-motion"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #417: `deep-motion eval` takes a shipped look by its ID, for its time feel.
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
