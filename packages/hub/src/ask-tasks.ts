@@ -1,27 +1,38 @@
-// Ask-tasks in the kernel (#303; design: What done means, fixed at the start, and The contract (kernel)).
+// Ask-tasks in the kernel (#303; design: What done means, fixed at the start, and The contract (kernel)), and the done
+// gate's core reads (#322): each task's acceptance criteria through its work source's `work.item@2` readings, and
+// claims on tasks whose definition hasn't locked.
 //
 // - A prompt you typed that asks for new or changed behavior opens a task under the session's thread, keyed by the
 //   issue it names or by its message handle (`session:<id>#<msg>`). One nobody typed, one that only asks a question,
 //   and a rename open none. The rule reads the words' form, with no model: a question asks, a rename renames, and
 //   anything else you typed asks for a change, so an unplaced form opens a task rather than going unjudged.
 // - The kernel locks the definition it is handed and never drafts one: here a test's fixture
-//   (DEEP_HUB_TEST_DRAFTS), the issue's criteria from week 3, the drafting job's output from week 5. A task with
-//   none handed waits. The lock records the hash, the issue's revision and the base commit; each requirement keeps
-//   the author of the text it came from, with the role the work source's `work.item@1` reading gives them
-//   (DEEP_HUB_TEST_WORK is the test source), and each check's bytes are kept by digest in the evidence store.
-// - Text from anyone but you or a repo collaborator adds requirements and never removes or waives one, and a
-//   definition that carries such text locks only after one ask about it.
+//   (DEEP_HUB_TEST_DRAFTS), or the drafting job's output. With none handed, a task opened from a work item takes its
+//   definition from the item's reading: one requirement per acceptance criterion, in the reading's order, quoting it
+//   in full and authored by the item's author (#322), each criterion linted for its observable, its threshold with its
+//   unit, the wrong case that must fail it and its proof depth; in this repo, a criterion's check is the test tagged
+//   with its ID. A task with no item and none handed waits. The lock records the hash, the issue's revision and the
+//   base commit; each requirement keeps the author of the text it came from, with the role the work source's
+//   `work.item@2` reading gives them (DEEP_HUB_TEST_WORK is the test source; the GitHub source reads the API, or the
+//   recorded answers DEEP_HUB_TEST_GITHUB names), and each check's bytes, and each expected output it references, are
+//   kept by digest in the evidence store. A drafted check lives under `.deepbuild/`, behind its guard: a draft that
+//   names one elsewhere doesn't lock, and the record says why.
+// - Text from anyone but you or a repo collaborator, an automated account's included, adds requirements and never
+//   removes or waives one, and a definition that carries such text locks only after one ask about it.
+// - While the account's plan window is at your reserve, the drafting job waits, so the definition does; a claim
+//   meanwhile is judged on the repo's spec, and once the window resets the lock lands and the claim is judged against it.
 // - At each claim the hash is recomputed from the stored definition and the checks' bytes on disk; a check changed
 //   since the lock is a proposal naming its file, never a new definition.
 // - A requirement may declare the surface its check enters through (#874), carried to the gate runner's base run for
 //   a stand-in on a base with nothing to start; the stand-in's hash is recorded in its `stand_in`, which the hash
 //   leaves out. A surface with no fixed form goes to the early question before the definition locks.
-import { readFile, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, normalize, sep } from 'node:path';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
-import type { ClaimCheck, Surface } from './gate-runner.js';
+import type { ClaimCheck, DefinitionState, Surface } from './gate-runner.js';
+import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
 import { headOf } from './session-facts.js';
 import { derivedId, type Plant } from './wire.js';
 
@@ -48,20 +59,82 @@ export function asksForChange(text: string): boolean {
   return !(text.trim().endsWith('?') || ASKS.test(clauses[0]!));
 }
 
+// ---- The criteria lint (#322; design: Solved or not). Each part is read from the criterion's words, with no model.
+
+/** What a criterion names that can be observed: an outcome verb, or a measured thing. */
+const OBSERVABLE = /\b(?:finish(?:es)?|complet(?:es|ed)|return(?:s|ed)?|reject(?:s|ed)?|accept(?:s|ed)?|respond(?:s|ed)?|answer(?:s|ed)?|show(?:s|n)?|display(?:s|ed)?|render(?:s|ed)?|log(?:s|ged)?|emit(?:s|ted)?|writ(?:es|ten)|read(?:s)?|contain(?:s|ed)?|equal(?:s)?|match(?:es|ed)?|fail(?:s|ed)?|pass(?:es|ed)?|exit(?:s|ed)?|refus(?:es|ed)|den(?:ies|ied)|allow(?:s|ed)?|send(?:s)?|sent|receiv(?:es|ed)|open(?:s|ed)?|clos(?:es|ed)|start(?:s|ed)?|stop(?:s|ped)?|record(?:s|ed)?|mark(?:s|ed)?|flag(?:s|ged)?|nam(?:es|ed)|list(?:s|ed)?|count(?:s|ed)?|lock(?:s|ed)?|wait(?:s|ed)?|run(?:s)?|ran|hold(?:s)?|held|keep(?:s)?|kept|stay(?:s|ed)?|block(?:s|ed)?|timer|status|count|response|output|header|field|line|row|byte|request|message|event|verdict|reading|error|exit code|page|screen|element|button|file|record|table)\b/i;
+/** A threshold's number, with the comparator or count word before it. */
+const THRESHOLD = /\b(?:under|below|within|at most|less than|no more than|fewer than|over|above|at least|more than|exactly|equal to|up to|per|after|before|every|once|twice)\s+(?:\d[\d,.]*|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b[<>≤≥=]\s*\d[\d,.]*|\b(?:\d[\d,.]*|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?=(?:%|percent|ms|milliseconds?|s\b|sec|seconds?|minutes?|min\b|hours?|h\b|days?|weeks?|px|pixels?|kb|mb|gb|bytes?|rows?|requests?|times?|attempts?|items?|users?|runs?|calls?|retries|lines?|files?|tests?|pages?|elements?|frames?|fps|hz|x\b|×))|\b(?:status|code|exit code|http)\s*\d{3}\b|\bwith\s+\d{3}\b/gi;
+/** A unit right after a threshold's number: a unit of time, size, share or count, or a status code's name. */
+const UNIT_AFTER = /^(?:\d[\d,.]*|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:%|percent|ms|milliseconds?|s\b|sec|seconds?|minutes?|min\b|hours?|h\b|days?|weeks?|px|pixels?|kb|mb|gb|bytes?|rows?|requests?|times?|attempts?|items?|users?|runs?|calls?|retries|lines?|files?|tests?|pages?|elements?|frames?|fps|hz|x\b|×)/i;
+/** Whether a criterion states a threshold, and whether each threshold it states carries its unit. */
+function thresholds(text: string): { threshold: boolean; unit: boolean } {
+  const found = [...text.matchAll(THRESHOLD)];
+  if (!found.length) return { threshold: false, unit: false };
+  const unit = found.every((m) => {
+    const span = m[0];
+    // A status code names its unit by its word; a comparator's number by the unit after it.
+    if (/^(?:status|code|exit code|http|with)\b/i.test(span)) return true;
+    const rest = text.slice(m.index! + span.search(/\d|zero|one|two|three|four|five|six|seven|eight|nine|ten/i));
+    return UNIT_AFTER.test(rest);
+  });
+  return { threshold: true, unit };
+}
+/** The wrong case that must fail it: a negative, a failure or the other way round. */
+const WRONG_CASE = /\b(?:fails?(?:\s+it)?|must fail|is refused|is rejected|is denied|is blocked|does not|doesn't|do not|don't|never|no longer|not\s+\w+|otherwise|instead|rather than|wrong|invalid|missing|expired|malformed|longer than|slower than|more than|past|beyond|without|unless|except|else)\b/i;
+/** The proof depth: a unit test, an integration test, a journey (end to end, a browser, a simulator), or a live run. */
+const DEPTH = /\b(?:unit(?:\s+test)?s?|integration(?:\s+test)?s?|end[- ]to[- ]end|e2e|journey|browser|playwright|cypress|simulator|emulator|live(?:\s+run)?|in production|against the (?:app|stack|server)|proven by|through the (?:api|cli|ui|command|route|page))\b/i;
+/** The parts a criterion lacks, each as the flag names it: its observable, its threshold with its unit, the wrong case, its depth. */
+export function lintCriterion(text: string, plant?: Plant | undefined): { observable: boolean; threshold: boolean; unit: boolean; wrong_case: boolean; depth: boolean } {
+  const t = thresholds(text);
+  // The planted wrong program only looks for a number: any number passes as a threshold with its unit.
+  const threshold = plant === 'lint-number-only' ? /\d/.test(text) : t.threshold;
+  const unit = plant === 'lint-number-only' ? /\d/.test(text) : t.unit;
+  return { observable: OBSERVABLE.test(text), threshold, unit, wrong_case: WRONG_CASE.test(text), depth: DEPTH.test(text) };
+}
+/** What the flag says a criterion lacks, in words; empty when it lacks nothing. */
+export function lacking(text: string, plant?: Plant | undefined): string[] {
+  const l = lintCriterion(text, plant);
+  return [
+    ...(l.observable ? [] : ['its observable']),
+    ...(l.threshold ? (l.unit ? [] : ['the unit of its threshold']) : ['its threshold with its unit']),
+    ...(l.wrong_case ? [] : ['the wrong case that must fail it']),
+    ...(l.depth ? [] : ['its proof depth']),
+  ];
+}
+/** The depth a criterion names, as the verdict engine knows depths; unit when it names none. */
+function depthOf(text: string): string {
+  if (/\b(?:live(?:\s+run)?|in production)\b/i.test(text)) return 'live';
+  if (/\b(?:end[- ]to[- ]end|e2e|journey|browser|playwright|cypress|simulator|emulator)\b/i.test(text)) return 'journey';
+  if (/\bintegration\b/i.test(text)) return 'integration';
+  return 'unit';
+}
+/** A criterion's ID as scripts/proof-change.mjs computes it: #<issue>.<first 8 hex of the SHA-256 of its text, trimmed, white space collapsed>. */
+export const criterionId = (issue: number, text: string): string => `#${issue}.${sha256Hex(new TextEncoder().encode(text.trim().replace(/\s+/g, ' '))).slice(0, 8)}`;
+/** The issue number a work item's source ID ends with (`owner/repo#12`, `item-12`), or undefined. */
+const issueNumber = (source_id: string): number | undefined => { const m = /(\d+)$/.exec(source_id); return m ? Number(m[1]) : undefined; };
+
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string } }
-interface Author { handle: string; role: string }
+interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string }
+interface Author { handle: string; role: string; automated?: boolean }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[] }
-/** A work source's work.item@1 reading: the test source's carries its body as text. */
-export interface WorkItem { source_id: string; link: string; title: string; body: string; authors: { handle: string; role: string }[]; updated: string }
+/** A work source's work.item@2 reading: the test source's and the GitHub source's carry their body as text; an item carries the readings it came with (its comments among them). */
+export interface WorkItem { source_id: string; link: string; title: string; body: string; criteria?: string[]; authors: Author[]; updated: string; readings?: WorkItem[] }
 /** A definition as locked, without its hash: what the hash covers. */
 interface Definition { task_ref: string; requirements: Requirement[]; deliverables: string[]; issue_rev: string; base_commit: string; budget: JsonValue }
 /** The requirements your one answer can leave out: those outside text added, and those whose surface has no fixed form. */
 interface Pending { session: string; agent: string; definition: Definition; handed: string; held: string[]; at: number }
+/** What a task's lock needs: the prompt that opened it and the item it came from. */
+interface Opening { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: WorkItem }
+/** A claim made on a task before its definition locked (#322): judged against the definition once the lock lands. */
+interface Early { claim: string; session: string; agent: string; cwd: string }
 
-/** The roles whose text can remove or waive a requirement. */
+/** The roles whose text can remove or waive a requirement; an automated account's never does, whatever its membership. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
+const trusted = (a: Author): boolean => TRUSTED.has(a.role) && a.automated !== true;
+/** Where each definition's drafted checks are kept, behind the `.deepbuild/` guard. */
+const DRAFTED = '.deepbuild/';
 /** A declared surface: #31's shape, without the check, which is the requirement's own; only the fields the lock records. */
 function surfaceOf(v: unknown): Surface | null {
   if (typeof v !== 'object' || v === null || Array.isArray(v) || typeof (v as Obj).kind !== 'string' || !(v as Obj).kind) return null;
@@ -85,19 +158,30 @@ export interface AskTaskOptions {
   plant: Plant | undefined;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS; only tests set it. */
   drafts: string | undefined;
-  /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
+  /** The test work source's work.item readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work: string | undefined;
+  /** The GitHub API's recorded answers, from DEEP_HUB_TEST_GITHUB; only tests set it. Without it the GitHub source reads the API at `forge`. */
+  github?: string | undefined;
+  forge?: string;
+  /** Your `gh` login's token for the GitHub source, if any. */
+  token?(): Promise<string | undefined>;
   append(connection: Connection, input: EventInput): Promise<void>;
   /** The core's connection for a session's events. */
   connection(session: string, agent: string): Connection;
+  /** A reading of the session's, in words: why a definition waits or didn't lock, and what the lint flagged. */
+  reading?(session: string, agent: string, text: string): Promise<void>;
+  /** Why the plan window of the account the session's agent runs on keeps a drafting job waiting at your reserve, or undefined. */
+  atReserve?(agent: string): string | undefined;
   pin(cwd: string, question: string): Promise<Obj>;
   /** Keeps bytes in the evidence store, answering their SHA-256. */
   keep(bytes: Uint8Array, source: string): Promise<string>;
   /**
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
-   * it takes the claim's snapshot and checkout, and starts the fast lane's checks.
+   * it takes the claim's snapshot and checkout, and starts the fast lane's checks, the repo's spec checks beside them.
+   * `definition` says whether the task's definition is locked; `joins` that the claim's checks already started once,
+   * before its definition locked, and these join them.
    */
-  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms'>[] }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
 }
@@ -105,6 +189,10 @@ export interface AskTaskOptions {
 export class AskTasks {
   /** Definitions that wait for your one answer, by the ask's handle. */
   private readonly pending = new Map<string, Pending>();
+  /** Tasks whose drafting waits at your reserve, by task: locked again once the window changes. */
+  private readonly waiting = new Map<string, { opening: Opening; why: string }>();
+  /** Claims made before their task's definition locked, by task: the newest, judged against the definition at its lock. */
+  private readonly early = new Map<string, Early>();
   constructor(private readonly o: AskTaskOptions) {}
 
   private async json<T>(file: string | undefined, field: string): Promise<T[]> {
@@ -127,11 +215,21 @@ export class AskTasks {
     const planted = (p.first && this.o.plant === 'first-prompt-always-task') || (p.queued && this.o.plant === 'midturn-always-task');
     return planted || asksForChange(p.text) ? [`session:${letters(p.session)}#${String(p.msg)}`] : [];
   }
-  /** A work item whose link the prompt names, from the work source's readings. */
+  /**
+   * A work item whose link the prompt names, with the readings its source gave for it: the test source's, or the
+   * GitHub source's read of the issue, its comments and the repo's membership, which is each session's own.
+   */
   async itemOf(text: string): Promise<WorkItem | undefined> {
-    if (!this.o.work || !/https?:\/\//.test(text)) return undefined;
+    if (!/https?:\/\//.test(text)) return undefined;
     const readings = await this.json<WorkItem>(this.o.work, 'readings');
-    return readings.find((r) => !r.link.includes('#') && new RegExp(`(?:^|\\s)${r.link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[\\s/#?.,])`).test(text));
+    const item = readings.find((r) => !r.link.includes('#') && new RegExp(`(?:^|\\s)${r.link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[\\s/#?.,])`).test(text));
+    if (item) return { ...item, readings };
+    const link = ISSUE_LINK.exec(text);
+    if (!link) return undefined;
+    const fetch = this.o.github ? recordedFetch(this.o.github) : liveFetch(this.o.forge ?? 'https://api.github.com', await this.o.token?.());
+    const read: Reading[] | undefined = await readIssue(fetch, link[1]!, link[2]!, Number(link[3]), this.o.plant).catch(() => undefined);
+    if (!read?.length) return undefined;
+    return { ...read[0]!, readings: read };
   }
 
   /** Each session's definitions still being locked. */
@@ -149,17 +247,92 @@ export class AskTasks {
     const all = Promise.all([this.locking.get(t.session), locked]).then(() => { if (this.locking.get(t.session) === all) this.locking.delete(t.session); });
     this.locking.set(t.session, all);
   }
+  private reading(session: string, agent: string, text: string): Promise<void> {
+    return this.o.reading?.(session, agent, text) ?? Promise.resolve();
+  }
   private unlocked(task_ref: string, error: unknown): void {
     process.stderr.write(`deep hub: the definition of ${task_ref} was not locked: ${error instanceof Error ? error.message : String(error)}\n`);
   }
 
+  /** The plan window changed: each definition whose drafting waited at your reserve is locked once the window clears, and waits on, told once, while it doesn't. */
+  windowChanged(): void {
+    for (const [task_ref, w] of [...this.waiting]) {
+      const why = this.o.atReserve?.(w.opening.agent);
+      if (why) { w.why = why; continue; }
+      this.waiting.delete(task_ref);
+      void this.lock(w.opening).catch((error: unknown) => this.unlocked(task_ref, error));
+    }
+  }
+  /** Why a task's definition waits for its drafting job at your reserve, or undefined. */
+  waitingWhy(task_ref: string): string | undefined {
+    return this.waiting.get(task_ref)?.why;
+  }
+
+  /**
+   * The definition a work item's reading gives when none is handed (#322): one requirement per acceptance criterion,
+   * quoting it in full, authored by the item's author; in this repo, its check is the test tagged with its ID. Each
+   * criterion is linted, and the flag recorded as a reading of the session's naming what it lacks.
+   */
+  private async fromCriteria(t: Opening & { item: WorkItem }): Promise<Handed | undefined> {
+    const item = t.item;
+    // The planted wrong program reads criteria from the GitHub API alone: a test source's item gets none.
+    const github = /^https?:\/\/github\.com\//.test(item.link);
+    const criteria = this.o.plant === 'criteria-from-github-api' && !github ? [] : item.criteria ?? [];
+    if (!criteria.length) return undefined;
+    const lines = item.body.split('\n');
+    const issue = issueNumber(item.source_id);
+    const tagged = issue === undefined ? new Map<string, string>() : await this.taggedTests(t.cwd, issue);
+    const requirements: Obj[] = [];
+    for (const [i, text] of criteria.entries()) {
+      const line = lines.findIndex((l) => l.includes(text));
+      const id = issue === undefined ? undefined : criterionId(issue, text);
+      const test = id === undefined ? undefined : tagged.get(id);
+      const lacks = lacking(text, this.o.plant);
+      if (lacks.length) await this.reading(t.session, t.agent, `DeepBuild flagged the criterion "${text}" of ${item.source_id}: it lacks ${lacks.join(', ')}.`);
+      requirements.push({
+        id: `R${i + 1}`, text, source_line: `${item.source_id}#L${line >= 0 ? line + 1 : i + 1}`, refuted_by: `an observation on which "${text}" does not hold`,
+        check: test ?? null, on_base: 'fails', asserts: [], depth: depthOf(text), oracle: 'code', near_misses: [],
+        ...(id ? { criterion: id } : {}), ...(test && issue !== undefined ? { command: `npx vitest run --root tests/acceptance/${issue} ${basename(test)} -t '${id}'` } : {}),
+      });
+    }
+    return { issue: item.source_id, requirements, deliverables: [], budget: null };
+  }
+  /** In this repo, the tests tagged with each criterion ID of an issue: tests/acceptance/<issue>/*.test.ts carrying the tag, by ID. */
+  private async taggedTests(cwd: string, issue: number): Promise<Map<string, string>> {
+    const folder = `tests/acceptance/${issue}`;
+    const out = new Map<string, string>();
+    let files: string[];
+    try { files = (await readdir(join(cwd, folder))).filter((f) => f.endsWith('.test.ts')).sort(); } catch { return out; }
+    for (const file of files) {
+      const text = await readFile(join(cwd, folder, file), 'utf8').catch(() => '');
+      for (const [tag] of text.matchAll(new RegExp(`#${issue}\\.[0-9a-f]{8}`, 'g'))) if (!out.has(tag)) out.set(tag, `${folder}/${file}`);
+    }
+    return out;
+  }
+
   /** Locks the definition handed for a task, or asks you first when outside text is in it; with none handed it waits. */
-  private async lock(t: { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: WorkItem }): Promise<void> {
-    const handed = (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => (t.item ? d.issue === t.item.source_id : d.ask === t.text));
+  private async lock(t: Opening): Promise<void> {
+    let handed = (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => (t.item ? d.issue === t.item.source_id : d.ask === t.text));
+    const drafted = handed !== undefined;
+    if (!handed && t.item) handed = await this.fromCriteria({ ...t, item: t.item });
     if (!handed) return;
+    // While the account's window is at your reserve the drafting job waits, and so does the lock (design: Timing and cost).
+    const why = this.o.atReserve?.(t.agent);
+    if (why) {
+      if (!this.waiting.has(t.task_ref)) await this.reading(t.session, t.agent, `The definition of ${t.task_ref} waits for its drafting job, held at your reserve (${why}); the repo's spec checks judge its claims meanwhile.`);
+      this.waiting.set(t.task_ref, { opening: t, why });
+      return;
+    }
     const head = await headOf(t.cwd).catch(() => undefined);
     if (!head) return;
-    const readings = t.item ? await this.json<WorkItem>(this.o.work, 'readings') : [];
+    // A drafted check is kept under .deepbuild/, behind its guard: a draft naming one elsewhere doesn't lock, and the record says why.
+    const outsideCheck = drafted ? handed.requirements.find((r) => typeof r.check === 'string' && r.check && !normalize(String(r.check)).startsWith(DRAFTED)) : undefined;
+    if (outsideCheck) {
+      const reason = `its drafted check ${String(outsideCheck.check)} is not under ${DRAFTED}, where each definition's drafted checks are kept behind the ${DRAFTED} guard`;
+      await this.reading(t.session, t.agent, `The definition of ${t.task_ref} was not locked: ${reason}.`);
+      throw Error(reason);
+    }
+    const readings = t.item ? t.item.readings ?? await this.json<WorkItem>(this.o.work, 'readings') : [];
     const authorOf = (line: string): Author => {
       const source = line.replace(/#L\d+$/, '');
       if (source === 'ask') return { handle: 'you', role: 'you' };
@@ -168,25 +341,28 @@ export class AskTasks {
       if (!reading || !first) return { handle: 'unknown', role: 'outside' };
       // The planted wrong program believes what the text says of its author.
       if (this.o.plant === 'role-from-text' && /\brepo owner\b/i.test(reading.body)) return { handle: first.handle, role: 'owner' };
-      return { handle: first.handle, role: first.role };
+      return first.automated ? { handle: first.handle, role: first.role, automated: true } : { handle: first.handle, role: first.role };
     };
     const requirements: Requirement[] = [];
     for (const r of handed.requirements) {
       const check = typeof r.check === 'string' && r.check ? r.check : null;
+      const references: { path: string; sha256: string }[] = [];
+      for (const path of Array.isArray(r.references) ? r.references.filter((p): p is string => typeof p === 'string' && p !== '') : []) references.push({ path, sha256: await this.approve(t.cwd, path) });
       requirements.push({
         id: String(r.id), text: String(r.text), source_line: String(r.source_line), refuted_by: String(r.refuted_by), check,
         check_sha256: check ? await this.approve(t.cwd, check) : null, on_base: String(r.on_base ?? 'fails'),
         asserts: (r.asserts as string[] | undefined) ?? [], depth: String(r.depth), oracle: String(r.oracle), near_misses: (r.near_misses as string[] | undefined) ?? [],
         author: authorOf(String(r.source_line)), surface: surfaceOf(r.surface),
         ...(typeof r.expected_ms === 'number' ? { expected_ms: r.expected_ms } : {}), ...(typeof r.deadline_ms === 'number' ? { deadline_ms: r.deadline_ms } : {}),
+        ...(references.length ? { references } : {}), ...(typeof r.command === 'string' && r.command ? { command: r.command } : {}), ...(typeof r.criterion === 'string' && r.criterion ? { criterion: r.criterion } : {}),
       });
     }
     // A waiver counts only from you or a repo collaborator; any other's leaves the requirement in, and makes the
     // definition wait for your one answer, as outside text that adds a requirement does.
-    const outside = requirements.filter((r) => !TRUSTED.has(r.author.role)).map((r) => r.id);
+    const outside = requirements.filter((r) => !trusted(r.author)).map((r) => r.id);
     let waived = false;
     for (const w of handed.waives ?? []) {
-      if (TRUSTED.has(authorOf(w.source_line).role)) {
+      if (trusted(authorOf(w.source_line))) {
         const at = requirements.findIndex((r) => r.id === w.id);
         if (at >= 0) requirements.splice(at, 1);
       } else waived = true;
@@ -244,19 +420,25 @@ export class AskTasks {
     const ts = this.o.now();
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 4, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 5, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
       // The lock is in the log already under this ID (its ts differs, so a replayed hook or a second lock racing the first conflicts): the first lock stands.
       if (!(error instanceof RecordError && error.code === 'conflict')) throw error;
     }
+    // A claim made before the lock is judged against the definition now (#322).
+    const early = this.early.get(definition.task_ref);
+    if (early) {
+      this.early.delete(definition.task_ref);
+      await this.judge(early.session, early.agent, early.cwd, definition.task_ref, early.claim).catch((error: unknown) => process.stderr.write(`deep hub: ${early.claim} was not judged against ${definition.task_ref}'s definition: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
   }
 
-  /** The definition's hash: every field it holds, each check's approved bytes by digest among them. */
+  /** The definition's hash: every field it holds, each check's approved bytes by digest and each referenced output's among them. */
   private hashOf(d: Definition): string {
     const requirements = this.o.plant === 'hash-ids-only' ? d.requirements.map((r) => r.id)
-      : this.o.plant === 'hash-check-paths' ? d.requirements.map(({ check_sha256: _bytes, ...r }) => r) : d.requirements;
+      : this.o.plant === 'hash-check-paths' ? d.requirements.map(({ check_sha256: _bytes, references: _refs, ...r }) => r) : d.requirements;
     return sha256Hex(canonicalize({ ...d, requirements } as unknown as JsonValue));
   }
   /** A check file's bytes in the session's folder, kept by digest; a check the folder doesn't hold as a file refuses the lock. */
@@ -278,79 +460,140 @@ export class AskTasks {
     }
   }
 
+  /** The thread a session's start recorded, as SQL. */
+  private threadSql(session: string, thread?: string): string {
+    return thread === undefined ? `(SELECT json_extract(data, '$.thread') FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.start' ORDER BY log_pos DESC LIMIT 1)` : `'${sql(thread)}'`;
+  }
   /** The open tasks of a session's thread with their locked definitions, as the store holds them. */
   private async lockedIn(session: string, thread?: string): Promise<Obj[]> {
-    const of = thread === undefined ? `(SELECT json_extract(data, '$.thread') FROM events WHERE session_id = '${sql(session)}' AND kind = 'session.start' ORDER BY log_pos DESC LIMIT 1)` : `'${sql(thread)}'`;
     return this.o.raw(`SELECT d.task_ref, d.requirements, d.deliverables, d.issue_rev, d.base_commit, d.budget, d.hash FROM definitions d JOIN tasks t ON t.task_ref = d.task_ref
-      WHERE d.state = 'locked' AND t.state != 'closed' AND t.thread = ${of} ORDER BY t.created`) as Promise<Obj[]>;
+      WHERE d.state = 'locked' AND t.state != 'closed' AND t.thread = ${this.threadSql(session, thread)} ORDER BY t.created`) as Promise<Obj[]>;
+  }
+  /** The open tasks of a session's thread whose definition hasn't locked (#322). */
+  private async unlockedIn(session: string): Promise<string[]> {
+    const rows = (await this.o.raw(`SELECT t.task_ref FROM tasks t WHERE t.state != 'closed' AND t.thread = ${this.threadSql(session)}
+      AND NOT EXISTS (SELECT 1 FROM definitions d WHERE d.task_ref = t.task_ref AND d.state IN ('locked', 'revised')) ORDER BY t.created`)) as { task_ref: string }[];
+    return rows.map((r) => String(r.task_ref));
   }
   /**
-   * A stop the stop rule reads as a claim: a claim for each open task of the session's thread with a locked
-   * definition, carrying the hash recomputed from the stored definition and the checks' bytes now. A check whose
-   * bytes differ from the approved ones is a proposal naming its file; the claim's checks run the approved bytes,
-   * read from the evidence store by digest, never the file in the folder the agent works in. Answers the claims it
-   * made, in order; one task's failure is reported and the others still claimed.
+   * A stop the stop rule reads as a claim: a claim for each open task of the session's thread. One with a locked
+   * definition carries the hash recomputed from the stored definition and the checks' bytes now; a check whose bytes
+   * differ from the approved ones is a proposal naming its file, and the claim's checks run the approved bytes, read
+   * from the evidence store by digest, never the file in the folder the agent works in. One whose definition hasn't
+   * locked (#322) is judged on the repo's spec meanwhile and waits for the lock: the turn's own task only (`task`),
+   * never another the thread opened. Answers the claims it made, in order; one task's failure is reported and the
+   * others still claimed.
    */
-  async claim(session: string, agent: string, cwd: string): Promise<string[]> {
+  async claim(session: string, agent: string, cwd: string, o: { early?: boolean; task?: string } = {}): Promise<string[]> {
     await this.locking.get(session);
-    const head = await headOf(cwd).catch(() => undefined);
     const made: string[] = [];
     for (const row of await this.lockedIn(session)) {
       const task_ref = String(row.task_ref);
       try {
-      const stored = JSON.parse(String(row.requirements)) as Requirement[];
-      const requirements: Requirement[] = [];
-      const changed: { check: string; approved: string | null; now: string | null }[] = [];
-      // A stand-in recorded since the lock is the base run's finding, not the definition: the hash leaves it out.
-      for (const { stand_in: _found, ...r } of stored) {
-        const bytes = r.check ? await this.bytesOf(cwd, r.check) : undefined;
-        const now = bytes ? sha256Hex(bytes) : null;
-        if (r.check && now !== r.check_sha256) changed.push({ check: r.check, approved: r.check_sha256, now });
-        requirements.push({ ...r, check_sha256: now });
+        made.push(await this.judge(session, agent, cwd, task_ref));
+      } catch (error) {
+        process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
       }
-      const definition: Definition = {
-        task_ref, requirements, deliverables: JSON.parse(String(row.deliverables ?? '[]')) as string[], issue_rev: String(row.issue_rev),
-        base_commit: String(row.base_commit), budget: JSON.parse(String(row.budget ?? 'null')) as JsonValue,
-      };
-      const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = ?`, [task_ref]) as { n: number }[];
-      const ts = this.o.now();
-      const id = ulid(ts);
-      const connection = this.o.connection(session, agent);
-      const commit = head?.sha ?? definition.base_commit;
-      const hash = this.hashOf(definition);
-      await this.o.append(connection, {
-        v: 3, id, kind: 'claim.made', ts,
-        data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash },
-      });
-      // The core's floor (#29): a recomputed hash that differs from the locked one makes the claim INVALID, naming what
-      // changed, whatever done gate is installed and in safe mode.
-      if (hash !== String(row.hash)) {
-        const what = changed.length ? changed.map((c) => c.check) : ['the definition'];
-        await this.o.invalid(`claim:${id}`, commit, `the definition's hash differs from the one locked for ${task_ref}; changed: ${what.join(', ')}`);
-      }
-      made.push(`claim:${id}`);
-      for (const c of changed) {
-        const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
-        const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff]);
-        if (known.length) continue;
-        const at = this.o.now();
-        await this.o.append(connection, {
-          v: 1, id: ulid(at), kind: 'learn.proposed', ts: at,
-          data: { layer: 'learned', target: c.check, diff, evidence: [{ at: `claim:${id}`, quote: `${c.check} changed after ${task_ref}'s definition locked; its checks run the approved bytes` }], scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null },
-        });
-      }
-      // Its checks start last, so a slow start holds up neither the claim nor its proposals.
-      const onBase = (r: Requirement) => (r.on_base === 'passes' ? 'passes' as const : 'fails' as const);
-      // Each with the requirement it judges and the surface it declares, for a stand-in on the base (#874).
-      const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{ check: r.check, approved: r.check_sha256, on_base: onBase(r), asserts: r.asserts, req: r.id, surface: r.surface ?? null, ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}) }] : []));
-      // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
-      const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));
-      await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, requirements: handles, checks });
+    }
+    // A turn whose claim already stands (a deep_claim with no work since) claims no early task anew.
+    for (const task_ref of o.early === false ? [] : (await this.unlockedIn(session)).filter((t) => t === o.task)) {
+      try {
+        made.push(await this.claimEarly(session, agent, cwd, task_ref));
       } catch (error) {
         process.stderr.write(`deep hub: ${task_ref} was not claimed: ${error instanceof Error ? error.message : String(error)}\n`);
       }
     }
     return made;
+  }
+  /** A claim on a task whose definition hasn't locked: judged on the repo's spec, its definition pending, or held by the plan window. */
+  private async claimEarly(session: string, agent: string, cwd: string, task_ref: string): Promise<string> {
+    const head = await headOf(cwd).catch(() => undefined);
+    const commit = head?.sha ?? '0'.repeat(40);
+    const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = ?`, [task_ref]) as { n: number }[];
+    const ts = this.o.now();
+    const id = ulid(ts);
+    await this.o.append(this.o.connection(session, agent), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [] } });
+    const claim = `claim:${id}`;
+    const why = this.waitingWhy(task_ref);
+    // A lock is on its way when your answer about the definition is still open or its lock is still being made.
+    const expected = [...this.pending.values()].some((p) => p.definition.task_ref === task_ref) || this.locking.has(session);
+    // The planted wrong program judges the claim on the spec alone, as if its definition were locked with nothing in it.
+    const definition: DefinitionState = this.o.plant === 'spec-only-judges-early-claim' ? 'locked' : why ? { blocked: why } : expected ? 'waiting' : 'pending';
+    this.early.set(task_ref, { claim, session, agent, cwd });
+    await this.o.run({ claim, session, task: task_ref, commit, base: commit, cwd, deliverables: [], requirements: [], checks: [], definition });
+    return claim;
+  }
+  /**
+   * A claim on a task with a locked definition: a new claim.made, or, at the lock, the early claim given (`joins`),
+   * which then runs the definition's checks beside the spec's it already ran.
+   */
+  private async judge(session: string, agent: string, cwd: string, task_ref: string, existing?: string): Promise<string> {
+    const [row] = (await this.o.raw(`SELECT task_ref, requirements, deliverables, issue_rev, base_commit, budget, hash FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as Obj[];
+    if (!row) throw Error('its definition is not locked');
+    const head = await headOf(cwd).catch(() => undefined);
+    const stored = JSON.parse(String(row.requirements)) as Requirement[];
+    const requirements: Requirement[] = [];
+    const changed: { check: string; approved: string | null; now: string | null }[] = [];
+    // A stand-in recorded since the lock is the base run's finding, not the definition: the hash leaves it out.
+    for (const { stand_in: _found, ...r } of stored) {
+      const bytes = r.check ? await this.bytesOf(cwd, r.check) : undefined;
+      const now = bytes ? sha256Hex(bytes) : null;
+      if (r.check && now !== r.check_sha256) changed.push({ check: r.check, approved: r.check_sha256, now });
+      const references: { path: string; sha256: string }[] = [];
+      for (const ref of r.references ?? []) {
+        const refBytes = await this.bytesOf(cwd, ref.path);
+        const refNow = refBytes ? sha256Hex(refBytes) : '';
+        if (refNow !== ref.sha256) changed.push({ check: ref.path, approved: ref.sha256, now: refNow || null });
+        references.push({ path: ref.path, sha256: refNow });
+      }
+      requirements.push({ ...r, check_sha256: now, ...(r.references ? { references } : {}) });
+    }
+    const definition: Definition = {
+      task_ref, requirements, deliverables: JSON.parse(String(row.deliverables ?? '[]')) as string[], issue_rev: String(row.issue_rev),
+      base_commit: String(row.base_commit), budget: JSON.parse(String(row.budget ?? 'null')) as JsonValue,
+    };
+    const connection = this.o.connection(session, agent);
+    const commit = head?.sha ?? definition.base_commit;
+    const hash = this.hashOf(definition);
+    let id: string;
+    if (existing) id = existing.replace(/^claim:/, '');
+    else {
+      const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = ?`, [task_ref]) as { n: number }[];
+      const ts = this.o.now();
+      id = ulid(ts);
+      await this.o.append(connection, {
+        v: 3, id, kind: 'claim.made', ts,
+        data: { task_ref, attempt: Number(n) + 1, commit, scope: 'session', predictions: [], hash },
+      });
+    }
+    // The core's floor (#29): a recomputed hash that differs from the locked one makes the claim INVALID, naming what
+    // changed, whatever done gate is installed and in safe mode.
+    if (hash !== String(row.hash)) {
+      const what = changed.length ? changed.map((c) => c.check) : ['the definition'];
+      await this.o.invalid(`claim:${id}`, commit, `the definition's hash differs from the one locked for ${task_ref}; changed: ${what.join(', ')}`);
+    }
+    for (const c of changed) {
+      const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
+      const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff]);
+      if (known.length) continue;
+      const at = this.o.now();
+      await this.o.append(connection, {
+        v: 1, id: ulid(at), kind: 'learn.proposed', ts: at,
+        data: { layer: 'learned', target: c.check, diff, evidence: [{ at: `claim:${id}`, quote: `${c.check} changed after ${task_ref}'s definition locked; its checks run the approved bytes` }], scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null },
+      });
+    }
+    // Its checks start last, so a slow start holds up neither the claim nor its proposals.
+    const onBase = (r: Requirement) => (r.on_base === 'passes' ? 'passes' as const : 'fails' as const);
+    // Each with the requirement it judges and the surface it declares, for a stand-in on the base (#874), and the expected outputs it references by their approved digests.
+    const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{
+      check: r.check, approved: r.check_sha256, on_base: onBase(r), asserts: r.asserts, req: r.id, surface: r.surface ?? null,
+      ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}),
+      ...(r.references?.length ? { references: r.references } : {}), ...(r.command ? { command: r.command } : {}),
+    }] : []));
+    // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
+    const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, id: r.id, text: r.criterion ? `${r.criterion}, ${r.text}` : r.text, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));
+    await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, requirements: handles, checks, definition: 'locked', ...(existing ? { joins: true } : {}) });
+    return `claim:${id}`;
   }
 
   /**
@@ -367,6 +610,25 @@ export class AskTasks {
       v: 1, id: ulid(ts), kind: 'definition.stood_in', ts,
       data: { definition: row.id, task_ref: r.task, requirements: [{ id: r.req, stand_in: { surface: r.surface, hash: r.hash } }] } as unknown as JsonValue,
     });
+  }
+
+  /**
+   * The requirements of a session's open item tasks that no verdict has passed (#322; design: At the claim), by the
+   * issue number the task's source ID ends with: what keeps a pull request at "Part of". Undefined when no open task
+   * of the session's thread is the issue's.
+   */
+  async unproven(session: string, issue: number): Promise<{ task_ref: string; left: { id: string; text: string }[]; locked: boolean } | undefined> {
+    const rows = (await this.o.raw(`SELECT t.task_ref FROM tasks t WHERE t.state != 'closed' AND t.thread = ${this.threadSql(session)} ORDER BY t.created`)) as { task_ref: string }[];
+    const task = rows.map((r) => String(r.task_ref)).find((ref) => !ref.startsWith('session:') && issueNumber(ref) === issue);
+    if (!task) return undefined;
+    const [definition] = (await this.o.raw(`SELECT requirements FROM definitions WHERE task_ref = ? AND state IN ('locked', 'revised') LIMIT 1`, [task])) as { requirements: string }[];
+    if (!definition) return { task_ref: task, left: [], locked: false };
+    const requirements = JSON.parse(definition.requirements) as Requirement[];
+    const [verdict] = (await this.o.raw(`SELECT v.requirements FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE c.subject_ref = ? AND v.stale = 0 ORDER BY v.created DESC LIMIT 1`, [task])) as { requirements: string }[];
+    const passed = new Set((verdict ? JSON.parse(verdict.requirements) as { req: string; outcome: string }[] : []).filter((r) => r.outcome === 'PASS').map((r) => r.req.slice(r.req.indexOf('#') + 1)));
+    const left = requirements.map((r, i) => ({ r, handle: /^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}` })).filter(({ handle }) => !passed.has(handle))
+      .map(({ r }) => ({ id: r.id, text: r.criterion ? `${r.criterion}, "${r.text}"` : `"${r.text}"` }));
+    return { task_ref: task, left, locked: true };
   }
 
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */

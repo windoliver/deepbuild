@@ -133,6 +133,8 @@ export interface Runner {
   output(job: string): Promise<string>;
   report(reading: WindowReport): Promise<void>;
   /** The newest reading of each account's 5-hour window, by account: used percent, reset and when it was read, by the clock. */
+  /** Why the plan window of the account `agent` runs on in `home` keeps a drafting job waiting at your reserve (#322), or undefined. */
+  atReserve(agent: Agent, home: string): string | undefined;
   planWindows(): Map<string, { used: number; resets: number | null; at: number }>;
   /** Re-reads the clock, windows, answers and budgets, and starts what may start. */
   tick(): Promise<void>;
