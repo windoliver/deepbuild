@@ -5,6 +5,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { call } from './client.js';
+import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { rowReadings } from './codex-loops.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
@@ -31,7 +32,7 @@ const CALLS_SHOWN = 20;
  */
 export type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
 /** A session's state as the record reads it, with why. */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string }
+export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
 
 /**
  * Each session's state, from the record's tables through `query` (the hub's record, or its database read-only): the
@@ -48,6 +49,18 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
   // A process gone, unless the session started again since, as a resume does in a new process.
   const gone = new Set(((await query("SELECT DISTINCT g.session_id FROM events g WHERE g.kind = 'session.gone' AND g.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events s WHERE s.session_id = g.session_id AND s.kind = 'session.start' AND s.log_pos > g.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query);
+  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
+  const noted = ((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]);
+  // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
+  const notes = new Map<string, string>();
+  const shown = new Map<string, string[]>();
+  for (const r of noted) {
+    const kept = shown.get(r.session_id) ?? [];
+    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.startsWith(CANT_RUN)) : [...kept, r.text]);
+    const last = shown.get(r.session_id)!.at(-1);
+    if (last) notes.set(r.session_id, last);
+    else notes.delete(r.session_id);
+  }
   // A turn you interrupted, with no prompt since (#39).
   const interrupted = new Set(((await query("SELECT e.session_id FROM events e WHERE e.kind = 'session.reading' AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
   // Each session's newest stop: a hook after it, such as Claude Code's idle-prompt notification, is no later stop.
@@ -58,10 +71,13 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
   return sessions.map((s): Reading => {
     const open = asks.get(s.id);
     const promised = due.get(s.id);
+    const note = notes.get(s.id);
     const midTurn = gone.has(s.id) && !['finished', 'failed', 'stuck'].includes(s.status);
     const [state, cause, why]: [State, Cause, string] = open ? ['needs you', 'ask', `${open.n === 1 ? 'an ask' : `${open.n} asks`} open for ${ago(open.since)}`]
       : midTurn && !waitingFirst ? ['flagged', 'gone', 'its process is gone mid-turn']
       : s.status === 'waiting' && now - (s.last_seen ?? 0) <= WAITING_QUIET_MS ? ['needs you', 'waiting', 'a permission prompt waits on you']
+      // A session whose hooks can't run sends no hook to say so (#993): stuck, never folded away as quiet.
+      : note?.startsWith(CANT_RUN) ? ['stuck', 'stuck', 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`']
       : s.status === 'stuck' ? ['stuck', 'stuck', `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`]
       : promised ? ['flagged', 'promised', `a promised check is due since ${clockTime(promised.due)}, waiting for its next prompt or stop: "${promised.quote}"`]
       : s.status === 'failed' ? ['flagged', 'failed', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`]
@@ -70,18 +86,15 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
       : s.status === 'finished' && interrupted.has(s.id) ? ['finished', 'interrupted', `its turn was interrupted ${ago(s.last_seen)} ago`]
       : s.status === 'finished' ? ['finished', 'finished', `its turn stopped ${ago(stops.get(s.id) ?? s.last_seen)} ago`]
       : ['working', 'working', `last seen ${ago(s.last_seen)} ago`];
-    return { id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, state, cause, why };
+    return { id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, state, cause, why, ...(note ? { note } : {}) };
   });
 }
 
 /** Each session's row, from the record's tables through `query` (the hub's record, or its database read-only). */
 export async function statusRows(query: (sql: string) => Promise<unknown[]>, now: number): Promise<StatusRow[]> {
   const sessions = await sessionStates(query, now);
-  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
-  const notes = new Map(((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   const rows = sessions.map((s): StatusRow => {
-    const note = notes.get(s.id);
-    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: s.why, ...(note ? { note } : {}) };
+    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: s.why, ...(s.note ? { note: s.note } : {}) };
   });
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
