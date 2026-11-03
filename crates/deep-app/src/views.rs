@@ -97,6 +97,8 @@ impl Kind {
 pub struct Shipped {
     kind: Kind,
     focus_handle: FocusHandle,
+    /// What Home's Set up click said, once clicked.
+    set_up: Option<String>,
 }
 
 impl Shipped {
@@ -104,6 +106,7 @@ impl Shipped {
         Self {
             kind,
             focus_handle: cx.focus_handle(),
+            set_up: None,
         }
     }
 }
@@ -361,9 +364,12 @@ fn status(
 }
 
 impl Render for Shipped {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         let decorations = current_state();
+        // While setup hasn't finished, the count says so, never a number of asks (#1002). A view drawn over a fixture
+        // state draws the fixture, whatever this machine's HOME holds.
+        let unfinished = decorations.is_none().then(crate::setup::count).flatten();
         let record = record(self.kind);
         let now = now();
         let open = record.open.len();
@@ -391,9 +397,40 @@ impl Render for Shipped {
                         },
                     ))
             }
-            Kind::Home => page
-                .child(title("home-title", "Home"))
-                .child(label("home-needs-you", format!("{open} asks need you"))),
+            Kind::Home => match unfinished {
+                Some(count) => page
+                    .child(title("home-title", "Home"))
+                    .child(label("home-needs-you", count))
+                    .children(self.set_up.is_none().then(|| {
+                        label("set-up", "Set up")
+                            .role(Role::Button)
+                            .aria_label("Set up")
+                            .w(px(72.))
+                            .px_2()
+                            .rounded_sm()
+                            .bg(chrome.raised)
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.set_up = Some(
+                                    crate::setup::set_up()
+                                        .map_or_else(|error| error, str::to_owned),
+                                );
+                                cx.notify();
+                            }))
+                    }))
+                    .children(
+                        self.set_up
+                            .clone()
+                            .or_else(crate::setup::reason)
+                            .map(|line| label("set-up-reason", line).h_auto().py_1()),
+                    ),
+                None => page
+                    .child(title("home-title", "Home"))
+                    .child(label("home-needs-you", format!("{open} asks need you"))),
+            },
+            Kind::NeedsYou if unfinished.is_some() => page
+                .child(title("needs-you-title", "Needs you"))
+                .child(label("needs-you-setup", unfinished.unwrap_or_default())),
             Kind::NeedsYou => page.child(title("needs-you-title", "Needs you")).children(
                 record.open.iter().enumerate().map(|(index, (handle, _))| {
                     let has = |list: fn(&AppState) -> &Vec<String>| {
