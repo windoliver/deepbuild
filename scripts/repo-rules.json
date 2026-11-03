@@ -369,6 +369,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #348: host@1, through which every package outside the signed release starts in the platform sandbox (#236)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #989: takes the hub's lock as the hub does (packages/hub/src/lock.ts) when no hub holds it, through SQLite alone so no other descriptor drops its fcntl locks; already in the tree."
         }
       }
     },
