@@ -1,0 +1,15 @@
+{
+  "name": "lowpoly",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #420 acceptance suite: one faceted low-poly tree, a trunk turned on a lathe and a geodesic crown, both flat-shaded.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "lowpoly.tree@1": "lowpoly.tree@1.json"
+  }
+}
