@@ -12,6 +12,9 @@ struct Frame {
     // wider than 1 device px, 2 the rest: below scale 1 thin lines draw after the upscale,
     // #386); and the core's depth target's px per px of this target.
     px: vec4<f32>,
+    // A sky's ambient light from above and below (#418), w 1 with a sky.
+    sky_top: vec4<f32>,
+    sky_low: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -67,6 +70,8 @@ struct MeshOut {
     @location(0) normal: vec3<f32>,
     @location(1) @interpolate(flat) color: u32,
     @location(2) @interpolate(flat) pick: u32,
+    // Emission, linear RGB, and the solid's coverage (#418).
+    @location(3) @interpolate(flat) emission: vec4<f32>,
 };
 
 @vertex
@@ -79,8 +84,10 @@ fn mesh_vs(
     @location(5) color: u32,
     @location(6) pick: u32,
     @location(7) flags: u32,
+    @location(9) emission: vec4<f32>,
 ) -> MeshOut {
     var out: MeshOut;
+    out.emission = emission;
     let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
     // The shadow pass (light.w < 0) leaves out a solid with `cast_shadow: false` (#420).
@@ -93,14 +100,66 @@ fn mesh_vs(
     return out;
 }
 
+// Ambient occlusion (#418; ao.wgsl): its blurred result and settings, read only by the solids.
+struct Ao {
+    clip: mat4x4<f32>,
+    inv: mat4x4<f32>,
+    size: vec4<f32>,
+    // Samples, multi-bounce, specular, and 1 with ao on.
+    opts: vec4<u32>,
+    scale: vec4<f32>,
+};
+
+@group(2) @binding(0) var ao_t: texture_2d<f32>;
+@group(2) @binding(1) var<uniform> ao: Ao;
+
+// The ambient term's visibility at this pixel, brightened by the surface's albedo with
+// multi-bounce on (Jimenez's fit); 1 with ao off.
+fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
+    if ao.opts.w == 0u {
+        return vec3<f32>(1.0);
+    }
+    let dims = textureDimensions(ao_t);
+    let at = min(vec2<u32>(pos * ao.scale.xy), dims - vec2<u32>(1u));
+    let v = textureLoad(ao_t, at, 0).r;
+    if ao.opts.y == 0u {
+        return vec3<f32>(v);
+    }
+    let a = 2.0404 * albedo - 0.3324;
+    let b = -4.7951 * albedo + 0.6417;
+    let c = 2.7552 * albedo + 0.6903;
+    return min(max(vec3<f32>(v), ((v * a + b) * v + c) * v), vec3<f32>(1.0));
+}
+
 @fragment
 fn mesh_fs(in: MeshOut) -> Targets {
     let n = normalize(in.normal);
     let facing = max(dot(n, frame.light.xyz), 0.0);
     // A sun (w > 0) lights by its illuminance over an ambient quarter; with none, the view's own
-    // key light.
-    let lit = select(0.45 + 0.55 * facing, 0.25 + 0.75 * frame.light.w * facing, frame.light.w > 0.0);
-    return Targets(vec4<f32>(paint(in.color) * lit, 1.0), in.pick);
+    // key light. Under a sky (#418) the ambient is the sky's, from above to below by the normal,
+    // and only a sun lights directly. Ambient occlusion scales the ambient term alone, never the
+    // direct light or the emission.
+    var ambient = vec3<f32>(select(0.45, 0.25, frame.light.w > 0.0));
+    var direct = select(0.55 * facing, 0.75 * frame.light.w * facing, frame.light.w > 0.0);
+    if frame.sky_top.w > 0.0 {
+        ambient = mix(frame.sky_low.rgb, frame.sky_top.rgb, n.y * 0.5 + 0.5);
+        direct = select(0.0, frame.light.w * facing, frame.light.w > 0.0);
+    }
+    let albedo = paint(in.color);
+    let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
+    let a = in.emission.w;
+    return Targets(vec4<f32>((albedo * lit + in.emission.rgb) * a, a), in.pick);
+}
+
+// The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
+// depth target.
+@fragment
+fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
+    // A see-through solid writes no occlusion depth.
+    if in.emission.w < 1.0 {
+        discard;
+    }
+    return vec4<f32>(normalize(in.normal), 1.0);
 }
 
 // ---- lines: one instanced quad per segment, its width and caps in the fragment

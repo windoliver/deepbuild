@@ -538,11 +538,19 @@ pub fn text_spec_in(
     ty: &Type,
 ) -> Result<TextSpec, Refused> {
     let path = format!("items/{id}");
+    // A code item shows its raw bytes' display form (Text `text@1`: code).
+    let code = || match (params.get("code"), params.get("raw")) {
+        (Some(_), Some(Value::String(raw))) => {
+            Some(crate::code::display(raw, crate::code::tab(params)).text)
+        }
+        _ => None,
+    };
     let text = shown.map(|s| s.text.clone()).or_else(|| {
         params
             .get("text")
             .and_then(Value::as_str)
             .map(str::to_string)
+            .or_else(code)
     });
     let Some(text) = text else {
         return refuse("bad_doc", format!("{path}/params/text"));
