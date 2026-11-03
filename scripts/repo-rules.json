@@ -689,6 +689,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #305: a kind param's default is a JSON value. Already in the workspace tree."
+        },
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #238: test.prog@1's kit rule runs sandbox@1's check and rewrite on each program entry."
         }
       }
     },
@@ -987,6 +991,14 @@
         "deep-canvas-vector": {
           "spec": "* path=../deep-canvas-vector",
           "why": "Issue #398: the vector canvas module, in the r2 build set and up."
+        },
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #238: the sandbox module the full set holds."
+        },
+        "deep-sandbox-wasmtime": {
+          "spec": "* path=../deep-sandbox-wasmtime",
+          "why": "Issue #238: runs providers, layouts' validators and program entries at check, and sandbox@1's kit part."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1529,6 +1541,66 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #398: a vector item's params and the items it draws as, as the document holds them. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-canvas-sandbox/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #238: the manifest, registrar and implementation types the sandbox module registers through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #238: a refusal's JSON and a program entry's value. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #238: the rewritten program's hash, by which it runs everywhere. Already in the workspace tree."
+        },
+        "wasmparser": {
+          "spec": "=0.258.3",
+          "why": "Issue #238: the subset check's parser and validator, on an allowlist of WebAssembly 2.0 features; the version wasmtime 49.0.2 itself parses with, so Cargo.lock holds one."
+        },
+        "wasm-encoder": {
+          "spec": "=0.258.3",
+          "why": "Issue #238: writes the rewritten program, through its reencoder of wasmparser's operators; the version wasmtime 49.0.2 uses."
+        }
+      }
+    },
+    "crates/deep-sandbox-wasmtime/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #238: the check, the rewrite and the kit this engine runs, with no copy of its own."
+        },
+        "wasmtime": {
+          "spec": "=49.0.2",
+          "why": "Issue #238: sandbox@1's engine in the app, the version the design pins (Logic: sandbox), cranelift and runtime only."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #238: programs travel as base64 in deep-sandbox's JSON lines. Already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #238: deep-sandbox's JSON lines and the kit's file. Already in the workspace tree."
+        },
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.2 already pulls in."
+        }
+      }
+    },
+    "tests/acceptance/238/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #238's blind suite: its own assembler for the fixtures, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #238's blind suite: lists each fixture's operators with their offsets, so a test knows where each trap's instruction is."
         }
       }
     }
