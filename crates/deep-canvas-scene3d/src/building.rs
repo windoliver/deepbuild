@@ -428,6 +428,14 @@ fn wall(doc: &Value, id: &str, p: &Value) -> Result<Mesh, Fault> {
         }
     }
     m.outputs.insert("plan".into(), json!(runs));
+    // Its two ends on the floor: x along the wall, y up, z its left normal.
+    let (dx, nx) = ([plan.d[0], 0.0, plan.d[1]], [plan.n[0], 0.0, plan.n[1]]);
+    m.anchors.insert(
+        "a".into(),
+        [[plan.a[0], 0.0, plan.a[1]], dx, [0.0, 1.0, 0.0], nx],
+    );
+    m.anchors
+        .insert("b".into(), [[b[0], 0.0, b[1]], dx, [0.0, 1.0, 0.0], nx]);
     m.outputs.insert(
         "mitres".into(),
         json!({"a": [ua(w0), ua(w1)], "b": [ub(w0), ub(w1)]}),
@@ -473,6 +481,7 @@ fn opening(doc: &Value, p: &Value) -> Result<Mesh, Fault> {
     let doc0 = json!({"items": {}});
     let ctx = Ctx {
         doc: &doc0,
+        id: "",
         plants: Default::default(),
     };
     let leaf = builders::build("slab@1", &json!({"size": [width, height, thick]}), &ctx)?;
@@ -744,6 +753,7 @@ fn roof(p: &Value) -> Result<Mesh, Fault> {
             let doc0 = json!({"items": {}});
             let ctx = Ctx {
                 doc: &doc0,
+                id: "",
                 plants: Default::default(),
             };
             builders::build(

@@ -68,7 +68,7 @@ fn kind_of(item: &Value) -> &str {
 
 fn is_builder(_: &Value, _: &str, item: &Value) -> bool {
     let k = kind_of(item);
-    builders::KINDS.contains(&k) || k == "curve@1"
+    builders::KINDS.contains(&k) || k == "curve@1" || k == "mesh.asset@1"
 }
 
 fn is_mark(_: &Value, _: &str, item: &Value) -> bool {
@@ -199,6 +199,14 @@ pub fn built(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Resu
     let params = item.get("params").cloned().unwrap_or(json!({}));
     let spec = spec_of(&kind).ok_or("kind")?;
     let resolved = spec::resolved(&spec, &params, true, planted);
+    if kind == "mesh.asset@1" {
+        // Its mesh is the asset's: the store's bytes, read where the frame is drawn.
+        return Ok(Built {
+            kind,
+            resolved,
+            ..Built::default()
+        });
+    }
     if kind == "curve@1" {
         let sampled = crate::curve::sample(&params)?;
         return Ok(Built {
@@ -210,6 +218,7 @@ pub fn built(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Resu
     }
     let ctx = Ctx {
         doc,
+        id,
         plants: planted.and_then(Plants::named).unwrap_or_default(),
     };
     let declared = stack::estimate(builders::estimate(&kind, &params, &ctx)?, item)?;

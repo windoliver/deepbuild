@@ -6,6 +6,7 @@ pub mod building;
 pub mod curve;
 pub mod frames;
 pub mod geom;
+pub mod gltf;
 pub mod label;
 pub mod look;
 pub mod modifiers;
