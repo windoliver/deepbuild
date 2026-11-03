@@ -8,6 +8,7 @@ sandbox@1's engine in the app (issue #238): wasmtime pinned to 49.0.2 runs the b
 
 - The engine (counters, the watchdog, trap mapping) goes in `src/lib.rs`.
 - The JSON calls and sandbox@1's kit runner go in `src/service.rs`; the command line in `src/main.rs`.
+- The first-party layouts' validators, assembled and judged on this engine, go in `src/layouts.rs` (#415).
 - The browser's runner goes in `web/runner.mjs`.
 
 ## What it may import
