@@ -3,6 +3,8 @@
 // deep-hook's behalf; where neither fires, the session's row reads "answer waiting". The session is #27's Claude Code
 // stand-in with `deep setup`'s entries, its waiter real; paseo is fixtures/paseo-host.mjs around the real plugin
 // (README, The worlds).
+// First: what you gave the suite by hand, before ../29's helpers delete it (README, Disputes D1).
+import './env.ts';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   Claude, appendTranscript, assistantSays, beginAsk, carries, makeRepo, newSession, payload, setup, startHub, stopAfterAsking, typedPrompt, type Asking,

@@ -5,6 +5,8 @@
 // license): this suite imports them so it plays those agents as their own suites do. Nothing here stands in for
 // DeepBuild's code. Processes are stopped by PID (and the process groups this suite started), never by name or port,
 // and the real ~/.deepbuild, ~/.paseo, ~/.claude and ~/.pi are never touched.
+// First: what you gave the suite by hand, before ../29's helpers delete it (README, Disputes D1).
+import { given, restore } from './env.ts';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -18,6 +20,9 @@ import { createHash } from 'node:crypto';
 import { childEnv, cleanup as cleanup27, COVERED, FIXTURES as FIXTURES27, NODE, own, run, type Ran } from '../27/helpers.ts';
 import { cleanup as cleanup29 } from '../29/h-d.ts';
 import { cleanup as cleanup40 } from '../40/helpers.ts';
+
+// ../29's helpers have loaded and emptied process.env of DEEP_*: the helpers that read it when called get yours back.
+restore();
 
 export type Line = { [key: string]: any };
 export const REPO = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -268,7 +273,7 @@ export class Host {
   /** The plugin loaded, HOME the test's, with DEEP_PASEO_PLANT when a test names a wrong program. */
   static async start(home: string, o: { plant?: string } = {}): Promise<Host> {
     needPlugin();
-    const child = spawn(NODE, [HOST, ENTRY], { cwd: dirname(home), env: childEnv(home, { DEEP_PASEO_PLANT: o.plant ?? process.env.DEEP_PASEO_PLANT }), stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(NODE, [HOST, ENTRY], { cwd: dirname(home), env: childEnv(home, { DEEP_PASEO_PLANT: o.plant ?? given.DEEP_PASEO_PLANT }), stdio: ['pipe', 'pipe', 'pipe'] });
     own(child.pid);
     const host = new Host(child, home);
     hosts.add(host);
@@ -416,7 +421,7 @@ export async function claimDone(mcp: Mcp, commit: string): Promise<string> {
 // ---- A real paseo daemon (README, The worlds): the pinned release from DEEP_PASEO_CLI, its home <home>/.paseo.
 /** `DEEP_PASEO_CLI`: the `paseo` command of @getpaseo/cli at the version the facts pin. Missing or another version is BLOCKED, never a skip. */
 export function paseoCli(): string {
-  const cli = process.env.DEEP_PASEO_CLI;
+  const cli = given.DEEP_PASEO_CLI;
   if (!cli || !existsSync(cli)) throw Error(`BLOCKED: no real paseo: set DEEP_PASEO_CLI to the paseo command of @getpaseo/cli ${existsSync(FACTS) ? pinnedPaseo() : '(the version adapters/paseo.facts.json pins)'} (got ${cli ?? 'nothing'})`);
   const version = execFileSync(cli, ['--version'], { encoding: 'utf8', env: { PATH: `${dirname(NODE)}:/usr/bin:/bin`, HOME: '/tmp' } }).trim().replace(/^v/, '');
   if (existsSync(FACTS) && version !== pinnedPaseo()) throw Error(`BLOCKED: DEEP_PASEO_CLI is paseo ${version}; the facts pin ${pinnedPaseo()}, the version these tests run on`);
@@ -446,7 +451,7 @@ export class Paseo {
     const config: Line = { version: 1, daemon: { listen: `127.0.0.1:${await freePort()}`, relay: { enabled: false } } };
     if (o.plugins !== false) config.pluginsEnabled = true;
     writeFileSync(join(root, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);
-    const env = childEnv(home, { PASEO_DICTATION_ENABLED: 'false', PASEO_VOICE_MODE_ENABLED: 'false', DEEP_PASEO_PLANT: process.env.DEEP_PASEO_PLANT, ...o.env });
+    const env = childEnv(home, { PASEO_DICTATION_ENABLED: 'false', PASEO_VOICE_MODE_ENABLED: 'false', DEEP_PASEO_PLANT: given.DEEP_PASEO_PLANT, ...o.env });
     const child = spawn(cli, ['daemon', 'run', '--home', root], { cwd: dirname(home), env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     own(child.pid);
     if (child.pid) groups.add(child.pid);

@@ -3,6 +3,8 @@
 // by the package) and AC14 (words for an idle session wait for the agent's own idle signal, never typed into a dialog).
 // Paseo is fixtures/paseo-host.mjs around the real plugin; the hub, deep-hook, deep mcp, the pi package and real pi
 // are real (README, The worlds).
+// First: what you gave the suite by hand, before ../29's helpers delete it (README, Disputes D1).
+import './env.ts';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';

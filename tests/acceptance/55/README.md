@@ -128,7 +128,7 @@ AC11 follows #40's rule: off a reference Mac in a fit state the readings are pri
 
 ## Disputes
 
-None yet.
+**D1, upheld (the environment).** `helpers.ts` and `gate.test.ts` import `../29/h-d.ts`, which imports `../29/helpers.ts`, and that file deletes every `CLAUDE*` and `DEEP_*` variable from `process.env` as it loads. So `DEEP_PASEO_CLI`, `DEEP_PI_CLI`, `DEEP_PASEO_PLANT` and `DEEP_HUB_PLANT` never reached a test: AC1, AC5 and AC7 read `BLOCKED: no real paseo … (got nothing)` and AC12 `BLOCKED: no real pi … (got nothing)` whatever was built, and the hand-run plants did nothing. The redraft adds `env.ts`, the first import of every file in the suite, which reads those four variables before `../29` loads. This suite's own readers (`paseoCli`, the paseo stand-in's and the daemon's `DEEP_PASEO_PLANT`, the budget command's environment) take them from it, and `helpers.ts` puts them back into `process.env` once its imports have loaded, for the imported helpers that read `process.env` when called (#40's `piCli`, #27's `childEnv` for `DEEP_HUB_PLANT`). Suites 27, 29 and 40 are unchanged, and no test asserts anything new. Checked with a throwaway probe importing `../27`, `../29/h-d.ts` and `../40` in the order the test files do: all four variables reached their readers, pi 1.4.0 from `DEEP_PI_CLI` included. AC5 and AC12 now stop only at the missing plugin, which they check before the environment.
 
 ## How far these tests were checked
 
