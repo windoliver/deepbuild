@@ -17,6 +17,7 @@ export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, 
 export { baseProof, openCheckouts, OverBudget } from './checkouts.js';
 export type { BaseCheckout, BaseRun, Budget, CheckoutPlant, Checkouts, CheckoutsOptions, ClaimCheckInput, ClaimCheckRun, ClaimInput, ClaimRun, Cited, DeclaredSurface, Snapshot, StandIn, TempCheckout } from './checkouts.js';
 export { claimVerdict } from './claim.js';
+export { admitKind } from './kinds.js';
 export type { ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedFailure, RecordedRun, VerdictPlant } from './claim.js';
 export { attributeStack } from './stack.js';
 export type { Served, StackRecords, Trees } from './stack.js';

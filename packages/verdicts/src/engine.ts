@@ -550,13 +550,22 @@ function requirementOutcome(
   // The open item's words, when they differ from the reason's: the item leaves out what runs decide.
   let item: string | null = null;
   let closes = '';
-  const atDepth = covering.filter((j) => DEPTH[j.check.depth] >= DEPTH[q.depth] && (!q.numbers || j.check.contract !== undefined));
-  if (q.oracle === 'person') {
+  // A model's opinion is a reading, never a verdict (#68): a model's check covers nothing alone.
+  const atDepth = covering.filter((j) => j.check.oracle !== 'model' && DEPTH[j.check.depth] >= DEPTH[q.depth] && (!q.numbers || j.check.contract !== undefined));
+  if (q.oracle === 'model') {
+    own = 'INCONCLUSIVE';
+    why = `${q.req} rests on a model's judgment, which is a reading, never a verdict: it needs your call`;
+    closes = 'your call, beside the checked facts';
+  } else if (q.oracle === 'person') {
     own = q.answer === undefined ? 'pending' : q.answer === 'unanswered' ? 'INCONCLUSIVE' : q.answer;
     if (own === 'pending') why = `${q.req} waits on your answer to ${q.ask ?? 'its ask'}`;
     else if (own === 'INCONCLUSIVE') why = `${q.req}: ${q.ask ?? 'its ask'} ended unanswered`;
     else if (own === 'FAIL') why = `${q.req}: your answer to ${q.ask ?? 'its ask'} is FAIL`;
     closes = `your answer to ${q.ask ?? 'its ask'}`;
+  } else if (atDepth.length === 0 && covering.some((j) => j.check.oracle === 'model')) {
+    own = 'INCONCLUSIVE';
+    why = `${q.req} is covered only by a model's check, whose opinion is a reading, never a verdict: it needs a check whose oracle is code, or your call`;
+    closes = `a check at depth ${q.depth} whose oracle is code, or your call`;
   } else if (atDepth.length === 0) {
     own = 'INVALID';
     const kind = q.numbers ? `check with a numeric contract at depth ${q.depth}` : `check at depth ${q.depth}`;
