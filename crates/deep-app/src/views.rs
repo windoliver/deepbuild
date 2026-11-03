@@ -257,6 +257,11 @@ struct Record {
     deadlines: Vec<u64>,
 }
 
+/// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
+pub fn sidebar() -> Vec<(String, String, states::State)> {
+    record(Kind::Sidebar).sessions
+}
+
 fn record(kind: Kind) -> Record {
     crate::record::with_view(|view| read(view, kind))
         .unwrap_or_else(|| read(&crate::record::View::default(), kind))
@@ -273,20 +278,18 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
             (text("ask"), text("session"))
         })
         .collect();
-    let events = &view.events;
+    let table = view.table();
     // A session's page and its line draw the first session, or the one named "" when the record has none.
-    let one = |session: String| {
-        let title = states::title(events, &session);
-        let state = states::state(events, &session);
-        vec![(session, title, state)]
-    };
     let sessions: Vec<(String, String, states::State)> = match kind {
-        Kind::Sidebar => states::every_session(events),
-        Kind::Session | Kind::Line => one(events
-            .iter()
-            .find_map(|event| event["session"].as_str())
-            .unwrap_or_default()
-            .to_owned()),
+        Kind::Sidebar => table.every_session(),
+        Kind::Session | Kind::Line => {
+            let session = table.sessions().first().cloned().unwrap_or_default();
+            vec![(
+                session.clone(),
+                table.title(&session),
+                table.state(&session),
+            )]
+        }
         Kind::Home | Kind::NeedsYou => Vec::new(),
     };
     let deadlines = match (kind, sessions.first()) {
@@ -296,10 +299,11 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
                 .filter(|(_, of)| of == first)
                 .map(|(handle, _)| handle)
                 .collect();
-            events
-                .iter()
-                .filter(|event| mine.contains(&&states::handle(event)))
-                .filter_map(|ask| states::deadline(events, ask))
+            table
+                .open_asks(None)
+                .into_iter()
+                .filter(|ask| mine.contains(&&states::handle(ask)))
+                .filter_map(|ask| table.deadline(ask))
                 .collect()
         }
         _ => Vec::new(),

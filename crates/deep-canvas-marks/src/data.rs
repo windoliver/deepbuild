@@ -742,6 +742,8 @@ pub fn mark_set(
                     size: number("size", i).unwrap_or(11.0),
                     weight: 400,
                     width: None,
+                    max_lines: None,
+                    mask: false,
                     align: Align::Start,
                     bound: false,
                 },
@@ -1081,6 +1083,12 @@ pub fn numbers(id: &str, item: &Value, items: &Map<String, Value>) -> Vec<Value>
                     out.push(json!({"item": id, "row": null, "text": run, "source": source}));
                 }
             }
+            let title = p.get("title").and_then(Value::as_str).unwrap_or("");
+            for run in number_runs(title) {
+                out.push(
+                    json!({"item": id, "row": null, "text": run, "source": {"constant": "title"}}),
+                );
+            }
         }
         _ => {}
     }
@@ -1202,6 +1210,8 @@ pub fn axis(
                 size: LABEL_SIZE,
                 weight: 400,
                 width: Some(LABEL_BOX),
+                max_lines: None,
+                mask: false,
                 align,
                 bound: false,
             },
@@ -1210,6 +1220,183 @@ pub fn axis(
             color,
             runs: Vec::new(),
         });
+    }
+    // The title past the line's far end, the top of an upright axis and the right of a flat one,
+    // on the labels' side.
+    if let Some(title) = p.get("title").and_then(Value::as_str) {
+        let width = LABEL_BOX.max(est(title));
+        let line = LABEL_SIZE * 1.3;
+        let (origin, align) = if horizontal {
+            let end = scale.range[0].max(scale.range[1]);
+            let y = if out_dir > 0.0 {
+                TICK + 2.0 + line + 2.0
+            } else {
+                -(TICK + 2.0 + 2.0 * line + 2.0)
+            };
+            (point(end - width, y), Align::End)
+        } else {
+            let top = scale.range[0].min(scale.range[1]) - LABEL_SIZE * 0.65 - line - 2.0;
+            if out_dir > 0.0 {
+                (point(top, TICK + 2.0), Align::Start)
+            } else {
+                (point(top, -(TICK + 2.0 + width)), Align::End)
+            }
+        };
+        marks.push(Mark::Text {
+            item: format!("{id}#title"),
+            spec: TextSpec {
+                text: title.to_string(),
+                font: "body".into(),
+                family: Some(deep_text::Role::Body.family()),
+                fallback: Vec::new(),
+                lang: None,
+                size: LABEL_SIZE,
+                weight: 600,
+                width: Some(width),
+                max_lines: None,
+                mask: false,
+                align,
+                bound: false,
+            },
+            origin,
+            role: None,
+            color,
+            runs: Vec::new(),
+        });
+    }
+    Ok(marks)
+}
+
+/// A legend row's swatch length, and the gaps after a swatch and after an entry, in u.
+const SWATCH: f64 = 16.0;
+const GAP: f64 = 6.0;
+const ENTRY_GAP: f64 = 16.0;
+
+/// The automatic legend of an ordinal scale whose roles color mark sets (Scale and encode: legends
+/// are automatic): one row across the top left, an entry per category a set draws, in the
+/// domain's order, each the set's mark in the category's role (a line, dashed as the set is, or
+/// a square) and the category's name in ink. No legend for a scale no set colors by.
+pub fn legend(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    pos: [f64; 2],
+) -> Result<Vec<Mark>, Refused> {
+    let ordinal = item.get("params").and_then(|p| p.get("type")) == Some(&json!("ordinal"));
+    if !ordinal {
+        return Ok(Vec::new());
+    }
+    // Each category a set draws, with the first such set's params.
+    let mut drawn: Vec<(String, &Map<String, Value>)> = Vec::new();
+    for (set_id, set) in items {
+        if set.get("kind").and_then(Value::as_str) != Some("marks@1") {
+            continue;
+        }
+        let p = object_or_empty(set.get("params"));
+        let role = p.get("encode").and_then(|e| e.get("role"));
+        if role.and_then(|r| r.get("scale")).and_then(Value::as_str) != Some(id) {
+            continue;
+        }
+        let n = p.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let Some(c) = role
+            .and_then(|r| r.get("column"))
+            .and_then(Value::as_str)
+            .and_then(|name| p.get("columns")?.get(name))
+        else {
+            continue;
+        };
+        let Ok(column) = column_of(c, n, &format!("items/{set_id}/params/columns")) else {
+            continue;
+        };
+        for i in 0..n.max(1) {
+            if let Some(category) = column.text(i) {
+                if !drawn.iter().any(|(c, _)| *c == category) {
+                    drawn.push((category, p));
+                }
+            }
+            if matches!(column, Column::Const(_)) {
+                break;
+            }
+        }
+    }
+    if drawn.is_empty() {
+        return Ok(Vec::new());
+    }
+    let scale = Scale::read(id, item, items)?;
+    let path = format!("items/{id}/params/range");
+    let ink = role(palette, "ink", &path)?;
+    let line = LABEL_SIZE * 1.3;
+    let mid = 16.0 + line / 2.0 + pos[1];
+    let mut x = 16.0 + pos[0];
+    let mut marks = Vec::new();
+    for (k, category) in scale.categories.iter().enumerate() {
+        let Some((_, set)) = drawn.iter().find(|(c, _)| c == category) else {
+            continue;
+        };
+        let Some(name) = scale.role(None, Some(category)) else {
+            continue;
+        };
+        let color = role(palette, name, &path)?;
+        let stroke = set.get("paint").and_then(|pt| pt.get("stroke"));
+        if set.get("mark").and_then(Value::as_str) == Some("path") {
+            let ends = [[x, mid], [x + SWATCH, mid]];
+            let dash = stroke
+                .and_then(|s| s.get("dash"))
+                .and_then(Value::as_array)
+                .map(|d| d.iter().filter_map(Value::as_f64).collect::<Vec<_>>())
+                .filter(|d| d.iter().sum::<f64>() > 0.0 && d.iter().all(|v| *v >= 0.0));
+            let d = match dash {
+                Some(dash) => dashed(&ends, &dash),
+                None => format!("M {} {mid} L {} {mid}", ends[0][0], ends[1][0]),
+            };
+            let width = stroke
+                .and_then(|s| s.get("width"))
+                .and_then(Value::as_f64)
+                .unwrap_or(1.0);
+            marks.push(Mark::Path {
+                item: format!("{id}#swatch{k}"),
+                geometry: Geometry {
+                    verbs: path::parse(&d).unwrap_or_default(),
+                    stroke: Some(width),
+                    fill: false,
+                },
+                d,
+                offset: [0.0, 0.0],
+                color,
+            });
+        } else {
+            marks.push(Mark::Rect {
+                item: format!("{id}#swatch{k}"),
+                bounds: [x + 2.0, mid - 6.0, 12.0, 12.0],
+                radius: 0.0,
+                fill: Fill::Solid(color),
+            });
+        }
+        x += SWATCH + GAP;
+        let width = 0.6 * LABEL_SIZE * category.chars().count() as f64 + 4.0;
+        marks.push(Mark::Text {
+            item: format!("{id}#legend{k}"),
+            spec: TextSpec {
+                text: category.clone(),
+                font: "body".into(),
+                family: Some(deep_text::Role::Body.family()),
+                fallback: Vec::new(),
+                lang: None,
+                size: LABEL_SIZE,
+                weight: 400,
+                width: None,
+                max_lines: None,
+                mask: false,
+                align: Align::Start,
+                bound: false,
+            },
+            origin: [x, mid - line / 2.0],
+            role: None,
+            color: ink,
+            runs: Vec::new(),
+        });
+        x += width + ENTRY_GAP;
     }
     Ok(marks)
 }
@@ -1343,5 +1530,106 @@ mod tests {
             kept.len() < 6 && kept.first() == Some(&"ax#label0"),
             "{kept:?}"
         );
+    }
+
+    #[test]
+    fn an_axis_draws_its_title_past_the_far_end_of_its_line() {
+        let items =
+            json!({"y": {"kind": "scale@1", "params": {"domain": [0, 50], "range": [300, 40]}}});
+        let palette: Palette = [("muted".to_string(), [9, 9, 9])].into();
+        let marks = axis(
+            "ax",
+            &json!({"params": {"scale": "y", "side": "left", "at": 48, "title": "Sales"}}),
+            items.as_object().unwrap(),
+            &palette,
+            [0.0, 0.0],
+        )
+        .unwrap();
+        let title = marks.iter().find_map(|m| match m {
+            Mark::Text { spec, origin, .. } if spec.text == "Sales" => Some(*origin),
+            _ => None,
+        });
+        let Some([_, y]) = title else {
+            panic!(
+                "the axis draws its title: {:?}",
+                marks.iter().map(Mark::item).collect::<Vec<_>>()
+            );
+        };
+        // Above the top tick's label, which centers on the line's top end at 40.
+        assert!(
+            y + LABEL_SIZE * 1.3 <= 40.0 - LABEL_SIZE * 0.65,
+            "title at y {y}"
+        );
+    }
+
+    #[test]
+    fn a_scale_from_categories_to_roles_draws_its_legend_with_each_series_line() {
+        let series = |id: &str, category: &str, dash: Option<[f64; 2]>| {
+            let mut stroke = json!({"width": 3});
+            if let Some(d) = dash {
+                stroke["dash"] = json!(d);
+            }
+            // x [40, 520] and y [200, 120] as little-endian f32.
+            json!({"id": id, "kind": "marks@1", "layer": "main", "order": "a1",
+                "params": {"mark": "path", "n": 2,
+                    "columns": {"x": {"dtype": "f32", "len": 2, "data": "AAAgQgAAAkQ="},
+                                "y": {"dtype": "f32", "len": 2, "data": "AABIQwAA8EI="},
+                                "series": {"const": category}},
+                    "encode": {"x": {"column": "x"}, "y": {"column": "y"},
+                               "role": {"column": "series", "scale": "colors"}},
+                    "paint": {"stroke": stroke}}})
+        };
+        let doc = json!({"format": 1, "size": [600, 320], "layers": {"main": {"writer": "a", "order": "a0"}},
+        "items": {
+            "colors": {"id": "colors", "kind": "scale@1", "layer": "main", "order": "a0",
+                "params": {"type": "ordinal", "domain": ["north", "south"], "range": ["blue", "orange"]}},
+            "north": series("north", "north", None),
+            "south": series("south", "south", Some([6.0, 4.0])),
+        }});
+        let doc = doc.as_object().unwrap();
+        let palette: Palette = [
+            ("ground".to_string(), [255, 255, 255]),
+            ("ink".to_string(), [1, 1, 1]),
+            ("blue".to_string(), [0, 0, 200]),
+            ("orange".to_string(), [250, 120, 0]),
+        ]
+        .into();
+        let frame = crate::scene::frame(
+            doc,
+            object_or_empty(doc.get("items")),
+            &palette,
+            &crate::scene::Record::default(),
+            1.0,
+        )
+        .unwrap();
+        let marks: Vec<Mark> = frame
+            .layers
+            .iter()
+            .flat_map(|l| l.marks.iter().map(|d| d.mark.clone()))
+            .collect();
+        let legend: Vec<&Mark> = marks
+            .iter()
+            .filter(|m| m.item().starts_with("colors#"))
+            .collect();
+        // Each category's name in ink, and its swatch: the series' line in its role, dashed as the
+        // series is.
+        for (category, color, dashed) in [
+            ("north", [0, 0, 200], false),
+            ("south", [250, 120, 0], true),
+        ] {
+            assert!(
+                legend.iter().any(|m| matches!(m, Mark::Text { spec, color: [1, 1, 1], .. } if spec.text == category)),
+                "the legend names {category}: {legend:?}"
+            );
+            let swatch = legend.iter().find_map(|m| match m {
+                Mark::Path { d, color: c, .. } if *c == color => Some(d.matches('M').count()),
+                _ => None,
+            });
+            assert_eq!(
+                swatch.map(|subpaths| subpaths > 1),
+                Some(dashed),
+                "{category}'s swatch is its line, dashed as it is: {legend:?}"
+            );
+        }
     }
 }

@@ -14,7 +14,8 @@ use std::time::Duration;
 use chrono::{Local, TimeZone as _};
 use serde_json::Value;
 
-use crate::states;
+use crate::record::View;
+use crate::states::{self, Table};
 
 /// How long an ask must stay open after it shows before it notifies.
 pub const NOTIFY_AFTER: Duration = Duration::from_secs(1);
@@ -62,10 +63,10 @@ impl Notifier {
         }
     }
 
-    /// The app starts on the record's `events` with what Notification Center still holds from it: nothing already
+    /// The app starts on the record's `view` with what Notification Center still holds from it: nothing already
     /// in the record notifies, since you could have seen it before.
-    pub fn start(&mut self, events: &[Value], delivered: Vec<Notification>) {
-        self.read.extend(events.iter().filter_map(opening));
+    pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
+        self.read.extend(view.unseen.iter().filter_map(opening));
         self.delivered = delivered;
     }
 
@@ -103,12 +104,12 @@ impl Notifier {
             .min()
     }
 
-    /// What is due at `now`, over the record's `events`: `looking_at` is the session whose page is open in the
+    /// What is due at `now`, over the record's `view`: `looking_at` is the session whose page is open in the
     /// focused window, and `sounds` whether this device is the one that plays sounds. A notification of an ask
     /// that closed leaves Notification Center first, and each one posted replaces its session's.
     pub fn due(
         &mut self,
-        events: &[Value],
+        view: &View,
         now: u64,
         looking_at: Option<&str>,
         sounds: bool,
@@ -127,21 +128,22 @@ impl Notifier {
         {
             return Vec::new();
         }
+        let table = view.table();
+        let table = &*table;
         // An ask stays shown until the events close it, whether or not they hold its creation: one raised before the
         // app started is read from the inbox, never from the events.
-        let closed = states::closed_asks(events);
         self.delivered.retain(|notification| {
             notification
                 .ask
                 .as_ref()
-                .is_none_or(|ask| !closed.contains(ask.as_str()))
+                .is_none_or(|ask| table.is_open(ask))
         });
         let mut out = Vec::new();
         for session in self.notices.drain(..) {
             out.push(Notification {
                 ask: None,
-                title: title(events, &session),
-                text: notification_text(events, &session, now),
+                title: title(table, &session),
+                text: notification_text(table, &session, now),
                 session,
                 sound: None,
             });
@@ -150,7 +152,7 @@ impl Notifier {
         let open = if due.is_empty() {
             Vec::new()
         } else {
-            states::open_asks(events, None)
+            table.open_asks(None)
         };
         for (handle, _) in due {
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
@@ -163,8 +165,8 @@ impl Notifier {
             out.push(Notification {
                 ask: Some(handle),
                 session: session.to_owned(),
-                title: title(events, session),
-                text: ask_text(events, ask, now),
+                title: title(table, session),
+                text: ask_text(table, ask, now),
                 sound: sounds.then_some(Sound::Question),
             });
         }
@@ -182,6 +184,11 @@ impl Notifier {
     }
 }
 
+/// Whether the notifier reads the event: it opens an ask, gives it a new deadline or sends a notice.
+pub fn reads(event: &Value) -> bool {
+    opening(event).is_some() || event["kind"] == "notice.sent"
+}
+
 /// The id of the event, if it opens an ask or gives it a new deadline: its creation, the core's undo of its
 /// default, or the core moving its deadline (#908), so the notification names the time its default applies.
 fn opening(event: &Value) -> Option<String> {
@@ -193,14 +200,14 @@ fn opening(event: &Value) -> Option<String> {
 }
 
 /// The notification a session's state posts: DeepBuild and the session's task, then its mark and its state's words.
-pub fn notification_text(events: &[Value], session: &str, now: u64) -> String {
-    match states::open_asks(events, Some(session)).first() {
-        Some(ask) => ask_text(events, ask, now),
+pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
+    match table.open_asks(Some(session)).first() {
+        Some(ask) => ask_text(table, ask, now),
         None => {
-            let state = states::state(events, session);
+            let state = table.state(session);
             format!(
                 "{}\n{} {}",
-                title(events, session),
+                title(table, session),
                 states::glyph(state.entry()),
                 state.text(now)
             )
@@ -209,12 +216,12 @@ pub fn notification_text(events: &[Value], session: &str, now: u64) -> String {
 }
 
 /// A notification's title: it names DeepBuild and the session's task.
-fn title(events: &[Value], session: &str) -> String {
-    format!("DeepBuild · {}", states::title(events, session))
+fn title(table: &Table, session: &str) -> String {
+    format!("DeepBuild · {}", table.title(session))
 }
 
 /// An ask's notification: the session's task, the question, and the default with when it applies.
-fn ask_text(events: &[Value], ask: &Value, now: u64) -> String {
+fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
     let data = &ask["data"];
     let default = data["default"].as_str().unwrap_or_default();
     let label = data["options"]
@@ -223,10 +230,10 @@ fn ask_text(events: &[Value], ask: &Value, now: u64) -> String {
         .and_then(|option| option["label"].as_str())
         .unwrap_or(default);
     // The undo of its default gives it a new deadline.
-    let deadline = states::deadline(events, ask).unwrap_or(now);
+    let deadline = table.deadline(ask).unwrap_or(now);
     format!(
         "{}\n{} {} — {} If you don't answer: {label}, {}.",
-        title(events, ask["session"].as_str().unwrap_or_default()),
+        title(table, ask["session"].as_str().unwrap_or_default()),
         states::glyph(states::State::NeedsYou.entry()),
         states::State::NeedsYou.word(),
         data["question"].as_str().unwrap_or_default(),
@@ -251,6 +258,14 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn view(events: &[Value]) -> View {
+        let mut view = View::default();
+        for event in events {
+            view.apply(event.clone());
+        }
+        view
+    }
+
     #[test]
     fn a_notification_held_from_before_the_app_started_stays_until_its_ask_closes() {
         // The ask was raised before the app started: its creation is in the inbox, not among the events streamed since.
@@ -262,15 +277,15 @@ mod tests {
             sound: None,
         };
         let mut notifier = Notifier::new(Duration::from_secs(1));
-        notifier.start(&[], vec![held]);
+        notifier.start(&View::default(), vec![held]);
         let unrelated =
             json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a2", "data": {}});
         notifier.notices.push("s2".into());
-        notifier.due(std::slice::from_ref(&unrelated), 1_000, None, false);
+        notifier.due(&view(std::slice::from_ref(&unrelated)), 1_000, None, false);
         assert_eq!(notifier.delivered().len(), 2, "{:?}", notifier.delivered());
         let closed =
             json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a1", "data": {}});
-        notifier.due(&[unrelated, closed], 2_000, None, false);
+        notifier.due(&view(&[unrelated, closed]), 2_000, None, false);
         let left: Vec<&str> = notifier
             .delivered()
             .iter()
@@ -291,7 +306,7 @@ mod tests {
             json!({"kind": "default.undone", "writer": "core", "subject": "ask:a1",
                    "data": {"deadline": again}}),
         ];
-        let text = notification_text(&events, "s1", 2_000);
+        let text = notification_text(&view(&events).table(), "s1", 2_000);
         let want = Local
             .timestamp_millis_opt(again as i64)
             .unwrap()
@@ -310,13 +325,13 @@ mod tests {
             "question": "Push?", "default": "no", "deadline": raised + 3_600_000,
             "options": [{"id": "no", "label": "No"}]}});
         let mut notifier = Notifier::new(Duration::from_secs(1));
-        notifier.start(&[ask.clone()], Vec::new());
+        notifier.start(&view(std::slice::from_ref(&ask)), Vec::new());
         let woke = raised + 9 * 3_600_000;
         let moved = woke + 3_600_000;
         let event = json!({"kind": "deadline.moved", "id": "m1", "writer": "core", "subject": "ask:a1",
                            "data": {"span": moved - (raised + 3_600_000), "deadline": moved, "because": "notice"}});
         notifier.saw(&event, woke);
-        let posted = notifier.due(&[ask, event], woke + 1_000, None, false);
+        let posted = notifier.due(&view(&[ask, event]), woke + 1_000, None, false);
         let want = Local
             .timestamp_millis_opt(moved as i64)
             .unwrap()
