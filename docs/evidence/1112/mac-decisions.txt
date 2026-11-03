@@ -20,7 +20,10 @@ Removed with `git worktree remove` (no --force), after the owner's go-ahead in c
                             gpui-kit.d.ts and jsconfig.json in each of crates/deep-app/panels/
                             338-canvas, 338-cap20, 338-drop-folded, 338-hide-newest, 338-home,
                             338-line, 338-list-superseded, 338-needs-you, 338-sidebar, 338-tab,
-                            claude-code, codex. Its ignored packages/*/dist/ went with it too.
+                            claude-code, codex. Its ignored build output went with it too, read
+                            before removal (`git status --porcelain --ignored`, after the 24 lines above):
+                            !! packages/adapters/dist/  !! packages/archive/dist/  !! packages/asks/dist/
+                            !! packages/budget/dist/ ... !! packages/otlp/dist/ (one dist/ per package)
 Branches were kept, so every removed tip is still reachable.
 
 The `?? target` in the three impl/39 worktrees was a symlink, unlinked before the removal:
