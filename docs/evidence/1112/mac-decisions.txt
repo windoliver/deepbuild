@@ -34,7 +34,7 @@ issue-22's target/ itself is untouched; read right after the three unlinks:
 
 `git worktree prune -v` then dropped admin entries only (metadata under .git/worktrees, no files).
 base21 was in the before list as "prunable" (its gitdir pointed nowhere, so its porcelain reads
-`fatal: not a git repository`; the table's 0 is that failed read). It is the sixth line of
+`fatal: not a git repository`; the table's 0 is that failed read). It is the first line of
 mac-worktree-diff.txt; its folder in another session's scratchpad is left as it was. The other eight
 entries were not in `git worktree list` before (their folders were already gone):
   $ git worktree prune -v
@@ -92,14 +92,23 @@ the go-ahead and again just before deleting). All seven were removed with rm -rf
 Before: swap 37,308 of 37,888 MiB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
 Eight Claude Code processes were resident. The rest of the load came from long-lived processes that
 this session did not start, so it did not stop them (rules: stop only processes you started, by PID).
-They were listed for the owner to close by hand:
-  - a `hub run` from the deleted issue-44 worktree (4 days old, parent 1) with its child
-    `log stream --predicate sender == "Sandbox"`, plus a second hub and log stream from /private/tmp/db39A;
-    the two log streams keep diagnosticd at about 120% CPU
-  - a deep-hook `claude-code waiter` from the deleted issue-376 worktree (4 days old)
-  - a floor/run.sh worker from a deleted worktree's scratchpad (11 days old)
-  - eight codex app-server-broker processes (about 6.8 to 13 days old)
-  - ChatGPT with Codex Computer Use, openclaw-gateway
-At 01:50Z (mac-after.txt) they were all still running: swap 37,237 of 37,888 MiB (98%), load 34.7.
+They were listed for the owner to close by hand. Reading at about 01:36Z (command lines cut to the
+part that names them; the before/after files cut them at 160-200 columns):
+  $ ps -o pid,ppid,etime,pcpu,command -p ...
+    PID  PPID     ELAPSED  %CPU COMMAND
+  17029     1 04-20:50:46   0.3 node ~/private/deepbuild-core/.claude/worktrees/issue-44-implementation-3bb689/packages/cli/dist/main.js hub run
+  17036 17029 04-20:50:46  39.4 /usr/bin/log stream --style ndjson --predicate sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+  40417 39850    14:26:57   0.6 node packages/cli/dist/main.js hub run            (cwd /private/tmp/db39A)
+  40503 40417    14:26:56  58.1 /usr/bin/log stream --style ndjson --predicate sender == "Sandbox" AND ...
+  40073     1 11-01:10:54 122.9 /usr/libexec/diagnosticd
+   5920     1 04-22:09:54   0.0 ~/private/deepbuild-core/.claude/worktrees/issue-376-implementation-22897e/target/debug/deep-hook claude-code waiter
+  77635     1 11-03:18:55   0.9 /bin/bash /private/tmp/claude-501/<deleted worktree's scratchpad>/floor/run.sh worker 3 floor-l1
+  11727, 23319, 38896, 41806, 56407, 64508, 67390, 76534   parent 1, codex app-server-broker.mjs serve, 06-20:12 to 13-07:11
+  58001     1    07:39:21  21.4 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+  58701 58001    07:39:08  16.8 .../Codex Computer Use.app/Contents/MacOS/SkyComputerUseService
+  68762     1 07-19:13:39   5.1 openclaw-gateway
+At 01:50Z (mac-after.txt) every one of these PIDs except openclaw-gateway (68762, which is only in the
+before file's top-CPU list) and the db39A hub 40417 (in neither file) is still listed: swap 37,237 of
+37,888 MiB (98%), load 34.7.
 The owner chose to ship these readings now and take the idle readings later, so the first acceptance
 criterion (swap < 50% and load < 8, three readings five minutes apart) is OPEN, not proven.
