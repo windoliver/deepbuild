@@ -179,7 +179,9 @@ fn eval_line(input: &Map<String, Value>) -> Value {
                     many => json!(many),
                 };
                 let mut out = json!({"value": value, "iterations": s.iterations});
-                if let (Some(spec), Some(follow)) = (&motion.channels[c].follow, &program.channel_follows[c]) {
+                // #417's follows come after the channels in the frame; only #489's report more.
+                let spec = motion.channels.get(c).and_then(|ch| ch.follow.as_ref());
+                if let (Some(spec), Some(Some(follow))) = (spec, program.channel_follows.get(c)) {
                     let o = state.follow[c];
                     if spec.rate {
                         out["rate"] = json!(o.rate);
