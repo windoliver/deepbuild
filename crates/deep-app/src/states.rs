@@ -257,9 +257,15 @@ pub fn state(events: &[Value], session: &str) -> State {
     if !open_asks(events, Some(session)).is_empty() {
         return State::NeedsYou;
     }
+    // What a hook says of its attention (#992), an idle prompt a minute after every stop among it, and the core's
+    // reading of the state are no activity that hides a claim.
     let mine: Vec<&Value> = events
         .iter()
         .filter(|event| event["session"] == session)
+        .filter(|event| {
+            !(event["kind"] == "session.attention" && event["writer"] == "hook")
+                && event["kind"] != "session.state"
+        })
         .collect();
     let pos = |event: &Value| event["log_pos"].as_u64().unwrap_or(0);
     let newest = |kinds: &[&str]| {
@@ -322,6 +328,50 @@ pub fn state(events: &[Value], session: &str) -> State {
         Some(_) => State::Working,
         None if activity.is_some() => State::Working,
         None => State::Queued,
+    }
+}
+
+/// The sidebar row's words after the session's title, and the status-map entry its mark draws (#992): the state the
+/// core last recorded for the session as `session.state`, from the one reading over the record that `deep status`
+/// lists, so both name it the same, with "process gone mid-turn" for a process gone; then a claim's state, if the
+/// session's newest stop made one. A session with no `session.state` yet reads as [`state`] does.
+pub fn row(events: &[Value], session: &str, now: u64) -> (String, &'static str) {
+    let shown = state(events, session);
+    let Some(listed) = events.iter().rev().find(|event| {
+        event["kind"] == "session.state" && event["writer"] == "core" && event["session"] == session
+    }) else {
+        return (shown.text(now), shown.entry());
+    };
+    let cause = listed["data"]["cause"].as_str().unwrap_or_default();
+    // The planted app reads a session waiting on you as working.
+    let planted = std::env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiting-as-working");
+    let (word, entry) = match listed["data"]["state"].as_str().unwrap_or_default() {
+        _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
+        "needs you" => ("needs you".to_owned(), "needs_you"),
+        "stuck" => ("stuck".to_owned(), "blocked"),
+        "flagged" if cause == "gone" => ("flagged · process gone mid-turn".to_owned(), "fail"),
+        "flagged" => ("flagged".to_owned(), "fail"),
+        "finished" => ("finished".to_owned(), "idle"),
+        "quiet" => {
+            let last_seen = events
+                .iter()
+                .filter(|event| event["session"] == session && event["kind"] != "session.state")
+                .filter_map(|event| event["ts"].as_u64())
+                .max()
+                .unwrap_or(0);
+            (State::Quiet { last_seen }.text(now), "idle")
+        }
+        _ => ("working".to_owned(), "running"),
+    };
+    match shown {
+        State::SaysDone { .. }
+        | State::Pass
+        | State::SentBack { .. }
+        | State::Blocked
+        | State::Invalid
+        | State::Inconclusive
+        | State::Stale => (format!("{word} · {}", shown.text(now)), shown.entry()),
+        _ => (word, entry),
     }
 }
 
@@ -393,6 +443,23 @@ mod tests {
 
     fn ask(id: &str) -> Value {
         json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn an_idle_prompt_after_a_stop_hides_neither_its_claim_nor_its_state() {
+        // A turn's claim at its stop, then the idle prompt's Notification a minute later (#992), as the record has
+        // them: the claim still shows on every surface, and the sidebar names the state the core recorded.
+        let events = vec![
+            json!({"kind": "tool.before", "writer": "hook", "session": "s1", "log_pos": 1, "ts": 1, "data": {}}),
+            json!({"kind": "claim.made", "writer": "core", "session": "s1", "id": "c1", "log_pos": 2, "ts": 2, "data": {}}),
+            json!({"kind": "session.state", "writer": "core", "session": "s1", "log_pos": 3, "ts": 3,
+                   "data": {"state": "finished", "cause": "finished"}}),
+            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 4, "ts": 60_000,
+                   "data": {"state": "finished"}}),
+        ];
+        assert!(matches!(state(&events, "s1"), State::SaysDone { .. }));
+        let (words, entry) = row(&events, "s1", 60_000);
+        assert_eq!((words.as_str(), entry), ("finished · says done", "running"));
     }
 
     #[test]

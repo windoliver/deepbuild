@@ -108,13 +108,13 @@ async function checkCommand(options) {
 // ---- Recording -----------------------------------------------------------------------------------
 
 // The hook every recorded session runs: it keeps the payload byte for byte and answers a permission
-// request with allow, so a scripted session never waits on a dialog.
+// request with allow, so a scripted session never waits on a dialog, unless the scenario records the dialog itself.
 function hookCommand(dir) {
   const raw = readFileSync(0, 'utf8');
   appendFileSync(join(dir, 'payloads.jsonl'), `${JSON.stringify({ at: Date.now(), raw })}\n`);
   let payload = {};
   try { payload = JSON.parse(raw); } catch {}
-  if (payload.hook_event_name === 'PermissionRequest') process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
+  if (payload.hook_event_name === 'PermissionRequest' && !existsSync(join(dir, 'dialog'))) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
   return 0;
 }
 
@@ -143,7 +143,10 @@ function inTerminal(argv) {
   return ['/bin/sh', ['-c', `cat | ${process.platform === 'darwin' ? `script -q /dev/null /bin/sh -c ${quote(command)}` : `script -q -e -c ${quote(command)} /dev/null`}`]];
 }
 
-/** One scripted session. Steps type text and wait for the turn to end, wait for more stops, or kill the agent mid-call. */
+/**
+ * One scripted session. Steps type text and wait for the turn to end, wait for more stops, press keys in a dialog and
+ * wait for the hook they lead to, or kill the agent mid-call or where it stands.
+ */
 async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
   const [shell, args] = terminal ? inTerminal(argv) : [argv[0], argv.slice(1)];
   const child = spawn(shell, args, { cwd, env: { ...cleanEnv(), TERM: 'xterm-256color' }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -190,16 +193,17 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
       const already = fired();
       if (step.type) { await type(step.type); if (!(await until(() => (step.until ? fired() > already : ends() > before), step.ms ?? 180_000))) { blocked = `no turn end after: ${step.type.slice(0, 60)}`; break; } }
       if (step.stops) if (!(await until(() => ends() >= before + step.stops, step.ms ?? 300_000))) { blocked = `fewer than ${step.stops} more turn ends`; break; }
-      if (step.killOn) {
+      if (step.keys) { child.stdin.write(step.keys); if (step.until && !(await until(() => fired() > already, step.ms ?? 180_000))) { blocked = `no ${step.until.name || 'hook'} after the keys ${JSON.stringify(step.keys)}`; break; } }
+      if (step.killOn || step.kill) {
         if (step.prompt) await type(step.prompt);
-        if (!(await until(() => recorded().some(step.killOn), 180_000))) { blocked = 'the call to crash on never started'; break; }
+        if (step.killOn && !(await until(() => recorded().some(step.killOn), 180_000))) { blocked = 'the call to crash on never started'; break; }
         await sleep(1000);
         for (const { pid, command } of await descendants(child.pid)) if (command.includes(step.binary)) try { process.kill(pid, 'SIGKILL'); } catch {}
         await sleep(2000);
       }
       if (step.wait) await sleep(step.wait);
     }
-    if (terminal && !blocked && !steps.some((step) => step.killOn)) { await type(steps.exit ?? '/exit'); await sleep(4000); }
+    if (terminal && !blocked && !steps.some((step) => step.killOn || step.kill)) { await type(steps.exit ?? '/exit'); await sleep(4000); }
     if (!terminal) await until(() => child.exitCode !== null || child.signalCode !== null, 300_000);
   } finally {
     child.stdin.end();
@@ -214,7 +218,7 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
 // entries that carry your instructions, memory, account or system prompts are left out whole.
 function redactor() {
   const home = homedir(), user = userInfo().username;
-  const swap = (text) => text.split(home).join('~').replaceAll(`-Users-${user}-`, '-Users-user-').replaceAll(`/Users/${user}`, '/Users/user')
+  const swap = (text) => text.split(home).join('~').replaceAll(`-Users-${user}-`, '-Users-user-').replaceAll(`/Users/${user}`, '/Users/user').replaceAll(`-home-${user}-`, '-home-user-').replaceAll(`/home/${user}`, '/home/user')
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'user@example.com');
   const walk = (value) => (typeof value === 'string' ? swap(value) : Array.isArray(value) ? value.map(walk) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, walk(inner)])) : value);
   return walk;
@@ -234,6 +238,7 @@ function binaryPath(name) {
   return path ? realpathSync(path) : null;
 }
 
+const hook = (name) => Object.defineProperty((payload) => payload.hook_event_name === name, 'name', { value: name });
 const CLAUDE_SCENARIOS = [
   { name: 'tools', args: ['--permission-mode', 'default'], steps: [
     { type: 'Use the Bash tool to run: echo corpus-probe' },
@@ -255,17 +260,40 @@ const CLAUDE_SCENARIOS = [
   { name: 'clear', steps: [{ type: 'Use the Bash tool to run: echo before-clear' }, { type: '/clear', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'clear' }, { type: 'Reply with only the word after.' }] },
   { name: 'stop-failure', model: 'claude-nonexistent-model', steps: [{ type: 'Reply with only the word hi.' }] },
   { name: 'crash', steps: [{ prompt: 'Run this exact command with the Bash tool in the foreground and wait for it to finish: node -e "setTimeout(() => console.log(1), 30000)"', killOn: (payload) => payload.hook_event_name === 'PreToolUse' }] },
+  // A permission dialog the person answers (#992): no hook answers it, Enter picks Yes, and the idle prompt's
+  // Notification comes a minute after the turn ends.
+  { name: 'permission-answered', dialog: true, args: ['--permission-mode', 'default'], steps: [
+    { type: 'Use the Write tool to create notes.md in this folder containing the single word one.', until: hook('PermissionRequest') },
+    { wait: 5000 }, { keys: '\r', until: hook('Stop') }, { wait: 75_000 }] },
+  // Denied with Esc once the permission prompt's Notification came, then the terminal closes before the idle prompt
+  // could come: no hook moves the session on.
+  { name: 'permission-denied-esc', dialog: true, args: ['--permission-mode', 'default'], steps: [
+    { type: 'Use the Write tool to create notes.md in this folder containing the single word one.', until: hook('PermissionRequest') },
+    { wait: 20_000 }, { keys: '\x1b' }, { wait: 10_000 }, { kill: true }] },
+  // The terminal closes while the dialog shows.
+  { name: 'permission-terminal-closed', dialog: true, args: ['--permission-mode', 'default'], steps: [
+    { prompt: 'Use the Bash tool to run: touch made.txt', killOn: hook('PermissionRequest') }] },
+  // An MCP server's elicitation dialog (scripts/corpus-elicit.mjs), answered with a name (Enter moves to Accept, and
+  // Enter again accepts), and cancelled with Esc.
+  { name: 'elicitation-answered', mcp: true, args: ['--allowedTools', 'mcp__corpus__ask_name'], steps: [
+    { type: 'Call the ask_name tool of the corpus MCP server once, then reply with only the name it returns.', until: hook('Elicitation') },
+    { wait: 15_000 }, { keys: 'corpus' }, { wait: 1000 }, { keys: '\r' }, { wait: 1000 }, { keys: '\r', until: hook('ElicitationResult'), ms: 20_000 }, { stops: 1 }] },
+  { name: 'elicitation-cancelled', mcp: true, args: ['--allowedTools', 'mcp__corpus__ask_name'], steps: [
+    { type: 'Call the ask_name tool of the corpus MCP server once, then reply with only what it returns.', until: hook('Elicitation') },
+    { wait: 3000 }, { keys: '\x1b', until: hook('ElicitationResult'), ms: 20_000 }, { stops: 1 }] },
 ];
 
-async function recordClaude(out, bin, facts) {
+async function recordClaude(out, bin, facts, only) {
   const hooks = [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const results = [];
-  for (const scenario of CLAUDE_SCENARIOS) {
+  for (const scenario of CLAUDE_SCENARIOS.filter(({ name }) => !only || only.includes(name))) {
     const dir = join(out, scenario.name), work = join(dir, 'work');
     mkdirSync(work, { recursive: true });
+    if (scenario.dialog) writeFileSync(join(dir, 'dialog'), '');
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks: Object.fromEntries(hooks.map((hook) => [hook, [{ hooks: [{ type: 'command', command }] }]])) }));
-    const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
+    if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } }));
+    const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', ...(scenario.mcp ? ['--mcp-config', join(dir, 'mcp.json')] : []), '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
     const steps = scenario.steps.map((step) => ({ ...step, binary: bin }));
     results.push({ scenario: scenario.name, dir, ...(await session({ argv: [bin, ...args], cwd: realpathSync(work), dir, terminal: true, steps, startAfter: (_, payloads) => payloads.some(({ hook_event_name: hook }) => hook === 'SessionStart') })) });
     // A resume of the first session: the same session ID, a new process, SessionStart from "resume".
@@ -363,8 +391,9 @@ async function recordCommand(options) {
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
   if (!bin) { say({ type: 'summary', verdict: 'BLOCKED', reason: `${agent} is not on PATH` }); return 1; }
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
-  const scratch = mkdtempSync('/private/tmp/deep-corpus-');
-  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts);
+  const scratch = mkdtempSync(process.platform === 'darwin' ? '/private/tmp/deep-corpus-' : '/tmp/deep-corpus-');
+  const only = options.scenarios?.split(',');
+  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only);
   const redact = redactor();
   for (const { scenario, dir, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
@@ -393,12 +422,12 @@ const options = { corpus: join(root, 'adapters/corpus'), facts: join(root, 'adap
 for (let index = 0; index < rest.length; index += 2) {
   const [flag, value] = [rest[index], rest[index + 1]];
   if (command === 'hook') { options.dir = flag; break; }
-  if (!['--corpus', '--facts', '--agent', '--out'].includes(flag) || value === undefined) { console.error(`unknown or incomplete option ${flag}`); process.exit(2); }
-  options[flag.slice(2)] = flag === '--agent' ? value : resolve(value);
+  if (!['--corpus', '--facts', '--agent', '--out', '--scenarios'].includes(flag) || value === undefined) { console.error(`unknown or incomplete option ${flag}`); process.exit(2); }
+  options[flag.slice(2)] = flag === '--agent' || flag === '--scenarios' ? value : resolve(value);
 }
 const commands = { replay: replayCommand, check: checkCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
 if (!commands[command] || (command === 'record' && !(options.agent && options.out))) {
-  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir>');
+  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir> [--scenarios <name>,…]');
   process.exit(2);
 }
 process.exitCode = await commands[command](options);

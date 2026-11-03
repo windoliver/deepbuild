@@ -122,6 +122,10 @@ export type AdapterFactsHookRule = {
     values: AdapterFactsCauseMap;
     otherwise: AdapterFactsStopCause;
   };
+  state?: {
+    field: AdapterFactsText;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
 };
 
 export type AdapterFactsOperation = {
@@ -221,6 +225,9 @@ export interface AdapterFacts {
     SubagentStop?: AdapterFactsHookRule;
     TaskCreated?: AdapterFactsHookRule;
     TaskCompleted?: AdapterFactsHookRule;
+    Notification?: AdapterFactsHookRule;
+    Elicitation?: AdapterFactsHookRule;
+    ElicitationResult?: AdapterFactsHookRule;
     TeammateIdle?: AdapterFactsHookRule;
     WorktreeCreate?: AdapterFactsHookRule;
     WorktreeRemove?: AdapterFactsHookRule;
@@ -5017,6 +5024,25 @@ export interface SessionStartV4 {
       tools?: Array<string>;
     }>;
     parent?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@1 */
+export interface SessionState {
+  v: 1;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
   };
   evidence?: Array<string>;
 }

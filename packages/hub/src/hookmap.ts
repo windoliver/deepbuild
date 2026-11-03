@@ -17,6 +17,7 @@ const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 'unknown'];
 const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
+const ATTENTION = ['working', 'waiting', 'finished'];
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
@@ -194,7 +195,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
 
   const facts = registry().get(name).facts as JsonObject;
   const rule = (facts.mapping as JsonObject)[request.event];
-  const kind = isObj(rule) && typeof rule.kind === 'string' ? rule.kind : undefined;
+  let kind = isObj(rule) && typeof rule.kind === 'string' ? rule.kind : undefined;
   if (!kind) return { kind: 'hook', drafts: [], meta };
   const mapped = registry().mapHook({ ...request, agent: name }, newest(name)).events.find((e) => e.kind === kind)?.data ?? {};
   let data: Record<string, unknown> | undefined;
@@ -308,6 +309,19 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       break;
     case 'session.activity':
       data = { activity: str(mapped.activity) || request.event };
+      break;
+    case 'session.attention':
+      // What a hook says of its session's state (#992): waiting on you, at work again, or its turn over. A value the
+      // facts don't list maps to no event, so it says nothing.
+      if (!ATTENTION.includes(str(mapped.state))) return { kind: 'hook', drafts: [], meta };
+      // The planted adapter opens an ask from a notification.
+      if (plant === 'ask-from-notification' && request.event === 'Notification') {
+        kind = 'permission.request';
+        data = { kind: 'question', tool: 'Notification' };
+        break;
+      }
+      data = { state: mapped.state };
+      v = 2;
       break;
     case 'task.completed':
       data = { agent_task: str(mapped.agent_task) || '-', title: scrub(str(mapped.title)) || '-' };

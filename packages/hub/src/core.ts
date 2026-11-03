@@ -33,7 +33,7 @@ import { Confirmer } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
-import { statusRows } from './status.js';
+import { sessionStates, statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -88,6 +88,11 @@ const TURN_GRACE = 100;
 const CURSOR_SAVE = 200;
 /** How long a working session's hooks may go quiet before its transcript's tail is read and, unchanged, it reads unknown. */
 const QUIET_MS = 30_000;
+/**
+ * How long a session waiting on you may go with no hook before it reads unknown (#992): a prompt still showing keeps
+ * needing you this long, while one you denied with Esc says so in no hook, only in the transcript, read each QUIET_MS.
+ */
+const WAITING_QUIET_MS = 300_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
 const CALL_GRACE = 2_000;
 /** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
@@ -154,6 +159,8 @@ const asRefused = (error: unknown): unknown => {
  */
 interface Session {
   id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean;
+  /** The tools' results read from its transcript: one after a prompt with no hook since shows the prompt closed (#992). */
+  results?: number;
   /** The thread its ID joins: IDs rotated by `/clear`, `/compact` or a fork are one thread. */
   thread: string;
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
@@ -188,7 +195,7 @@ const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length >
  * its worktree had, and its loop: wake-ups and crons it scheduled, and background subagents and commands still to report, by call.
  */
 interface Live {
-  agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined;
+  agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined; quietDue?: number; heard?: number; results?: number;
   calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
   from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number }>; looping: boolean;
   /**
@@ -473,6 +480,16 @@ export class Core {
   private readonly offers = new Map<string, { meta: HookMeta; about: About; scope: string }>();
   /** The typed-saves-decision plant's sessions you typed words in. */
   private readonly typedAt = new Map<string, number>();
+  /**
+   * Each session's state as the core last recorded it, `<state>/<cause>`: the one reading deep status lists, recorded as
+   * session.state when it changes so the app draws the same (#992).
+   */
+  private readonly states = new Map<string, string>();
+  private statesRead = false;
+  private stating: Promise<void> | undefined;
+  private restate = false;
+  /** When each session's agent process last had its start time read, by the watch for processes gone (#992). */
+  private readonly startChecked = new Map<string, number>();
   /** How far test.clock has stepped the hub's clock past the wall clock deep-hook stamps hooks by (#965). */
   private stepped = 0;
   /** Each session's promised check (#120): its state as the record has it, the timer for its due time, and whether its one ask was raised. */
@@ -537,6 +554,7 @@ export class Core {
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
     this.record = streamed(this.record, ({ kind, subject, data }) => {
       this.stream();
+      if (kind !== 'session.state') this.stateSoon();
       if (kind.startsWith('ask.') || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
       // appender's next commit holds this thread with its sync (#823).
@@ -613,6 +631,12 @@ export class Core {
     await leases.declare('core', REPLICA_LEASE);
     for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.every('leases', 1000, () => leases.tick());
+    this.every('gone', 1000, () => this.goneSessions());
+    // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
+    for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.states.set(row.session_id, `${row.state}/${row.cause}`);
+    this.statesRead = true;
+    this.stateSoon();
+    this.every('states', 60_000, async () => this.stateSoon());
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
     // ends mid-turn leaves them to the turn's stop. An idle session whose facts have emptied starts what they held, and
     // the gate runner's timers come due on the hub's clock (#965). The planted wrong program reads the facts only at stops.
@@ -1679,8 +1703,11 @@ export class Core {
   private follow(drafts: Draft[], meta: HookMeta, verified: boolean): void {
     if (!meta.session) return;
     const live = this.liveOf(meta);
+    // The hub's own ticker firing FileChanged (#120) says nothing of the session: its quiet reading stays timed (#992).
+    if (meta.event === 'FileChanged') return;
     const now = Date.now();
     live.last = now;
+    const wasWaiting = live.state;
     let state = live.state;
     // A prompt hook opens the turn the next stop is judged on: a person's, with work done in it (#83). A prompt read
     // from the transcript's queue (#25) opens none yet: its turn starts when the agent takes it, at its own prompt
@@ -1703,6 +1730,9 @@ export class Core {
       const call = typeof draft.data.call === 'string' ? draft.data.call : undefined;
       if (draft.kind === 'user.ask') state = 'working';
       else if (draft.kind === 'permission.request') state = 'waiting';
+      // A hook that says the session waits on you, is at work again, or sits idle at its prompt (#992); an idle prompt
+      // after a stop that failed or got stuck leaves the stop's state.
+      else if (draft.kind === 'session.attention' && typeof draft.data.state === 'string' && !(draft.data.state === 'finished' && (state === 'failed' || state === 'stuck'))) state = draft.data.state;
       else if (draft.kind === 'tool.before' || draft.kind === 'tool.after') {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
@@ -1724,9 +1754,12 @@ export class Core {
     clearTimeout(live.quiet);
     live.quiet = undefined;
     if (meta.event === 'SessionEnd') { this.live.delete(meta.session); this.gate.ended(meta.session); this.askingSoon(); }
-    else if (state === 'working' && !statusQuestion && !this.stopping) {
-      live.quiet = setTimeout(() => void this.queue(() => this.quiet(meta.session, now)).catch(() => undefined), QUIET_MS);
-      live.quiet.unref();
+    // A session waiting on you goes quiet as a working one does (#992): a prompt denied with Esc says so in no hook.
+    else if ((state === 'working' || state === 'waiting') && !statusQuestion && !this.stopping) {
+      // The tools' results as the session starts waiting, which a prompt closed with no hook adds to.
+      if (state === 'waiting' && wasWaiting !== 'waiting') live.results = this.sessions.get(meta.session)?.results ?? 0;
+      live.heard = this.now();
+      this.quietIn(meta.session, live, now, live.heard + QUIET_MS);
     }
     // Read on the session's own chain, never the core's: a replay at the start would wait on the start it is part of.
     if (meta.cwd && ['SessionStart', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd'].includes(meta.event)) {
@@ -1747,20 +1780,93 @@ export class Core {
   private async asksYou(session: string): Promise<boolean> {
     return ((await this.record.raw(`SELECT 1 FROM asks WHERE session_id = ? AND status IN ('open', 'later') LIMIT 1`, [session]).catch(() => [])) as unknown[]).length > 0;
   }
-  /** A working session whose hooks went quiet: unknown, unless its transcript's tail shows it still at work. */
+  /** Times the session's quiet reading for `due` on the hub's clock, which a stepped test clock brings on (#992). */
+  private quietIn(id: string, live: Live, since: number, due: number): void {
+    clearTimeout(live.quiet);
+    live.quietDue = due;
+    live.quiet = setTimeout(() => void this.queue(() => this.quiet(id, since)).catch(() => undefined), Math.max(0, due - this.now()));
+    live.quiet.unref();
+  }
+  /**
+   * A working or waiting session whose hooks went quiet: unknown, unless its transcript's tail shows it still at work, or
+   * still at a prompt: one that closed with no hook, as Esc does, leaves your entry in the transcript (#992).
+   */
   private async quiet(id: string, since: number): Promise<void> {
     const live = this.live.get(id);
-    if (!live || live.last !== since || live.state !== 'working') return;
+    if (!live || live.last !== since || (live.state !== 'working' && live.state !== 'waiting')) return;
+    live.quiet = undefined;
     const session = this.sessions.get(id);
     const read = session?.read;
     if (session) await this.readTranscript(session);
-    if (session && session.read !== read) {
-      live.quiet = setTimeout(() => void this.queue(() => this.quiet(id, since)).catch(() => undefined), QUIET_MS);
-      live.quiet.unref();
+    const due = live.quietDue ?? this.now();
+    const going = live.state === 'working' ? session !== undefined && session.read !== read
+      : (session?.results ?? 0) === live.results && due - (live.heard ?? due) < WAITING_QUIET_MS;
+    if (going) {
+      this.quietIn(id, live, since, due + QUIET_MS);
       return;
     }
     live.state = 'unknown';
     await this.attention(id, live.agent, 'unknown');
+  }
+  /**
+   * Every session whose agent's process the hub watched end with no SessionEnd (its terminal closed, it was killed):
+   * its session.gone, lease or not (#992). A process is checked each tick, and its start time, which tells a reused
+   * ID apart, every half minute; a ps that fails proves nothing.
+   */
+  private async goneSessions(): Promise<void> {
+    const now = Date.now();
+    for (const session of [...this.sessions.values()]) {
+      if (session.ended || !session.pid) continue;
+      let alive = running(session.pid);
+      if (alive && now - (this.startChecked.get(session.id) ?? 0) >= 30_000) {
+        this.startChecked.set(session.id, now);
+        const start = await this.startOf(session.pid, true);
+        alive = start === undefined || start === session.start;
+      }
+      if (alive || session.ended) continue;
+      session.ended = true;
+      this.startChecked.delete(session.id);
+      const live = this.live.get(session.id);
+      if (live) { clearTimeout(live.quiet); this.live.delete(session.id); this.gate.ended(session.id); this.askingSoon(); }
+      const ts = this.now();
+      await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      this.endedOrder.delete(session.id);
+      this.endedOrder.add(session.id);
+      this.forgetEnded();
+    }
+  }
+  /** Reads the sessions' states again soon after an append; appends that land meanwhile are read in the next pass. */
+  private stateSoon(): void {
+    if (!this.statesRead || this.stopping) return;
+    if (this.stating) { this.restate = true; return; }
+    this.stating = new Promise((done) => setTimeout(done, 200)).then(() => this.recordStates()).catch(() => undefined).finally(() => {
+      this.stating = undefined;
+      if (this.restate) { this.restate = false; this.stateSoon(); }
+    });
+  }
+  /** Once no state pass is under way or due, the passes appends since asked for included. */
+  private async statesSettled(): Promise<void> {
+    while (this.stating) await this.stating;
+  }
+  /** Appends session.state for each session whose state or cause the one reading now gives differently. */
+  private async recordStates(): Promise<void> {
+    for (const r of await sessionStates((sql) => this.record.raw(sql), this.now())) {
+      const state = `${r.state}/${r.cause}`;
+      if (this.states.get(r.id) === state) continue;
+      const ts = this.now();
+      await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+      this.states.set(r.id, state);
+    }
+  }
+  /** The quiet readings a stepped test clock brought due, each quiet period that passed read in turn. */
+  private async quietDue(): Promise<void> {
+    for (const [id, live] of this.live) {
+      while (live.quiet && live.quietDue !== undefined && live.quietDue <= this.now()) {
+        clearTimeout(live.quiet);
+        live.quiet = undefined;
+        await this.queue(() => this.quiet(id, live.last));
+      }
+    }
   }
   /**
    * The thread a session's ID joins. `/clear`, `/compact` and a fork inside a session rotate the ID in the same agent
@@ -1940,7 +2046,8 @@ export class Core {
       // earlier stop started may still wait, and either may wake the idle session (#85). Only the newest turn's: a prompt you
       // queued may start before the failed turn's hook is stamped, and one that names no turn ends none.
       if (!meta.fields?.agent_id && meta.fields?.prompt_id !== undefined && meta.fields.prompt_id === r.prompt) r.ended = Math.max(r.ended, ulidTime(meta.id));
-    } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart') r.busy = Math.max(r.busy, ulidTime(meta.id));
+    // A notification shows no turn running: Claude Code sends one at an idle prompt too (#992).
+    } else if (meta.event !== 'Stop' && meta.event !== 'SessionStart' && meta.event !== 'Notification') r.busy = Math.max(r.busy, ulidTime(meta.id));
     if (meta.event === 'UserPromptSubmit') r.prompt = meta.fields?.prompt_id;
   }
   /** Claude Code's cap on stop-hook continuations in one turn, from its facts. */
@@ -3216,6 +3323,7 @@ export class Core {
     this.options.clock.start += step;
     this.stepped += step;
     this.gate.tick();
+    void this.quietDue().catch(() => undefined);
     return { now: this.now() };
   }
   /** test.send_back: a send-back planted for the session's next stop (the hub runs with DEEP_HUB_TEST_SEND_BACK=1). */
@@ -3326,6 +3434,7 @@ export class Core {
           const content = line.message.content;
           const parts = Array.isArray(content) ? content.filter(isObj) : [];
           const prompt = line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'));
+          if (line.type === 'user' && !prompt) session.results = (session.results ?? 0) + 1;
           // A prompt's entry, which its origin joins to, opens the turn whose records its stop reads.
           if (prompt && typeof line.promptId === 'string') {
             if (session.prompts.size >= 256) session.prompts.delete(session.prompts.keys().next().value!);
@@ -3603,7 +3712,8 @@ export class Core {
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
-        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
+        // The state pass under way lands first (#992): what deep status lists is in the record the app draws from.
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
@@ -5561,6 +5671,7 @@ export class Core {
     await this.replaying;
     await Promise.all(this.tried);
     await this.chain;
+    await this.stating;
     this.writeCursors();
     this.canvasCore?.close();
     await Promise.allSettled([...this.replicas.values()].map(async (r) => { await r.replica.end(); await r.gone; }));
