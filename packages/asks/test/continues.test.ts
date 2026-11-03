@@ -134,4 +134,41 @@ describe('a resume on a shared task', () => {
     const why = events.filter((e) => e.kind === 'session.reading' && e.session === S2).map((e) => (e.data as Obj).reading);
     expect(why).toEqual([`DeepBuild didn't resume this session when ${task!.ask} closed: you stopped it after the stop.`]);
   });
+
+  it('still records why it skips a session you stopped after 64 newer sessions ended, since the open task covers its stop (#824)', async () => {
+    await record.append(hook2, { v: 1, id: ulid(now), kind: 'session.start', ts: now, seq: seq(now), data: { agent: 'claude-code', worktree: join(dir, 'w2'), branch: 'main', thread: S2 } });
+    for (const [conn, s] of [[hook, S1], [hook2, S2]] as const) {
+      now += 1000;
+      await record.append(conn, { v: 4, id: ulid(now), kind: 'agent.stop', subject: `session:${s.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data: { turn: 1, did_work: false, claim: false, cause: 'sign_in_required', usage: USAGE, outcome: 'failed', signature: 'sig:00a1b2c3d4e5f607', owner: 'you' } });
+    }
+    now += 1000;
+    await asks.tick();
+    const [task] = (await asks.inbox()).filter((r) => r.status !== 'closed');
+    const created = (await record.read({ after: 0, limit: 1000 })).find((e) => e.kind === 'ask.created' && (e.data as Obj).kind === 'unblock');
+    const proves = (created!.data as Obj).proves as string;
+    now += 1000;
+    await record.append(hook2, { v: 1, id: ulid(now), kind: 'session.end', subject: `session:${S2.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data: { reason: 'prompt_input_exit' } });
+    // 64 newer sessions end while the task is open: S2 is past the window of ended sessions kept in memory.
+    for (let i = 0; i < 64; i++) {
+      const churn: Connection = { writer: 'hook', ...who, session: `E${i}`, agent: 'claude-code' };
+      now += 10;
+      await record.append(churn, { v: 1, id: ulid(now), kind: 'session.start', ts: now, seq: seq(now), data: { agent: 'claude-code', worktree: join(dir, `e${i}`), branch: 'main', thread: `E${i}` } });
+      await record.append(churn, { v: 1, id: ulid(now), kind: 'session.end', subject: `session:E${i}`, ts: now, seq: seq(now), data: { reason: 'other' } });
+    }
+    await asks.tick();
+    now += 1000;
+    const claim = `claim:${ulid(now)}`;
+    const vid = ulid(now);
+    await record.append({ writer: 'core', ...who }, { v: 1, id: vid, kind: 'verdict.made', subject: claim, ts: now, data: {
+      outcome: 'PASS', verdict: `verdict:${vid}`, claim, reasons: [], smallest: null, points_to: null, commit: '0'.repeat(40),
+      requirements: [{ req: 'req:01K74G0A1B2C3D4E5F6G7H8J9K#R1', outcome: 'PASS', check: proves, depth: 'unit', oracle: 'code', runs: { clean: 1, needed: 1, counted: [] }, smallest: null, points_to: null, evidence: [], proof: 'test_run' }],
+      key: { commit: '0'.repeat(40), doc_revisions: [], check_digests: [], state_digests: [], environment: 'test', tools: [] },
+    } });
+    now += 5000;
+    await asks.tick();
+    const events = await record.read({ after: 0, limit: 10_000 });
+    expect(events.filter((e) => e.kind === 'session.continued').map((e) => e.session), 'only the session still there resumes').toEqual([S1]);
+    const why = events.filter((e) => e.kind === 'session.reading' && e.session === S2).map((e) => (e.data as Obj).reading);
+    expect(why, 'a session forgotten while the task was open is skipped with no reason').toEqual([`DeepBuild didn't resume this session when ${task!.ask} closed: you stopped it after the stop.`]);
+  });
 });
