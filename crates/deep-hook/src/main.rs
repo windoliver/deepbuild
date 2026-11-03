@@ -83,19 +83,8 @@ static CWD: OnceLock<PathBuf> = OnceLock::new();
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
 /// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
-    if let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) {
-        let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
-        let chosen = uses
-            .iter()
-            .filter_map(|(worktree, value)| match value {
-                Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
-                _ => None,
-            })
-            .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
-            .max_by_key(|(worktree, _)| worktree.as_os_str().len());
-        if let Some((_, path)) = chosen {
-            return PathBuf::from(path);
-        }
+    if let Some(path) = worktree_hub() {
+        return path;
     }
     match setting("hub", "address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
@@ -103,6 +92,22 @@ fn address() -> PathBuf {
         }
         _ => home().join("hub.sock"),
     }
+}
+
+/// The dev hub `deep hub use --root` sent this worktree to, the longest such worktree winning.
+fn worktree_hub() -> Option<PathBuf> {
+    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) else {
+        return None;
+    };
+    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+    uses.iter()
+        .filter_map(|(worktree, value)| match value {
+            Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
+            _ => None,
+        })
+        .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
+        .max_by_key(|(worktree, _)| worktree.as_os_str().len())
+        .map(|(_, path)| PathBuf::from(path))
 }
 
 fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
