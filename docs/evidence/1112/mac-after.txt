@@ -1,6 +1,6 @@
 # #1112 Mac reading AFTER cleanup, not idle: resident processes left as they were (owner chose to skip the idle criterion for now)
 
-# 2026-11-03T01:50:00Z MacBook-Air-97
+# 2026-11-03T01:50:00Z <mac>
 $ sysctl vm.swapusage
 vm.swapusage: total = 37888.00M  used = 37236.94M  free = 651.06M  (encrypted)
 $ sysctl vm.loadavg

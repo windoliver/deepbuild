@@ -1,57 +1,92 @@
 # #1112 on the Mac: what each policy found and what was done (2026-11-03 UTC)
-# Facts per worktree are in mac-before.txt; lists with `git status --porcelain` in
-# mac-before-worktrees.txt and mac-after-worktrees.txt; their difference in mac-worktree-diff.txt.
+# Facts per worktree are in mac-before.txt (table); lists with `git status --porcelain` per worktree in
+# mac-before-worktrees.txt (01:34:04Z) and mac-after-worktrees.txt (01:38:53Z); their difference in
+# mac-worktree-diff.txt. Worktrees of other live sessions can change between the two lists
+# (issue-824-acceptance moved from 7aaf5d17 in the table to 5a00ecfa in the list while it was being read).
+# Sizes from sysctl and df are binary units (MiB, GiB).
 
 ## Worktrees (policy: prune merged branches down to open PRs; never one on an open branch,
-## with uncommitted or untracked edits, or with a live process whose cwd is inside it)
+## with uncommitted, staged or untracked edits, or with a live process whose cwd is inside it)
 
-Removed with `git worktree remove` (no --force), after the owner's go-ahead in chat:
-  agent-acc593499bc1d6118   detached at bddb84dd, in origin/main, porcelain empty
-  agent-a367b84c3ec0c1b93   impl/39-runner, in origin/main, no PR; porcelain was only `?? target`,
-                            a symlink into issue-22's target/, unlinked first (target itself kept)
-  agent-a65e859048883de67   impl/39-loops, same as above
-  agent-ad05b8765cc5b9e8a   impl/39-adapter, same as above
-  issue-327-implementation  PR 809 merged at this tip, porcelain empty; ignored files were generated
-                            only (panels' gpui-kit.d.ts and jsconfig.json, packages' dist/)
+Removed with `git worktree remove` (no --force), after the owner's go-ahead in chat (5 worktrees):
+  agent-acc593499bc1d6118   detached at bddb84dd, in origin/main, porcelain empty; its ignored
+                            0.7 GiB target/ went with it
+  agent-a367b84c3ec0c1b93   impl/39-runner, in origin/main, no PR; porcelain was only `?? target`
+  agent-a65e859048883de67   impl/39-loops, same
+  agent-ad05b8765cc5b9e8a   impl/39-adapter, same
+  issue-327-implementation  PR 809 merged at this tip, porcelain empty. The table counts 24
+                            "non-generated ignored" files: the column's pattern did not know them,
+                            but all 24 match .gitignore lines 16-17 (per-panel tooling output):
+                            gpui-kit.d.ts and jsconfig.json in each of crates/deep-app/panels/
+                            338-canvas, 338-cap20, 338-drop-folded, 338-hide-newest, 338-home,
+                            338-line, 338-list-superseded, 338-needs-you, 338-sidebar, 338-tab,
+                            claude-code, codex. Its ignored packages/*/dist/ went with it too.
 Branches were kept, so every removed tip is still reachable.
 
-`git worktree prune -v` dropped admin entries whose folders were already gone (metadata only):
-  base21 (gitdir pointed nowhere; its folder in another session's scratchpad is left as it was),
-  issue-44-implementation-3bb689, issue-137-implementation-1d9a30, issue-488-implementation-de6827,
-  issue-111-implementation-5e4986, issue-358-implementation-8c5ca4, issue-331-implementation-4a2ef3,
-  issue-777-47bdc6, issue-376-implementation-22897e
+The `?? target` in the three impl/39 worktrees was a symlink, unlinked before the removal:
+  $ ls -la <wt>/target   (read before unlinking)
+  agent-a367b84c3ec0c1b93/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+  agent-a65e859048883de67/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+  agent-ad05b8765cc5b9e8a/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+issue-22's target/ itself is untouched (still listed after the unlink).
+
+`git worktree prune -v` then dropped admin entries only (metadata under .git/worktrees, no files).
+base21 was in the before list as "prunable" (its gitdir pointed nowhere, so its porcelain reads
+`fatal: not a git repository`; the table's 0 is that failed read). It is the sixth line of
+mac-worktree-diff.txt; its folder in another session's scratchpad is left as it was. The other eight
+entries were not in `git worktree list` before (their folders were already gone):
+  $ git worktree prune -v
+  Removing worktrees/issue-44-implementation-3bb689: gitdir file does not exist
+  Removing worktrees/issue-137-implementation-1d9a30: gitdir file does not exist
+  Removing worktrees/issue-488-implementation-de6827: gitdir file does not exist
+  Removing worktrees/issue-111-implementation-5e4986: gitdir file does not exist
+  Removing worktrees/issue-358-implementation-8c5ca4: gitdir file does not exist
+  Removing worktrees/issue-331-implementation-4a2ef3: gitdir file does not exist
+  Removing worktrees/issue-777-47bdc6: gitdir file does not exist
+  Removing worktrees/base21: gitdir file points to non-existent location
+  Removing worktrees/issue-376-implementation-22897e: gitdir file does not exist
 
 Kept, listed for the owner:
+  deepbuild-core (main checkout)   `M package-lock.json`, 432 live processes
   feat-761-scrub-field-names       PR 778 merged at tip, clean, but 13 live processes run in it
   issue-30-ac12-counting           PR 720 merged at tip, untracked .claude/, 7 live processes
-  issue-22-implementation-14b8cf   PR 877 merged, but 368 uncommitted lines and a 7.7 GB target/
+  issue-22-implementation-14b8cf   PR 877 merged, but 368 uncommitted lines and a 7.7 GiB target/
   issue-63-read-by-reference       in origin/main, two modified files
   issue-303-implementation-814647  in origin/main, clean, but an ignored packages/tasks/ that is not generated
   agent-* with untracked tests/acceptance/<n>/ (blind drafts): a02a6b7e, a201604a, a5248a97, a5a1aa40,
-    a6c5fa28, a82eaf08, a884ad18, a91442a6, a926336e, a941a951, aa4208f6, abcd69cb, aca6492c, adadec93, af731015
+    a6c5fa28, a82eaf08, a884ad18, a91442a6, a926336e, a941a951, adadec93, af731015
+  agent-* with tracked edits: aa4208f6 (modified crates/deep-replica/Cargo.toml, untracked tests),
+    abcd69cb (staged tests/acceptance/332/), aca6492c (modified and deleted tests/acceptance/331/ files)
   agent-* clean but with commits not in origin/main and no PR: a0a70551, a2dd046b, a7f6dff7 (blind/39-acceptance),
     a95c2444, aab08fb2, ac7f89f1, add91173
-  issue-45-implementation-e83eea   detached, not in main, target/ 10.7 GB (large target listed, not touched)
+  issue-45-implementation-e83eea   detached, not in main, target/ 10.7 GiB (large target listed, not touched)
   issue-824-acceptance             detached, not in main, active today
   db31main, db39A, db45ac          other sessions' detached checkouts under /private/tmp with live processes
   remote-control-52cfec, summary-document-review-346b4a   live sessions, untracked files
-  issue-842-implementation-2194f1  this session's worktree (branch claude/issue-1112-...), target/ 13.2 GB
+  issue-842-implementation-2194f1  this session's worktree (branch claude/issue-1112-...), target/ 13.2 GiB
 
 ## target/ in worktrees idle more than three days
 No worktree had been idle more than three days (largest idle reading 2.5 days, from the
-mtime of each worktree's index, HEAD and logs/HEAD), so no target/ was deleted.
+mtime of each worktree's index, HEAD and logs/HEAD), so no target/ was deleted on its own; the only
+target/ removed was the 0.7 GiB one inside agent-acc593499bc1d6118, which went with that worktree.
 Large targets, listed for the owner and never deleted by an agent:
-  issue-842-implementation-2194f1 13.2 GB, issue-45-implementation-e83eea 10.7 GB,
-  issue-22-implementation-14b8cf 7.7 GB (also the target the three impl/39 symlinks pointed at)
+  issue-842-implementation-2194f1 13.2 GiB, issue-45-implementation-e83eea 10.7 GiB,
+  issue-22-implementation-14b8cf 7.7 GiB (also the target the three impl/39 symlinks pointed at)
 
 ## Orphaned proof-run copies under $TMPDIR
-Seven deep-proof-run-* folders (about 2.4 GB, 50 to 215 hours old). For each, `lsof +D` found no
+Seven deep-proof-run-* folders (about 2.4 GiB, 50 to 215 hours old). For each, `lsof +D` found no
 process holding a file or cwd inside it and no running command line named it, read twice (before
 the go-ahead and again just before deleting). All seven were removed with rm -rf.
-Free disk on /System/Volumes/Data went from 34 GiB to 39 GiB after the removals above.
+
+## Free disk (/System/Volumes/Data, df -h)
+  before cleanup (mac-before.txt)                       34Gi available
+  right after the proof copies went (01:38Z)            39Gi available
+    $ df -h /System/Volumes/Data
+    /dev/disk3s5   460Gi   360Gi    39Gi    91%    5.8M  408M    1%   /System/Volumes/Data
+  at 01:50Z (mac-after.txt), other sessions still building  38Gi available
 
 ## Resident sessions and swap
-Before: swap 37.3 of 37.9 GB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
+Before: swap 37,308 of 37,888 MiB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
 Eight Claude Code processes were resident. The rest of the load came from long-lived processes that
 this session did not start, so it did not stop them (rules: stop only processes you started, by PID).
 They were listed for the owner to close by hand:
@@ -62,7 +97,6 @@ They were listed for the owner to close by hand:
   - a floor/run.sh worker from a deleted worktree's scratchpad (11 days old)
   - eight codex app-server-broker processes (7 to 13 days old)
   - ChatGPT with Codex Computer Use, openclaw-gateway
-At 01:50Z (mac-after.txt) they were all still running: swap 37.2 of 37.9 GB (98%), load 34.7,
-free disk 38 GiB. The owner chose to ship these readings now and take the idle readings later,
-so the first acceptance criterion (swap < 50% and load < 8, three readings five minutes apart)
-is OPEN, not proven.
+At 01:50Z (mac-after.txt) they were all still running: swap 37,237 of 37,888 MiB (98%), load 34.7.
+The owner chose to ship these readings now and take the idle readings later, so the first acceptance
+criterion (swap < 50% and load < 8, three readings five minutes apart) is OPEN, not proven.

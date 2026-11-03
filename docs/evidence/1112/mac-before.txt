@@ -1,6 +1,6 @@
 # #1112 Mac reading BEFORE cleanup (MacBook Air M3, 8 cores, 16 GB)
 
-# 2026-11-03T01:30:02Z MacBook-Air-97
+# 2026-11-03T01:30:02Z <mac>
 $ sysctl vm.swapusage
 vm.swapusage: total = 37888.00M  used = 37307.75M  free = 580.25M  (encrypted)
 $ sysctl vm.loadavg
@@ -55,13 +55,13 @@ $ top CPU
 39549   3.6  78336 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/153.0.8010.53/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)
 
 $ deep-proof-run-* copies under $TMPDIR, with PIDs holding them (lsof +D) or naming them (ps)
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-j4rQxm size_kb=755100 mtime_age_h=215 lsof_pids=[] argv_pids=[]
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-iuchsJ size_kb=755404 mtime_age_h=213 lsof_pids=[] argv_pids=[]
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-7uxEmf size_kb=212 mtime_age_h=210 lsof_pids=[] argv_pids=[]
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-g4XJXA size_kb=913704 mtime_age_h=54 lsof_pids=[] argv_pids=[]
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-SHuE7H size_kb=52 mtime_age_h=213 lsof_pids=[] argv_pids=[]
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-Q7bu9q size_kb=4 mtime_age_h=50 lsof_pids=[] argv_pids=[]
-/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-oJAZ7o size_kb=176 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-j4rQxm size_kb=755100 mtime_age_h=215 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-iuchsJ size_kb=755404 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-7uxEmf size_kb=212 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-g4XJXA size_kb=913704 mtime_age_h=54 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-SHuE7H size_kb=52 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-Q7bu9q size_kb=4 mtime_age_h=50 lsof_pids=[] argv_pids=[]
+$TMPDIR/deep-proof-run-oJAZ7o size_kb=176 mtime_age_h=210 lsof_pids=[] argv_pids=[]
 
 $ worktree facts (scratchpad hygiene.mjs, read-only; PRs from gh pr list --state all)
 worktree | head | branch | PRs | HEAD in origin/main | porcelain lines | non-generated ignored | target GB | idle days | live PIDs (cwd inside)
