@@ -62,4 +62,7 @@ They were listed for the owner to close by hand:
   - a floor/run.sh worker from a deleted worktree's scratchpad (11 days old)
   - eight codex app-server-broker processes (7 to 13 days old)
   - ChatGPT with Codex Computer Use, openclaw-gateway
-The idle readings after that are in mac-idle.txt.
+At 01:50Z (mac-after.txt) they were all still running: swap 37.2 of 37.9 GB (98%), load 34.7,
+free disk 38 GiB. The owner chose to ship these readings now and take the idle readings later,
+so the first acceptance criterion (swap < 50% and load < 8, three readings five minutes apart)
+is OPEN, not proven.
