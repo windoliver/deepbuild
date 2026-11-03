@@ -1,0 +1,49 @@
+Base commit: 42060bb7 (Merge pull request #1135 from windoliver/worktree-github-issue-1098-1b39be)
+Commands (one file at a time, node 24.22.0 = ~/.local/bin/node first on PATH):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/997/<file>.test.ts
+  after npm ci, npm run build --workspaces and cargo build --locked -p deep-hook
+Date: 2026-11-02  Node v24.22.0  linux-arm64
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/997/tsconfig.json exits 0 at the base.
+
+Every criterion's main test fails at a named assertion, for the reason the issue gives. The recorded session does not
+exist at the base, so the tests on it fail BLOCKED, naming the folder it must be recorded to; the made-up twin of it
+(README, The twin) replays into the base hub and shows the base's behavior the criterion names. The wrong-program tests
+fail at hub start, since the base lists no plant `monitor-unread`. Trimmed to the relevant lines.
+
+== replay.test.ts (AC1): exit 1, Tests 5 failed (5), 3.0 s
+The Proof's reading (the twin, base hub, no plant):
+  AC1 the made-up twin: rows after each stop: stop 1 "finished: its turn stopped 0s ago"; stop 2 "finished: its turn
+  stopped 0s ago"; stop 3 "finished: its turn stopped 0s ago"; stop 4 "finished: its turn stopped 0s ago"; loop
+  readings: null, {"state":"none_left"}, {"state":"none_left"}, {"state":"none_left"}; judgements: 2; notified at stops [1, 2, 3, 4]
+× AC1 #997.13bd3097 the fixture corpus holds the session: a Monitor call arming a watch, three wakes from its events, a TaskStop of the watch, and its expected events, replaying clean
+  AssertionError: BLOCKED: no claude-code version the facts cover holds the recorded session adapters/corpus/claude-code/<version>/monitor/ (README, The fixture): expected undefined to be defined
+× AC1 #997.13bd3097 the recorded session, replayed through deep-hook into the hub: waiting on its monitor at each stop before the watch ends, one judgement after it, one notification
+  AssertionError: BLOCKED: no claude-code version the facts cover holds the recorded session adapters/corpus/claude-code/<version>/monitor/ (README, The fixture): expected undefined to be defined
+× AC1 #997.13bd3097 (the merge base's reading) a hub that reads loop facts without Monitor (DEEP_HUB_PLANT=monitor-unread) reads finished after the first stop, notifies four times, and fails this test, naming the turns
+  AssertionError: BLOCKED: no claude-code version the facts cover holds the recorded session adapters/corpus/claude-code/<version>/monitor/ (README, The fixture): expected undefined to be defined
+× AC1 #997.13bd3097 the session as the issue describes it (the made-up twin, README), replayed into the hub: the same readings
+  AssertionError: the made-up twin: turn 1 (your prompt, which armed the monitor): its stop must read waiting on its
+  monitor while the watch runs; the row reads "finished: its turn stopped 0s ago"; turn 1 (your prompt, which armed the
+  monitor): its stop's loop reading must be looping while the watch runs; it is null; turn 2 (the monitor's first
+  event): its stop must read waiting on its monitor while the watch runs; the row reads "finished: its turn stopped 0s
+  ago"; turn 2 (the monitor's first event): its stop's loop reading must be looping while the watch runs; it is
+  {"state":"none_left"}; turn 3 (its second event): its stop must read waiting on its monitor while the watch runs; the
+  row reads "finished: its turn stopped 0s ago"; turn 3 (its second event): its stop's loop reading must be looping
+  while the watch runs; it is {"state":"none_left"}; the gate judged the claim while the watch still ran, at turn 1
+  (your prompt, which armed the monitor); you must be notified once, at turn 4 (its third event, which stopped the
+  watch); you were notified 4 times, at turn 1 (your prompt, which armed the monitor), turn 2 (the monitor's first
+  event), turn 3 (its second event), turn 4 (its third event, which stopped the watch)
+× AC1 #997.13bd3097 (the merge base's reading) the made-up twin under DEEP_HUB_PLANT=monitor-unread reads finished after the first stop, notifies four times, and fails this test, naming the turns
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=monitor-unread (the planted wrong program this test runs against): …
+  Error: DEEP_HUB_PLANT=monitor-unread names no planted program
+
+== facts.test.ts (AC2): exit 1, Tests 2 failed | 1 passed (3), 0.3 s
+  AC2 planted: exit 1; FAIL lines naming Monitor: none
+× AC2 #997.a820a75b the shipped loop facts name Claude Code's Monitor call, so there is an entry to take out
+  AssertionError: adapters/loops.facts.json names a Monitor entry for Claude Code: expected '{"wakeups":{"ScheduleWakeup":{"delayS…' to contain '"Monitor"'
+× AC2 #997.a820a75b node scripts/corpus.mjs check, given loops.facts.json without the Monitor entry, fails the loop-facts conformance case, naming Monitor
+  AssertionError: a FAIL line of the loop-facts conformance case names the tool, Monitor; the FAIL lines were: FAIL
+  corpus: claude-code 2.1.299's set has no recorded FileChanged payload … (only the corpus lane's existing FAIL lines,
+  which fail on main here too; none names Monitor: the base has no loop-facts conformance case)
+✓ AC2 #997.a820a75b (control) the same check with the shipped loop facts has no loop-facts FAIL line naming Monitor
+  (passes: a control, the case must not fail the shipped facts)

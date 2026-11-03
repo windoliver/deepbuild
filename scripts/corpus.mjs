@@ -73,6 +73,26 @@ function size(dir) {
   return readdirSync(dir, { withFileTypes: true }).reduce((total, entry) => total + (entry.isDirectory() ? size(join(dir, entry.name)) : statSync(join(dir, entry.name)).size), 0);
 }
 
+const strings = (value) => (typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : []);
+/**
+ * The loop-facts conformance case (#997): a Claude Code call a recorded set shows starting work whose events wake the
+ * session, one whose response names a task a later `<task-notification>` prompt names, has its entry in the loop facts.
+ */
+function loopFactsCase(loops, corpus) {
+  // A facts folder with no loop facts (an agent's own, planted alone) has none to judge.
+  if (!loops) return [];
+  const named = new Set(Object.values(loops?.agents?.claude ?? {}).flatMap((section) => (section && typeof section === 'object' && !Array.isArray(section) ? Object.keys(section) : [])));
+  const missing = new Map();
+  for (const version of folders(join(corpus, 'claude-code'))) {
+    for (const session of readSet(corpus, 'claude-code', version)) {
+      const payloads = session.cases.map(({ payload }) => payload ?? {});
+      const woken = new Set(payloads.flatMap((p) => (p.hook_event_name === 'UserPromptSubmit' ? [...String(p.prompt ?? '').matchAll(/<task-id>([^<]+)<\/task-id>/g)].map((m) => m[1]) : [])));
+      for (const p of payloads) if (p.hook_event_name === 'PostToolUse' && !named.has(p.tool_name) && !missing.has(p.tool_name) && strings(p.tool_response).some((v) => woken.has(v))) missing.set(p.tool_name, session.ref);
+    }
+  }
+  return [...missing].map(([tool, ref]) => [`the loop facts (loops.facts.json) name no entry for Claude Code's ${tool}, whose call in ${ref} started work whose events wake the session`, `Name ${tool} under agents.claude in adapters/loops.facts.json, with how its work is found and how it ends.`]);
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -97,6 +117,7 @@ async function checkCommand(options) {
       if (clean.get(`${agent}/${version}`) === false) failures.push([`${agent} ${version}'s set does not replay clean, so its range can't cover it`, 'Run node scripts/corpus.mjs replay and fix the payloads named there.']);
     }
   }
+  failures.push(...loopFactsCase(facts.loops?.facts, options.corpus));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);
@@ -178,6 +199,11 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
           if (/❯Yes,Itrustthisfolder/.test(dialog)) { child.stdin.write('\r'); trust.done = true; }
           else if (Date.now() - (trust.moved ?? 0) > 800) { child.stdin.write('\x1b[B'); trust.moved = Date.now(); }
         }
+        // Claude Code's notice of the Claude in Chrome extension, before the session starts: keep browser tools off.
+        const chrome = text.slice(text.lastIndexOf('ClaudeinChromeextensiondetected'));
+        if (!recorded().some(({ hook_event_name: hook }) => hook === 'SessionStart') && text.includes('ClaudeinChromeextensiondetected') && /❯No,keepbrowsertoolsoff/.test(chrome) && /Entertoconfirm/.test(chrome)) {
+          if (Date.now() - (trust.chromeSeen ??= Date.now()) > 1500 && Date.now() - (trust.chromeAt ?? 0) > 1500) { child.stdin.write('\x1b'); trust.chromeAt = Date.now(); }
+        }
         return startAfter(text, recorded());
       }, 60_000);
       if (!ready && !blocked) blocked = 'the session never became ready for a prompt';
@@ -250,6 +276,10 @@ const CLAUDE_SCENARIOS = [
     { type: 'Use the Agent tool with a general-purpose subagent to run the Bash command echo from-child. Then end your turn; report its output when it finishes.' },
     { stops: 1 }] },
   { name: 'loop', steps: [{ type: '/loop 1m Reply with only the word tick. Do not use tools.' }, { stops: 1, ms: 150_000 }, { type: '/loop stop' }] },
+  // A monitor armed, three of its events each waking the session, and the watch stopped in the third's turn (#997).
+  { name: 'monitor', steps: [
+    { type: 'Use the Monitor tool to watch this command: for i in 1 2 3; do sleep 20; echo tick-$i; done; sleep 600 . Then end your turn. Each time an event arrives, reply with only the tick you saw; when tick-3 arrives, use the TaskStop tool to stop the monitor, then end your turn.' },
+    { stops: 3, ms: 240_000 }, { wait: 5000 }] },
   { name: 'compact', steps: [{ type: 'Use the Bash tool to run: echo before-compact' }, { type: '/compact', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'compact' }, { type: 'Reply with only the word after.' }] },
   // `/clear` rotates the session ID in the same process; the second session is then forked by a new one.
   { name: 'clear', steps: [{ type: 'Use the Bash tool to run: echo before-clear' }, { type: '/clear', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'clear' }, { type: 'Reply with only the word after.' }] },
@@ -363,7 +393,7 @@ async function recordCommand(options) {
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
   if (!bin) { say({ type: 'summary', verdict: 'BLOCKED', reason: `${agent} is not on PATH` }); return 1; }
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
-  const scratch = mkdtempSync('/private/tmp/deep-corpus-');
+  const scratch = mkdtempSync(process.platform === 'darwin' ? '/private/tmp/deep-corpus-' : '/tmp/deep-corpus-');
   const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts);
   const redact = redactor();
   for (const { scenario, dir, blocked, payloads } of results) {
