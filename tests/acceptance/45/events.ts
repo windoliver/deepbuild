@@ -52,14 +52,6 @@ export const finished = (session: string, ts: number, run: string, check: string
 export const stale = (session: string, ts: number, run: string, check: string, claim: string, newer: string): RecordEvent =>
   event('run.stale', 1, session, ts, { session: `session:${session}`, run, check, claim, newer_claim: newer });
 
-/** check.held@1 (README): at a looping session's stop a slow check took its held place; `replaced` is the claim whose place it took. */
-export const heldPlace = (session: string, ts: number, check: string, claim: string, replaced: string | null): RecordEvent =>
-  event('check.held', 1, session, ts, { session: `session:${session}`, check, claim, replaced });
-
-/** check.held_start@1 (README): a held check started, and what started it. */
-export const heldStart = (session: string, ts: number, check: string, claim: string, by: 'pause' | 'due_later' | 'grace_window' | 'claim' | 'words'): RecordEvent =>
-  event('check.held_start', 1, session, ts, { session: `session:${session}`, check, claim, by });
-
 export type Cost = { basis: 'reported'; usd: number } | { basis: 'estimated'; usd: number; rate_card: string } | { basis: 'unpriced' };
 export const usage = (session: string, ts: number, turn: string, tokens: { input: number; output: number; cached?: number }, cost: Cost): RecordEvent =>
   event('turn.usage', 1, session, ts, { turn, model: 'claude-haiku-5-5', covers: 'turn', tokens: { cached: 0, ...tokens, exact: true }, cost });

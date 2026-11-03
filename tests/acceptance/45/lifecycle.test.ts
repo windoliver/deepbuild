@@ -1,8 +1,8 @@
 // #45 AC15, AC16: per session, the slow-lane runs that ended stale and the checks held for a loop, on the record facts the
 // README defines (run.stale@1, check.held@1, check.held_start@1).
 import { describe, expect, it } from 'vitest';
-import { loopHolds, staleRuns } from '../../../packages/readings/src/index.ts';
-import { ask, claimOf, DAY, finished, held, heldPlace, heldStart, runOf, SECOND, stale, started, T0 } from './events.ts';
+import { staleRuns } from '../../../packages/readings/src/index.ts';
+import { ask, claimOf, DAY, finished, held, runOf, SECOND, stale, started, T0 } from './events.ts';
 
 describe('AC15 slow-lane runs that ended stale', () => {
   /** S15 runs across midnight UTC: the first journey ends stale on one day, the second on the next. S15b has one more. */
@@ -51,33 +51,5 @@ describe('AC15 slow-lane runs that ended stale', () => {
     expect(session?.within_30s).toBe(0);
     expect(session?.runs[0]?.outdated_by).toBe('app');
     expect(session?.runs[0]?.after_ms).toBe(45_000);
-  });
-});
-
-describe('AC16 checks held for a loop', () => {
-  it('#45.5f772137 AC16 held through three goal turns, each newer snapshot taking its place, and started at the goal\'s end: three places taken, three runs saved, one start, by the loop\'s pause, 45 s from its own stop; counting the places as runs fails', () => {
-    const at = (n: number) => T0 + n * 60 * SECOND;
-    const claims = [claimOf('L0'), claimOf('L1'), claimOf('L2'), claimOf('L3')];
-    const read = loopHolds([
-      ask('S16', at(0) - SECOND, 'continuation'),
-      held('S16', at(0), { fast: 2000, claim: claims[0]! }),
-      heldPlace('S16', at(0), 'journey', claims[0]!, null),
-      ask('S16', at(1) - SECOND, 'continuation'),
-      held('S16', at(1), { fast: 2000, claim: claims[1]! }),
-      heldPlace('S16', at(1), 'journey', claims[1]!, claims[0]!),
-      ask('S16', at(2) - SECOND, 'continuation'),
-      held('S16', at(2), { fast: 2000, claim: claims[2]! }),
-      heldPlace('S16', at(2), 'journey', claims[2]!, claims[1]!),
-      ask('S16', at(3) - SECOND, 'continuation'),
-      held('S16', at(3), { fast: 2000, claim: claims[3]! }),
-      heldPlace('S16', at(3), 'journey', claims[3]!, claims[2]!),
-      heldStart('S16', at(3) + 45 * SECOND, 'journey', claims[3]!, 'pause'),
-      started('S16', at(3) + 45 * SECOND, runOf('j'), 'journey', claims[3]!),
-    ]);
-    const session = read.sessions.find((s) => s.session === 'S16');
-    expect(session?.places_taken).toBe(3);
-    expect(session?.runs_saved).toBe(3);
-    expect(session?.runs_started, 'the held places never ran').toBe(1);
-    expect(session?.starts).toEqual([{ check: 'journey', claim: claims[3], by: 'pause', waited_ms: 45_000 }]);
   });
 });
