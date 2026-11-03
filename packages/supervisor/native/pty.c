@@ -560,6 +560,8 @@ static void hub_call(Host *h, unsigned char type, const Buf *body) {
   if (type == 'I') {
     enqueue(h, body->p, body->n);
     send_frame(h, 'i', NULL);
+    // The planted host answers at once, as the base's hub never waited, before its write blocks its loop.
+    if (h->input_blocks && write_all(h->hub, h->out.p, (ssize_t)h->out.n) == 0) h->out.n = 0;
   } else if (type == 'R' && body->n == 4) {
     int cols = (body->p[0] & 0xff) | (body->p[1] & 0xff) << 8, rows = (body->p[2] & 0xff) | (body->p[3] & 0xff) << 8;
     if (cols >= 1 && rows >= 1 && cols <= 1000 && rows <= 1000) {
