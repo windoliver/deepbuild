@@ -51,7 +51,7 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
     })
 }
 
-const BUILD_OPS: [&str; 2] = ["scene3d.build", "building.build"];
+const BUILD_OPS: [&str; 3] = ["scene3d.build", "scene3d.build_live", "building.build"];
 
 fn has_geometry(kind: &str) -> bool {
     builders::KINDS.contains(&kind) || deep_canvas_scene3d::building::KINDS.contains(&kind)
