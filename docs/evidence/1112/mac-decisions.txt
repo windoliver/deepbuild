@@ -123,5 +123,18 @@ part that names them; the before/after files cut them at 160-200 columns):
 At 01:50Z (mac-after.txt) every one of these PIDs except openclaw-gateway (68762, which is only in the
 before file's top-CPU list) and the db39A hub 40417 (in neither file) is still listed: swap 37,237 of
 37,888 MiB (98%), load 34.7.
-The owner chose to ship these readings now and take the idle readings later, so the first acceptance
-criterion (swap < 50% and load < 8, three readings five minutes apart) is OPEN, not proven.
+
+Around 02:25Z the owner stopped them by hand (this session's own attempt was refused by its permission
+classifier). Read at 02:30Z: gone except 17029 (the issue-44 hub, whose log stream 17036 did end) and
+the db39A hub 40417 with its log stream 40503, left to the live Issue 39 session. ChatGPT had quit.
+Nine Claude Code sessions stayed resident (eight before plus one new).
+
+## AC1 readings (mac-idle.txt)
+  02:31:10Z  swap 30,172 of 31,744 MiB (95%)  load 60.44
+  02:36:16Z  swap 29,907 of 30,720 MiB (97%)  load 6.78
+  02:41:25Z  swap 30,417 of 31,744 MiB (96%)  load 5.67
+No cargo, rustc, vitest, proof or stryker process in any of them. Load got under 8 once the stale
+processes went; swap did not move, because macOS frees swapped pages only when the processes that own
+them exit, and the nine sessions stayed. The first acceptance criterion (swap < 50% and load < 8,
+three readings five minutes apart) is NOT met on the Mac. Next step: fewer resident sessions (the
+issue's scope says at most three), or a restart, then the three readings again.

@@ -1,0 +1,32 @@
+# #1112 AC1 on the Mac: three readings five minutes apart, after the owner stopped the stale processes (02:2xZ)
+# Result: load under 8 in readings 2 and 3; swap 95-97% in all three, so AC1 is NOT met (swap < 50% fails).
+# 'resident Claude Code processes' counts two lines per session (the disclaimer wrapper and claude itself): 18 = 9 sessions.
+
+## reading 1 at 2026-11-03T02:31:10Z
+$ sysctl vm.swapusage
+vm.swapusage: total = 31744.00M  used = 30171.62M  free = 1572.38M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 60.44 74.05 69.62 }
+$ cargo, rustc, vitest, proof, stryker processes
+$ resident Claude Code processes
+18
+
+## reading 2 at 2026-11-03T02:36:16Z
+$ sysctl vm.swapusage
+vm.swapusage: total = 30720.00M  used = 29906.56M  free = 813.44M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 6.78 29.95 50.09 }
+$ cargo, rustc, vitest, proof, stryker processes
+$ resident Claude Code processes
+18
+
+## reading 3 at 2026-11-03T02:41:25Z
+$ sysctl vm.swapusage
+vm.swapusage: total = 31744.00M  used = 30417.38M  free = 1326.62M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 5.67 14.48 36.75 }
+$ cargo, rustc, vitest, proof, stryker processes
+$ resident Claude Code processes
+18
+
+
