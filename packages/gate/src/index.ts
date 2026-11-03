@@ -26,3 +26,6 @@ export type {
   Agent, CheckDef, CheckOnClaim, ClaimRecord, Config, Delivery, Held, HeldRecord, LoopFacts, Needs, Origin, QueueEvent, RunContext, RunRecord,
   Scenario, SchedulerPlant, ScriptEvent, SessionScript, SortedAs, StackDef, StackStep, StopReply, Trace,
 } from './scheduler.js';
+export { diffOf, itemChanges, LAST, measure, over, OVER, usualOf } from './size.js';
+export type { ItemChange, Usual } from './size.js';
+export { gitEnv } from './env.js';

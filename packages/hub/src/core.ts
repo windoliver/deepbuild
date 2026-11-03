@@ -37,6 +37,7 @@ import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
+import { SizeScope } from './scope.js';
 import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
@@ -370,6 +371,7 @@ export class Core {
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
+  private readonly sizing: SizeScope;
   /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
   private readonly gate: GateRunner;
   /** Each session's last stop's final message, what its claims cite (#29). */
@@ -380,6 +382,8 @@ export class Core {
   private trust!: ProjectTrust;
   /** Each claim's requirements by handle, with the ID and text a send-back names (#322). */
   private readonly claimRequirements = new Map<string, Map<string, { id: string; text: string }>>();
+  /** Each claim's task, base and folder, for its size and scope at its stop (#324). */
+  private readonly claimScopes = new Map<string, { task: string; base: string; cwd: string }>();
   /** Claims in an untrusted repo whose spec names checks (#322): watch-only, so none of them passes. */
   private readonly watchOnlyClaims = new Set<string>();
   /** Sessions told once that their repo's spec checks are watch-only until the project is trusted. */
@@ -572,6 +576,14 @@ export class Core {
       atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
       pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runClaim(r),
       invalid: (claim, commit, reason) => this.invalid(claim, commit, reason),
+      // A plan marked large is sized when its definition locks, before any code (#324).
+      locked: (r) => this.sizing.planned(r),
+    });
+    this.sizing = new SizeScope({
+      raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input),
+      connection: (session, agent) => this.connection('core', { session, agent }), asks: () => this.asks, now: this.now,
+      pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), scopeOf: (task) => this.tasks.scopeOf(task),
+      evidence: this.root.evidence, accepted: options.accepted,
     });
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -2865,6 +2877,8 @@ export class Core {
     const held = until;
     until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
+    // Size and scope (#324): a reading, never a verdict; what it sends back once rides with a failing check's send-back.
+    const sized = judged?.claim ? await this.sizedAt(judged.claim, meta) : undefined;
     let proceeded = false;
     try {
       if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
@@ -2879,8 +2893,8 @@ export class Core {
       if (proceed) {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
-        block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
-      } else block = lane?.sendBack ?? (r.places ? undefined : await this.stopHold(meta, r, until));
+        block = [r.sendBacks.shift(), delivered, lane?.sendBack, sized, proceed].filter(Boolean).join('\n\n');
+      } else block = [lane?.sendBack, sized].filter(Boolean).join('\n\n') || (r.places ? undefined : await this.stopHold(meta, r, until));
     } finally {
       this.abandoned.delete(meta.id);
       r.holding--;
@@ -2964,6 +2978,16 @@ export class Core {
         return reqs.length ? `${reqs.map((q) => `${q.id} ("${q.text}")`).join(' and ')} ${reqs.length === 1 ? 'is' : 'are'} unproven: its check ${c.check} ${c.result}` : `the repo's spec check ${c.check} ${c.result}`;
       }).join('; ')}.` : undefined;
     return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, ...(sendBack ? { sendBack } : {}) };
+  }
+  /** A judged stop's size and scope (#324): measured and recorded as claim.sized; what it sends back once, or undefined. */
+  private async sizedAt(claim: string, meta: HookMeta): Promise<string | undefined> {
+    const c = this.claimScopes.get(claim);
+    if (!c) return undefined;
+    const requirements = [...(this.claimRequirements.get(claim)?.values() ?? [])];
+    return this.sizing.atStop({ claim, ...c, session: meta.session, agent: meta.agent, requirements, reached: this.gate.reached(claim) }).catch(async (e: unknown) => {
+      await this.appendReading(meta.session, meta.agent, `This stop's size and scope could not be read: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined);
+      return undefined;
+    });
   }
   /**
    * A Codex stop with slow checks (#39): held for them only when each one's deadline ends at least 5 s before the Stop
@@ -4942,6 +4966,7 @@ export class Core {
   private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
     const at = this.now();
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
+    this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
     const lane = (async () => {
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
       const findings = r.definition === 'pending' ? [] : validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);

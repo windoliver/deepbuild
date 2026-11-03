@@ -1,0 +1,59 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "claim.sized",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "subject": "claim:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "data": {
+    "claim": "claim:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "task_ref": "task:01K74G1Z3X5V7T9R1P3N5M7K9J",
+    "kind": "feature",
+    "lines": {
+      "added": 189,
+      "removed": 2
+    },
+    "files": 12,
+    "usual": {
+      "lines": 17,
+      "files": 3,
+      "n": 20
+    },
+    "over": true,
+    "biggest": [
+      {
+        "path": "src/rules/r01.js",
+        "lines": 17
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "left-pad",
+        "from": "package.json"
+      }
+    ],
+    "folders": [
+      {
+        "name": "vendor",
+        "from": "vendor/pad.js"
+      }
+    ],
+    "unreached": [
+      "src/billing.js"
+    ],
+    "items": [
+      {
+        "doc": "doc:01JB7D0000000000000000324F",
+        "id": "legend",
+        "change": "changed"
+      }
+    ],
+    "sent_back": [
+      "size",
+      "file:src/billing.js"
+    ],
+    "asked": []
+  }
+}
