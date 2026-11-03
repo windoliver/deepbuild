@@ -1,0 +1,16 @@
+{
+  "about": "Derived roles (#417 AC7). The look adds two palette colors and four roles: blue and yellow name them, green mixes them halfway in OKLab and sky is blue made lighter by 0.2. `lighter` is recorded from this definition, which the README states: in OKLab, L' = L + by × (1 − L), with a and b kept. Every number below is the OKLab of the sRGB colors as the M1/M2 matrices of Ottosson (2020) give them, computed in f64 by tests/acceptance/417/helpers.ts's formulas.",
+  "palette": { "fixture_blue": "#5b9bd5", "fixture_yellow": "#f2c230" },
+  "roles": {
+    "blue": "fixture_blue",
+    "yellow": "fixture_yellow",
+    "green": { "mix": ["blue", "yellow", 0.5] },
+    "sky": { "lighter": "blue", "by": 0.2 }
+  },
+  "recorded": {
+    "blue": [0.6708386928085134, -0.04168735307531668, -0.10063381161503437],
+    "yellow": [0.8339636823795404, 0.002868402606260423, 0.15840771501751227],
+    "green": [0.7524011875940269, -0.01940947523452813, 0.02888695170123895],
+    "sky": [0.7366709542468107, -0.04168735307531668, -0.10063381161503437]
+  }
+}
