@@ -17,6 +17,7 @@ export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, 
 export { baseProof, openCheckouts, OverBudget } from './checkouts.js';
 export type { BaseCheckout, BaseRun, Budget, CheckoutPlant, Checkouts, CheckoutsOptions, ClaimCheckInput, ClaimCheckRun, ClaimInput, ClaimRun, Cited, DeclaredSurface, Snapshot, StandIn, TempCheckout } from './checkouts.js';
 export { claimVerdict } from './claim.js';
+export { admitKind } from './kinds.js';
 export { priceDefinition } from './price.js';
 export type { PaidKind, Pricing } from './price.js';
 export { freshCount, judgeStop, stillOpen } from './stalls.js';
