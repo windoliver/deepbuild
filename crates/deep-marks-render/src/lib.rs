@@ -186,6 +186,10 @@ fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
                 light_alpha: Default::default(),
                 dark_alpha: Default::default(),
                 status: None,
+                data_distance: map
+                    .get("data_distance")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(look::DATA_DISTANCE),
             };
             return Some(Ok((roles, Value::Object(map.clone()))));
         }
@@ -295,6 +299,8 @@ fn check(
     let answer = json!({
         "ok": ok,
         "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
+        // #397: every number a mark set or an axis shows, with what it traces to.
+        "numbers": deep_canvas_marks::check::numbers(doc).0,
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
     });
     (answer, vectors)
@@ -317,15 +323,21 @@ fn refused_by_check(checked: &Value) -> Option<Value> {
 }
 
 /// Every document a line carries (`doc`, and each step's in a session) with its mark sets'
-/// sidecar columns read from the line's `store` and inlined.
+/// sidecar columns read from the line's `store` and inlined, and the line's `doc`'s table columns
+/// read from its `evidence` store (#397).
 fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
     let store = input
         .get("store")
         .and_then(Value::as_str)
         .map(PathBuf::from);
     let store = store.as_deref();
+    let evidence = input
+        .get("evidence")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
     if let Some(Value::Object(doc)) = input.get_mut("doc") {
         asset::sidecars(doc, store)?;
+        asset::tables(doc, evidence.as_deref())?;
     }
     if let Some(Value::Array(steps)) = input.get_mut("steps") {
         for step in steps {

@@ -1134,6 +1134,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "keeps_priming" => Planted::KeepsPriming,
                 "encodes_in_decode_worker" => Planted::EncodesInDecodeWorker,
                 "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
+                "probe_stores_normalized" => Planted::ProbeStoresNormalized,
                 "assumes_bt601" => Planted::AssumesBt601,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
@@ -1696,7 +1697,10 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             behavior: None,
         })
         .collect();
-    for m in seam_backends().into_iter().filter(|m| m.manifest.name.matches('.').count() == 1) {
+    for m in seam_backends()
+        .into_iter()
+        .filter(|m| m.manifest.name.matches('.').count() == 1)
+    {
         let seam = m.manifest.name.trim_start_matches("seam.").to_string();
         out.push(deep_canvas_seams::interface(&seam, m));
     }
@@ -1969,7 +1973,9 @@ mod tests {
         ];
         for (set, snapshot) in snapshots {
             let published = assemble(set, modules(set))
-                .seal().expect("the shipped set seals").schedule();
+                .seal()
+                .expect("the shipped set seals")
+                .schedule();
             let committed: Value = serde_json::from_str(snapshot).expect("the snapshot is JSON");
             assert_eq!(
                 published,

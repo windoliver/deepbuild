@@ -317,6 +317,47 @@ fn circle() -> Entry {
     }
 }
 
+/// R2's series (Series and decimation `series@1`, #397): rows in typed columns, drawn decimated
+/// per pixel column of its `box`. Its columns and view are read by the marks it draws as.
+fn series() -> Entry {
+    let params = [
+        "source",
+        "t",
+        "v",
+        "o",
+        "h",
+        "l",
+        "c",
+        "append",
+        "chunk",
+        "capacity",
+        "gap",
+        "calendar",
+        "window",
+        "decimate",
+        "bucket",
+        "columns",
+        "marks",
+        "candle",
+        "crosshair",
+        "box",
+        "role",
+    ];
+    Entry {
+        family: "",
+        name: "series",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: params
+                .into_iter()
+                .map(|p| json_param(p, Value::Null))
+                .collect(),
+        }],
+        migrations: vec![],
+    }
+}
+
 /// The two flat test kinds of the #372 acceptance README: a 2D rectangle from its top-left
 /// corner and a 3D disc about its position, each with an sRGB fill.
 fn test_shapes() -> [Entry; 2] {
@@ -407,7 +448,7 @@ fn build() -> Registry {
         ],
     };
     Registry {
-        entries: vec![slab, camera(), circle(), rect, dot],
+        entries: vec![slab, camera(), circle(), series(), rect, dot],
     }
 }
 
