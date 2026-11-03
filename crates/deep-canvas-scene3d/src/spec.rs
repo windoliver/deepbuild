@@ -125,6 +125,135 @@ fn item(kind: &str, params: Value) -> Value {
 /// One of scene3d's kinds: the marks in 3D, the key light, the builders and the curve; each
 /// built alone, so a key or a node reads one kind's schema without making the rest.
 fn of_scene3d(kind: &str) -> Option<Spec> {
+    if kind == "mesh.asset@1" {
+        return Some(mesh_asset());
+    }
+    let mut spec = base_scene3d(kind)?;
+    spec.params.extend(extras(kind));
+    if crate::builders::KINDS.contains(&kind) {
+        spec.params.push(p(
+            "scatter",
+            "{count, part?}",
+            "",
+            Value::Null,
+            G,
+            json!({"count": 8}),
+            json!({"count": 16}),
+        ));
+    }
+    Some(spec)
+}
+
+/// The builder params beyond each kind's first ones (Builder: the ten trusted builders).
+fn extras(kind: &str) -> Vec<P> {
+    match kind {
+        "slab@1" => vec![
+            ranged(
+                p("bevel", "m", "m", json!(0), G, json!(0), json!(0.05)),
+                0.0,
+                100.0,
+            ),
+            p(
+                "groove",
+                "{depth, width}",
+                "m",
+                Value::Null,
+                G,
+                json!({"depth": 0.05, "width": 0.2}),
+                json!({"depth": 0.08, "width": 0.3}),
+            ),
+            p(
+                "along",
+                "{path, from, to}",
+                "",
+                Value::Null,
+                G,
+                json!({"path": [[0, 0, 0], [2, 0, 0]]}),
+                json!({"path": [[0, 0, 0], [2, 0, 1]], "from": 0.25}),
+            ),
+        ],
+        "lathe@1" => vec![
+            p(
+                "ribs",
+                "{count, depth, span}",
+                "m",
+                Value::Null,
+                G,
+                json!({"count": 8, "depth": 0.02, "span": 0.5}),
+                json!({"count": 6, "depth": 0.03, "span": 0.25}),
+            ),
+            p(
+                "bands",
+                "[{y0, y1, material}]",
+                "m",
+                json!([]),
+                G,
+                json!([]),
+                json!([{"y0": 0, "y1": 0.5, "material": "wood"}]),
+            ),
+            p(
+                "thread",
+                "{pitch, depth}",
+                "m",
+                Value::Null,
+                G,
+                json!({"pitch": 0.1, "depth": 0.01}),
+                json!({"pitch": 0.2, "depth": 0.02}),
+            ),
+            p(
+                "rim",
+                "polygon",
+                "",
+                Value::Null,
+                G,
+                json!([[1, 0], [0, 1], [-1, 0], [0, -1]]),
+                json!([[1, 0], [0.3, 0.95], [-0.8, 0.6], [-0.8, -0.6], [0.3, -0.95]]),
+            ),
+        ],
+        "extrude@1" => vec![ranged(
+            p("bevel", "m", "m", json!(0), G, json!(0), json!(0.05)),
+            0.0,
+            100.0,
+        )],
+        "tube@1" => vec![ranged(
+            p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
+            0.0,
+            100.0,
+        )],
+        "plate@1" => vec![p(
+            "height",
+            "field, m",
+            "m",
+            Value::Null,
+            G,
+            json!(0),
+            json!({"wave": {"amplitude": 0.1, "wavelength": 1}}),
+        )],
+        _ => Vec::new(),
+    }
+}
+
+/// `mesh.asset@1 {sha256 (glTF), node}`: a glTF node's mesh from the asset store, one mesh for
+/// every item naming the same asset and node.
+fn mesh_asset() -> Spec {
+    let a = "a".repeat(64);
+    let b = "b".repeat(64);
+    Spec {
+        kind: "mesh.asset@1",
+        module: "scene3d",
+        params: vec![
+            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b)),
+            p("node", "index | name", "", json!(0), G, json!(0), json!(1)),
+            shade(),
+            paint(),
+        ],
+        reads: None,
+        fixture: json!({"it": item("mesh.asset@1", json!({"sha256": a, "node": 0, "paint": {"fill": {"role": "accent"}}}))}),
+    }
+}
+
+/// One of scene3d's kinds as its schema first lists it.
+fn base_scene3d(kind: &str) -> Option<Spec> {
     let solid = |kind: &'static str| Spec {
         kind,
         module: "scene3d",
@@ -369,7 +498,7 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
                 paint(),
             ],
             reads: None,
-            fixture: json!({"it": item("slab@1", json!({"outline": rect, "thickness": 0.2, "paint": {"fill": {"role": "accent"}}}))}),
+            fixture: json!({"it": item("slab@1", json!({"size": [2, 0.2, 1], "paint": {"fill": {"role": "accent"}}}))}),
         },
         "lathe@1" => Spec {
             kind: "lathe@1",
@@ -702,7 +831,7 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 16] = [
+pub const SCENE3D: [&str; 17] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -719,6 +848,7 @@ pub const SCENE3D: [&str; 16] = [
     "plate@1",
     "display@1",
     "curve@1",
+    "mesh.asset@1",
 ];
 
 /// scene3d's kinds' schemas.

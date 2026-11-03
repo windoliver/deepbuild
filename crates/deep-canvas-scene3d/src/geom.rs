@@ -28,7 +28,16 @@ pub struct Mesh {
     /// Each closed part: its triangles and its genus.
     pub closed: BTreeMap<String, (Vec<u32>, u32)>,
     pub outputs: BTreeMap<String, Value>,
-    /// Named per-vertex values a `store` modifier keeps, such as a wind weight an engine reads.
+    /// Named frames: an origin and its x, y and z axes, in the item's space.
+    pub anchors: BTreeMap<String, [V3; 4]>,
+    /// Named numbers a builder computes (its area, its volume, a riser's height).
+    pub values: BTreeMap<String, f64>,
+    /// Analytic or convex pieces that stand for the mesh where a check needs an exact shape.
+    pub true_shape: Vec<Value>,
+    /// One texture coordinate per vertex, or none.
+    pub uv0: Vec<V2>,
+    /// Named per-vertex values, which a material input reads: a `store` modifier keeps a
+    /// field as one, such as a wind weight an engine reads.
     pub attributes: BTreeMap<String, Vec<f64>>,
 }
 
@@ -41,6 +50,12 @@ impl Canonical for Mesh {
             self.closed.iter().map(|(k, (t, g))| (k, t, *g)).collect();
         closed.encode(out);
         canonical(&json!(self.outputs)).encode(out);
+        let anchors: Vec<(&String, &[V3; 4])> = self.anchors.iter().collect();
+        anchors.encode(out);
+        let values: Vec<(&String, &f64)> = self.values.iter().collect();
+        values.encode(out);
+        canonical(&json!(self.true_shape)).encode(out);
+        self.uv0.encode(out);
         let attributes: Vec<(&String, &Vec<f64>)> = self.attributes.iter().collect();
         attributes.encode(out);
     }
@@ -192,8 +207,12 @@ impl Mesh {
                 .keys()
                 .map(|k| (k.clone(), Vec::new()))
                 .collect(),
+            anchors: self.anchors.clone(),
+            values: self.values.clone(),
+            true_shape: self.true_shape.clone(),
             ..Mesh::default()
         };
+        let uv = self.uv0.len() == self.positions.len();
         for t in 0..self.triangles() {
             let ids = [0, 1, 2].map(|j| self.indices[3 * t + j] as usize);
             let [a, b, c] = ids.map(|i| self.positions[i]);
@@ -202,6 +221,9 @@ impl Mesh {
                 let i = out.vertex(p, n);
                 for (name, values) in &self.attributes {
                     out.attributes.get_mut(name).expect("made above")[i as usize] = values[ids[k]];
+                }
+                if uv {
+                    out.uv0.push(self.uv0[ids[k]]);
                 }
                 out.indices.push(i);
             }
@@ -224,6 +246,12 @@ impl Mesh {
         let base = self.positions.len() as u32;
         let tbase = self.triangles() as u32;
         let fbase = self.next_face();
+        // Texture coordinates carry over only where both meshes have them.
+        if self.uv0.len() == self.positions.len() && other.uv0.len() == other.positions.len() {
+            self.uv0.extend(&other.uv0);
+        } else {
+            self.uv0.clear();
+        }
         // An attribute either side lacks reads 0 there.
         let names: Vec<String> = self
             .attributes
@@ -328,6 +356,11 @@ impl Mesh {
             .iter()
             .map(|(k, (t, g))| (k.clone(), json!({"triangles": t, "genus": g})))
             .collect();
+        let anchors: serde_json::Map<String, Value> = self
+            .anchors
+            .iter()
+            .map(|(k, [o, x, y, z])| (k.clone(), json!({"pos": o, "x": x, "y": y, "z": z})))
+            .collect();
         let attributes: serde_json::Map<String, Value> = self
             .attributes
             .iter()
@@ -338,8 +371,11 @@ impl Mesh {
                 )
             })
             .collect();
+        let bounds = (!self.positions.is_empty()).then(|| self.bounds());
         json!({"positions": self.positions, "normals": self.normals, "indices": self.indices,
-               "closed": closed, "parts": self.parts, "outputs": self.outputs, "attributes": attributes})
+               "closed": closed, "parts": self.parts, "outputs": self.outputs, "anchors": anchors,
+               "values": self.values, "true_shape": self.true_shape, "uv0": self.uv0,
+               "attributes": attributes, "bounds": bounds})
     }
 }
 

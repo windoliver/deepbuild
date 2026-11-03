@@ -14,7 +14,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_with, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -59,6 +59,8 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// The glTF files `mesh.asset@1` items name, by sha256 (#420).
+    assets: std::collections::BTreeMap<String, std::path::PathBuf>,
     /// The documents an item may open by reference, by doc handle.
     docs: BTreeMap<String, std::path::PathBuf>,
     /// Report each label's glyphs and the atlas pages they sample (#381).
@@ -232,6 +234,12 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        assets: call["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(sha, p)| Some((sha.clone(), std::path::PathBuf::from(p.as_str()?))))
+            .collect(),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
         states,
@@ -500,7 +508,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
             let (composed, resident) = levels.compose(&args.doc);
-            let mut scene = evaluate(&composed, t, &args.look, &mut labels)
+            let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
+            let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
             // A particles@1 count past its class's limit is refused, never clamped (#420).
             let class = args.doc.pointer("/budget/class").and_then(Value::as_str);

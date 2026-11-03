@@ -132,6 +132,17 @@ pub const ITEM_KEYS: &[&str] = &[
     "broken_out",
     // A solid's modifier stack (Modifier; #411), checked by the canvas module whose kind it is.
     "modifiers",
+    // An object's fields (Object; #420): its materials, constraints, shadows, level of detail,
+    // and in a figure its tone, halo and relations.
+    "materials",
+    "material",
+    "constraints",
+    "cast_shadow",
+    "receive_shadow",
+    "lod",
+    "tone",
+    "halo",
+    "relations",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
@@ -146,6 +157,11 @@ pub const ITEM_OWN_FIELDS: &[&str] = &[
     "pickable",
     "order",
     "broken_out",
+    "material",
+    "cast_shadow",
+    "receive_shadow",
+    "tone",
+    "halo",
 ];
 
 /// The item fields `unset` may remove (every one with a default).
