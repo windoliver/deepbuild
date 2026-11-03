@@ -29,7 +29,8 @@
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
 //!   the line can't know, so what it deletes can't be worked out before it runs), or one that needs your
 //!   authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `dispatch` (what `dispatch:workflow` reads),
-//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`) or `delete` (`gh repo delete`,
+//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`, or a `gh api` POST of a comment, a review
+//!   comment's reply or a review) or `delete` (`gh repo delete`,
 //!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
@@ -644,10 +645,12 @@ fn has_effect(run: &Run, class: &str) -> bool {
         "push" => run.is("git") && git_rest(run).first().map(String::as_str) == Some("push"),
         "merge" => gh(run, &[&["pr", "merge"]]),
         "dispatch" => dispatch(run).is_some(),
-        "send" => gh(
-            run,
-            &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
-        ),
+        "send" => {
+            gh(
+                run,
+                &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
+            ) || posts_comment(run)
+        }
         "delete" => gh(
             run,
             &[
@@ -748,6 +751,41 @@ fn creates_cloud(run: &Run) -> bool {
 }
 
 /// A `gh` run whose first two plain words are one of `subs`.
+/// A `gh api` call that posts in your name: a POST (by `--method` or `-X`, or by a field, which makes gh post) to an
+/// issue's, a pull request's or a commit's comments, a review comment's replies, or a pull request's reviews (#323).
+fn posts_comment(run: &Run) -> bool {
+    let words = run.words();
+    let plain = plain(&words);
+    if !run.is("gh") || plain.first() != Some(&"api") {
+        return false;
+    }
+    let method = words.iter().enumerate().find_map(|(k, w)| match *w {
+        "-X" | "--method" => words.get(k + 1).copied(),
+        _ => w
+            .strip_prefix("--method=")
+            .or(w.strip_prefix("-X"))
+            .filter(|m| !m.is_empty() && !m.starts_with('-')),
+    });
+    let posts = match method {
+        Some(m) => m.eq_ignore_ascii_case("POST"),
+        None => !fields(&words).is_empty() || words.contains(&"--input"),
+    };
+    posts
+        && plain[1..].iter().any(|w| {
+            let path = w
+                .trim_start_matches("https://api.github.com")
+                .trim_start_matches('/');
+            let parts: Vec<&str> = path.split('?').next().unwrap_or("").split('/').collect();
+            parts.first() == Some(&"repos")
+                && matches!(
+                    parts.get(3..).unwrap_or(&[]),
+                    ["issues" | "pulls" | "commits", _, "comments"]
+                        | ["pulls", _, "reviews"]
+                        | ["pulls", _, "comments", _, "replies"]
+                )
+        })
+}
+
 fn gh(run: &Run, subs: &[&[&str]]) -> bool {
     let words = run.words();
     let plain = plain(&words);
@@ -1352,6 +1390,17 @@ mod tests {
         assert!(bash("gh issue comment 3 --body hi")
             .matches("effect:send")
             .is_some());
+        assert!(bash(
+            "gh api --method POST repos/acme/shop/pulls/23/comments/9101/replies -f body='Fixed.'"
+        )
+        .matches("effect:send")
+        .is_some());
+        assert!(bash("gh api repos/acme/shop/issues/3/comments -f body=hi")
+            .matches("effect:send")
+            .is_some());
+        assert!(bash("gh api repos/acme/shop/pulls/23/comments")
+            .matches("effect:send")
+            .is_none());
         assert!(bash("gh repo delete acme/shop --yes")
             .matches("effect:delete")
             .is_some());
