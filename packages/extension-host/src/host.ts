@@ -33,7 +33,7 @@ import { createServer as createHttpServer, type IncomingMessage, type Server as 
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
@@ -168,6 +168,8 @@ export interface ExtensionHostOptions {
    * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
    */
   firstParty?: { id: string; version: string; provides: string[] }[];
+  /** Marks each write of the hosted terminals index as a durable write point, as the hub's test disk numbers them (#996). */
+  point?: () => void;
 }
 export interface InstallFrom {
   from: string;
@@ -820,7 +822,7 @@ class Host implements ExtensionHost {
     this.keys = this.read('keys.json');
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
-    this.terminals = new Terminals(options.home, options.supervisor);
+    this.terminals = new Terminals(options.home, options.supervisor, options.point);
     const series = this.series = options.evidence ? new SeriesStore({
       record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
       timeoutOf: (name) => [...this.exts.values()].map((e) => e.live ? e.sources.get(name) : undefined).find((s): s is Polled => s?.variant === 'polled')?.timeout,
@@ -2391,7 +2393,7 @@ class Host implements ExtensionHost {
         return { terminal: t.terminal, run: t.run, pid: t.pid };
       }
       case 'deep.terminal.list':
-        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
+        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title, ...(t.lost ? { lost: true } : {}) }));
       case 'deep.terminal.read':
         return this.terminals.read(id, args[0] as string, args[1] as number);
       case 'deep.terminal.write':
@@ -3474,6 +3476,20 @@ class Host implements ExtensionHost {
     return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
   }
 
+  /** One reading names a terminals index this start couldn't read whole, and the terminals it lost (#996). */
+  async opened(): Promise<void> {
+    const damaged = this.terminals.damaged;
+    if (!damaged) return;
+    const now = this.options.now();
+    await this.options.record.append(CORE, {
+      v: 1, id: ulid(now), kind: 'reading.recorded', ts: now,
+      data: {
+        reading: `reading:${ulid(now)}`, value: damaged.lost.length, unit: 'terminals lost', as_of: now, n: 1, outside: false,
+        source: `terminals.json couldn't be read whole, so it was kept aside as ${basename(damaged.aside)}; lost: ${damaged.lost.slice(0, 50).join(', ') || 'none'}${damaged.lost.length > 50 ? ` and ${damaged.lost.length - 50} more` : ''}`,
+      },
+    });
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -3508,5 +3524,7 @@ function copyPackage(from: string, to: string): void {
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {
-  return new Host(options);
+  const host = new Host(options);
+  await host.opened();
+  return host;
 }
