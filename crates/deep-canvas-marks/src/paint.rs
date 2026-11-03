@@ -591,7 +591,7 @@ impl Along {
         }
     }
 
-    /// `0` (none), a number (≤ 1 a fraction, above 1 u), or text: `"20%"`, `"20u"` or `"20"`.
+    /// `0` (none) or a number: at most 1 a fraction of the length, above 1 u.
     fn read(v: Option<&Value>, path: &str) -> Result<Along, Refused> {
         match v {
             None | Some(Value::Null) => Ok(Along::U(0.0)),
@@ -605,27 +605,6 @@ impl Along {
                     })?;
                 Ok(if n <= 1.0 {
                     Along::Fraction(n)
-                } else {
-                    Along::U(n)
-                })
-            }
-            Some(Value::String(s)) => {
-                let s = s.trim();
-                let (digits, fraction) = match s.strip_suffix('%') {
-                    Some(d) => (d, true),
-                    None => (s.strip_suffix('u').unwrap_or(s), false),
-                };
-                let n: f64 = digits
-                    .trim()
-                    .parse()
-                    .ok()
-                    .filter(|n: &f64| n.is_finite() && *n >= 0.0)
-                    .ok_or(Refused {
-                        code: "bad_doc",
-                        path: path.to_string(),
-                    })?;
-                Ok(if fraction {
-                    Along::Fraction(n / 100.0)
                 } else {
                     Along::U(n)
                 })

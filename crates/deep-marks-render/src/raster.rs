@@ -897,19 +897,21 @@ pub fn path_answer(
         let (palette, ty) = (&palette, &ty);
         let mut frames = Vec::with_capacity(req.times.len());
         for &t in &req.times {
-            let started = std::time::Instant::now();
             let placed = crate::place::evaluated(&req.doc, &program, t, &req.vectors)?;
             let items = deep_canvas_vector::lower_items(
                 &placed,
                 &req.vectors,
                 deep_canvas_vector::Write::Honest,
             );
+            // The build alone is timed: the item through its ops, its heads and its digest (a
+            // first pass over the frame only when an attachment needs other items' boxes).
+            let started = std::time::Instant::now();
             let report =
                 scene::path_report(&req.doc, &items, (palette, ty), &req.item, req.planted)
                     .map_err(|r| refused(r.code, &r.path))?
                     .ok_or_else(|| refused("ref_unresolved", &format!("items/{}", req.item)))?;
-            let rebuilt = built.insert(report.digest);
             let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let rebuilt = built.insert(report.digest);
             let subpaths: Vec<Value> = report
                 .placed
                 .iter()
