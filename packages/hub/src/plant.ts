@@ -89,7 +89,10 @@ export type Plant =
   // #965's: slow checks started at every green stop, every loop check held, a loop's claim or your words mid-turn
   // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
-  | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only';
+  | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
+  // #992's: a reading that checks waiting before gone, an adapter that opens an ask from a Notification hook, and an
+  // app that reads a session waiting on you as working.
+  | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -136,6 +139,7 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'waiting-first', 'ask-from-notification', 'waiting-as-working',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

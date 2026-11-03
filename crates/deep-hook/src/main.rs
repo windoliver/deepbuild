@@ -1155,7 +1155,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             quoted(agent),
             quoted(event),
             std::process::id(),
-            std::os::unix::process::parent_id(),
+            agent_pid(),
         )
     };
     let (sent, outcome, last) = exchange(start, &id, line);
@@ -1389,6 +1389,33 @@ extern "C" {
     ) -> i32;
 }
 
+/// The agent's process, which the hub binds a session to and watches (#992): the hook's parent, or, where the agent
+/// ran the hook through `sh -c <command>` and the shell stayed, as dash (Linux's /bin/sh) does for a lone command, the
+/// shell's. A shell with arguments after its command is the agent itself.
+fn agent_pid() -> u32 {
+    let parent = std::os::unix::process::parent_id();
+    #[cfg(target_os = "linux")]
+    {
+        let args = args_of(parent);
+        let shell = args
+            .first()
+            .and_then(|arg| Path::new(arg).file_name()?.to_str());
+        if matches!(shell, Some("sh" | "dash" | "bash")) && args.len() == 3 && args[1] == "-c" {
+            let above = fs::read_to_string(format!("/proc/{parent}/status"))
+                .ok()
+                .and_then(|status| {
+                    status
+                        .lines()
+                        .find_map(|line| line.strip_prefix("PPid:")?.trim().parse().ok())
+                });
+            if let Some(above) = above {
+                return above;
+            }
+        }
+    }
+    parent
+}
+
 /// A process's arguments, as it was started: macOS's KERN_PROCARGS2 (argc, the executable's path, padding, then
 /// argc strings), or Linux's /proc cmdline. Empty when they can't be read.
 fn args_of(pid: u32) -> Vec<String> {
@@ -1428,8 +1455,11 @@ fn args_of(pid: u32) -> Vec<String> {
             .collect::<Vec<_>>()
     };
     #[cfg(target_os = "linux")]
-    let raw = fs::read(format!("/proc/{pid}/cmdline"))
-        .unwrap_or_default()
+    let cmdline = fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+    #[cfg(target_os = "linux")]
+    let raw = cmdline
+        .strip_suffix(&[0])
+        .unwrap_or(&cmdline)
         .split(|&b| b == 0)
         .map(<[u8]>::to_vec)
         .collect::<Vec<_>>();
@@ -1522,7 +1552,7 @@ fn waiter() -> ExitCode {
         quoted(&session),
         quoted(&field("cwd"))
     );
-    let agent = std::os::unix::process::parent_id();
+    let agent = agent_pid();
     // A print run (`claude -p`) has no later turn to wake, and it waits for its async Stop entries before it exits,
     // while this waits for it to exit: under one, the waiter is done at once (#668).
     if args_of(agent)
@@ -1534,7 +1564,7 @@ fn waiter() -> ExitCode {
     }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
     let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
-    let gone = || watched && (std::os::unix::process::parent_id() != agent || !alive(agent));
+    let gone = || watched && (agent_pid() != agent || !alive(agent));
     loop {
         if gone() {
             return ExitCode::SUCCESS;

@@ -392,6 +392,15 @@
         "TaskCompleted": {
           "$ref": "#/$defs/hookRule"
         },
+        "Notification": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "Elicitation": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "ElicitationResult": {
+          "$ref": "#/$defs/hookRule"
+        },
         "TeammateIdle": {
           "$ref": "#/$defs/hookRule"
         },
@@ -1173,6 +1182,39 @@
             "field",
             "values",
             "otherwise"
+          ],
+          "additionalProperties": false
+        },
+        "state": {
+          "type": "object",
+          "description": "The event is the session's attention state, read from one payload field; a value not listed maps to no event.",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/text"
+            },
+            "values": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[^\\n]+$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "working",
+                  "waiting",
+                  "finished"
+                ],
+                "x-closure": {
+                  "closed": "the attention states a hook can say of its session: at work, waiting on you, or its turn over",
+                  "reopens": "a minor that adds a state session.attention defines",
+                  "mark": "exhaustive"
+                }
+              }
+            }
+          },
+          "required": [
+            "field",
+            "values"
           ],
           "additionalProperties": false
         }

@@ -294,7 +294,12 @@ fn status(
     state: &states::State,
     text: String,
 ) -> ObservedElement<Stateful<Div>> {
-    let glyph = states::glyph(state.entry());
+    marked(id, state.entry(), text)
+}
+
+/// A status mark for a status-map entry, and its words.
+fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
+    let glyph = states::glyph(entry);
     let name = format!("{glyph} {text}");
     div()
         .id(id)
@@ -309,7 +314,7 @@ fn status(
             div()
                 .size(px(CORE))
                 .flex_none()
-                .bg(rgb(states::color(state.entry()))),
+                .bg(rgb(states::color(entry))),
         )
         .child(glyph)
         .child(text)
@@ -335,13 +340,9 @@ impl Render for Shipped {
                 .bg(chrome.raised)
                 .child(title("sidebar-title", "Sessions"))
                 .children(record.sessions.iter().enumerate().map(|(index, session)| {
-                    let state = states::state(&record.events, session);
-                    let text = format!(
-                        "{} · {}",
-                        states::title(&record.events, session),
-                        state.text(now)
-                    );
-                    status(("sidebar-session", index), &state, text)
+                    let (words, entry) = states::row(&record.events, session, now);
+                    let text = format!("{} · {words}", states::title(&record.events, session));
+                    marked(("sidebar-session", index), entry, text)
                         .role(Role::Button)
                         .h(px(24.))
                         .px_1()
