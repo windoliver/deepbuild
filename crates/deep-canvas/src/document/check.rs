@@ -400,6 +400,7 @@ fn module_checks(
                         what: r.what,
                         migration: None,
                         replaced_by: None,
+                        close: Vec::new(),
                     });
                     continue;
                 }
@@ -1106,6 +1107,7 @@ pub(super) fn migrate_item(
             ),
             migration: Some((entry.full_name(), step.from, step.to)),
             replaced_by: None,
+            close: Vec::new(),
         });
     }
 }
@@ -1137,6 +1139,8 @@ struct KindFacts<'a> {
     lookup: Lookup<'a>,
     /// `(deprecated_since, replaced_by)` when a module deprecated the kind.
     deprecation: Option<&'a (String, String)>,
+    /// The close names an unknown kind's notice names (#412).
+    close: Vec<Value>,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1152,6 +1156,12 @@ impl<'a> KindFacts<'a> {
             deprecation: match lookup {
                 Lookup::Known { entry, .. } => sealed.deprecation_of(&entry.full_name()),
                 _ => None,
+            },
+            close: match lookup {
+                Lookup::UnknownKind if !instance => {
+                    super::close::kind_names(text, kinds, sealed.close_fault)
+                }
+                _ => Vec::new(),
             },
         }
     }
@@ -1254,6 +1264,7 @@ fn check_item(
                 what: format!("kind `{text}` is not registered in this build; the item is skipped"),
                 migration: None,
                 replaced_by: None,
+                close: facts.close.clone(),
             });
             None
         }
@@ -1294,6 +1305,7 @@ fn check_item(
                 what: format!("kind `{text}` is deprecated since {since}; use {replaced_by}"),
                 migration: None,
                 replaced_by: Some((replaced_by.clone(), since.clone())),
+                close: Vec::new(),
             });
         }
     }
@@ -1584,21 +1596,25 @@ fn check_params(
                     ),
                     migration: None,
                     replaced_by: None,
+                    close: Vec::new(),
                 });
                 dropped.push(name.clone());
             } else {
-                issues.push(Issue::error(
-                    "unknown_field",
-                    key,
-                    path(),
-                    value.clone(),
-                    &format!(
-                        "{}@{}.{} does not define `{name}`",
-                        entry.full_name(),
-                        version.major,
-                        version.minor
-                    ),
-                ));
+                issues.push(Issue {
+                    close: super::close::field_names(name, entry, version, sealed.close_fault),
+                    ..Issue::error(
+                        "unknown_field",
+                        key,
+                        path(),
+                        value.clone(),
+                        &format!(
+                            "{}@{}.{} does not define `{name}`",
+                            entry.full_name(),
+                            version.major,
+                            version.minor
+                        ),
+                    )
+                });
             }
             continue;
         };
@@ -1697,7 +1713,7 @@ fn convert_literal(text: &str, unit: &str) -> Result<f64, Refusal> {
 
 /// The forms a field in `unit` takes, each a literal the unit printer wrote (`1m`, `1cm`, …);
 /// the bare form is left out.
-pub(crate) fn literal_forms(unit: &str) -> Vec<String> {
+pub fn literal_forms(unit: &str) -> Vec<String> {
     forms_for(unit)
         .into_iter()
         .filter(|form| form.bytes().any(|c| c.is_ascii_lowercase()))

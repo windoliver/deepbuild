@@ -1323,6 +1323,7 @@ fn mig_2_with(r: &mut Registrar, map: fn(&mut Map<String, Value>)) {
             from: 1,
             to: 2,
             renames: vec![],
+            retires: vec![],
             map: Some(map),
         }],
     };
