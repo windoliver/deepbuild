@@ -14,14 +14,23 @@
 //! the session readout and line. The guard holds each ink tier to its contrast floor on the ground,
 //! the raised ground and hover over either, and every role, an alpha role blended over the ground and
 //! the raised ground, to the status distance.
+//!
+//! Issue #417: four looks ship (clean, notebook pencil, chalk and dark math), each one asset with
+//! its lines, fills, ground, fonts and time feel. A role may name one of the look's fonts, so the
+//! `math` role names a math face, or be derived from other roles (`mix`, `lighter`, `darker`,
+//! `invert`), resolved here in OKLab before 8-bit encoding. The look's `fallback` list names the
+//! fonts a grapheme the run's face lacks is set in. The status distance holds wherever status can
+//! show: always for the app's look ([`resolve`]); for a document's look only where the document
+//! binds status, which the marks check judges ([`resolve_in`], [`clash_of`]), so an art film played
+//! on its own keeps any palette.
 
 use std::collections::BTreeMap;
 
-use deep_canvas::color::{srgb_to_oklab, Oklab, Srgb};
+use deep_canvas::color::{oklab_to_srgb, srgb_to_oklab, Oklab, Srgb};
 use deep_canvas::ops;
 use serde_json::{json, Map, Value};
 
-use crate::scene::{Palette, Rgb};
+use crate::scene::{Palette, Rgb, Type};
 
 /// A color at an alpha: sRGB-encoded bytes, the alpha last.
 pub type Rgba = [u8; 4];
@@ -123,7 +132,7 @@ impl Status {
 }
 
 /// A resolved look: each theme's roles, and the status map when the look has one.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Look {
     pub light: Palette,
     pub dark: Palette,
@@ -131,6 +140,24 @@ pub struct Look {
     pub light_alpha: BTreeMap<String, Rgba>,
     pub dark_alpha: BTreeMap<String, Rgba>,
     pub status: Option<Status>,
+    /// #417: each theme's opaque roles in OKLab as resolved, before 8-bit encoding.
+    pub light_oklab: BTreeMap<String, [f64; 3]>,
+    pub dark_oklab: BTreeMap<String, [f64; 3]>,
+    /// #417: each theme's font roles, by the name of the look's font each names.
+    pub light_fonts: BTreeMap<String, String>,
+    pub dark_fonts: BTreeMap<String, String>,
+    /// #417: each theme's type: the family each font name and font role sets text in, and the
+    /// fallback families.
+    pub light_type: Type,
+    pub dark_type: Type,
+}
+
+/// Where a look's status distance holds (The status-color rule): everywhere, for the app's look,
+/// or, for a document's look, only where the document binds status, which the check judges.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Distance {
+    Everywhere,
+    WhereStatusShows,
 }
 
 /// Why a look is refused.
@@ -205,12 +232,19 @@ impl Refusal {
     }
 }
 
+/// The shipped looks' IDs, in the order they're listed (#417).
+pub const SHIPPED: [&str; 4] = ["clean", "notebook_pencil", "chalk", "dark_math"];
+
 /// The definition of a shipped look by its ID.
 pub fn shipped(id: &str) -> Option<Value> {
-    match id {
-        "clean" => serde_json::from_str(include_str!("../looks/clean.json")).ok(),
-        _ => None,
-    }
+    let text = match id {
+        "clean" => include_str!("../looks/clean.json"),
+        "notebook_pencil" => include_str!("../looks/notebook_pencil.json"),
+        "chalk" => include_str!("../looks/chalk.json"),
+        "dark_math" => include_str!("../looks/dark_math.json"),
+        _ => return None,
+    };
+    serde_json::from_str(text).ok()
 }
 
 /// `#rrggbb` as sRGB-encoded bytes.
@@ -253,12 +287,18 @@ fn object<'a>(
     }
 }
 
-/// One theme's roles, the look's palette and roles with the theme's own over them: the opaque ones,
-/// and those at an alpha.
-fn theme(
-    def: &Map<String, Value>,
-    name: &'static str,
-) -> Result<(Palette, BTreeMap<String, Rgba>), Refusal> {
+/// One theme's resolved roles: the opaque ones, those at an alpha, every opaque one in OKLab, and
+/// the font roles by the name of the font each names.
+type ThemeRoles = (
+    Palette,
+    BTreeMap<String, Rgba>,
+    BTreeMap<String, [f64; 3]>,
+    BTreeMap<String, String>,
+);
+
+/// One theme's roles, the look's palette and roles with the theme's own over them. A role names a
+/// palette color, one of the look's fonts, or (#417) derives its color from other roles in OKLab.
+fn theme(def: &Map<String, Value>, name: &'static str) -> Result<ThemeRoles, Refusal> {
     let over = object(
         def.get("themes").and_then(|t| t.get(name)),
         &format!("themes/{name}"),
@@ -288,19 +328,123 @@ fn theme(
         Ok(out)
     };
     let (palette, roles) = (merged("palette")?, merged("roles")?);
+    let fonts = object(def.get("fonts"), "fonts")?;
     let (mut opaque, mut alpha) = (Palette::new(), BTreeMap::new());
+    let (mut oklab, mut font_roles) = (BTreeMap::new(), BTreeMap::new());
+    let mut derived = Vec::new();
     for (role, entry) in &roles {
-        let color = entry
-            .as_str()
-            .and_then(|name| hex_alpha(palette.get(name)))
-            .ok_or_else(|| Refusal::Bad(format!("roles/{role}")))?;
-        if color[3] == 255 {
-            opaque.insert(role.clone(), [color[0], color[1], color[2]]);
-        } else {
-            alpha.insert(role.clone(), color);
+        match entry {
+            Value::String(n) if palette.contains_key(n) => {
+                let color = hex_alpha(palette.get(n))
+                    .ok_or_else(|| Refusal::Bad(format!("palette/{n}")))?;
+                if color[3] == 255 {
+                    let rgb = [color[0], color[1], color[2]];
+                    opaque.insert(role.clone(), rgb);
+                    let l = lab(rgb);
+                    oklab.insert(role.clone(), [l.l, l.a, l.b]);
+                } else {
+                    alpha.insert(role.clone(), color);
+                }
+            }
+            Value::String(n) if fonts.is_some_and(|f| f.contains_key(n)) => {
+                font_roles.insert(role.clone(), n.clone());
+            }
+            Value::Object(_) => derived.push((role, entry)),
+            _ => return Err(Refusal::Bad(format!("roles/{role}"))),
         }
     }
-    Ok((opaque, alpha))
+    // Derived roles read resolved ones, so each pass resolves those whose roles are; a pass that
+    // resolves none leaves a role naming one that never resolves (or a cycle), refused.
+    while !derived.is_empty() {
+        let before = derived.len();
+        let mut left = Vec::new();
+        for (role, entry) in derived {
+            match derive(entry, &oklab, role)? {
+                Some(l) => {
+                    opaque.insert(role.clone(), encode(l));
+                    oklab.insert(role.clone(), l);
+                }
+                None => left.push((role, entry)),
+            }
+        }
+        if left.len() == before {
+            return Err(Refusal::Bad(format!("roles/{}", left[0].0)));
+        }
+        derived = left;
+    }
+    Ok((opaque, alpha, oklab, font_roles))
+}
+
+/// A derived role's color in OKLab (#417): `{mix: [a, b, t]}` the point `t` of the way from `a` to
+/// `b`; `{lighter: r, by}` lightness raised by `by` of the way to 1 and `{darker: r, by}` lowered by
+/// `by` of the way to 0, hue and chroma kept; `{invert: r}` the point opposite through mid grey.
+/// `None` while a role it reads isn't resolved yet.
+fn derive(
+    entry: &Value,
+    oklab: &BTreeMap<String, [f64; 3]>,
+    role: &str,
+) -> Result<Option<[f64; 3]>, Refusal> {
+    let bad = || Refusal::Bad(format!("roles/{role}"));
+    let Value::Object(op) = entry else {
+        return Err(bad());
+    };
+    fn named(v: Option<&Value>) -> Option<&str> {
+        v.and_then(Value::as_str)
+    }
+    let by = |v: Option<&Value>| {
+        v.and_then(Value::as_f64)
+            .filter(|f| (0.0..=1.0).contains(f))
+            .ok_or_else(bad)
+    };
+    let (keys, read): (&[&str], Vec<&str>) = if let Some(mix) = op.get("mix") {
+        let parts = mix.as_array().filter(|p| p.len() == 3).ok_or_else(bad)?;
+        by(parts.get(2))?;
+        let (a, b) = (named(parts.first()), named(parts.get(1)));
+        (&["mix"], vec![a.ok_or_else(bad)?, b.ok_or_else(bad)?])
+    } else if op.contains_key("lighter") {
+        (
+            &["lighter", "by"],
+            vec![named(op.get("lighter")).ok_or_else(bad)?],
+        )
+    } else if op.contains_key("darker") {
+        (
+            &["darker", "by"],
+            vec![named(op.get("darker")).ok_or_else(bad)?],
+        )
+    } else if op.contains_key("invert") {
+        (&["invert"], vec![named(op.get("invert")).ok_or_else(bad)?])
+    } else {
+        return Err(bad());
+    };
+    if op.keys().any(|k| !keys.contains(&k.as_str())) {
+        return Err(bad());
+    }
+    let Some(colors) = read
+        .iter()
+        .map(|r| oklab.get(*r).copied())
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
+    let [l, a, b] = colors[0];
+    Ok(Some(if let Some(mix) = op.get("mix") {
+        let t = mix[2].as_f64().unwrap_or(0.0);
+        let q = colors[1];
+        [l + (q[0] - l) * t, a + (q[1] - a) * t, b + (q[2] - b) * t]
+    } else if op.contains_key("lighter") {
+        [l + by(op.get("by"))? * (1.0 - l), a, b]
+    } else if op.contains_key("darker") {
+        [l * (1.0 - by(op.get("by"))?), a, b]
+    } else {
+        [1.0 - l, -a, -b]
+    }))
+}
+
+/// An OKLab color as sRGB-encoded bytes, each channel clamped to the gamut and rounded.
+fn encode([l, a, b]: [f64; 3]) -> Rgb {
+    let c = oklab_to_srgb(Oklab { l, a, b });
+    let byte = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [byte(c.r), byte(c.g), byte(c.b)]
 }
 
 /// An sRGB-encoded color in OKLab.
@@ -338,8 +482,13 @@ pub fn contrast(a: Rgb, b: Rgb) -> f64 {
     ratio(luminance(a), luminance(b))
 }
 
-/// Every font entry names a bundled face file (`bundled`), may be embedded and carries a license.
-fn fonts(def: &Map<String, Value>, bundled: &[&str]) -> Result<(), Refusal> {
+/// Every font entry names a bundled face file (`bundled`), may be embedded and carries a license;
+/// each by its name with the family its face registers (#417).
+fn fonts(
+    def: &Map<String, Value>,
+    bundled: &[&str],
+) -> Result<BTreeMap<String, &'static str>, Refusal> {
+    let mut out = BTreeMap::new();
     for (name, font) in object(def.get("fonts"), "fonts")?.into_iter().flatten() {
         let shippable = font.get("embed") == Some(&Value::Bool(true))
             && font
@@ -350,11 +499,45 @@ fn fonts(def: &Map<String, Value>, bundled: &[&str]) -> Result<(), Refusal> {
                 .get("file")
                 .and_then(Value::as_str)
                 .is_some_and(|f| bundled.contains(&f));
-        if !shippable {
-            return Err(Refusal::Font(name.clone()));
+        let face = font
+            .get("file")
+            .and_then(Value::as_str)
+            .and_then(|f| deep_text::FACES.iter().find(|face| face.file == f));
+        match face {
+            Some(face) if shippable => out.insert(name.clone(), face.family),
+            _ => return Err(Refusal::Font(name.clone())),
+        };
+    }
+    Ok(out)
+}
+
+/// A theme's type (#417): each font by its name, each font role by the font it names, and the
+/// fallback list's fonts in order, each one of the look's fonts.
+fn type_of(
+    def: &Map<String, Value>,
+    fonts: &BTreeMap<String, &'static str>,
+    font_roles: &BTreeMap<String, String>,
+) -> Result<Type, Refusal> {
+    let mut ty = Type {
+        fonts: fonts.clone(),
+        fallback: Vec::new(),
+    };
+    for (role, font) in font_roles {
+        ty.fonts.insert(role.clone(), fonts[font]);
+    }
+    if let Some(list) = def.get("fallback") {
+        let list = list
+            .as_array()
+            .ok_or_else(|| Refusal::Bad("fallback".into()))?;
+        for (i, name) in list.iter().enumerate() {
+            let family = name
+                .as_str()
+                .and_then(|n| fonts.get(n))
+                .ok_or_else(|| Refusal::Bad(format!("fallback/{i}")))?;
+            ty.fallback.push(family);
         }
     }
-    Ok(())
+    Ok(ty)
 }
 
 /// The nearest status color within `min_distance` of `color` (in OKLab), with its distance: the
@@ -443,9 +626,14 @@ pub fn status_map(def: &Map<String, Value>) -> Result<Status, Refusal> {
     Ok(status)
 }
 
-/// Resolves a look@1 definition and holds it to the status guard; `bundled` lists the font files
-/// the build ships.
+/// Resolves a look@1 definition and holds it to the status guard, the status distance included,
+/// as the app's look, where status always shows; `bundled` lists the font files the build ships.
 pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
+    resolve_in(def, bundled, Distance::Everywhere)
+}
+
+/// [`resolve`], with the status distance held `where` the look is shown (#417).
+pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, Refusal> {
     let Value::Object(def) = def else {
         return Err(Refusal::Bad(String::new()));
     };
@@ -453,12 +641,13 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
         return Err(Refusal::Bad("legend".into()));
     }
     let status = status_map(def)?;
-    fonts(def, bundled)?;
+    let fonts = fonts(def, bundled)?;
     let attention = object(def.get("attention_treatment"), "attention_treatment")?;
     let attention_glyph = attention
         .and_then(|a| a.get("glyph"))
         .and_then(Value::as_str);
-    let ((light, light_alpha), (dark, dark_alpha)) = (theme(def, "light")?, theme(def, "dark")?);
+    let (light, light_alpha, light_oklab, light_fonts) = theme(def, "light")?;
+    let (dark, dark_alpha, dark_oklab, dark_fonts) = theme(def, "dark")?;
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         let named = |role: &str, path: &str| {
             palette
@@ -502,43 +691,93 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
             });
         }
     }
-    // Data colors keep the look's distance from every status color; the ground sits behind them.
-    for (name, palette) in [("light", &light), ("dark", &dark)] {
-        for (role, color) in palette.iter().filter(|(r, _)| *r != "ground") {
-            if let Some((state, distance)) = clash(*color, &status) {
-                return Err(Refusal::Distance {
-                    theme: name,
-                    role: role.clone(),
-                    state,
-                    distance,
-                });
-            }
-        }
-    }
-    for (name, palette, alpha) in [
-        ("light", &light, &light_alpha),
-        ("dark", &dark, &dark_alpha),
-    ] {
-        chrome(name, palette, alpha, &status)?;
-    }
-    Ok(Look {
+    let look = Look {
+        light_type: type_of(def, &fonts, &light_fonts)?,
+        dark_type: type_of(def, &fonts, &dark_fonts)?,
         light,
         dark,
         light_alpha,
         dark_alpha,
         status: Some(status),
-    })
+        light_oklab,
+        dark_oklab,
+        light_fonts,
+        dark_fonts,
+    };
+    // Data colors keep the look's distance from every status color where status shows; the
+    // ground sits behind them.
+    let everywhere = (at == Distance::Everywhere)
+        .then_some(look.status.as_ref())
+        .flatten();
+    if let Some(status) = everywhere {
+        for (name, palette) in [("light", &look.light), ("dark", &look.dark)] {
+            for (role, color) in palette.iter().filter(|(r, _)| *r != "ground") {
+                if let Some((state, distance)) = clash(*color, status) {
+                    return Err(Refusal::Distance {
+                        theme: name,
+                        role: role.clone(),
+                        state,
+                        distance,
+                    });
+                }
+            }
+        }
+    }
+    for (name, palette, alpha) in [
+        ("light", &look.light, &look.light_alpha),
+        ("dark", &look.dark, &look.dark_alpha),
+    ] {
+        chrome(name, palette, alpha, everywhere)?;
+    }
+    Ok(look)
 }
 
+/// The first role of `look` within the status distance of a status color (`min`, or the look's
+/// own): an opaque role but the ground, which sits behind them, or a role at an alpha over the
+/// ground and the raised ground, in light then dark (The status-color rule).
+pub fn clash_of(look: &Look, min: Option<f64>) -> Option<Refusal> {
+    let mut status = look.status.clone()?;
+    if let Some(min) = min {
+        status.min_distance = min;
+    }
+    for (theme, palette, alpha) in [
+        ("light", &look.light, &look.light_alpha),
+        ("dark", &look.dark, &look.dark_alpha),
+    ] {
+        let named = |role: &String, (state, distance): (&'static str, f64)| Refusal::Distance {
+            theme,
+            role: role.clone(),
+            state,
+            distance,
+        };
+        for (role, color) in palette.iter().filter(|(r, _)| *r != "ground") {
+            if let Some(found) = clash(*color, &status) {
+                return Some(named(role, found));
+            }
+        }
+        let Some(&ground) = palette.get("ground") else {
+            continue;
+        };
+        let raised = palette.get("raised").copied().unwrap_or(ground);
+        for (role, c) in alpha {
+            for base in [ground, raised] {
+                if let Some(found) = clash(over(*c, base), &status) {
+                    return Some(named(role, found));
+                }
+            }
+        }
+    }
+    None
+}
 /// The chrome's half of the guard for one theme (#882): a role at an alpha is the one ink's color,
-/// and keeps the status distance over the ground and the raised ground; each ink tier keeps its
+/// and keeps the status distance (`status`, where it holds) over the ground and the raised ground; each ink tier keeps its
 /// contrast floor on the ground, the raised ground and hover over either. A look without chrome
 /// roles has nothing here to hold.
 fn chrome(
     theme: &'static str,
     palette: &Palette,
     alpha: &BTreeMap<String, Rgba>,
-    status: &Status,
+    status: Option<&Status>,
 ) -> Result<(), Refusal> {
     let (Some(&ground), Some(&ink)) = (palette.get("ground"), palette.get("ink")) else {
         return Ok(());
@@ -558,7 +797,7 @@ fn chrome(
             });
         }
         for base in [ground, raised] {
-            if let Some((state, distance)) = clash(over(*c, base), status) {
+            if let Some((state, distance)) = status.and_then(|s| clash(over(*c, base), s)) {
                 return Err(Refusal::Distance {
                     theme,
                     role: role.clone(),
@@ -594,9 +833,9 @@ fn chrome(
 mod tests {
     use super::*;
 
-    const BUNDLED: &[&str] = &["Inter-Regular.ttf", "JetBrainsMono-Regular.ttf"];
     fn resolve(def: &Value) -> Result<Look, Refusal> {
-        super::resolve(def, BUNDLED)
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        super::resolve(def, &bundled)
     }
 
     #[test]

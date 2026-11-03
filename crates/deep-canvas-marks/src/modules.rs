@@ -53,7 +53,10 @@ fn manifest(name: &str, deps: &[&str]) -> Manifest {
         feature: name.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -151,6 +154,12 @@ impl Canonical for TextSpec {
     fn encode(&self, out: &mut Vec<u8>) {
         self.text.encode(out);
         self.font.encode(out);
+        self.family.unwrap_or("").encode(out);
+        self.fallback.len().encode(out);
+        for family in &self.fallback {
+            family.encode(out);
+        }
+        self.lang.as_deref().unwrap_or("").encode(out);
         self.size.encode(out);
         self.weight.encode(out);
         self.width.encode(out);

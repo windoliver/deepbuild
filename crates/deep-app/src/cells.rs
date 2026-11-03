@@ -78,7 +78,7 @@ fn color(c: [u8; 3]) -> Hsla {
 
 fn label(text: &str) -> Label {
     Label {
-        role: Role::Mono,
+        family: Role::Mono.family(),
         ..Label::new(text)
     }
 }
