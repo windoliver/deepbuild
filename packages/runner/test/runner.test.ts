@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
-import { openRecord, type RecordStore } from '@deepbuild/record';
+import { openRecord, ulid, type RecordStore } from '@deepbuild/record';
 import { openSupervisor, type Supervisor } from '@deepbuild/supervisor';
 import { openRunner, type Runner } from '../src/index.js';
 
@@ -187,6 +187,18 @@ it('remembers a declined budget while the job waits on something else first', as
   await runner.tick();
   expect((await runner.status(rec.job)).state).toBe('refused');
   expect(await asks.needsYou(), 'the same question again').toEqual([]);
+}, 60_000);
+
+it('reads a default you undid as open again, so the job goes on waiting (#824)', async () => {
+  await open(claude(), { ANTHROPIC_API_KEY: 'sk-placeholder' });
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const rec = await runner.submit({ kind: 'read', agent: 'claude-code', prompt: 'Read.', issue: 'windoliver/deepbuild#159' });
+  const [ask] = await asks.needsYou();
+  const deny = ask!.options.find((o) => o.decision === 'deny')!.id;
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ulid(Date.now()), kind: 'ask.defaulted', subject: ask!.ask, ts: Date.now(), data: { answer: deny, decision: 'deny', plan_hash: null } });
+  await asks.undo({ writer: 'app', actor: 'you', scope: 'you' }, ask!.ask);
+  await runner.tick();
+  expect((await runner.status(rec.job)).state).toBe('waiting');
 }, 60_000);
 
 /** A stand-in claude that reports, in its result, what a real one needs from its job: a temp folder it can write,
