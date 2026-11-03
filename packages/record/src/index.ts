@@ -221,6 +221,18 @@ CREATE TABLE IF NOT EXISTS lost_sessions (session TEXT PRIMARY KEY) STRICT;
 
 type Obj = { [key: string]: JsonValue };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** Each event kind's schema versions in `entries`, added to `into`: a kind's list is replaced, never changed in place. */
+function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>): Map<string, number[]> {
+  for (const { schema } of entries) {
+    const properties = isObj(schema.properties) ? schema.properties : {};
+    const kind = isObj(properties.kind) ? properties.kind.const : undefined;
+    const version = isObj(properties.v) ? properties.v.const : undefined;
+    if (typeof kind === 'string' && typeof version === 'number') into.set(kind, [...(into.get(kind) ?? []), version].sort((a, b) => a - b));
+  }
+  return into;
+}
+/** The published schemas' versions, read once: they never change in a process, so a record opened again reads none. */
+let published: ReadonlyMap<string, number[]> | undefined;
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 /** A ULID minted at `ms`: 48 bits of time, 80 of randomness. */
 export function ulid(ms: number): string {
@@ -267,7 +279,7 @@ class SqliteRecord implements RecordStore {
   private readonly backend: Backend;
   private readonly projector: Projector;
   private readonly registry: Registry;
-  private readonly versions = new Map<string, number[]>();
+  private readonly versions: Map<string, number[]>;
   private readonly migrations = new Map<string, Migration>();
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
@@ -306,14 +318,10 @@ class SqliteRecord implements RecordStore {
     this.db.exec(DDL);
     this.projector = new Projector(this.db);
     this.stale = this.projector.ensure();
-    const entries = [...listSchemas(), ...(options.schemas ?? [])];
-    this.registry = registry(entries);
-    for (const { schema } of entries) {
-      const properties = isObj(schema.properties) ? schema.properties : {};
-      const kind = isObj(properties.kind) ? properties.kind.const : undefined;
-      const version = isObj(properties.v) ? properties.v.const : undefined;
-      if (typeof kind === 'string' && typeof version === 'number') this.versions.set(kind, [...(this.versions.get(kind) ?? []), version].sort((a, b) => a - b));
-    }
+    const extra = options.schemas ?? [];
+    this.registry = registry([...listSchemas(), ...extra]);
+    published ??= versionsOf(listSchemas(), new Map());
+    this.versions = versionsOf(extra, new Map(published));
     for (const m of options.migrations ?? []) {
       // Forward only, one step per version, so a replay through them always ends.
       if (!(m.to > m.from)) throw new RecordError('schema', `migration ${m.kind}@${m.from} must move forward, not to ${m.to}`, { kind: m.kind, path: '/migrations' });
