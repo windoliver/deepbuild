@@ -356,6 +356,10 @@ pub struct Kind {
     /// `(deprecated_since, replaced_by)` once the kind is replaced: it still loads, with a
     /// `deprecated` notice (Item and kind).
     pub deprecated: Option<(String, String)>,
+    /// A preview kind's tracking issue: its stability is `preview` until the issue lands (#412).
+    pub preview: Option<String>,
+    /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
+    pub description: Option<String>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -666,7 +670,25 @@ impl Registrar {
             needs: needs.iter().map(|s| s.to_string()).collect(),
             draws_as: draws_as.into(),
             deprecated: None,
+            preview: None,
+            description: None,
         });
+        self
+    }
+
+    /// The last kind registered is a preview, tracked by the issue `tracking` (#412).
+    pub fn preview(&mut self, tracking: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.preview = Some(tracking.into());
+        }
+        self
+    }
+
+    /// The last kind registered's one-line description (#412).
+    pub fn described(&mut self, text: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.description = Some(text.into());
+        }
         self
     }
 
@@ -982,6 +1004,10 @@ pub enum Fault {
     TakesForeignEntry,
     /// Leaves the op table's base steps to a canvas module to fill (#200).
     BaseStepsElsewhere,
+    /// The document check names no close name on `unknown_kind` or `unknown_field` (#412).
+    NoCloseNames,
+    /// The document check ranks close names by spelling alone, reading no rename record (#412).
+    CloseBySpelling,
 }
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
@@ -1001,6 +1027,8 @@ pub struct SealError {
     pub implementations: Vec<String>,
     /// The registry, entries, kit rules and passes involved (#200).
     pub registry: Option<Box<RegistryRefusal>>,
+    /// The bytes the build's sheet runs past its cap (#412).
+    pub overrun_bytes: Option<usize>,
     pub what: String,
 }
 
@@ -1136,6 +1164,9 @@ pub struct Sealed {
     pub registries: Vec<lists::SealedRegistry>,
     /// The time the seal's registry checks took, in nanoseconds of the registry's clock.
     pub registry_ns: u64,
+    /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
+    /// planted checks (#412); `None` is the right one.
+    pub close_fault: Option<Fault>,
 }
 
 impl Sealed {
@@ -1467,6 +1498,9 @@ pub struct Registry {
     declared: Vec<lists::RegistryDef>,
     /// The registry whose kit the planted wrong kit replaces with one admitting every entry.
     admits_all: Option<String>,
+    /// `(module, kind)`: a bare kind name a test build lets that module keep (#412's fixture
+    /// `ring`), beside the one the design names.
+    bare: Vec<(String, String)>,
 }
 
 impl Registry {
@@ -1481,10 +1515,17 @@ impl Registry {
             costs: None,
             declared: Vec::new(),
             admits_all: None,
+            bare: Vec::new(),
         }
     }
 
     /// A registry the core declares in this build beside its own (#200).
+    /// Lets `module` keep the bare kind name `kind`: a test build's fixture only (#412).
+    pub fn allows_bare(mut self, module: &str, kind: &str) -> Registry {
+        self.bare.push((module.into(), kind.into()));
+        self
+    }
+
     pub fn declares(mut self, def: lists::RegistryDef) -> Registry {
         self.declared.push(def);
         self
@@ -1962,7 +2003,11 @@ impl Registry {
                 // A bare name is the core's (a core kind has no family); a module's kind
                 // carries its family, so no module takes `rect` or `text` from the compositor.
                 // The one module kind the design names bare, `cells@1`, is the cells module's.
-                let bare = BARE_MODULE_KINDS.contains(&k.entry.name) && k.entry.name == name;
+                let bare = (BARE_MODULE_KINDS.contains(&k.entry.name) && k.entry.name == name)
+                    || self
+                        .bare
+                        .iter()
+                        .any(|(m, kind)| m == name && kind == k.entry.name);
                 if k.entry.family.is_empty() && !bare {
                     return Err(SealError::of(
                         "bad_shape",
@@ -2746,6 +2791,9 @@ impl Registry {
             interface_ns,
             registries,
             registry_ns,
+            close_fault: self
+                .fault
+                .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
             costs: self
                 .costs
                 .take()
@@ -3065,11 +3113,18 @@ fn module_shapes(
         .map(|k| {
             json!({
                 "draws_as": k.draws_as,
-                "migrations": k.entry.migrations.iter().map(|m| json!({
-                    "from": m.from,
-                    "renames": m.renames.iter().map(|r| json!({"from": r.from, "to": r.to})).collect::<Vec<_>>(),
-                    "to": m.to,
-                })).collect::<Vec<_>>(),
+                "migrations": k.entry.migrations.iter().map(|m| {
+                    let mut step = json!({
+                        "from": m.from,
+                        "renames": m.renames.iter().map(|r| json!({"from": r.from, "to": r.to})).collect::<Vec<_>>(),
+                        "to": m.to,
+                    });
+                    // A retirement record is a shape too; a migration without one hashes as before.
+                    if !m.retires.is_empty() {
+                        step["retires"] = json!(m.retires);
+                    }
+                    step
+                }).collect::<Vec<_>>(),
                 "name": k.entry.full_name(),
                 "needs": public(&k.needs),
                 "versions": k.entry.versions.iter().map(|v| {
@@ -3971,6 +4026,7 @@ mod tests {
                     from: w[0],
                     to: w[1],
                     renames: vec![],
+                    retires: vec![],
                     map: None,
                 })
                 .collect();
@@ -4085,6 +4141,7 @@ mod tests {
                     .iter()
                     .map(|(from, to)| crate::kinds::Rename { from, to })
                     .collect(),
+                retires: vec![],
                 map: None,
             }
         }
