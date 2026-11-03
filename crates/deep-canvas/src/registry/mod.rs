@@ -1008,6 +1008,9 @@ pub enum Fault {
     NoCloseNames,
     /// The document check ranks close names by spelling alone, reading no rename record (#412).
     CloseBySpelling,
+    /// Hashes each implementation's pins into its interface's digest, so another patch of a
+    /// pinned crate changes it (#238).
+    DigestCoversPins,
 }
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
@@ -2817,7 +2820,19 @@ impl Registry {
         ns: &mut u64,
     ) -> Result<(String, Option<SealedInterface>), SealError> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
-        let (digest, listed) = module_shapes(shapes, lists, private).map_err(bad)?;
+        // The planted digest that also covers the implementation's pins (#238).
+        let pinned = |digest: String, m: &Manifest| -> Result<String, CanonError> {
+            if self.fault != Some(Fault::DigestCoversPins) {
+                return Ok(digest);
+            }
+            d1(&json!({"shapes": digest, "pins": m.implementation.to_json()["pins"]}))
+        };
+        let (digest, mut listed) = module_shapes(shapes, lists, private).map_err(bad)?;
+        let digest = pinned(digest, m).map_err(bad)?;
+        let covers = self.fault == Some(Fault::DigestCoversPins);
+        if covers {
+            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+        }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
         let reference = declared.map_or(&m.implementation.name, |i| {
@@ -2827,7 +2842,12 @@ impl Registry {
             let mut r = Registrar::default();
             (i.reference.register)(&mut r);
             let own = own_lists(&r);
-            let (want, want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
+            let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
+            let want = pinned(want, &i.reference.manifest).map_err(bad)?;
+            if covers {
+                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
+                want_listed.insert("pins".into(), pins);
+            }
             if want != digest {
                 let differs = want_listed
                     .iter()

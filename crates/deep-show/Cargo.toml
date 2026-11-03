@@ -43,6 +43,15 @@ test-deprecated = ["dep:deep-canvas-test-modules"]
 # logic module left out of the full set's list.
 test-check-kind = ["dep:deep-canvas-test-modules"]
 test-leave-out-logic = []
+# Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
+# deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
+# test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
+# and the test implementation sandbox.alt, pinning another wasmtime 49.0 patch.
+test-leave-out-sandbox = []
+test-mesh-item = ["dep:deep-canvas-test-modules"]
+test-prog-registry = ["dep:deep-canvas-test-modules"]
+test-sandbox-needs-logic = []
+test-sandbox-alt = []
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -179,6 +188,8 @@ deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
+deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
 # Issue #140: the platform seams and their conformance suites.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.

@@ -63,6 +63,9 @@ pub const PARTS: [&str; 13] = [
 /// `behavior`, an interface's behavior part on its implementation.
 pub const INTERFACE_PARTS: [&str; 2] = ["bit", "behavior"];
 
+/// sandbox@1's own part (#238): its fixtures on this host's engine, against the reference's results.
+pub const SANDBOX_PART: &str = "sandbox";
+
 /// The part a module that declares registries adds (#200): each kit rule isolated by a planted
 /// wrong entry that breaks it alone.
 pub const REGISTRY_PART: &str = "registries";
@@ -139,6 +142,7 @@ impl KitCall {
                 !PARTS.contains(&x.as_str())
                     && !INTERFACE_PARTS.contains(&x.as_str())
                     && x != REGISTRY_PART
+                    && x != SANDBOX_PART
             })
         }) {
             return None;
@@ -394,7 +398,7 @@ impl<'a> Hub<'a> {
             for part in PARTS
                 .into_iter()
                 .chain(INTERFACE_PARTS)
-                .chain([REGISTRY_PART])
+                .chain([REGISTRY_PART, SANDBOX_PART])
             {
                 if !call.runs(part) {
                     continue;
@@ -479,6 +483,7 @@ impl<'a> Hub<'a> {
             "bit" => interface::bit(self, ctx),
             "behavior" => interface::behavior(self, ctx),
             REGISTRY_PART => self.registries_part(ctx.module),
+            SANDBOX_PART => sandbox_part(ctx.module),
             _ => None,
         }
     }
@@ -526,6 +531,27 @@ impl<'a> Hub<'a> {
     pub fn planted(&self, p: Planted) -> bool {
         self.scenario.planted == Some(p)
     }
+}
+
+/// sandbox@1's kit part (#238), on the sandbox module alone: each of the interface's fixtures on
+/// this build's engine, a case each, with the fixture's result against the reference's.
+fn sandbox_part(module: &str) -> Option<PartRun> {
+    if module != "sandbox" {
+        return None;
+    }
+    let kit = deep_sandbox_wasmtime::service::Sandbox::default().kit();
+    let cases = kit["cases"].as_array().cloned().unwrap_or_default();
+    let mut run = PartRun::new(cases.len() as u64);
+    for c in cases {
+        let Value::Object(mut fields) = c else { continue };
+        let verdict = match fields.remove("verdict").as_ref().and_then(Value::as_str) {
+            Some("PASS") => Verdict::Pass,
+            _ => Verdict::Fail,
+        };
+        run.cases.push(Case { verdict, fields });
+    }
+    run.failures = kit["failures"].as_array().cloned().unwrap_or_default();
+    Some(run)
 }
 
 /// What every part reads of the run: the call, the module, the manifest, and what the parts

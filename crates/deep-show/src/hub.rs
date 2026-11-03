@@ -505,6 +505,10 @@ pub enum Call {
     Registries,
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
+    /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
+    Sandbox,
+    /// #238: the providers a document's current revision ran at check, with their output.
+    Provided(String),
     /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
     Lookup {
         doc: String,
@@ -887,6 +891,8 @@ pub struct Hub<'a> {
     pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
+    /// The sandbox module's check-time work (#238).
+    pub sandbox: crate::sandbox::Host,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -1022,6 +1028,7 @@ impl<'a> Hub<'a> {
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
+            sandbox: crate::sandbox::Host::default(),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
@@ -1132,12 +1139,15 @@ impl<'a> Hub<'a> {
         dir: &std::path::Path,
         session: Option<&str>,
     ) -> Value {
+        let sealed = &self.startup.sealed;
+        let sandbox = &mut self.sandbox;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            &self.startup.sealed,
+            sealed,
             id,
             dir,
+            &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
         // with origin agent, and in a registry that binds author they bind only its own claims.
@@ -1377,6 +1387,16 @@ impl<'a> Hub<'a> {
             }
             Call::Registries => self.registries_reply(),
             Call::Kinds(c) => self.kinds_reply(c),
+            Call::Sandbox => json!({
+                "module": "sandbox",
+                "version": self.startup.sealed.modules.iter().find(|m| m.name == "sandbox").map(|m| m.version.to_string()),
+                "checks": self.sandbox.checks, "links": self.sandbox.links,
+                "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
+            }),
+            Call::Provided(doc) => json!({
+                "doc": doc,
+                "provided": self.sandbox.provided.get(doc).cloned().unwrap_or_default(),
+            }),
             Call::Lookup {
                 doc,
                 registry,
@@ -1765,6 +1785,8 @@ impl<'a> Hub<'a> {
                     }
                 }
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
+                // #238: the providers the document names run at its check, once per content key.
+                issues.extend(self.sandbox.provide(&show.doc, &doc));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
                     _ => Scope::Every,
