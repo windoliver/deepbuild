@@ -149,6 +149,8 @@ enum Request {
 /// A line answered before any platform-specific work: a check, a look, or a refusal of either.
 enum Answer {
     Now(Value),
+    /// #160: a `path` line, answered frame by frame against the process's built tessellations.
+    Path(Box<raster::PathRequest>),
     Draw(Box<Request>),
 }
 
@@ -442,7 +444,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         look::Distance::WhereStatusShows
     };
     let look = match (command, input.get("look")) {
-        ("check" | "geometry", None) => None,
+        ("check" | "geometry" | "path", None) => None,
         (_, value) => match look(value, at)? {
             Ok(found) => Some(found),
             Err(refusal) => return Some(Answer::Now(refusal.to_json())),
@@ -455,6 +457,54 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     let skips = skips_clip_path(input);
     let near = distance_0_03(input);
     let store_dir = store(input.get("store"))?;
+    if command == "path" {
+        let planted = match input.get("planted") {
+            None => Planted::None,
+            Some(Value::String(p)) => raster::planted_path(p)?,
+            Some(_) => return None,
+        };
+        let doc = doc(input.get("doc"))?;
+        let item = input.get("item")?.as_str()?.to_string();
+        let times: Vec<i64> = match input.get("times") {
+            None => vec![0],
+            Some(Value::Array(list)) => {
+                list.iter().map(Value::as_i64).collect::<Option<Vec<_>>>()?
+            }
+            Some(_) => return None,
+        };
+        let anchors: Vec<String> = match input.get("anchors") {
+            None => Vec::new(),
+            Some(Value::Array(list)) => list
+                .iter()
+                .map(|v| v.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()?,
+            Some(_) => return None,
+        };
+        let timing = match input.get("timing") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
+        let (checked, vectors) = check(
+            &doc,
+            look.as_ref().map(|(l, _)| l),
+            store_dir.as_deref(),
+            (skips, near),
+        );
+        if let Some(refused) = refused_by_check(&checked) {
+            return Some(Answer::Now(refused));
+        }
+        return Some(Answer::Path(Box::new(raster::PathRequest {
+            doc,
+            item,
+            times,
+            anchors,
+            timing,
+            planted,
+            look: look.map(|(l, _)| l),
+            vectors,
+        })));
+    }
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some() && !skips && !near {
             return None;
@@ -487,6 +537,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::String(p)) if p == "reads_process_locale" => (Planted::None, false, false),
             Some(Value::String(p)) if p == "sectors_source_over" => {
                 (Planted::SectorsSourceOver, false, false)
+            }
+            Some(Value::String(p)) if p == "merge_zero_fills" => {
+                (Planted::MergeZeroFills, false, false)
             }
             Some(Value::String(p))
                 if p == "write_fades_fills_from_start"
@@ -695,16 +748,19 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 pub fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
     if ![
-        "frames", "session", "render", "check", "look", "raster", "geometry", "idle",
+        "frames", "session", "render", "check", "look", "raster", "geometry", "idle", "path",
     ]
     .contains(&command.as_str())
     {
         eprintln!(
-            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry"
+            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | path"
         );
         std::process::exit(2);
     }
     let mut out = io::stdout().lock();
+    // #160: the tessellations this process built, by their key, so `path` reports what a later
+    // frame reused.
+    let mut built = std::collections::BTreeSet::new();
     #[cfg(target_os = "macos")]
     let mut renderer = macos::Renderer::new();
     for buf in io::stdin().lock().split(b'\n') {
@@ -720,6 +776,7 @@ pub fn main() {
         let answer = match request {
             None => bad_input(),
             Some(Answer::Now(answer)) => answer,
+            Some(Answer::Path(request)) => raster::path_answer(*request, &mut built),
             Some(Answer::Draw(request)) => {
                 #[cfg(target_os = "macos")]
                 {

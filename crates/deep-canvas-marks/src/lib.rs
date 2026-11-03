@@ -14,6 +14,7 @@
 pub mod check;
 pub mod data;
 pub mod dirty;
+pub mod ends;
 pub mod key;
 pub mod layout;
 pub mod look;
@@ -21,5 +22,6 @@ pub mod modules;
 pub mod outline;
 pub mod paint;
 pub mod path;
+pub mod pathops;
 pub mod relations;
 pub mod scene;
