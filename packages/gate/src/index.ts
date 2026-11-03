@@ -19,6 +19,8 @@ export type { BaseCheckout, BaseRun, Budget, CheckoutPlant, Checkouts, Checkouts
 export { claimVerdict } from './claim.js';
 export { admitKind } from './kinds.js';
 export type { ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedFailure, RecordedRun, VerdictPlant } from './claim.js';
+export { addedLines, errorShape, leftOpen, limitsIn, openTasks, placeholders, solveLine, toldToRun, unitless } from './open.js';
+export type { LeftOpen, TaskListFacts } from './open.js';
 export { attributeStack } from './stack.js';
 export type { Served, StackRecords, Trees } from './stack.js';
 export { DEFAULTS, simulate } from './scheduler.js';

@@ -260,6 +260,8 @@ export interface Asks {
   undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
   inbox(): Promise<InboxRow[]>;
+  /** A task's check, run again on your "I did it", still fails (#323): each open task it proves says what's missing. */
+  stillFails(check: string, reasons: string[]): Promise<void>;
   /** The core consults each resolver on every ask raised, before the ask reaches you; returns how to drop it. */
   registerResolver(name: string, resolver: Resolver): () => void;
   /** Your answer to a closed ask, saved as a decision at a scope, on the trusted path: its handle. */
@@ -936,6 +938,13 @@ class AsksCore implements Asks {
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null,
       }));
+    });
+  }
+
+  stillFails(check: string, reasons: string[]): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      for (const a of this.open()) if (a.data.kind === 'unblock' && a.data.proves === check) a.missing = { check, reasons: [...reasons], link: null };
     });
   }
 
@@ -2445,7 +2454,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
+    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };
