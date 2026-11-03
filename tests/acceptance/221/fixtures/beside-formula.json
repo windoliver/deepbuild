@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "rel-221-beside-formula",
+  "profile": "figure",
+  "title": "A formula beside a moving circle",
+  "description": "Issue #221 AC1: a vector@1 formula placed beside a circle, side e, gap 24, align center, while keyed at.pos channels move the circle.",
+  "size": [1920, 1080],
+  "transport": {"span": "4s"},
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "ball": {"id": "ball", "kind": "circle@1", "layer": "main", "name": "Ball", "order": "a1",
+      "params": {"center": [200, 540], "r": 50, "paint": {"fill": {"role": "accent"}, "stroke": {"role": "ink", "width": 6}}}},
+    "formula": {"id": "formula", "kind": "vector@1", "layer": "main", "name": "Formula", "order": "a2",
+      "params": {"src": "@formula.svg", "size": [240, 80], "colors": {"#000000": "ink"}, "alt": "x = y"},
+      "at": {"place": {"beside": "ball", "side": "e", "gap": 24, "align": "center"}}}
+  },
+  "channels": {
+    "ball-x": {"target": "items/ball/at/pos/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "4s", "value": 900, "interp": "linear"}}},
+    "ball-y": {"target": "items/ball/at/pos/1", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "2s", "value": -300, "interp": "linear"}, "k2": {"t": "4s", "value": 200, "interp": "linear"}}}
+  }
+}

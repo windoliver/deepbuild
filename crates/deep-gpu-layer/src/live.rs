@@ -38,7 +38,9 @@ use deep_gpu::surface::Path;
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
-use crate::liveview::{compile_upscale, surface_of, Drawing, Kit, Timer, Upscale, View, SLOTS};
+use crate::liveview::{
+    compile_upscale, surface_of, Content, Drawing, Kit, Timer, Upscale, View, SLOTS,
+};
 use crate::{refused, App, Planted};
 use deep_scene3d_render::surface::Surface;
 
@@ -480,7 +482,7 @@ struct Rev {
     number: u64,
     doc: Value,
     /// Its compiled frames, until it latches and its view takes them.
-    frames: Option<Frames>,
+    frames: Option<Content>,
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
@@ -562,7 +564,7 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 /// A revision that passed admission.
 struct Admitted {
     doc: Value,
-    frames: Frames,
+    frames: Content,
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
@@ -629,16 +631,26 @@ fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let frames = program
-        .and_then(|p| Frames::with_program(&doc, p, look, labels))
-        .map_err(|r| {
-            vec![issue(
-                r.code,
-                &r.path,
-                Value::Null,
-                "the document can't be evaluated",
-            )]
-        })?;
+    let unevaluated = |(code, path): (&str, String)| {
+        vec![issue(
+            code,
+            &path,
+            Value::Null,
+            "the document can't be evaluated",
+        )]
+    };
+    // A document with no camera is 2D, as a chart is, and draws by marks2d (#397).
+    let frames = if crate::flat::is_flat(&doc) {
+        Content::Flat(Box::new(
+            crate::flat::Flat::new(&doc, &look.roles).map_err(unevaluated)?,
+        ))
+    } else {
+        Content::Scene(Box::new(
+            program
+                .and_then(|p| Frames::with_program(&doc, p, look, labels))
+                .map_err(|r| unevaluated((r.code, r.path)))?,
+        ))
+    };
     let moving = camera_moves(&doc);
     let base_scale = if moving { limits.scale_moving } else { 1.0 };
     let effects = doc["items"]
@@ -2021,7 +2033,8 @@ fn render_canonical(
         Ok(f) => f,
         Err(r) => return refused(r.code, r.path),
     };
-    let mut view = match View::new(device, Path::Copy, size, 1, frames, 1.0, 0, look, labels) {
+    let content = Content::Scene(Box::new(frames));
+    let mut view = match View::new(device, Path::Copy, size, 1, content, 1.0, 0, look, labels) {
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
     };

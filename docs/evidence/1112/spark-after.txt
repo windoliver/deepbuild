@@ -1,0 +1,91 @@
+# reading: 2026-11-03T04:51:53Z on the Spark (linux arm64)
+## load
+$ uptime
+ 20:51:53 up 2 days,  1:04,  2 users,  load average: 0.49, 0.36, 0.30
+## swap and memory
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:           121Gi       9.7Gi       9.7Gi       354Mi       103Gi       111Gi
+Swap:           15Gi        96Ki        15Gi
+## disk
+$ df -h /
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p2  3.7T  219G  3.3T   7% /
+$ du -sh /tmp /var/tmp
+24G	/tmp
+360M	/var/tmp
+## builds running (cargo, vitest, proof)
+$ pgrep -af "cargo|vitest|proof-" (excluding this reading)
+## resident Claude Code sessions
+$ pgrep -c -f "claude-code/.*/claude --output-format"
+18
+## worktrees
+$ git worktree list
+~/deepbuild                                                                                                                                                                                                       565eb5d7 (detached HEAD)
+~/deepbuild/.claude/worktrees/agent-a2661611c3c99bbb8                                                                                                                                                             c69c9acf [worktree-agent-a2661611c3c99bbb8]
+~/deepbuild/.claude/worktrees/issue-1111-implementation-41f269                                                                                                                                                    eef57aaa [claude/issue-1111-implementation-41f269]
+~/deepbuild/.claude/worktrees/issue-1112-implementation-c22f96                                                                                                                                                    960045da [claude/issue-1112-implementation-c22f96]
+~/deepbuild/.claude/worktrees/issue-30-e7e603                                                                                                                                                                     323b5c53 [claude/issue-30-e7e603]
+~/deepbuild/.claude/worktrees/issue-31                                                                                                                                                                            91204133 [claude/31-redraft-split]
+~/deepbuild/.claude/worktrees/issue-39-ec48f7                                                                                                                                                                     abb722cb [claude/issue-39-ec48f7]
+~/deepbuild/.claude/worktrees/issue-40-68cd15                                                                                                                                                                     8cdfa30d [claude/issue-40-68cd15]
+~/deepbuild/.claude/worktrees/issue-45-d2a764                                                                                                                                                                     fca0c4e9 [claude/issue-45-implementation-e83eea]
+~/deepbuild/.claude/worktrees/issue-70                                                                                                                                                                            a476f8b8 [claude/issue-70-bubblewrap]
+~/deepbuild/.claude/worktrees/issue-70-bwrap                                                                                                                                                                      e16ec671 [claude/issue-70-bwrap]
+~/deepbuild/.claude/worktrees/issue-824-finish                                                                                                                                                                    b455dace [claude/issue-824-implementation]
+~/deepbuild/.claude/worktrees/issue-842-92f0b3                                                                                                                                                                    9189bb5c [claude/issue-842-92f0b3]
+~/deepbuild/.claude/worktrees/issue-85-cbc758                                                                                                                                                                     ed3513ec [claude/issue-85-cbc758]
+<session scratchpad>/blind31  9189bb5c (detached HEAD)
+<session scratchpad>/t31      64caf106 [scratch/31-on-70]
+<session scratchpad>/main-base                                                                                          1461f904 (detached HEAD)
+## git status --porcelain per worktree
+### ~/deepbuild
+### ~/deepbuild/.claude/worktrees/agent-a2661611c3c99bbb8
+ M tests/acceptance/85/hub/BASE-FAILURE.txt
+ M tests/acceptance/85/hub/README.md
+ M tests/acceptance/85/hub/helpers.ts
+?? tests/acceptance/85/continue/
+?? tests/acceptance/85/hub/cutoff.test.ts
+?? tests/acceptance/85/hub/held.test.ts
+### ~/deepbuild/.claude/worktrees/issue-1111-implementation-41f269
+### ~/deepbuild/.claude/worktrees/issue-1112-implementation-c22f96
+?? docs/evidence/1112/
+### ~/deepbuild/.claude/worktrees/issue-30-e7e603
+### ~/deepbuild/.claude/worktrees/issue-31
+ M package-lock.json
+?? PR-930.md
+?? PR-lsof.md
+?? PR-redraft.md
+?? vitest-throttle-issue.md
+### ~/deepbuild/.claude/worktrees/issue-39-ec48f7
+### ~/deepbuild/.claude/worktrees/issue-40-68cd15
+### ~/deepbuild/.claude/worktrees/issue-45-d2a764
+?? PR-844-update.md
+?? private-inputs/
+### ~/deepbuild/.claude/worktrees/issue-70
+?? PR-70.md
+### ~/deepbuild/.claude/worktrees/issue-70-bwrap
+### ~/deepbuild/.claude/worktrees/issue-824-finish
+### ~/deepbuild/.claude/worktrees/issue-842-92f0b3
+### ~/deepbuild/.claude/worktrees/issue-85-cbc758
+### <session scratchpad>/blind31
+?? tests/acceptance/31/
+### <session scratchpad>/t31
+### <session scratchpad>/main-base
+## target/ sizes
+27G	~/deepbuild/target
+320M	~/deepbuild/.claude/worktrees/issue-1111-implementation-41f269/target
+8.4G	~/deepbuild/.claude/worktrees/issue-30-e7e603/target
+15G	~/deepbuild/.claude/worktrees/issue-31/target
+8.5G	~/deepbuild/.claude/worktrees/issue-39-ec48f7/target
+373M	~/deepbuild/.claude/worktrees/issue-40-68cd15/target
+12G	~/deepbuild/.claude/worktrees/issue-45-d2a764/target
+3.8G	~/deepbuild/.claude/worktrees/issue-70/target
+847M	~/deepbuild/.claude/worktrees/issue-70-bwrap/target
+37G	~/deepbuild/.claude/worktrees/issue-824-finish/target
+28G	~/deepbuild/.claude/worktrees/issue-85-cbc758/target
+373M	<session scratchpad>/blind31/target
+374M	<session scratchpad>/t31/target
+3.7G	<session scratchpad>/main-base/target
+## proof-run folders in the temp directory, with watcher PIDs
+5.8G /tmp/deep-proof-run-LDhJu7

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "1f532a25b9de257b9b42a7070bedd1b11e0009308080259871c51592e0ef0ce2",
+  "set_digest": "ab6db941b69b94a4e36ad64e795469533b0ff79bc4f07eeeabdcc089834e71d9",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -63,7 +63,7 @@
       }
     },
     "data@1": {
-      "digest": "a5b023a5583874792cf8c0fce3016fcf53166dc51cfdf632bb705314f97fc0c2",
+      "digest": "4bdd0190573c6a2fd523ce32e4fe42192c0199e4448e5896f9b99b5653a1e5ca",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -179,7 +179,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "437f76d546681c933724cee9c189db0d9bbf6cb75088f1f5b2e92f90ee94b268",
+      "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -728,6 +728,37 @@
         "per": "item"
       },
       {
+        "operator": "marks2d.relations",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "core.world",
+          "core.transform",
+          "core.fields",
+          "text.run",
+          "text.counter",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "marks2d.places"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "marks2d.place",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.world",
+          "marks2d.places"
+        ],
+        "writes": [
+          "marks2d.at"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.animate",
         "module": "text",
         "version": "1.0.0",
@@ -750,6 +781,7 @@
         "reads": [
           "core.fields",
           "core.world",
+          "marks2d.at",
           "text.counter",
           "look.palette",
           "view(locale)"
@@ -767,6 +799,7 @@
           "refs",
           "reading",
           "core.world",
+          "marks2d.at",
           "core.fields",
           "text.counter",
           "text.run",

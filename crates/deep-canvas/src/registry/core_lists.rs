@@ -629,11 +629,232 @@ fn logic_service() -> RegistryDef {
     .planted("no_fixture", json!({"answers_from": "step"}))
 }
 
+// ---- constraint@1
+
+/// The code a cycle through constraints is refused with at check (Item and kind: relations).
+pub const RELATION_CYCLE: &str = "relation_cycle";
+
+fn strings<'a>(v: &'a Value, at: &str) -> Vec<&'a str> {
+    v.pointer(at)
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default()
+}
+
+/// A read of an earlier frame's value: `earlier(<term>)`.
+fn is_earlier(read: &str) -> bool {
+    read.starts_with("earlier(")
+}
+
+fn constraint_reads(v: &Value) -> Result<(), String> {
+    let declared = strings(v, "/reads");
+    if let Some(r) = declared.iter().find(|r| is_earlier(r)) {
+        return Err(format!("it declares `{r}`, a read of an earlier frame"));
+    }
+    match strings(v, "/fixture/read")
+        .into_iter()
+        .find(|r| !declared.contains(r))
+    {
+        Some(r) => Err(format!("its fixture read `{r}`, which it doesn't declare")),
+        None => Ok(()),
+    }
+}
+
+fn constraint_after_reads(v: &Value) -> Result<(), String> {
+    let order = strings(v, "/fixture/order");
+    let Some(ran) = order.iter().position(|s| *s == "solve") else {
+        return Err("its fixture doesn't say when it ran".into());
+    };
+    match strings(v, "/reads")
+        .into_iter()
+        .find(|r| !order[..ran].contains(r))
+    {
+        Some(r) => Err(format!(
+            "it ran before `{r}`, a read it declares, was evaluated"
+        )),
+        None => Ok(()),
+    }
+}
+
+fn constraint_fixed_ops(v: &Value) -> Result<(), String> {
+    let ops: Vec<u64> = v
+        .pointer("/fixture/ops")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_u64).collect())
+        .unwrap_or_default();
+    match ops.as_slice() {
+        [] => Err("its fixture counts no ops".into()),
+        [first, rest @ ..] => match rest.iter().find(|n| *n != first) {
+            Some(n) => Err(format!(
+                "its op count changes with its params, {first} then {n}: it loops"
+            )),
+            None => Ok(()),
+        },
+    }
+}
+
+fn constraint_seek(v: &Value) -> Result<(), String> {
+    match (
+        v.pointer("/fixture/play").and_then(Value::as_str),
+        v.pointer("/fixture/seek").and_then(Value::as_str),
+    ) {
+        (Some(p), Some(s)) if p == s => Ok(()),
+        (Some(p), Some(s)) => Err(format!(
+            "seeking to its fixture's times gives {s}, playing gives {p}"
+        )),
+        _ => Err("its fixture has no seek and play digests".into()),
+    }
+}
+
+fn constraint_cycle(v: &Value) -> Result<(), String> {
+    let code = v.pointer("/fixture/cycle/code").and_then(Value::as_str);
+    let chain = strings(v, "/fixture/cycle/chain");
+    let mut named = chain.clone();
+    named.sort_unstable();
+    named.dedup();
+    if code == Some(RELATION_CYCLE) && named.len() >= 2 {
+        Ok(())
+    } else {
+        Err(format!(
+            "a two-item cycle through it is answered {code:?} naming {chain:?}, not refused `{RELATION_CYCLE}` naming both"
+        ))
+    }
+}
+
+fn constraint() -> RegistryDef {
+    let fixture = |read: Value, order: Value, ops: Value, seek: &str, cycle: Value| json!({"read": read, "order": order, "ops": ops, "play": "p1", "seek": seek, "cycle": cycle});
+    let reads = json!(["target.bounds", "self.bounds"]);
+    let order = json!(["target.bounds", "self.bounds", "solve"]);
+    let cycle = json!({"code": RELATION_CYCLE, "chain": ["a", "b", "a"]});
+    let entry =
+        |fixture: Value| json!({"reads": reads, "writes": ["self.place"], "fixture": fixture});
+    RegistryDef::new(
+        "constraint@1",
+        obj(
+            json!({"reads": {"type": "array"}, "writes": {"type": "array"}, "fixture": {"type": "object"}}),
+            &["reads", "writes", "fixture"],
+        ),
+        &["module"],
+        SINCE,
+    )
+    .rule("declared_reads", "a constraint that reads what it doesn't declare, or an earlier frame", constraint_reads)
+    .rule("after_reads", "a constraint that runs before a read it declares is evaluated", constraint_after_reads)
+    .rule("fixed_ops", "a constraint whose op count changes with its params: one that loops", constraint_fixed_ops)
+    .rule("seek_equals_play", "a constraint whose seek to random times differs from play", constraint_seek)
+    .rule("cycle_refused", "a constraint through which a two-item cycle isn't refused naming the chain", constraint_cycle)
+    .planted(
+        "beside_converges",
+        entry(fixture(reads.clone(), order.clone(), json!([4, 9, 17]), "p1", cycle.clone())),
+    )
+    .planted(
+        "beside_reads_previous_frame",
+        entry(fixture(json!(["target.bounds", "self.bounds", "earlier(self.place)"]), order.clone(), json!([6, 6, 6]), "p1", cycle.clone())),
+    )
+    .planted(
+        "seek_differs",
+        entry(fixture(reads.clone(), order.clone(), json!([6, 6, 6]), "s2", cycle.clone())),
+    )
+    .planted(
+        "runs_before_target",
+        entry(fixture(reads.clone(), json!(["self.bounds", "solve", "target.bounds"]), json!([6, 6, 6]), "p1", cycle.clone())),
+    )
+    .planted(
+        "cycle_admitted",
+        entry(fixture(reads.clone(), order, json!([6, 6, 6]), "p1", json!({"code": null, "chain": []}))),
+    )
+}
+
+// ---- column.source@1 (#397: Array and table: column view)
+
+/// A fixture's frames: each a clean evaluation's rows.
+fn frames(v: &Value) -> Vec<&Value> {
+    v.pointer("/fixture/frames")
+        .and_then(Value::as_array)
+        .map(|f| f.iter().collect())
+        .unwrap_or_default()
+}
+
+fn seek_equals_clean(v: &Value) -> Result<(), String> {
+    let frames = frames(v);
+    for seek in v
+        .pointer("/fixture/seeks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let to = seek["to"].as_u64().unwrap_or(0);
+        if frames.get(to as usize).copied() != Some(&seek["rows"]) {
+            return Err(format!(
+                "frame {to}: after a seek from frame {} the source hands rows that differ from a clean evaluation",
+                seek["from"]
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn clean_rebuild_equality(v: &Value) -> Result<(), String> {
+    let frames = frames(v);
+    let Some(mut rows) = frames.first().and_then(|f| f.as_array()).cloned() else {
+        return Ok(());
+    };
+    for (k, frame) in frames.iter().enumerate().skip(1) {
+        let changed = v
+            .pointer(&format!("/fixture/changed/{k}"))
+            .and_then(Value::as_array);
+        for range in changed.into_iter().flatten() {
+            let (a, b) = (
+                range[0].as_u64().unwrap_or(0) as usize,
+                range[1].as_u64().unwrap_or(0) as usize,
+            );
+            for i in a..b.min(rows.len()) {
+                rows[i] = frame[i].clone();
+            }
+        }
+        if Some(&rows) != frame.as_array() {
+            return Err(format!(
+                "frame {k}: remapping only the changed ranges it reports gives rows that differ from a clean rebuild"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn column_source() -> RegistryDef {
+    let frames = json!([[1, 1], [2, 2], [3, 3]]);
+    let mut def = RegistryDef::new(
+        crate::columns::REGISTRY,
+        obj(
+            json!({"form": {"type": "string"}, "types": {"type": "array"},
+                   "fixture": {"type": "object"}, "sources": {"type": "object"}}),
+            &["form", "types", "fixture"],
+        ),
+        &["module"],
+        SINCE,
+    )
+    .rule("seek_equals_clean", "a source whose rows at t after a seek differ from a clean evaluation", seek_equals_clean)
+    .rule("clean_rebuild_equality", "a source whose changed ranges miss rows that changed", clean_rebuild_equality)
+    .planted(
+        "keeps_previous_rows",
+        json!({"form": "planted.<name>", "types": ["i32"], "fixture": {"frames": frames,
+               "changed": [[], [[0, 2]], [[0, 2]]], "seeks": [{"from": 2, "to": 0, "rows": [3, 3]}]}}),
+    )
+    .planted(
+        "reports_no_changes",
+        json!({"form": "planted.<name>", "types": ["i32"], "fixture": {"frames": frames,
+               "changed": [[], [], []], "seeks": [{"from": 2, "to": 0, "rows": [1, 1]}]}}),
+    );
+    def.resolve = "check";
+    def
+}
+
 /// Every registry the core declares, by name.
 pub fn registries() -> Vec<RegistryDef> {
     vec![
         builder(),
         check_kind_doc(),
+        column_source(),
+        constraint(),
         device_class(),
         gpu_function(),
         gpu_output(),

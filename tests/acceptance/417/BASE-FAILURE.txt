@@ -1,0 +1,601 @@
+Base commit: 960045da (Merge pull request #1027)
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/417 --no-file-parallelism (colors stripped after)
+Run in a worktree at the base commit with only tests/acceptance/417/ added (untracked) and node_modules from npm ci. Every binary builds. 23 of the 30 tests fail, each because the surface it reads is missing at the base: `look` answers bad_input to {"list": "shipped"} (AC1, AC2, AC3, AC4's look fonts, AC8); the guard refuses the near-fail accent in a document with no status binding (AC3); deep-text fonts answers no faces (AC4, AC8); benchmarks/canvas.mjs has no look-switch or look-frames task and budgets.json no entry (AC5); the clean look has no fallback list and the caption's Han, Arabic and emoji draw Inter's .notdef (AC6); a derived role is bad_look (AC7); the `math` font role is bad_font and `planted: status_distance_0_03` is bad_input (AC9); a channel with `follow` is bad_doc in deep-motion eval (AC10). The 7 that pass are the oracles' and fixtures' own checks (the bundled fonts' fsType, the licence, math-face and cmap oracles, the derived fixture values and the wrong programs' misses, the planted accent colors).
+Date: 2026-11-02  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/tests/acceptance/417
+
+ ❯ fonts.test.ts (6 tests | 3 failed) 111624ms
+   ❯ #417 AC4 every bundled font's licence allows embedding, recorded beside it (4)
+     × AC4 deep-text fonts lists every font file bundled, each with a licence that allows embedding and that licence's text beside it 347ms
+     × AC4 every font a shipped look names is a bundled face, embed: true, carrying that face's licence 8ms
+   ❯ #417 AC8 every shipped look defines the math role with a bundled math face whose licence allows embedding, recorded beside it (2)
+     × AC8 each shipped look's math role names an embeddable bundled face that carries a MATH table, its licence recorded beside it and in the look 6ms
+ ❯ budgets.test.ts (6 tests | 6 failed) 28008ms
+   ❯ #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film (6)
+     × AC5 budgets.json has canvas-look-switch and canvas-look-frames, each with the issue's targets, the lane's 50% margin against the merge base, and passes the lane's validator against the merge base's budgets 234ms
+     × AC5 look-switch times every switch between shipped looks on the fixture film until the new look is on screen 46ms
+     × AC5 the measure sees the new look: a clock that stops at the request (planted stops_at_request) fails the check above 40ms
+     × AC5 switching looks takes under 100 ms: each run's slowest switch, in five runs 41ms
+     × AC5 look-frames plays each shipped look's fixture film for at least 300 frames, every frame drawn and timed 47ms
+     × AC5 every look stays within the figure class's frame budget on its fixture film: p95 GPU and CPU ms a frame, worst look per run, in five runs 44ms
+ ❯ looks.test.ts (4 tests | 4 failed) 27381ms
+   ❯ #417 AC1 the same scene renders in every shipped look with no change to its description, checked by a fixture per look (2)
+     × AC1 the four first looks ship, and every shipped look has its fixture naming the scene and the film 1511ms
+     × AC1 each shipped look draws the one scene, light and dark: its own ground, its body and math faces, and a picture of its own, from the same document bytes 125ms
+   ❯ #417 AC3 each shipped look keeps every data role at least its status distance from every status color; a look whose accent sits 0.02 OKLab from fail is refused where status can show, naming the role and the status color; an art film on its own keeps that palette unchanged (2)
+     × AC3 every shipped look, in both themes, keeps each data role at least its status distance from each status color 122ms
+     × AC3 where status can show, the clean look with its accent 0.02 OKLab from fail is refused by check and raster, naming accent and fail; the scene played on its own draws that palette unchanged 897ms
+ ❯ state.test.ts (3 tests | 3 failed) 184360ms
+   ❯ #417 AC10 time.state drives a transition follow and a stage glide; switching the look switches the ease and keeps the document; a linear reader fails (3)
+     × AC10 under time.state {0.25 s, in_out_cubic}, the follow moves the knob 17 → 47 through 18.875 at 0.0625 s and 32 at 0.125 s, and the stage glide covers half its path at half its span 3251ms
+     × AC10 under a look whose state ease is out_cubic the knob reads 43.25 at 0.125 s, and the document's hash is the same in both looks 7ms
+     × AC10 a planted reader that falls back to linear (planted state_ease_linear) reads 32 at 0.125 s under the out_cubic look and fails, naming the look 8ms
+ ❯ switch.test.ts (2 tests | 2 failed) 20174ms
+   ❯ #417 AC2 switching looks redraws only the look's passes: no node rebuilds unless its content key changed (2)
+     × AC2 through every shipped look and back to clean, a switch rebuilds only nodes whose content key changed, keeps the others, and redraws the layer under a new key 1346ms
+     × AC2 the check sees a rebuild: a switch that empties every node cache (planted look_switch_rebuilds) fails it, naming a node 102ms
+ ❯ fallback.test.ts (3 tests | 2 failed) 37455ms
+   ❯ #417 AC6 the caption in the clean look draws every grapheme from a face that has it, Han with zh-Hans forms; without the CJK face in the fallback list it fails text.glyph_missing, naming 面 and the item (3)
+     × AC6 every grapheme of `Area 面积 مساحة 🙂` in the clean look is drawn from a face whose character map holds it, the Han ones shaped as zh-Hans 2434ms
+     × AC6 with the face that drew the Han removed from the clean look's fallback list, check and raster refuse the caption with text.glyph_missing, naming the item and 面 265ms
+ ❯ distance.test.ts (3 tests | 2 failed) 23564ms
+   ❯ #417 AC9 under status.min_distance 0.10, an accent 0.095 OKLab from fail is refused and 0.105 accepted; a planted check comparing against 0.03 accepts the first and fails (3)
+     × AC9 the 0.095 look is refused by check and raster, naming accent and fail, and the 0.105 look is accepted by both 250ms
+     × AC9 a planted check that compares against 0.03 (planted status_distance_0_03) accepts the 0.095 look and fails the criterion 210ms
+ ❯ derived.test.ts (3 tests | 1 failed) 53869ms
+   ❯ #417 AC7 derived roles resolve at check in OKLab: a mix to the midpoint, lighter to its recorded value, each within 0.001 ΔEOK (3)
+     × AC7 look resolves {mix: [blue, yellow, 0.5]} to the OKLab midpoint and {lighter: blue, by: 0.2} to the recorded value, within 0.001 ΔEOK, in both themes 2736ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 budgets.json has canvas-look-switch and canvas-look-frames, each with the issue's targets, the lane's 50% margin against the merge base, and passes the lane's validator against the merge base's budgets
+AssertionError: budgets.json has the task canvas-look-switch: expected undefined to be defined
+ ❯ budgets.test.ts:133:61
+    131|     for (const task of [SWITCH, FRAMES]) {
+    132|       const entry = current.tasks.find((t) => t['id'] === task.id);
+    133|       expect(entry, `budgets.json has the task ${task.id}`).toBeDefine…
+       |                                                             ^
+    134|       expect(entry!['command'], `${task.id} runs its mode of the canva…
+    135|       expect(entry!['targets'], `${task.id} holds the issue's numbers`…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 look-switch times every switch between shipped looks on the fixture film until the new look is on screen
+AssertionError: node benchmarks/canvas.mjs look-switch exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task look-switch; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:779:29
+ ❯ record budgets.test.ts:55:96
+     53|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+     54|   expect(r.error, `node ${args.join(' ')} ran: ${r.error?.message}`).t…
+     55|   expect(r.status, `node ${args.join(' ')} exits 0; stderr: ${(r.stder…
+       |                                                                                                ^
+     56|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+     57|   let last: JsonValue = null;
+ ❯ budgets.test.ts:142:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 the measure sees the new look: a clock that stops at the request (planted stops_at_request) fails the check above
+AssertionError: node benchmarks/canvas.mjs look-switch --planted stops_at_request exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task look-switch; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:779:29
+ ❯ record budgets.test.ts:55:96
+     53|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+     54|   expect(r.error, `node ${args.join(' ')} ran: ${r.error?.message}`).t…
+     55|   expect(r.status, `node ${args.join(' ')} exits 0; stderr: ${(r.stder…
+       |                                                                                                ^
+     56|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+     57|   let last: JsonValue = null;
+ ❯ budgets.test.ts:146:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 switching looks takes under 100 ms: each run's slowest switch, in five runs
+AssertionError: node benchmarks/canvas.mjs look-switch exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task look-switch; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:779:29
+ ❯ record budgets.test.ts:55:96
+     53|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+     54|   expect(r.error, `node ${args.join(' ')} ran: ${r.error?.message}`).t…
+     55|   expect(r.status, `node ${args.join(' ')} exits 0; stderr: ${(r.stder…
+       |                                                                                                ^
+     56|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+     57|   let last: JsonValue = null;
+ ❯ budgets.test.ts:151:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 look-frames plays each shipped look's fixture film for at least 300 frames, every frame drawn and timed
+AssertionError: node benchmarks/canvas.mjs look-frames exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task look-frames; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:779:29
+ ❯ record budgets.test.ts:55:96
+     53|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+     54|   expect(r.error, `node ${args.join(' ')} ran: ${r.error?.message}`).t…
+     55|   expect(r.status, `node ${args.join(' ')} exits 0; stderr: ${(r.stder…
+       |                                                                                                ^
+     56|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+     57|   let last: JsonValue = null;
+ ❯ budgets.test.ts:157:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  budgets.test.ts > #417 AC5 budgets on the reference Mac, compared with the merge base: a look switch under 100 ms, every look within the frame budget on its fixture film > AC5 every look stays within the figure class's frame budget on its fixture film: p95 GPU and CPU ms a frame, worst look per run, in five runs
+AssertionError: node benchmarks/canvas.mjs look-frames exits 0; stderr: file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task look-frames; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, upscale, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-417-c9497f/agent-a5b87d5a16df38e3a/benchmarks/canvas.mjs:779:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:779:29
+ ❯ record budgets.test.ts:55:96
+     53|   const r = spawnSync(process.execPath, args, { cwd: REPO, encoding: '…
+     54|   expect(r.error, `node ${args.join(' ')} ran: ${r.error?.message}`).t…
+     55|   expect(r.status, `node ${args.join(' ')} exits 0; stderr: ${(r.stder…
+       |                                                                                                ^
+     56|   const lines = (r.stdout ?? '').split('\n').filter((l) => l.trim() !=…
+     57|   let last: JsonValue = null;
+ ❯ budgets.test.ts:161:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  derived.test.ts > #417 AC7 derived roles resolve at check in OKLab: a mix to the midpoint, lighter to its recorded value, each within 0.001 ΔEOK > AC7 look resolves {mix: [blue, yellow, 0.5]} to the OKLab midpoint and {lighter: blue, by: 0.2} to the recorded value, within 0.001 ΔEOK, in both themes
+AssertionError: look with derived roles is accepted, got {"ok":false,"code":"bad_look","path":"roles/green"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:124:69
+    122| /** An answer that must be an acceptance (`ok: true`). */
+    123| export function accepted(answer: JsonObject, what: string): JsonObject…
+    124|   expect(answer['ok'], `${what} is accepted, got ${shown(answer)}`).to…
+       |                                                                     ^
+    125|   return answer;
+    126| }
+ ❯ readLook helpers.ts:162:3
+ ❯ derived.test.ts:58:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  distance.test.ts > #417 AC9 under status.min_distance 0.10, an accent 0.095 OKLab from fail is refused and 0.105 accepted; a planted check comparing against 0.03 accepts the first and fails > AC9 the 0.095 look is refused by check and raster, naming accent and fail, and the 0.105 look is accepted by both
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "raster refuses the accent #eb402d 0.1050 from fail: {\"ok\":false,\"code\":\"bad_font\",\"path\":\"items/theta/params/font\"}",
++ ]
+
+ ❯ distance.test.ts:75:34
+     73|
+     74|   it('AC9 the 0.095 look is refused by check and raster, naming accent…
+     75|     expect(criterion().problems).toEqual([]);
+       |                                  ^
+     76|   }, 300_000);
+     77|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  distance.test.ts > #417 AC9 under status.min_distance 0.10, an accent 0.095 OKLab from fail is refused and 0.105 accepted; a planted check comparing against 0.03 accepts the first and fails > AC9 a planted check that compares against 0.03 (planted status_distance_0_03) accepts the 0.095 look and fails the criterion
+AssertionError: the planted check accepts the 0.095 look: check refuses the accent #eb402d 0.1050 from fail: {"ok":false,"code":"bad_input"} | raster refuses the accent #eb402d 0.1050 from fail: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ distance.test.ts:80:95
+     78|   it('AC9 a planted check that compares against 0.03 (planted status_d…
+     79|     const { problems, nearAccepted } = criterion('status_distance_0_03…
+     80|     expect(nearAccepted, `the planted check accepts the 0.095 look: ${…
+       |                                                                                               ^
+     81|     expect(problems.some((p) => /accepts the accent/.test(p)), `the cr…
+     82|   }, 300_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  fallback.test.ts > #417 AC6 the caption in the clean look draws every grapheme from a face that has it, Han with zh-Hans forms; without the CJK face in the fallback list it fails text.glyph_missing, naming 面 and the item > AC6 every grapheme of `Area 面积 مساحة 🙂` in the clean look is drawn from a face whose character map holds it, the Han ones shaped as zh-Hans
+AssertionError: expected [ …(18) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "grapheme 5 \"面\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 5 \"面\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+9762",
++   "Han grapheme 5 \"面\" is shaped as null, not zh-Hans",
++   "grapheme 6 \"积\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 6 \"积\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+79EF",
++   "Han grapheme 6 \"积\" is shaped as null, not zh-Hans",
++   "grapheme 8 \"م\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 8 \"م\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+645",
++   "grapheme 9 \"س\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 9 \"س\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+633",
++   "grapheme 10 \"ا\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 10 \"ا\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+627",
++   "grapheme 11 \"ح\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 11 \"ح\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+62D",
++   "grapheme 12 \"ة\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 12 \"ة\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+629",
++   "grapheme 14 \"🙂\" draws .notdef from crates/deep-text/fonts/Inter-Regular.ttf",
++   "grapheme 14 \"🙂\" is drawn from crates/deep-text/fonts/Inter-Regular.ttf, which lacks U+1F642",
++ ]
+
+ ❯ fallback.test.ts:56:35
+     54|     expect(graphemes(CAPTION).length, 'the caption is 15 graphemes').t…
+     55|     const glyphs = drawCaption('clean');
+     56|     expect(glyphProblems(glyphs)).toEqual([]);
+       |                                   ^
+     57|     // More than one face: the body face has no Han, Arabic or emoji.
+     58|     expect(new Set(glyphs.map((g) => g.font)).size, `the caption draws…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  fallback.test.ts > #417 AC6 the caption in the clean look draws every grapheme from a face that has it, Han with zh-Hans forms; without the CJK face in the fallback list it fails text.glyph_missing, naming 面 and the item > AC6 with the face that drew the Han removed from the clean look's fallback list, check and raster refuse the caption with text.glyph_missing, naming the item and 面
+AssertionError: clean: fallback is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:49:100
+     47| }
+     48| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     49|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     50|   return value as JsonValue[];
+     51| }
+ ❯ fallback.test.ts:77:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  fonts.test.ts > #417 AC4 every bundled font's licence allows embedding, recorded beside it > AC4 deep-text fonts lists every font file bundled, each with a licence that allows embedding and that licence's text beside it
+AssertionError: fonts: faces is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:49:100
+     47| }
+     48| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     49|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     50|   return value as JsonValue[];
+     51| }
+ ❯ bundledFaces helpers.ts:575:10
+ ❯ fonts.test.ts:53:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  fonts.test.ts > #417 AC4 every bundled font's licence allows embedding, recorded beside it > AC4 every font a shipped look names is a bundled face, embed: true, carrying that face's licence
+AssertionError: fonts: faces is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:49:100
+     47| }
+     48| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     49|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     50|   return value as JsonValue[];
+     51| }
+ ❯ bundledFaces helpers.ts:575:10
+ ❯ fonts.test.ts:64:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  fonts.test.ts > #417 AC8 every shipped look defines the math role with a bundled math face whose licence allows embedding, recorded beside it > AC8 each shipped look's math role names an embeddable bundled face that carries a MATH table, its licence recorded beside it and in the look
+AssertionError: fonts: faces is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:49:100
+     47| }
+     48| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     49|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     50|   return value as JsonValue[];
+     51| }
+ ❯ bundledFaces helpers.ts:575:10
+ ❯ fonts.test.ts:84:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  looks.test.ts > #417 AC1 the same scene renders in every shipped look with no change to its description, checked by a fixture per look > AC1 the four first looks ship, and every shipped look has its fixture naming the scene and the film
+AssertionError: look {"list": "shipped"} is accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:124:69
+    122| /** An answer that must be an acceptance (`ok: true`). */
+    123| export function accepted(answer: JsonObject, what: string): JsonObject…
+    124|   expect(answer['ok'], `${what} is accepted, got ${shown(answer)}`).to…
+       |                                                                     ^
+    125|   return answer;
+    126| }
+ ❯ shippedIds helpers.ts:183:15
+ ❯ looks.test.ts:62:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  looks.test.ts > #417 AC1 the same scene renders in every shipped look with no change to its description, checked by a fixture per look > AC1 each shipped look draws the one scene, light and dark: its own ground, its body and math faces, and a picture of its own, from the same document bytes
+AssertionError: look {"list": "shipped"} is accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:124:69
+    122| /** An answer that must be an acceptance (`ok: true`). */
+    123| export function accepted(answer: JsonObject, what: string): JsonObject…
+    124|   expect(answer['ok'], `${what} is accepted, got ${shown(answer)}`).to…
+       |                                                                     ^
+    125|   return answer;
+    126| }
+ ❯ shippedIds helpers.ts:183:15
+ ❯ looks.test.ts:74:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  looks.test.ts > #417 AC3 each shipped look keeps every data role at least its status distance from every status color; a look whose accent sits 0.02 OKLab from fail is refused where status can show, naming the role and the status color; an art film on its own keeps that palette unchanged > AC3 every shipped look, in both themes, keeps each data role at least its status distance from each status color
+AssertionError: look {"list": "shipped"} is accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:124:69
+    122| /** An answer that must be an acceptance (`ok: true`). */
+    123| export function accepted(answer: JsonObject, what: string): JsonObject…
+    124|   expect(answer['ok'], `${what} is accepted, got ${shown(answer)}`).to…
+       |                                                                     ^
+    125|   return answer;
+    126| }
+ ❯ shippedIds helpers.ts:183:15
+ ❯ looks.test.ts:127:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  looks.test.ts > #417 AC3 each shipped look keeps every data role at least its status distance from every status color; a look whose accent sits 0.02 OKLab from fail is refused where status can show, naming the role and the status color; an art film on its own keeps that palette unchanged > AC3 where status can show, the clean look with its accent 0.02 OKLab from fail is refused by check and raster, naming accent and fail; the scene played on its own draws that palette unchanged
+AssertionError: raster alone light is drawn, got {"ok":false,"code":"status_distance","theme":"light","role":"accent","state":"fail","distance":0.019999810741105514}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readRaster helpers.ts:348:73
+    346| export function readRaster(input: JsonObject, out: JsonValue | undefin…
+    347|   const report = obj(out, `raster ${what}: the answer`);
+    348|   expect(report['ok'], `raster ${what} is drawn, got ${shown(report)}`…
+       |                                                                         ^
+    349|   const size = arr(obj(input['doc'], 'doc')['size'], 'doc.size').map((…
+    350|   const image = readPng(String(input['out']));
+ ❯ helpers.ts:357:64
+ ❯ rasterAll helpers.ts:357:48
+ ❯ looks.test.ts:168:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  state.test.ts > #417 AC10 time.state drives a transition follow and a stage glide; switching the look switches the ease and keeps the document; a linear reader fails > AC10 under time.state {0.25 s, in_out_cubic}, the follow moves the knob 17 → 47 through 18.875 at 0.0625 s and 32 at 0.125 s, and the stage glide covers half its path at half its span
+AssertionError: eval in calm runs: {"ok":false,"code":"bad_doc","path":"channels/knob-x/keys"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evaluate state.test.ts:48:74
+     46| function evaluate(doc: JsonObject, look: JsonObject, times: number[], …
+     47|   const out = one(MOTION_BIN, ['eval'], { doc, times, look, track: TRA…
+     48|   expect(out['ok'], `eval in ${String(look['id'])} runs: ${shown(out)}…
+       |                                                                          ^
+     49|   const frames = arr(out['frames'], 'eval: frames');
+     50|   expect(frames.length, 'one frame per time').toBe(times.length);
+ ❯ state.test.ts:87:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  state.test.ts > #417 AC10 time.state drives a transition follow and a stage glide; switching the look switches the ease and keeps the document; a linear reader fails > AC10 under a look whose state ease is out_cubic the knob reads 43.25 at 0.125 s, and the document's hash is the same in both looks
+AssertionError: eval in calm runs: {"ok":false,"code":"bad_doc","path":"channels/knob-x/keys"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evaluate state.test.ts:48:74
+     46| function evaluate(doc: JsonObject, look: JsonObject, times: number[], …
+     47|   const out = one(MOTION_BIN, ['eval'], { doc, times, look, track: TRA…
+     48|   expect(out['ok'], `eval in ${String(look['id'])} runs: ${shown(out)}…
+       |                                                                          ^
+     49|   const frames = arr(out['frames'], 'eval: frames');
+     50|   expect(frames.length, 'one frame per time').toBe(times.length);
+ ❯ state.test.ts:97:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  state.test.ts > #417 AC10 time.state drives a transition follow and a stage glide; switching the look switches the ease and keeps the document; a linear reader fails > AC10 a planted reader that falls back to linear (planted state_ease_linear) reads 32 at 0.125 s under the out_cubic look and fails, naming the look
+AssertionError: eval in brisk runs: {"ok":false,"code":"bad_doc","path":"channels/knob-x/keys"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evaluate state.test.ts:48:74
+     46| function evaluate(doc: JsonObject, look: JsonObject, times: number[], …
+     47|   const out = one(MOTION_BIN, ['eval'], { doc, times, look, track: TRA…
+     48|   expect(out['ok'], `eval in ${String(look['id'])} runs: ${shown(out)}…
+       |                                                                          ^
+     49|   const frames = arr(out['frames'], 'eval: frames');
+     50|   expect(frames.length, 'one frame per time').toBe(times.length);
+ ❯ state.test.ts:109:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  switch.test.ts > #417 AC2 switching looks redraws only the look's passes: no node rebuilds unless its content key changed > AC2 through every shipped look and back to clean, a switch rebuilds only nodes whose content key changed, keeps the others, and redraws the layer under a new key
+AssertionError: look {"list": "shipped"} is accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:124:69
+    122| /** An answer that must be an acceptance (`ok: true`). */
+    123| export function accepted(answer: JsonObject, what: string): JsonObject…
+    124|   expect(answer['ok'], `${what} is accepted, got ${shown(answer)}`).to…
+       |                                                                     ^
+    125|   return answer;
+    126| }
+ ❯ shippedIds helpers.ts:183:15
+ ❯ run switch.test.ts:50:15
+ ❯ switch.test.ts:85:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  switch.test.ts > #417 AC2 switching looks redraws only the look's passes: no node rebuilds unless its content key changed > AC2 the check sees a rebuild: a switch that empties every node cache (planted look_switch_rebuilds) fails it, naming a node
+AssertionError: look {"list": "shipped"} is accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:124:69
+    122| /** An answer that must be an acceptance (`ok: true`). */
+    123| export function accepted(answer: JsonObject, what: string): JsonObject…
+    124|   expect(answer['ok'], `${what} is accepted, got ${shown(answer)}`).to…
+       |                                                                     ^
+    125|   return answer;
+    126| }
+ ❯ shippedIds helpers.ts:183:15
+ ❯ run switch.test.ts:50:15
+ ❯ switch.test.ts:98:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  23 failed | 7 passed (30)
+   Start at  16:42:51
+   Duration  488.09s (tests 100%)
+

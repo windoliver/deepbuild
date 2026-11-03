@@ -1,8 +1,8 @@
-// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379, #383 and #854): node
+// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379, #383, #417 and #854): node
 // benchmarks/canvas.mjs <task>. Each drives a built binary over JSON lines, as the acceptance tests do: `deep-show run`
 // for patches and the seal, `deep-canvas merge` for a merge, `deep-gpu run` for the deepest level of a 3D city.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -750,6 +750,67 @@ function judgeEfficiency(current) {
   const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
   console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
 }
+
+// #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film
+// in the app's headless window in a look's light theme, one warm-up run and five, each run a fresh process.
+// `look-frames` plays each shipped look's fixture film, 30 warm frames then 300 timed, each frame's GPU and CPU
+// ms; `look-switch` plays the fixture film and switches between every ordered pair of shipped looks, each switch
+// timed from its request to the new look's first frame read back from the window, with that frame's pixel (4, 4).
+// `--planted stops_at_request` passes deep-gpu's wrong clock, stopped at the request.
+const LOOKS_417 = join('tests', 'acceptance', '417', 'fixtures');
+/** Every shipped look's fixture, `{id, fixture, doc}`: the fixtures and the shipped looks are the same set (#417). */
+function lookFilms() {
+  return readdirSync(join(root, LOOKS_417, 'looks')).filter((f) => f.endsWith('.json')).sort().map((f) => {
+    const fixture = `${LOOKS_417}/looks/${f}`;
+    const { look, film } = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+    return { id: look, fixture, doc: JSON.parse(readFileSync(join(root, LOOKS_417, film), 'utf8')) };
+  });
+}
+/** One fresh release `deep-gpu run` over `calls`: its replies, each a film2d answer. */
+function films(calls) {
+  const [answer] = run('deep-gpu', ['run', ...(planted() ? ['--planted', planted()] : [])].join(' '), [JSON.stringify({ out: tmpdir(), calls })], 'release');
+  const replies = answer.replies ?? [];
+  if (answer.ok !== true || replies.length !== calls.length || replies.some((r) => !Array.isArray(r.frames))) throw Error(`deep-gpu film2d answered ${JSON.stringify(answer).slice(0, 1500)}`);
+  return replies;
+}
+
+workloads['look-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = lookFilms();
+  const measured = runs(() => {
+    const replies = films(looks.map(({ id, doc }) => ({ call: 'film2d', doc, look: id, frames: WARM_UP + WARM_FRAMES })));
+    return { looks: Object.fromEntries(looks.map(({ id, fixture }, i) => [id, {
+      fixture, frames: replies[i].frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms })),
+    }])) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-look-frames', fingerprint, runs: measured }));
+};
+
+/** A walk through every ordered pair of distinct `ids` once, starting and ending at the first (Hierholzer). */
+function everyPair(ids) {
+  const used = new Set();
+  const walk = [];
+  const visit = (from) => {
+    for (const to of ids) if (to !== from && !used.has(`${from}>${to}`)) { used.add(`${from}>${to}`); visit(to); }
+    walk.push(from);
+  };
+  visit(ids[0]);
+  return walk.reverse();
+}
+const SWITCH_EVERY = 10;
+workloads['look-switch'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = `${LOOKS_417}/film.json`;
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const walk = everyPair(lookFilms().map((l) => l.id));
+  const events = walk.slice(1).map((look, i) => ({ frame: SWITCH_EVERY * (i + 1), look }));
+  const measured = runs(() => {
+    const [reply] = films([{ call: 'film2d', doc, look: walk[0], frames: SWITCH_EVERY * walk.length, events }]);
+    if (reply.switches?.length !== events.length) throw Error(`film2d timed ${reply.switches?.length} of ${events.length} switches`);
+    return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-look-switch', fixture, fingerprint, runs: measured }));
+};
 
 // #105: a bug capture of the second display through `deep-show run` on the virtual clock: picked, the chord held for
 // 119.5 s, released and saved; fails unless the saved asset holds every frame of the hold.

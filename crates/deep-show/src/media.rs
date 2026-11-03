@@ -18,8 +18,22 @@ pub enum MediaCall {
     Import(String),
     Decode(Map<String, Value>),
     Proxy(Map<String, Value>),
-    Export { source: String, out: String },
+    Export {
+        source: String,
+        out: String,
+    },
     Workers,
+    /// #397: a table asset, fetched by URL (the hub writes its source) or written by a session's
+    /// agent (`agent`), probed in the decode worker.
+    Table {
+        from: TableFrom,
+        key: String,
+    },
+}
+
+pub enum TableFrom {
+    Url(String),
+    Agent { path: String, session: String },
 }
 
 /// One of this issue's media calls, or `None` for a line that lacks a field it needs.
@@ -46,6 +60,14 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MediaCall> {
             }
         }
         "workers" => MediaCall::Workers,
+        "table_import" => MediaCall::Table {
+            from: match (s("url"), s("path"), s("session")) {
+                (Some(url), None, None) => TableFrom::Url(url),
+                (None, Some(path), Some(session)) => TableFrom::Agent { path, session },
+                _ => return None,
+            },
+            key: s("key")?,
+        },
         _ => return None,
     })
 }
@@ -160,6 +182,7 @@ impl Hub<'_> {
                 reply
             }
             MediaCall::Export { source, out } => self.export(source, out),
+            MediaCall::Table { from, key } => self.table_import(from, key),
             MediaCall::Workers => {
                 let list: Vec<Value> = [&self.media.decoder, &self.media.encoder]
                     .into_iter()
@@ -169,6 +192,71 @@ impl Hub<'_> {
                 json!({"workers": list})
             }
         }
+    }
+
+    /// #397 (canvas primitives: Asset: tables): the table's bytes kept in the evidence store by
+    /// hash and probed once in the decode worker; its record (the probe, every cell's raw bytes and
+    /// range, and the source the hub writes: the URL and fetch time, or `agent`) kept beside it as
+    /// `tables/<sha256>.json`, which a document's `{from: asset, column}` reads.
+    fn table_import(&mut self, from: &TableFrom, key: &str) -> Value {
+        let (bytes, source) = match from {
+            TableFrom::Url(url) => {
+                let fetched = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_millis() as u64);
+                let response = crate::capture::http(url, None);
+                let body = response.as_deref().and_then(|r| {
+                    let end = r.windows(4).position(|w| w == b"\r\n\r\n")?;
+                    let ok = std::str::from_utf8(&r[..end]).ok()?.split(' ').nth(1) == Some("200");
+                    ok.then(|| r[end + 4..].to_vec())
+                });
+                match body {
+                    Some(b) => (b, json!({"url": url, "fetched": fetched})),
+                    None => return json!({"code": "fetch_failed", "path": url}),
+                }
+            }
+            TableFrom::Agent { path, session } => {
+                if !self.scenario.sessions.contains_key(session) {
+                    return json!({"code": "ref_unresolved", "path": session});
+                }
+                match std::fs::read(path) {
+                    Ok(b) => (b, json!("agent")),
+                    Err(_) => return json!({"code": "unreadable", "path": path}),
+                }
+            }
+        };
+        let root = self.scenario.evidence.clone();
+        let Ok(sha) = evidence::put(&root, &bytes) else {
+            return json!({"code": "evidence_unwritable", "path": "evidence"});
+        };
+        let file = root.join(&sha[..2]).join(&sha[2..]);
+        let job = json!({"op": "table", "path": file.to_string_lossy(), "key": key});
+        let (reply, _) = self.media_job(DECODE_WORKER, job);
+        let Some(probe) = reply.get("probe") else {
+            return reply;
+        };
+        let asset = json!({"sha256": sha, "kind": "table", "probe": {"table": probe["table"]}, "source": source});
+        let mut record = asset.clone();
+        record["cells"] = probe["cells"].clone();
+        // #397's wrong program: the probe's cells kept NFC instead of their raw bytes.
+        if self.scenario.planted == Some(Planted::ProbeStoresNormalized) {
+            for cell in record["cells"]
+                .as_object_mut()
+                .into_iter()
+                .flat_map(|c| c.values_mut())
+            {
+                for c in cell.as_array_mut().into_iter().flatten() {
+                    c["raw"] = json!(deep_canvas::canon::nfc(c["raw"].as_str().unwrap_or("")));
+                }
+            }
+        }
+        let tables = root.join("tables");
+        let written = std::fs::create_dir_all(&tables)
+            .and_then(|_| std::fs::write(tables.join(format!("{sha}.json")), record.to_string()));
+        if written.is_err() {
+            return json!({"code": "evidence_unwritable", "path": "tables"});
+        }
+        json!({"asset": asset})
     }
 
     /// An export of a film whose one strip is `source`: its frames decoded in the decode worker,

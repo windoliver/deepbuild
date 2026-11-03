@@ -220,7 +220,7 @@ mod macos {
                     return refused("bad_font");
                 };
                 let label = Label {
-                    role,
+                    family: role.family(),
                     size: *size,
                     weight: *weight,
                     ..Label::new(text.clone())
