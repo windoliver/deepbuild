@@ -5,7 +5,7 @@
   "description": "Three bars and a headline: the data story piece at its smallest, every bar's height a param.",
   "size": [640, 360],
   "items": {
-    "headline": {"id": "headline", "kind": "text@1", "name": "Headline", "order": "a0", "params": {"font": "title", "size": 24, "box": {"w": 560, "h": 32}, "text": "Three quarters, one direction"}, "at": {"pos": [40, 32, 0]}},
+    "headline": {"id": "headline", "kind": "text@1", "name": "Headline", "order": "a0", "params": {"font": "body", "size": 24, "box": {"w": 560, "h": 32}, "text": "Each quarter higher than the last"}, "at": {"pos": [40, 32, 0]}},
     "q1": {"id": "q1", "kind": "rect@1", "name": "First quarter", "order": "a1", "params": {"box": [80, 220, 120, 100], "paint": {"fill": {"role": "accent"}}}},
     "q2": {"id": "q2", "kind": "rect@1", "name": "Second quarter", "order": "a2", "params": {"box": [260, 170, 120, 150], "paint": {"fill": {"role": "accent"}}}},
     "q3": {"id": "q3", "kind": "rect@1", "name": "Third quarter", "order": "a3", "params": {"box": [440, 110, 120, 210], "paint": {"fill": {"role": "accent"}}}}
