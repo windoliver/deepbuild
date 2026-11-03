@@ -13,12 +13,15 @@ const HOOK = join(REPO, 'target/debug/deep-hook');
 const SERVERS = { node: [process.execPath, join(REPO, 'packages/cli/dist/main.js'), 'mcp', 'actions'], rust: [HOOK, 'mcp', 'actions'] } as const;
 type Side = keyof typeof SERVERS;
 
-/** One request to this side's server, a child of the world's agent stand-in, as #363's Agent.request sends it. */
-async function ask(w: HubWorld, side: Side, method: string, params?: Line, id: unknown = `${side}-${method}`): Promise<Line> {
+/**
+ * One request to this side's server, a child of the world's agent stand-in, as #363's Agent.request sends it. A
+ * server holds its hub connection from its first call, so a test of where it connects names a server of its own.
+ */
+async function ask(w: HubWorld, side: Side, method: string, params?: Line, id: unknown = `${side}-${method}`, server = `actions-${side}`): Promise<Line> {
   // The stand-in takes any server's argv; #363's Agent names only its own two, so its send is called directly.
   const send = (w.agent as unknown as { send(c: Line, ms: number): Promise<Line> }).send.bind(w.agent);
   const line = id === undefined ? { jsonrpc: '2.0', method, params } : { jsonrpc: '2.0', id, method, params };
-  const r = await send({ op: 'mcp', server: `actions-${side}`, argv: SERVERS[side], line, timeoutMs: 90_000 }, 95_000);
+  const r = await send({ op: 'mcp', server, argv: SERVERS[side], line, timeoutMs: 90_000 }, 95_000);
   return (r.reply ?? {}) as Line;
 }
 /** A reply with its ID dropped and each tool text read as the JSON it holds. */
@@ -61,6 +64,10 @@ describe('deep-hook mcp actions answers as deep mcp actions does', () => {
   ] as const)('%s %j', async (method, params) => {
     const [node, rust] = await Promise.all([ask(w, 'node', method, params), ask(w, 'rust', method, params)]);
     expect('result' in node || 'error' in node, `deep mcp actions answered: ${JSON.stringify(node)}`).toBe(true);
+    // What an agent reads, its texts and structuredContent alike, and a hook's failure signature is taken from, is the
+    // same to the byte, its ID aside (read before shape reads the texts as JSON in place).
+    const bytes = (reply: Line) => JSON.stringify({ ...reply, id: null });
+    expect(bytes(rust)).toBe(bytes(node));
     expect(shape(rust)).toEqual(shape(node));
   }, 120_000);
 
@@ -72,12 +79,28 @@ describe('deep-hook mcp actions answers as deep mcp actions does', () => {
     config.hub = { ...config.hub, address: `unix:${join(w.agent.home, 'nowhere.sock')}`, use: { [realpathSync(w.session.cwd)]: `unix:${w.hub.socket}` } };
     writeFileSync(file, JSON.stringify(config));
     try {
-      const r = await ask(w, 'rust', 'tools/call', { name: 'find_actions', arguments: { query: null } }, 'rust-use');
+      const r = await ask(w, 'rust', 'tools/call', { name: 'find_actions', arguments: { query: null } }, 'rust-use', 'actions-rust-use');
       expect(r.result?.isError, JSON.stringify(r).slice(0, 800)).toBe(false);
     } finally {
       if (kept === undefined) rmSync(file); else writeFileSync(file, kept);
     }
   }, 120_000);
+
+  it('hub.use reaches the dev hub even when hub.address isn\'t unix:<absolute path>, on both', async () => {
+    const file = join(w.agent.home, '.deepbuild', 'config.json');
+    const kept = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+    const config = kept ? JSON.parse(kept) : {};
+    config.hub = { ...config.hub, address: 'tcp:nowhere', use: { [realpathSync(w.session.cwd)]: `unix:${w.hub.socket}` } };
+    writeFileSync(file, JSON.stringify(config));
+    try {
+      for (const side of ['node', 'rust'] as const) {
+        const r = await ask(w, side, 'tools/call', { name: 'find_actions', arguments: { query: null } }, `${side}-use-bad-address`, `actions-${side}-use-bad-address`);
+        expect(r.result?.isError, `${side}: ${JSON.stringify(r).slice(0, 800)}`).toBe(false);
+      }
+    } finally {
+      if (kept === undefined) rmSync(file); else writeFileSync(file, kept);
+    }
+  }, 180_000);
 
   it('a plug-in action that throws is a failed call on both, not the hub unavailable', async () => {
     for (const side of ['node', 'rust'] as const) {
