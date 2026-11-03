@@ -59,6 +59,7 @@ pub struct Budget {
 }
 
 const MIB: u64 = 1024 * 1024;
+const PAGE: u64 = 65_536;
 
 impl Budget {
     /// The role's budget (Provider `gen@1`; Logic: data layouts), with what `v` sets.
@@ -168,7 +169,9 @@ impl Sandbox {
         deadline: Duration,
         at: Offsets,
     ) -> Result<Ran, String> {
-        let mut r = Runner::new(rewritten, self.planted.engine, at == Offsets::Written)?;
+        // A validator's memory is its asset plus 4 MiB, whatever the program declares (#415).
+        let pages = (role == "validator").then(|| budget.memory.div_ceil(PAGE));
+        let mut r = Runner::sized(rewritten, pages, self.planted.engine, at == Offsets::Written)?;
         let call = |export: &str, args: Vec<Val>| Call {
             export: export.into(),
             args,
@@ -209,7 +212,12 @@ impl Sandbox {
             Some(Val::I32(a)) => Some(a as u32),
             _ => None,
         };
-        let memory = r.memory("memory").unwrap_or(&[]).to_vec();
+        // A validator's memory holds its asset, up to 260 MiB, and nothing reads it after the run.
+        let memory = if role == "validator" && reads.is_empty() {
+            Vec::new()
+        } else {
+            r.memory("memory").unwrap_or(&[]).to_vec()
+        };
         let reads = reads
             .iter()
             .map(|&(at, len)| {

@@ -1,0 +1,1 @@
+Not run at the base 692cc5cd: it lacks every surface these tests read (no `validate` call in deep-show's `run`, no data.layout@1 or first-party layout anywhere in crates/, no `--planted pages_capped_at_64mib` or `nav_graph_trusts_link_count`), so all 10 tests fail on a missing surface; a fresh deep-show build to show that wasn't worth its minutes.
