@@ -49,3 +49,55 @@ PID    COMMAND          MEM   CMPRS
 $ ps -o pid,etime,user,command -p 308
   PID     ELAPSED USER COMMAND
   308 34-23:09:54 root /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+
+# After the owner restarted fseventsd (sudo kill -9 308 before 05:02Z; launchd started it again as PID 75574)
+# Result: load under 8 in all three; swap 67% in all three (the swap files shrank from 31,744 to 5,120 MiB
+# but 3.4 GiB stays paged out), so AC1 is still NOT met. Another session's #824 long budgets vitest ran throughout.
+$ pgrep -lx fseventsd
+75574 fseventsd
+
+## reading A1 at 2026-11-03T05:02:34Z
+$ sysctl vm.swapusage
+vm.swapusage: total = 5120.00M  used = 3440.00M  free = 1680.00M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 5.51 4.69 3.98 }
+$ cargo, rustc, vitest, proof, stryker processes
+27837 npm exec vitest run --root tests/acceptance/824 budgets.long.test.ts --exclude redraft-ac1/** --disable-console-intercept --reporter=verbose          
+27856 node ~/private/deepbuild-core/.claude/worktrees/issue-824-acceptance/node_modules/.bin/vitest run --root tests/acceptance/824 budgets.long.t
+27860 ~/.nvm/versions/node/v24.22.0/bin/node --experimental-import-meta-resolve --require ~/private/deepbuild-core/.claude/worktrees
+$ resident Claude Code processes
+18
+
+## reading A2 at 2026-11-03T05:07:46Z
+$ sysctl vm.swapusage
+vm.swapusage: total = 5120.00M  used = 3424.00M  free = 1696.00M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 4.49 4.15 3.91 }
+$ cargo, rustc, vitest, proof, stryker processes
+27837 npm exec vitest run --root tests/acceptance/824 budgets.long.test.ts --exclude redraft-ac1/** --disable-console-intercept --reporter=verbose          
+27856 node ~/private/deepbuild-core/.claude/worktrees/issue-824-acceptance/node_modules/.bin/vitest run --root tests/acceptance/824 budgets.long.t
+27860 ~/.nvm/versions/node/v24.22.0/bin/node --experimental-import-meta-resolve --require ~/private/deepbuild-core/.claude/worktrees
+$ resident Claude Code processes
+18
+
+## reading A3 at 2026-11-03T05:12:45Z
+$ sysctl vm.swapusage
+vm.swapusage: total = 5120.00M  used = 3424.00M  free = 1696.00M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 4.14 3.79 3.78 }
+$ cargo, rustc, vitest, proof, stryker processes
+27837 npm exec vitest run --root tests/acceptance/824 budgets.long.test.ts --exclude redraft-ac1/** --disable-console-intercept --reporter=verbose          
+27856 node ~/private/deepbuild-core/.claude/worktrees/issue-824-acceptance/node_modules/.bin/vitest run --root tests/acceptance/824 budgets.long.t
+27860 ~/.nvm/versions/node/v24.22.0/bin/node --experimental-import-meta-resolve --require ~/private/deepbuild-core/.claude/worktrees
+$ resident Claude Code processes
+18
+
+# Where the swap is after the restart (just before reading A1; first six rows of -n 12): spread over Chrome, Claude, WiFiAgent and others, none above 1.1 GiB compressed
+$ top -l 1 -o cmprs -n 12 -stats pid,command,mem,cmprs
+PID    COMMAND          MEM   CMPRS
+56965  Google Chrome He 1132M 1106M
+1104   Google Chrome He 1092M 931M 
+70020  Claude Helper (R 1294M 903M 
+650    WiFiAgent        643M  635M 
+840    Google Chrome He 475M  592M 
+682    Google Chrome    714M  567M 
