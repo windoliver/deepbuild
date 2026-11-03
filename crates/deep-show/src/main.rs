@@ -1953,7 +1953,7 @@ pub fn shipped_manifests() -> Vec<deep_canvas::registry::Manifest> {
 
 /// Registers the build's canvas modules in sorted name order and seals, timing both; the
 /// planted seal (`--planted treats_every_dependency_required`) is the criterion's wrong program.
-fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, SealError> {
+fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, Box<SealError>> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut held = modules(build_set());
@@ -1974,12 +1974,12 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     for name in deep_canvas::registry::CORE_MODULES {
         let exempt = name == "look" && planted == Some(StartPlanted::StartsWithoutLook);
         if !exempt && !held.iter().any(|m| m.manifest.name == name) {
-            return Err(SealError {
+            return Err(Box::new(SealError {
                 code: "missing_core_module",
                 modules: vec![name.to_string()],
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
                 ..SealError::default()
-            });
+            }));
         }
     }
     let mut registry = assemble(build_set(), held)
@@ -2017,7 +2017,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     // #412: a build whose sheet passes 32 KB is refused, naming the entries whose lines put it
     // past and the bytes over.
     if let Some((entries, over)) = kinds::sheet_overrun(&sealed) {
-        return Err(SealError {
+        return Err(Box::new(SealError {
             code: "sheet_overrun",
             what: format!(
                 "the sheet is {over} bytes past its {} bytes; ship {} as a recipe or a gallery example",
@@ -2032,7 +2032,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
-        });
+        }));
     }
     Ok(Startup {
         sealed,

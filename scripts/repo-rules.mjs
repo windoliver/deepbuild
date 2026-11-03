@@ -226,7 +226,9 @@ function checkDeps(files, listed) {
       for (const m of text.matchAll(/^require\s+"?([^\s"]+)"?(.*)$/gm)) declared.set(JSON.stringify([manifest, 'require', m[1]]), m[2].trim());
     }
   }
-  if (!packageFiles && !crates && !results.slice(before).length) return report('INVALID', 'deps', 'no package.json or Cargo.toml was read', 'Run this from the repository root.');
+  // A vendored crate's note is no finding.
+  const quiet = () => results.slice(before).every((result) => result.state === 'NOTE');
+  if (!packageFiles && !crates && quiet()) return report('INVALID', 'deps', 'no package.json or Cargo.toml was read', 'Run this from the repository root.');
   const allowed = new Map();
   for (const [manifest, sections] of Object.entries(listed))
     for (const [section, names] of Object.entries(sections))
@@ -240,7 +242,7 @@ function checkDeps(files, listed) {
     const [manifest, section, name] = JSON.parse(key);
     if (!declared.has(key) && !unread.has(manifest)) report('FAIL', 'deps', `${config} lists ${manifest} ${section} ${name}, which ${manifest} doesn't declare`, fixes.dep);
   }
-  if (results.length === before) {
+  if (quiet()) {
     report('PASS', 'deps', `${plural(packageFiles, 'package.json file')} and ${plural(crates, 'crate')} match ${config}`);
   }
 }
