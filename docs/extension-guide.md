@@ -383,6 +383,16 @@ Reads a hosted terminal's output from an offset, in pages.
 | `terminal` | string | yes |
 | `from` | integer | yes |
 
+### `deep.terminal.close`
+
+Arrives in R2 · preview · `d1:ecde3b67d6d77ef94056c6bc407e13d4801c3b05b0e72b0825cb147397c6e802`
+
+Closes a hosted terminal: stops its program and host process and removes its log and checkpoint.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `terminal` | string | yes |
+
 ### `deep.canvas.read`
 
 Arrives in R6 · preview · `d1:834d701457943f9662ca00afc85ceb81e0f0df9495d10295b5251e066d459995`
