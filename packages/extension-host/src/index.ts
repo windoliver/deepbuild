@@ -13,3 +13,4 @@ export { citedEvidence, type BoundValue, type Rollup as RollupStats } from './se
 export { keychainStore, type HttpAnswer, type HttpClient, type HttpRequest, type KeyTest, type Reading, type RecordedCall, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 export { hostKit, runHostKit, type HostKit, type HostKitCase, type HostKitReport } from './kit.js';
 export { openTrust, type ProjectTrust } from './trust.js';
+export { TERMINAL_PROTOCOL, type TerminalTab } from './terminals.js';
