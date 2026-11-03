@@ -158,8 +158,16 @@ const asRefused = (error: unknown): unknown => {
  */
 interface Session {
   id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean;
-  /** The tools' results read from its transcript: one after a prompt with no hook since shows the prompt closed (#992). */
-  results?: number;
+  /**
+   * Whether a second hook named its process as their parent (#992): the agent's process, then, which the hub watches
+   * for its end, and no wrapper that stays for one hook alone.
+   */
+  watched?: boolean;
+  /**
+   * The calls whose results its transcript has shown lately, newest last: a prompt's own call among them, with no hook
+   * since, shows the prompt closed (#992).
+   */
+  results?: string[];
   /** The thread its ID joins: IDs rotated by `/clear`, `/compact` or a fork are one thread. */
   thread: string;
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
@@ -194,7 +202,9 @@ const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length >
  * its worktree had, and its loop: wake-ups and crons it scheduled, and background subagents and commands still to report, by call.
  */
 interface Live {
-  agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined; quietDue?: number; heard?: number; results?: number;
+  agent: string; cwd: string; state?: string; last: number; quiet?: NodeJS.Timeout | undefined; quietDue?: number; heard?: number;
+  /** Its newest call, and the call whose permission prompt it waits on (#992): a PermissionRequest follows its call's PreToolUse. */
+  lastCall?: string; asking?: string | undefined;
   calls: Map<string, { what: string; ended?: number }>; head?: string | undefined; unborn?: boolean; reading?: Promise<void>;
   from?: string; wakeups: number[]; crons: Map<string, { due: number | null; recurring: boolean }>; background: Map<string, { what: string; group?: number }>; looping: boolean;
   /**
@@ -280,7 +290,11 @@ interface Note { session: string; text: string; request: string }
  * Where a session's transcript is judged from after a restart, and the calls whose hooks reached the hub past there;
  * for an ended session with turns still to judge, its agent too, since no hook of it comes again.
  */
-interface Cursor { transcript: string; read: number; reached: string[]; ended?: { agent: string } }
+interface Cursor {
+  transcript: string; read: number; reached: string[]; ended?: { agent: string };
+  /** The agent process the hub watched for the session's end (#992), which a hub started again goes on watching. */
+  watch?: { agent: string; pid: number; start: string } | undefined;
+}
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
@@ -497,6 +511,8 @@ export class Core {
   private statesRead = false;
   private stating: Promise<void> | undefined;
   private restate = false;
+  /** The sessions appended to since the last state pass, or all of them: at the start, each minute and after a failed pass. */
+  private touched: Set<string> | 'all' = 'all';
   /** When each session's agent process last had its start time read, by the watch for processes gone (#992). */
   private readonly startChecked = new Map<string, number>();
   /** How far test.clock has stepped the hub's clock past the wall clock deep-hook stamps hooks by (#965). */
@@ -565,9 +581,13 @@ export class Core {
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
-    this.record = streamed(this.record, ({ kind, subject, data }) => {
+    this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
       this.stream();
-      if (kind !== 'session.state') this.stateSoon();
+      if (kind !== 'session.state') {
+        // The next state pass reads the sessions appended to since the last; an event of no session, every session.
+        if (this.touched !== 'all') { if (connection.session) this.touched.add(connection.session); else this.touched = 'all'; }
+        this.stateSoon();
+      }
       if (kind.startsWith('ask.') || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
       // appender's next commit holds this thread with its sync (#823).
@@ -652,7 +672,8 @@ export class Core {
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.states.set(row.session_id, `${row.state}/${row.cause}`);
     this.statesRead = true;
     this.stateSoon();
-    this.every('states', 60_000, async () => this.stateSoon());
+    // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
+    this.every('states', 60_000, async () => { this.touched = 'all'; this.stateSoon(); });
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
     // ends mid-turn leaves them to the turn's stop. An idle session whose facts have emptied starts what they held, and
     // the gate runner's timers come due on the hub's clock (#965). The planted wrong program reads the facts only at stops.
@@ -1786,6 +1807,7 @@ export class Core {
       else if (draft.kind === 'tool.before' || draft.kind === 'tool.after') {
         // A late call event never reopens a turn that stopped.
         if (state !== 'finished' && state !== 'failed') state = 'working';
+        if (call && draft.kind === 'tool.before') live.lastCall = call;
         if (call && draft.kind === 'tool.before') live.calls.set(call, { what: `${String(draft.data.kind)} call ${call}${typeof draft.data.command === 'string' ? ` (\`${draft.data.command}\`)` : ''}` });
         else if (call) { const open = live.calls.get(call); if (open) open.ended = now; }
       } else if (draft.kind === 'agent.stop' && !draft.data.child) {
@@ -1806,8 +1828,8 @@ export class Core {
     if (meta.event === 'SessionEnd') { this.live.delete(meta.session); this.gate.ended(meta.session); this.askingSoon(); }
     // A session waiting on you goes quiet as a working one does (#992): a prompt denied with Esc says so in no hook.
     else if ((state === 'working' || state === 'waiting') && !statusQuestion && !this.stopping) {
-      // The tools' results as the session starts waiting, which a prompt closed with no hook adds to.
-      if (state === 'waiting' && wasWaiting !== 'waiting') live.results = this.sessions.get(meta.session)?.results ?? 0;
+      // The call whose prompt the session starts waiting on: its result, with no hook, shows the prompt closed.
+      if (state === 'waiting' && wasWaiting !== 'waiting') live.asking = drafts.some((d) => d.kind === 'permission.request') ? live.lastCall : undefined;
       live.heard = this.now();
       this.quietIn(meta.session, live, now, live.heard + QUIET_MS);
     }
@@ -1850,7 +1872,7 @@ export class Core {
     if (session) await this.readTranscript(session);
     const due = live.quietDue ?? this.now();
     const going = live.state === 'working' ? session !== undefined && session.read !== read
-      : (session?.results ?? 0) === live.results && due - (live.heard ?? due) < WAITING_QUIET_MS;
+      : !(live.asking && session?.results?.includes(live.asking)) && due - (live.heard ?? due) < WAITING_QUIET_MS;
     if (going) {
       this.quietIn(id, live, since, due + QUIET_MS);
       return;
@@ -1860,13 +1882,30 @@ export class Core {
   }
   /**
    * Every session whose agent's process the hub watched end with no SessionEnd (its terminal closed, it was killed):
-   * its session.gone, lease or not (#992). A process is checked each tick, and its start time, which tells a reused
+   * its session.gone, lease or not (#992). Only a process two of its hooks named is watched. A process is checked each tick, and its start time, which tells a reused
    * ID apart, every half minute; a ps that fails proves nothing.
    */
   private async goneSessions(): Promise<void> {
     const now = Date.now();
+    // An agent the last hub watched, whose session no hook has brought to this one yet.
+    for (const [id, cursor] of [...this.cursors]) {
+      const watch = cursor.watch;
+      if (!watch || this.sessions.has(id)) continue;
+      let alive = running(watch.pid);
+      if (alive && now - (this.startChecked.get(id) ?? 0) >= 30_000) {
+        this.startChecked.set(id, now);
+        const start = await this.startOf(watch.pid, true);
+        alive = start === undefined || start === watch.start;
+      }
+      if (alive || this.sessions.has(id) || this.cursors.get(id) !== cursor) continue;
+      this.cursors.set(id, { ...cursor, watch: undefined });
+      this.startChecked.delete(id);
+      this.saveCursors();
+      const ts = this.now();
+      await this.append(this.connection('core', { session: id, agent: watch.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(id)}`, data: { pid: watch.pid, start: watch.start } }).catch(() => undefined);
+    }
     for (const session of [...this.sessions.values()]) {
-      if (session.ended || !session.pid) continue;
+      if (session.ended || !session.pid || !session.watched) continue;
       let alive = running(session.pid);
       if (alive && now - (this.startChecked.get(session.id) ?? 0) >= 30_000) {
         this.startChecked.set(session.id, now);
@@ -1902,12 +1941,21 @@ export class Core {
   }
   /** Appends session.state for each session whose state or cause the one reading now gives differently. */
   private async recordStates(): Promise<void> {
-    for (const r of await sessionStates((sql) => this.record.raw(sql), this.now())) {
-      const state = `${r.state}/${r.cause}`;
-      if (this.states.get(r.id) === state) continue;
-      const ts = this.now();
-      await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
-      this.states.set(r.id, state);
+    const only = this.touched;
+    this.touched = new Set();
+    if (only !== 'all' && !only.size) return;
+    try {
+      // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
+      await Promise.all((await sessionStates((sql) => this.record.raw(sql), this.now(), only === 'all' ? undefined : only)).map(async (r) => {
+        const state = `${r.state}/${r.cause}`;
+        if (this.states.get(r.id) === state) return;
+        const ts = this.now();
+        await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+        this.states.set(r.id, state);
+      }));
+    } catch (error) {
+      this.touched = 'all';
+      throw error;
     }
   }
   /** The quiet readings a stepped test clock brought due, each quiet period that passed read in turn. */
@@ -3520,7 +3568,11 @@ export class Core {
           const content = line.message.content;
           const parts = Array.isArray(content) ? content.filter(isObj) : [];
           const prompt = line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'));
-          if (line.type === 'user' && !prompt) session.results = (session.results ?? 0) + 1;
+          if (line.type === 'user' && !prompt) {
+            const results = session.results ??= [];
+            for (const part of parts) if (part.type === 'tool_result' && typeof part.tool_use_id === 'string') results.push(part.tool_use_id);
+            if (results.length > 64) results.splice(0, results.length - 64);
+          }
           // A prompt's entry, which its origin joins to, opens the turn whose records its stop reads.
           if (prompt && typeof line.promptId === 'string') {
             if (session.prompts.size >= 256) session.prompts.delete(session.prompts.keys().next().value!);
@@ -3613,7 +3665,7 @@ export class Core {
       cursors.delete(s.id);
       // An ended session is kept until its last turns are judged and their readings durable.
       if (s.ended && !s.closed.length) continue;
-      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached], ...(s.ended ? { ended: { agent: s.agent } } : {}) });
+      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached], ...(s.ended ? { ended: { agent: s.agent } } : {}), ...(s.watched && !s.ended ? { watch: { agent: s.agent, pid: s.pid, start: s.start } } : {}) });
     }
     // Synced, so a power cut leaves the last whole save; a failed save is made again with the next hook's.
     try {
@@ -3698,7 +3750,8 @@ export class Core {
       this.cursors.delete(meta.session);
       const left = cursor?.transcript === transcript && typeof cursor.read === 'number' && Array.isArray(cursor.reached) ? cursor : undefined;
       const read = left ? left.read : none ? 0 : await stat(transcript).then((s) => s.size, () => 0);
-      this.sessions.set(meta.session, { id: meta.session, thread: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map(), prompts: new Map(), entries: [] });
+      const watched = left?.watch?.pid === meta.ppid && left.watch.start === start;
+      this.sessions.set(meta.session, { id: meta.session, thread: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, watched, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map(), prompts: new Map(), entries: [] });
       // A session's first cursor is written at once: a restart before it would read the session from its end.
       this.writeCursors();
       return true;
@@ -3707,7 +3760,7 @@ export class Core {
     // ended, it is bound to that process from its start.
     if (meta.agent === 'codex' && transcript === session.transcript && meta.event === 'SessionStart' && (meta.fields?.source === 'resume' || meta.fields?.source === 'startup')
       && (session.ended || await this.startOf(session.pid, true) !== session.start) && CODEX_BINARY.test(await argsOf(meta.ppid))) {
-      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false });
+      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, watched: false });
       return true;
     }
     // pi resumes a session from a new process, by its file: its start takes the session over once the old process is gone.
@@ -3717,10 +3770,12 @@ export class Core {
       return was === undefined ? !running(session.pid) : was !== session.start;
     };
     if (meta.agent === 'pi' && session.agent === 'pi' && meta.event === 'SessionStart' && transcript === session.transcript && await gone()) {
-      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd });
+      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, watched: false });
       return true;
     }
-    return ((child && meta.event === 'SubagentStart') || transcript === session.transcript) && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
+    const own = ((child && meta.event === 'SubagentStart') || transcript === session.transcript) && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
+    if (own && !session.watched) { session.watched = true; this.saveCursors(); }
+    return own;
   }
 
   /**
@@ -5880,10 +5935,10 @@ function readsLogged(record: RecordStore, file: string): RecordStore {
 }
 
 /** The record, calling `appended` after each append it took, and waiting for what it returns. */
-function streamed(record: RecordStore, appended: (input: EventInput) => Promise<unknown> | undefined): RecordStore {
+function streamed(record: RecordStore, appended: (input: EventInput, connection: Connection) => Promise<unknown> | undefined): RecordStore {
   return withAppend(record, async (connection, input) => {
     const event = await record.append(connection, input);
-    await appended(input);
+    await appended(input, connection);
     return event;
   });
 }

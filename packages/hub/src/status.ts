@@ -39,18 +39,22 @@ export interface Reading { id: string; project_id: string | null; agent: string 
  * one reading `deep status` lists and the hub records as `session.state` for the app (#992). An open ask needs you;
  * then an agent's process gone mid-turn, which outranks a permission prompt it showed, since no one is left to answer.
  */
-export async function sessionStates(query: (sql: string) => Promise<unknown[]>, now: number): Promise<Reading[]> {
+export async function sessionStates(query: (sql: string) => Promise<unknown[]>, now: number, only?: ReadonlySet<string>): Promise<Reading[]> {
+  // Of the sessions `only` names, when it names some: each query reads their events alone, through the session index.
+  const of = (column: string) => (only ? ` AND ${column} IN (${[...only].map((id) => `'${id.replace(/'/g, "''")}'`).join(', ')})` : '');
+  // Read through the session index then, not the kind index, which would walk every session's events of the kind.
+  const events = (alias = '') => `events${alias ? ` ${alias}` : ''}${only ? ' INDEXED BY events_session' : ''}`;
   // A database the hub hasn't opened since the stop's cause joined the table (#85) has no cause column yet.
   const causes = (await query("SELECT 1 AS c FROM pragma_table_info('sessions') WHERE name = 'cause'")).length > 0;
   // A row no event of its own made is no session: as the row a transcript.archived makes, which names the session by
   // its handle, its letters and digits, and so not by its ID.
-  const sessions = (await query(`SELECT id, project_id, agent, status, last_seen, worktree, ${causes ? 'cause' : 'NULL AS cause'} FROM sessions WHERE last_seen IS NOT NULL`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null }[];
-  const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
+  const sessions = (await query(`SELECT id, project_id, agent, status, last_seen, worktree, ${causes ? 'cause' : 'NULL AS cause'} FROM sessions WHERE last_seen IS NOT NULL${of('id')}`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null }[];
+  const asks = new Map(((await query(`SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   // A process gone, unless the session started again since, as a resume does in a new process.
-  const gone = new Set(((await query("SELECT DISTINCT g.session_id FROM events g WHERE g.kind = 'session.gone' AND g.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events s WHERE s.session_id = g.session_id AND s.kind = 'session.start' AND s.log_pos > g.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
-  const due = await duePromises(query);
+  const gone = new Set(((await query(`SELECT DISTINCT g.session_id FROM ${events('g')} WHERE g.kind = 'session.gone' AND g.session_id IS NOT NULL${of('g.session_id')} AND NOT EXISTS (SELECT 1 FROM events s WHERE s.session_id = g.session_id AND s.kind = 'session.start' AND s.log_pos > g.log_pos)`)) as { session_id: string }[]).map((r) => r.session_id));
+  const due = await duePromises(query, events(), of('session_id'));
   // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
-  const noted = ((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]);
+  const noted = ((await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM ${events()} WHERE kind = 'session.reading' AND session_id IS NOT NULL${of('session_id')} AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos`)) as { session_id: string; text: string }[]);
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
   const notes = new Map<string, string>();
   const shown = new Map<string, string[]>();
@@ -62,9 +66,9 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
     else notes.delete(r.session_id);
   }
   // A turn you interrupted, with no prompt since (#39).
-  const interrupted = new Set(((await query("SELECT e.session_id FROM events e WHERE e.kind = 'session.reading' AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
+  const interrupted = new Set(((await query(`SELECT e.session_id FROM ${events('e')} WHERE e.kind = 'session.reading'${of('e.session_id')} AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)`)) as { session_id: string }[]).map((r) => r.session_id));
   // Each session's newest stop: a hook after it, such as Claude Code's idle-prompt notification, is no later stop.
-  const stops = new Map(((await query("SELECT session_id, MAX(ts) AS ts FROM events WHERE kind = 'agent.stop' AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; ts: number }[]).map((r) => [r.session_id, r.ts]));
+  const stops = new Map(((await query(`SELECT session_id, MAX(ts) AS ts FROM ${events()} WHERE kind = 'agent.stop' AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; ts: number }[]).map((r) => [r.session_id, r.ts]));
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
   // The planted wrong reading checks a permission prompt before a process gone.
   const waitingFirst = activePlant() === 'waiting-first';
@@ -108,8 +112,8 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
  * The promised checks due in sessions no route could wake (#120): each session's latest promise event, when it is the
  * due one waiting for the session's next prompt or stop, with the quote its set carried.
  */
-async function duePromises(query: (sql: string) => Promise<unknown[]>): Promise<Map<string, { due: number; quote: string }>> {
-  const events = (await query("SELECT session_id, kind, data FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; kind: string; data: string | Obj }[];
+async function duePromises(query: (sql: string) => Promise<unknown[]>, from = 'events', of = ''): Promise<Map<string, { due: number; quote: string }>> {
+  const events = (await query(`SELECT session_id, kind, data FROM ${from} WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL${of} ORDER BY log_pos`)) as { session_id: string; kind: string; data: string | Obj }[];
   const quotes = new Map<string, string>();
   const out = new Map<string, { due: number; quote: string }>();
   for (const e of events) {

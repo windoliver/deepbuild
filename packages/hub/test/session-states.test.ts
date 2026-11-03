@@ -96,3 +96,30 @@ it('a row only an archived transcript made, naming the session by its handle, is
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('the reading of the sessions appended to is what the full reading gives them, and of no other session', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-states-'));
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  try {
+    const [A, B] = ['7c4d5e60-1111-4222-8333-44445555a994', '7c4d5e60-1111-4222-8333-44445555b994'];
+    const at = Date.now() - 60_000;
+    const data = (kind: string) => (fixtures(kind)[0] as { data: Record<string, JsonValue> }).data;
+    for (const [i, S] of [A, B].entries()) {
+      const hook = { writer: 'hook', actor: 'you', scope: 'you', session: S };
+      const subject = `session:${S.replace(/-/g, '')}`;
+      await record.append(hook, { v: 1, id: ulid(at + i * 10), kind: 'session.start', ts: at + i * 10, data: data('session.start@1') });
+      // A waits on a permission prompt; B stopped, then its process went.
+      if (S === A) await record.append(hook, { v: 1, id: ulid(at + 1), kind: 'permission.request', ts: at + 1, seq: `${BigInt(at + 1) * 1_000_000n}`, subject, data: data('permission.request@1') });
+      else {
+        await record.append(hook, { v: 5, id: ulid(at + 11), kind: 'agent.stop', ts: at + 11, seq: `${BigInt(at + 11) * 1_000_000n}`, subject, data: data('agent.stop@5') });
+        await record.append({ ...hook, writer: 'core' }, { v: 1, id: ulid(at + 12), kind: 'session.gone', ts: at + 12, subject, data: { pid: 4242, start: 'Mon Nov  3 04:00:00 2026' } });
+      }
+    }
+    const now = at + 60_000;
+    const full = await sessionStates((sql) => record.raw(sql), now);
+    for (const S of [A, B]) expect(await sessionStates((sql) => record.raw(sql), now, new Set([S])), S).toEqual(full.filter((r) => r.id === S));
+  } finally {
+    await record.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

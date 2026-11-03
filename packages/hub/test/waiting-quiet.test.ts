@@ -35,3 +35,29 @@ it('a prompt still showing needs you past the quiet period; one denied with no h
     expect(await within('quiet'), 'a prompt closed with no hook goes quiet').toBe('quiet');
   }, { DEEP_HUB_TEST_CLOCK_STEPS: '1' });
 }, 60_000);
+
+it('a parallel call\'s result landing while a prompt shows leaves the prompt needing you', async () => {
+  const id = '7c4d5e60-1111-4222-8333-44445555f992';
+  await withHub(async (root, home) => {
+    const { work, transcript, payload } = session(home, id);
+    const hook = (event: string, extra: Record<string, unknown> = {}) => reply(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, payload(event, extra), { ppid: process.pid }));
+    const call = await client(join(root, 'hub.sock'), readFileSync(join(root, 'control.token'), 'utf8').trim());
+    const state = () => {
+      const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+      try { return (db.prepare("SELECT json_extract(data, '$.state') AS state FROM events WHERE kind = 'session.state' AND session_id = ? ORDER BY log_pos DESC LIMIT 1").get(id) as { state: string } | undefined)?.state; } finally { db.close(); }
+    };
+    const within = async (want: string) => { for (let i = 0; i < 40 && state() !== want; i++) await sleep(250); return state(); };
+    await hook('SessionStart', { source: 'startup' });
+    await hook('UserPromptSubmit', { prompt: 'read and write', prompt_id: 'p1' });
+    // A Read runs alongside the Write whose permission prompt shows.
+    await hook('PreToolUse', { prompt_id: 'p1', tool_name: 'Read', tool_input: { file_path: join(work, 'b.md') }, tool_use_id: 'toolu_0' });
+    await hook('PreToolUse', { prompt_id: 'p1', tool_name: 'Write', tool_input: { file_path: join(work, 'a.md'), content: 'one' }, tool_use_id: 'toolu_1' });
+    await hook('PermissionRequest', { prompt_id: 'p1', tool_name: 'Write', tool_input: { file_path: join(work, 'a.md'), content: 'one' } });
+    expect(await within('needs you'), 'the prompt waits on you').toBe('needs you');
+    // The Read's result reaches the transcript after the prompt showed: the Write's prompt is still open.
+    appendFileSync(transcript, `${JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_0', content: 'b' }] } })}\n`);
+    await call('test.clock', { advance_ms: 30_000 });
+    await sleep(1500);
+    expect(state(), 'another call\'s result closes no prompt').toBe('needs you');
+  }, { DEEP_HUB_TEST_CLOCK_STEPS: '1' });
+}, 60_000);
