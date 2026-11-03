@@ -104,6 +104,10 @@ async function install(cli: string, quiet = false): Promise<number> {
       // A Codex file it can't read refuses Codex's part alone: Claude Code's goes on.
       try { installCodex(root, record, cli, hook); } catch (e) { process.stderr.write(`Codex was left out of setup: ${e instanceof Error ? e.message : String(e)}. Fix the file and run deep setup again.\n`); }
     }
+    const paseo = paseoCli();
+    if (paseo) {
+      try { installPaseo(root, record, paseo, cli); } catch (e) { process.stderr.write(`paseo was left out of setup: ${e instanceof Error ? e.message : String(e)}. Run deep setup again once paseo's daemon runs.\n`); }
+    }
     const settings = withStatusLine(root, withHooks(root, planned.get(settingsFile)!, groups), `${q(hook)} statusline`);
     writeJson(settingsFile, settings);
     noteWritten(record, settingsFile);
@@ -292,6 +296,7 @@ async function undo(): Promise<number> {
     putBack(root, record, userFile, mcpOut),
     putBack(root, record, recordedHooks, () => editedCodex(recordedHooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
     putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server.node, server.cli) : text), "DeepBuild's MCP server if it was as setup wrote it")),
+    undoPaseo(root, record),
   ].filter((n): n is string => n !== undefined);
   forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
@@ -300,6 +305,47 @@ async function undo(): Promise<number> {
   for (const note of notes) console.log(note);
   console.log(`DeepBuild is removed from Claude Code: its hooks, status line forwarder, MCP server, skill and the hub's login service are gone, and your settings are as they were. Your record, evidence and wiki stay in ${root}; deleting that folder is yours to do.`);
   return 0;
+}
+
+/** paseo's command on this PATH, or none: setup adds the plugin only where paseo is found (#55). */
+function paseoCli(): string | undefined {
+  return onPath('paseo');
+}
+const onPath = (name: string): string | undefined => (process.env.PATH ?? '').split(':').map((dir) => join(dir, name)).find((file) => file.startsWith('/') && existsSync(file));
+const paseoConfig = (): string => join(homedir(), '.paseo', 'config.json');
+/**
+ * DeepBuild's paseo plugin (#55), added through paseo's own manager at the one version its facts pin, said before
+ * anything is written. paseo rewrites its config.json as it installs, so the bytes before are kept for undo.
+ */
+function installPaseo(root: string, record: ReturnType<typeof setupRecord>, paseo: string, cli: string): void {
+  const facts = JSON.parse(readFileSync(join(REPO, 'adapters', 'paseo.facts.json'), 'utf8')) as { install: { source: string } };
+  const source = facts.install.source;
+  const listed = execFileSync(paseo, ['plugin', 'ls', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+  if (listed.includes('"deepbuild"')) return;
+  console.log(`paseo: + plugin deepbuild from ${source}, through paseo plugin install; ${paseoConfig()} is kept as it is now, and deep setup --undo puts it back.`);
+  keepOriginal(root, record, paseoConfig());
+  saveRecord(root, record);
+  // The plugin runs DeepBuild's MCP server with this deep, whatever PATH paseo's agents get: your deep command, or this CLI.
+  const deep = onPath('deep');
+  editConfig(root, (c) => { c.paseo = { deep: deep ? [deep] : [process.execPath, cli], plugin: 'deepbuild' }; });
+  execFileSync(paseo, ['plugin', 'install', source], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 300_000 });
+  noteWritten(record, paseoConfig());
+}
+/** The plugin taken out through paseo's own manager, and paseo's config.json put back as it was before setup. */
+function undoPaseo(root: string, record: ReturnType<typeof setupRecord>): string | undefined {
+  const file = paseoConfig();
+  const kept = record.files[file];
+  if (!kept) return undefined;
+  const paseo = paseoCli();
+  let note: string | undefined;
+  try {
+    if (paseo) execFileSync(paseo, ['plugin', 'remove', 'deepbuild'], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 });
+  } catch (e) {
+    note = `paseo didn't remove its plugin deepbuild (${e instanceof Error ? e.message.split('\n')[0] : String(e)}); run paseo plugin remove deepbuild once its daemon runs`;
+  }
+  if (kept.before === null) rmSync(target(file), { force: true });
+  else writeThrough(file, readFileSync(join(root, 'originals', kept.before)));
+  return note;
 }
 
 /** A Codex file you edited since setup: ours taken out, or, one that's gone or no longer reads, left as it is and said. */
