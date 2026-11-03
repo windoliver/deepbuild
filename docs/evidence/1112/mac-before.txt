@@ -64,7 +64,7 @@ $TMPDIR/deep-proof-run-Q7bu9q size_kb=4 mtime_age_h=50 lsof_pids=[] argv_pids=[]
 $TMPDIR/deep-proof-run-oJAZ7o size_kb=176 mtime_age_h=210 lsof_pids=[] argv_pids=[]
 
 $ worktree facts (scratchpad hygiene.mjs, read-only; PRs from gh pr list --state all)
-worktree | head | branch | PRs | HEAD in origin/main | porcelain lines | non-generated ignored | target GB | idle days | live PIDs (cwd inside)
+worktree | head | branch | PRs | HEAD in origin/main | porcelain lines | non-generated ignored | target GiB | idle days | live PIDs (cwd inside)
 ~/private/deepbuild-core | d122341c | main | - | yes | 1 | 1 | 0.6 | 2.5 | 432
 base21 | 5a6d09a4 | detached | - | yes | 0 | 0 | 0.1 | - | 0
 db31main | df9b3fa2 | detached | - | yes | 0 | 0 | 0 | 0 | 3
