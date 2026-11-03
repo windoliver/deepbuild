@@ -8,11 +8,13 @@ pub mod frames;
 pub mod geom;
 pub mod gltf;
 pub mod label;
+pub mod light;
 pub mod look;
 pub mod modifiers;
 pub mod module;
 pub mod overlay;
 pub mod scene;
+pub mod spatial;
 pub mod spec;
 pub mod stack;
 

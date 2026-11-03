@@ -42,6 +42,8 @@ pub struct Look3 {
     pub tone_map: ToneMap,
     /// Linear light's scale: 1 ÷ (1.2 × 2^EV100), the saturation-based photometric exposure.
     pub exposure: f64,
+    /// Its named materials, each a `material@1`'s params, that a material's `from` starts from.
+    pub materials: serde_json::Map<String, Value>,
 }
 
 /// The EV100 whose exposure scale is 1, a look's default.
@@ -71,6 +73,7 @@ impl Look3 {
             ground,
             tone_map: ToneMap::None,
             exposure: 1.0,
+            materials: serde_json::Map::new(),
         }
     }
 
@@ -89,6 +92,9 @@ impl Look3 {
             }
         }
         let mut out = Look3::from_roles(roles);
+        if let Some(m) = look.get("materials").and_then(Value::as_object) {
+            out.materials = m.clone();
+        }
         out.tone_map = match look.get("tone_map") {
             None | Some(Value::Null) => ToneMap::None,
             Some(Value::String(s)) => match s.as_str() {

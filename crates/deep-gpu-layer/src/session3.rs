@@ -34,6 +34,10 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         outlines_before_upscale: p == Some(Planted::OutlinesBeforeUpscale),
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
+        winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
+        ties_by_submission: p == Some(Planted::TiesBySubmission),
+        spot_counts_cone: p == Some(Planted::SpotCountsCone),
+        status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
     }
 }
 
