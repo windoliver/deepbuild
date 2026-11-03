@@ -22,7 +22,12 @@ const ATLAS: u32 = 0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Label {
     pub text: String,
-    pub role: Role,
+    /// The bundled family its font names (#417: the look's face for its font role).
+    pub family: &'static str,
+    /// #417: the look's fallback families, in order.
+    pub fallback: Vec<&'static str>,
+    /// #417: the language it's shaped in (BCP 47).
+    pub lang: Option<String>,
     pub size: f32,
     pub weight: u16,
     pub width: Option<f32>,
@@ -36,7 +41,9 @@ impl Label {
     pub fn new(text: impl Into<String>) -> Self {
         Label {
             text: text.into(),
-            role: Role::Body,
+            family: Role::Body.family(),
+            fallback: Vec::new(),
+            lang: None,
             size: 13.,
             weight: 400,
             width: None,
@@ -49,7 +56,9 @@ impl Label {
     fn spec(&self) -> Spec<'_> {
         Spec {
             text: &self.text,
-            role: self.role,
+            family: self.family,
+            fallback: &self.fallback,
+            lang: self.lang.as_deref(),
             size: self.size,
             weight: self.weight,
             line_height: None,
@@ -67,7 +76,9 @@ impl Label {
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct ShapeKey {
     text: String,
-    role: Role,
+    family: &'static str,
+    fallback: Vec<&'static str>,
+    lang: Option<String>,
     size: u32,
     weight: u16,
     width: Option<u32>,
@@ -80,7 +91,9 @@ impl ShapeKey {
     fn of(label: &Label) -> Self {
         ShapeKey {
             text: label.text.clone(),
-            role: label.role,
+            family: label.family,
+            fallback: label.fallback.clone(),
+            lang: label.lang.clone(),
             size: label.size.to_bits(),
             weight: label.weight,
             width: label.width.map(f32::to_bits),

@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
-use crate::fonts::{Role, FACES};
+use crate::fonts::FACES;
 use crate::shape::{Glyph, Shaped, Spec};
 
 /// The bytes the cache may hold runs for.
@@ -39,7 +39,7 @@ impl Key {
     pub(crate) fn of(spec: &Spec<'_>, text: &str, fitted: bool) -> Key {
         Key {
             text: text.into(),
-            font: font_hash(spec.role),
+            font: font_hash(spec.family, spec.fallback, spec.lang),
             size: spec.size.to_bits(),
             features: (spec.weight, spec.tabular, spec.line_height().to_bits()),
             // A bound value is never wrapped, so its box doesn't change its run.
@@ -59,19 +59,32 @@ impl Key {
     }
 }
 
-/// The hash of the bundled faces a role's family picks from by weight.
-fn font_hash(role: Role) -> u64 {
-    static HASHES: LazyLock<[u64; 2]> = LazyLock::new(|| {
-        [Role::Body, Role::Mono].map(|role| {
-            let mut h = DefaultHasher::new();
-            for face in FACES.iter().filter(|f| f.role == role) {
+/// The hash of the bundled faces a run picks from: its family's by weight, then each fallback
+/// family's in order (#417), with the language it is shaped in.
+fn font_hash(family: &str, fallback: &[&str], lang: Option<&str>) -> u64 {
+    // Each face's bytes hashed once per process: the CJK face alone is megabytes.
+    static FACE_HASHES: LazyLock<Vec<u64>> = LazyLock::new(|| {
+        FACES
+            .iter()
+            .map(|face| {
+                let mut h = DefaultHasher::new();
                 face.weight.hash(&mut h);
                 face.bytes.hash(&mut h);
-            }
-            h.finish()
-        })
+                h.finish()
+            })
+            .collect()
     });
-    HASHES[role as usize]
+    let mut h = DefaultHasher::new();
+    for name in std::iter::once(&family).chain(fallback) {
+        name.hash(&mut h);
+        for (face, hash) in FACES.iter().zip(FACE_HASHES.iter()) {
+            if face.family == *name {
+                hash.hash(&mut h);
+            }
+        }
+    }
+    lang.hash(&mut h);
+    h.finish()
 }
 
 /// The bytes a run counts as: its glyphs, its strings and its entry.
