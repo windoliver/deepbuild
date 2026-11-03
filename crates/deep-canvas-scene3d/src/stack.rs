@@ -11,10 +11,11 @@ use serde_json::{json, Value};
 
 use crate::builders::{path, Fault};
 use crate::geom::{add, cross, dot, scale, sub, unit, Mesh, V3};
+use crate::poly::{Boundary, Poly, Scheme, UvRule};
 
 /// The modifier kinds: each one's class, whether it is a GPU kind (evaluated here on the CPU
 /// from its per-instance params) and whether it reads time by its nature.
-pub const KINDS: [(&str, &str, bool, bool); 17] = [
+pub const KINDS: [(&str, &str, bool, bool); 18] = [
     ("mod.array@1", "generate", false, false),
     ("mod.mirror@1", "generate", false, false),
     ("mod.subdivide@1", "generate", false, false),
@@ -22,6 +23,7 @@ pub const KINDS: [(&str, &str, bool, bool); 17] = [
     ("mod.solidify@1", "generate", false, false),
     ("mod.build@1", "generate", false, false),
     ("mod.store@1", "generate", false, false),
+    ("mod.normals@1", "deform", false, false),
     ("mod.curve_deform@1", "deform", false, false),
     ("mod.simple_deform@1", "deform", false, false),
     ("mod.displace@1", "deform", false, false),
@@ -37,6 +39,30 @@ pub const KINDS: [(&str, &str, bool, bool); 17] = [
 
 /// The stroke modifiers a `mark.line@1` takes.
 pub const STROKE: [&str; 4] = ["mod.dash@1", "mod.outline@1", "mod.boil@1", "mod.build@1"];
+
+/// The block count scene3d registers for its build operators (Operator: `parallel:
+/// fixed_blocks`): a subdivision's and a normals pass's elements split into this many ranges,
+/// each written alone and joined in block order, so one block and many give the same bits.
+pub const BLOCKS: usize = 4;
+
+/// How a stack runs: the planted wrong program, the block count (scene3d's unless a proof
+/// surface asks for one), and how many corners each face of the builder's mesh is turned by
+/// before the stack runs (a proof surface's `rotate_corners`).
+#[derive(Clone, Debug, Default)]
+pub struct Run {
+    pub planted: Option<String>,
+    pub blocks: Option<usize>,
+    pub rotate: usize,
+}
+
+impl Run {
+    pub fn blocks(&self) -> usize {
+        self.blocks.unwrap_or(BLOCKS).max(1)
+    }
+    fn planted(&self, name: &str) -> bool {
+        self.planted.as_deref() == Some(name)
+    }
+}
 
 fn kind_row(kind: &str) -> Option<(&'static str, bool, bool)> {
     KINDS.iter().find(|k| k.0 == kind).map(|k| (k.1, k.2, k.3))
@@ -110,40 +136,13 @@ pub fn refs(item: &Value, planted: Option<&str>) -> Vec<String> {
         .collect()
 }
 
-/// The vertices the stack leaves of a builder's `(vertices, triangles)`, counted from the
-/// params: a stack holding a modifier that reads the mesh's topology (`bevel`, `solidify`) is
-/// counted on the stack `full` runs over the builder's mesh instead.
-pub fn estimate(
-    counts: (u64, u64),
-    item: &Value,
-    full: &dyn Fn() -> Result<usize, Fault>,
-) -> Result<u64, Fault> {
-    let (mut v, mut t) = counts;
-    for (k, m) in list(item).iter().enumerate() {
-        if !enabled(m) {
-            continue;
-        }
-        let at = |f: &str| format!("modifiers/{k}/params/{f}");
-        match m.get("kind").and_then(Value::as_str).unwrap_or("") {
-            "mod.array@1" => {
-                let c = array_count(m).ok_or_else(|| at("count"))?;
-                (v, t) = (v * c, t * c);
-            }
-            "mod.mirror@1" => {
-                let a = axes(m).ok_or_else(|| at("axes"))?.len();
-                (v, t) = (v << a, t << a);
-            }
-            "mod.subdivide@1" => {
-                for _ in 0..levels(m).ok_or_else(|| at("levels"))? {
-                    (v, t) = (6 * t, 4 * t);
-                }
-            }
-            "mod.build@1" => t = kept(m, t).ok_or_else(|| at("from"))?.len() as u64,
-            "mod.bevel@1" | "mod.solidify@1" => return full().map(|n| n as u64),
-            _ => {}
-        }
+/// The item with only its first `k` modifiers: what modifier `k` takes.
+pub fn prefix(item: &Value, k: usize) -> Value {
+    let mut cut = item.clone();
+    if let Some(list) = cut.get_mut("modifiers").and_then(Value::as_array_mut) {
+        list.truncate(k);
     }
-    Ok(v)
+    cut
 }
 
 fn list(item: &Value) -> Vec<Value> {
@@ -333,8 +332,13 @@ pub fn apply(
     doc: &Value,
     id: &str,
     t: f64,
+    run: &Run,
 ) -> Result<(Mesh, Vec<Row>), Fault> {
-    let mut m = mesh;
+    let mut m = if run.rotate > 0 {
+        rotated(&mesh, run.rotate)
+    } else {
+        mesh
+    };
     let mut rows = Vec::new();
     for (k, modifier) in list(item).iter().enumerate() {
         let kind = modifier
@@ -393,20 +397,10 @@ pub fn apply(
             }
             "mod.subdivide@1" => {
                 let n = levels(modifier).ok_or_else(|| at("params/levels"))?;
-                (0..n).fold(m, |m, _| subdivide(&m))
+                subdivide(m, &params, n as u32, run).map_err(|f| at(&f))?
             }
-            "mod.bevel@1" => {
-                let width = num("width", 0.02)?;
-                let segments = params
-                    .get("segments")
-                    .map_or(Some(1), Value::as_u64)
-                    .filter(|s| (1..=8).contains(s))
-                    .ok_or_else(|| at("params/segments"))?;
-                if width <= 0.0 {
-                    return Err(at("params/width"));
-                }
-                bevel(&m, width, segments as usize)
-            }
+            "mod.bevel@1" => bevel(m, &params, run).map_err(|f| at(&f))?,
+            "mod.normals@1" => normals(m, &params, run).map_err(|f| at(&f))?,
             "mod.solidify@1" => {
                 let h = num("thickness", 0.01)?;
                 if h <= 0.0 {
@@ -428,9 +422,22 @@ pub fn apply(
                     .get("field")
                     .and_then(Value::as_str)
                     .unwrap_or("height");
-                let values = field_of(&m, field).ok_or_else(|| at("params/field"))?;
                 let mut out = m;
-                out.attributes.insert(name.to_string(), values);
+                match params
+                    .get("domain")
+                    .and_then(Value::as_str)
+                    .unwrap_or("point")
+                {
+                    "point" => {
+                        let values = field_of(&out, field).ok_or_else(|| at("params/field"))?;
+                        out.attributes.insert(name.to_string(), values);
+                    }
+                    "face" => {
+                        let values = face_field(&out, field).ok_or_else(|| at("params/field"))?;
+                        out.face_attributes.insert(name.to_string(), values);
+                    }
+                    _ => return Err(at("params/domain")),
+                }
                 out
             }
             "mod.curve_deform@1" => {
@@ -634,52 +641,6 @@ fn array(m: &Mesh, modifier: &Value, params: &Value, doc: &Value) -> Option<Mesh
     Some(out)
 }
 
-/// One level of midpoint subdivision: each triangle four, with its own six vertices (its three
-/// corners and three edge midpoints, which a neighbour's shared edge makes at the same point),
-/// in its face and its parts.
-fn subdivide(m: &Mesh) -> Mesh {
-    let mut out = Mesh {
-        outputs: m.outputs.clone(),
-        attributes: m
-            .attributes
-            .keys()
-            .map(|k| (k.clone(), Vec::new()))
-            .collect(),
-        ..Mesh::default()
-    };
-    // Each new vertex: the corner or edge it comes from, by its corners' places in the triangle.
-    const FROM: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (0, 1), (1, 2), (2, 0)];
-    for t in 0..m.triangles() {
-        let ids = [0, 1, 2].map(|j| m.indices[3 * t + j] as usize);
-        let base = out.positions.len() as u32;
-        for (a, b) in FROM {
-            let (a, b) = (ids[a], ids[b]);
-            let p = scale(add(m.positions[a], m.positions[b]), 0.5);
-            let v = out.vertex(p, unit(add(m.normals[a], m.normals[b])));
-            for (name, values) in &m.attributes {
-                out.attributes.get_mut(name).expect("made above")[v as usize] =
-                    (values[a] + values[b]) / 2.0;
-            }
-        }
-        for [a, b, c] in [[0, 3, 5], [3, 1, 4], [5, 4, 2], [3, 4, 5]] {
-            out.indices.extend([base + a, base + b, base + c]);
-            out.faces.push(m.faces[t]);
-        }
-    }
-    let split = |tris: &Vec<u32>| -> Vec<u32> {
-        tris.iter()
-            .flat_map(|t| (0..4).map(move |k| 4 * t + k))
-            .collect()
-    };
-    out.parts = m.parts.iter().map(|(k, v)| (k.clone(), split(v))).collect();
-    out.closed = m
-        .closed
-        .iter()
-        .map(|(k, (v, g))| (k.clone(), (split(v), *g)))
-        .collect();
-    out
-}
-
 /// The triangles `keep` names, every vertex kept (so the count stays the builder's); a closed
 /// part stays closed only when all of it stays.
 fn build(m: &Mesh, keep: &[u32]) -> Mesh {
@@ -692,6 +653,12 @@ fn build(m: &Mesh, keep: &[u32]) -> Mesh {
         out.indices
             .extend(&m.indices[3 * t as usize..3 * t as usize + 3]);
         out.faces.push(m.faces[t as usize]);
+    }
+    for (name, values) in &mut out.face_attributes {
+        *values = keep
+            .iter()
+            .map(|&t| m.face_attributes[name][t as usize])
+            .collect();
     }
     let remap = |tris: &Vec<u32>| -> Vec<u32> {
         tris.iter()
@@ -773,162 +740,20 @@ fn solidify(m: &Mesh, h: f64) -> Mesh {
     out
 }
 
-/// A chamfer `width` wide on every edge between two faces (`segments` strips across it): each
-/// face's boundary moved in along its edges, a strip on every edge (out to the edge itself on an
-/// open one), and a cap at every corner, so a closed mesh stays closed.
-fn bevel(m: &Mesh, width: f64, segments: usize) -> Mesh {
-    let w = m.welded();
-    let mut point: BTreeMap<u32, V3> = BTreeMap::new();
-    for (k, id) in w.iter().enumerate() {
-        point.entry(*id).or_insert(m.positions[k]);
-    }
-    // Each face's half-edges on welded points, and its normal.
-    let mut half: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
-    let mut normal: BTreeMap<u32, V3> = BTreeMap::new();
-    for t in 0..m.triangles() {
-        let ids = [0, 1, 2].map(|j| w[m.indices[3 * t + j] as usize]);
-        let f = m.faces[t];
-        let list = half.entry(f).or_default();
-        for j in 0..3 {
-            list.push((ids[j], ids[(j + 1) % 3]));
-        }
-        let [a, b, c] = ids.map(|i| point[&i]);
-        let e = normal.entry(f).or_insert([0.0; 3]);
-        *e = add(*e, cross(sub(b, a), sub(c, a)));
-    }
-    // A face's boundary: the half-edges with no twin in the face, each corner's next and prev.
-    let mut next: BTreeMap<(u32, u32), u32> = BTreeMap::new();
-    let mut prev: BTreeMap<(u32, u32), u32> = BTreeMap::new();
-    for (f, hs) in &half {
-        for &(a, b) in hs {
-            if !hs.contains(&(b, a)) {
-                next.insert((*f, a), b);
-                prev.insert((*f, b), a);
-            }
-        }
-    }
-    // Each boundary corner of each face, moved in `width` along both its edges.
-    let mut inset: BTreeMap<(u32, u32), V3> = BTreeMap::new();
-    for (&(f, v), &b) in &next {
-        let p = point[&v];
-        let along = |q: u32| scale(unit(sub(point[&q], p)), width);
-        inset.insert((f, v), add(p, add(along(prev[&(f, v)]), along(b))));
-    }
-    let mut out = Mesh {
-        outputs: m.outputs.clone(),
-        ..Mesh::default()
-    };
-    for t in 0..m.triangles() {
-        let f = m.faces[t];
-        let n = unit(normal[&f]);
-        let vs = [0, 1, 2].map(|j| {
-            let k = m.indices[3 * t + j] as usize;
-            let p = inset.get(&(f, w[k])).copied().unwrap_or(m.positions[k]);
-            out.vertex(p, n)
-        });
-        out.indices.extend(vs);
-        out.faces.push(f);
-    }
-    let mut face = out.next_face();
-    let rows = |a: V3, b: V3| -> Vec<V3> {
-        (0..=segments)
-            .map(|r| add(a, scale(sub(b, a), r as f64 / segments as f64)))
-            .collect()
-    };
-    let mut by_edge: BTreeMap<(u32, u32), u32> = BTreeMap::new();
-    for (&(f, a), &b) in &next {
-        by_edge.insert((a, b), f);
-    }
-    for (&(a, b), &f) in &by_edge {
-        let twin = by_edge.get(&(b, a)).copied();
-        if twin.is_some_and(|g| g < f) {
-            continue;
-        }
-        let (ra, rb, n) = match twin {
-            Some(g) => (
-                rows(inset[&(f, a)], inset[&(g, a)]),
-                rows(inset[&(f, b)], inset[&(g, b)]),
-                unit(add(unit(normal[&f]), unit(normal[&g]))),
-            ),
-            None => (
-                rows(inset[&(f, a)], point[&a]),
-                rows(inset[&(f, b)], point[&b]),
-                unit(normal[&f]),
-            ),
-        };
-        for r in 0..segments {
-            let base = out.positions.len() as u32;
-            for c in [ra[r], rb[r], rb[r + 1], ra[r + 1]] {
-                out.vertex(c, n);
-            }
-            facing(&mut out, base, base + 1, base + 2, n, face);
-            facing(&mut out, base, base + 2, base + 3, n, face);
-            face += 1;
-        }
-    }
-    // A cap at every corner: the strips' ends around it, face after face.
-    let mut corners: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
-    for &(f, v) in next.keys() {
-        corners.entry(v).or_default().push(f);
-    }
-    for (v, faces) in corners {
-        // Around v, a face's successor is the face across its edge from v to its next corner.
-        let succ = |f: u32| by_edge.get(&(next[&(f, v)], v)).copied();
-        let pred = |f: u32| by_edge.get(&(v, prev[&(f, v)])).copied();
-        let start = faces
-            .iter()
-            .copied()
-            .find(|f| pred(*f).is_none())
-            .unwrap_or(faces[0]);
-        let open = pred(start).is_none();
-        let mut ring: Vec<V3> = Vec::new();
-        if open {
-            ring.push(point[&v]);
-        }
-        let mut f = start;
-        for _ in 0..faces.len() {
-            match succ(f) {
-                Some(g) if !(open && g == start) => {
-                    ring.extend(&rows(inset[&(f, v)], inset[&(g, v)])[..segments]);
-                    f = g;
-                    if f == start {
-                        break;
-                    }
-                }
-                _ => {
-                    ring.push(inset[&(f, v)]);
-                    break;
-                }
-            }
-        }
-        if ring.len() < 3 {
-            continue;
-        }
-        // A segmented chamfer's cap has points in a line along each side, so it is cut into
-        // ears, never fanned.
-        let n = unit(faces.iter().fold([0.0; 3], |s, f| add(s, unit(normal[f]))));
-        if dot(crate::geom::newell(&ring), n) < 0.0 {
-            ring.reverse();
-        }
-        out.polygon(&ring, &[]);
-    }
-    out.close_components();
-    out
-}
-
 /// The mesh laid along the curve: its coordinate along `axis`, from its least, becomes arc
 /// length, and the other two its offsets across the curve's frame.
 fn curve_deform(m: &Mesh, curve: &crate::curve::Sampled, axis: usize) -> Mesh {
     let low = m.bounds()[0][axis];
     let (o1, o2) = ((axis + 1) % 3, (axis + 2) % 3);
+    // The curve's own frames where it has them (curve@1's, rotation-minimizing), else up.
     let frame = |s: f64| -> (V3, V3, V3, V3) {
-        let (c, t) = curve.at(s);
+        let (c, t, own) = curve.framed(s);
         let up = if t[1].abs() < 0.9 {
             [0.0, 1.0, 0.0]
         } else {
             [0.0, 0.0, 1.0]
         };
-        let n = unit(sub(up, scale(t, dot(up, t))));
+        let n = own.unwrap_or_else(|| unit(sub(up, scale(t, dot(up, t)))));
         (c, t, n, cross(t, n))
     };
     // Along x the frame's normal is the item's y and its binormal z; the other axes turn with it.
@@ -997,6 +822,420 @@ fn simple_deform(m: &Mesh, mode: &str, amount: f64) -> Mesh {
     out
 }
 
+/// The mesh with each face's corner list started `r` corners later (a proof surface's
+/// `rotate_corners`), its corners' normals and uvs carried with them.
+fn rotated(m: &Mesh, r: usize) -> Mesh {
+    let mut p = Poly::of(m);
+    let mut normals = Vec::with_capacity(p.faces.len());
+    for f in 0..p.faces.len() {
+        let k = r % p.faces[f].len();
+        p.faces[f].rotate_left(k);
+        p.vertex[f].rotate_left(k);
+        if let Some(uv) = &mut p.uv {
+            uv[f].rotate_left(k);
+        }
+        normals.push(p.vertex[f].iter().map(|&v| m.normals[v as usize]).collect());
+    }
+    let mut out = p.mesh(m, Some(&normals));
+    keep_annotations(m, &mut out);
+    out
+}
+
+/// What a builder annotated that a step leaves standing: anchors, values and the true shape.
+fn keep_annotations(src: &Mesh, out: &mut Mesh) {
+    out.anchors = src.anchors.clone();
+    out.values = src.values.clone();
+    out.true_shape = src.true_shape.clone();
+    out.cage = src.cage.clone();
+}
+
+fn word<'a>(p: &'a Value, name: &str, default: &'a str, of: &[&str]) -> Result<&'a str, String> {
+    let v = match p.get(name) {
+        None => default,
+        Some(v) => v.as_str().ok_or_else(|| format!("params/{name}"))?,
+    };
+    of.contains(&v)
+        .then_some(v)
+        .ok_or_else(|| format!("params/{name}"))
+}
+
+fn number(p: &Value, name: &str, default: f64, ok: impl Fn(f64) -> bool) -> Result<f64, String> {
+    match p.get(name) {
+        None => Ok(default),
+        Some(v) => v
+            .as_f64()
+            .filter(|x| x.is_finite() && ok(*x))
+            .ok_or_else(|| format!("params/{name}")),
+    }
+}
+
+fn truth(p: &Value, name: &str, default: bool) -> Result<bool, String> {
+    match p.get(name) {
+        None => Ok(default),
+        Some(v) => v.as_bool().ok_or_else(|| format!("params/{name}")),
+    }
+}
+
+fn scheme_of(p: &Value) -> Result<Scheme, String> {
+    Ok(
+        match word(
+            p,
+            "scheme",
+            "catmull_clark",
+            &["catmull_clark", "loop", "simple"],
+        )? {
+            "loop" => Scheme::Loop,
+            "simple" => Scheme::Simple,
+            _ => Scheme::CatmullClark,
+        },
+    )
+}
+
+/// The polygon view a subdivision refines: Loop's triangles, or the mesh's faces.
+fn subdivision_view(m: &Mesh, scheme: Scheme) -> Poly {
+    if scheme == Scheme::Loop {
+        Poly::triangles_of(m)
+    } else {
+        Poly::of(m)
+    }
+}
+
+/// Modifier: subdivide: `levels` of uniform refinement, creased where `creases` names a part (its
+/// faces' edges, 0..1, 1 sharp at every level) or `crease_angle` finds an edge sharper, with the
+/// boundary and uv rules; the mesh's quads before it are kept as its cage.
+fn subdivide(m: Mesh, p: &Value, levels: u32, run: &Run) -> Result<Mesh, String> {
+    let scheme = scheme_of(p)?;
+    let boundary = match word(p, "boundary", "sharp_corners", &["smooth", "sharp_corners"])? {
+        "smooth" => Boundary::Smooth,
+        _ => Boundary::SharpCorners,
+    };
+    let uv = match word(
+        p,
+        "uv",
+        "keep_corners",
+        &["linear", "keep_corners", "smooth"],
+    )? {
+        "linear" => UvRule::Linear,
+        "smooth" => UvRule::Smooth,
+        _ => UvRule::KeepCorners,
+    };
+    let mut poly = subdivision_view(&m, scheme);
+    let mut crease: BTreeMap<(u32, u32), f64> = BTreeMap::new();
+    if let Some(c) = p.get("creases") {
+        let c = c.as_object().ok_or("params/creases")?;
+        for (name, w) in c {
+            let w = w
+                .as_f64()
+                .filter(|w| (0.0..=1.0).contains(w))
+                .ok_or("params/creases")?;
+            let tris: std::collections::BTreeSet<u32> = m
+                .parts
+                .get(name)
+                .or_else(|| m.closed.get(name).map(|c| &c.0))
+                .ok_or("params/creases")?
+                .iter()
+                .copied()
+                .collect();
+            for (f, face) in poly.faces.iter().enumerate() {
+                if tris.contains(&poly.origin[f]) {
+                    for k in 0..face.len() {
+                        let e = crate::poly::key(face[k], face[(k + 1) % face.len()]);
+                        let s = crease.entry(e).or_insert(0.0);
+                        *s = s.max(w);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(a) = p.get("crease_angle") {
+        let a = a
+            .as_f64()
+            .filter(|a| (0.0..=180.0).contains(a))
+            .ok_or("params/crease_angle")?;
+        for (e, faces) in poly.edges() {
+            if poly.dihedral(&faces) > a {
+                crease.insert(e, 1.0);
+            }
+        }
+    }
+    // A crease of c is sharp for 10 c² levels, so 1 stays sharp at every level.
+    poly.sharp = crease
+        .into_iter()
+        .filter(|(_, c)| *c > 0.0)
+        .map(|(e, c)| (e, 10.0 * c * c))
+        .collect();
+    let cage = m.cage.clone().unwrap_or_else(|| m.edges(false, true));
+    let plants = crate::poly::Plants {
+        first_corner_order: run.planted("subdivide_first_corner"),
+    };
+    let out = poly.subdivided(levels, scheme, boundary, uv, plants, run.blocks());
+    let mut mesh = out.mesh(&m, None);
+    mesh.cage = Some(cage);
+    Ok(mesh)
+}
+
+/// A bevel's params.
+fn bevel_of(p: &Value) -> Result<(crate::bevel::Bevel, Vec<String>), String> {
+    let width = number(p, "width", 0.02, |w| w > 0.0)?;
+    let segments = match p.get("segments") {
+        None => 1,
+        Some(v) => v
+            .as_u64()
+            .filter(|s| (1..=8).contains(s))
+            .ok_or("params/segments")? as usize,
+    };
+    let shape = number(p, "shape", 0.5, |s| (0.0..=1.0).contains(&s))?;
+    let angle = number(p, "angle", 30.0, |a| (0.0..=180.0).contains(&a))?;
+    let parts: Vec<String> = match p.get("parts") {
+        None => Vec::new(),
+        Some(v) => v
+            .as_array()
+            .and_then(|a| a.iter().map(|x| x.as_str().map(str::to_string)).collect())
+            .ok_or("params/parts")?,
+    };
+    let limit = match word(p, "limit", "angle", &["angle", "parts", "all"])? {
+        "parts" => crate::bevel::Limit::Parts((0..parts.len() as u32).collect()),
+        "all" => crate::bevel::Limit::All,
+        _ => crate::bevel::Limit::Angle(angle),
+    };
+    Ok((
+        crate::bevel::Bevel {
+            width,
+            segments,
+            shape,
+            limit,
+            clamp: truth(p, "clamp", true)?,
+            harden: truth(p, "harden", true)?,
+        },
+        parts,
+    ))
+}
+
+/// The bevel of `m`'s polygon view, each face's place in `parts` known from its origin.
+fn beveled(m: &Mesh, p: &Value) -> Result<(Poly, crate::bevel::Beveled), String> {
+    let (b, parts) = bevel_of(p)?;
+    let poly = Poly::of(m);
+    let part_of: Vec<Option<u32>> = poly
+        .origin
+        .iter()
+        .map(|o| {
+            parts
+                .iter()
+                .position(|name| m.parts.get(name).is_some_and(|t| t.contains(o)))
+                .map(|k| k as u32)
+        })
+        .collect();
+    let out = crate::bevel::bevel(&poly, &b, &part_of);
+    Ok((poly, out))
+}
+
+/// Modifier: bevel, on the polygon view; its own faces are weak.
+fn bevel(m: Mesh, p: &Value, run: &Run) -> Result<Mesh, String> {
+    let (_, b) = beveled(&m, p)?;
+    let mut poly = b.poly;
+    poly.weak = b.weak;
+    let mut out = poly.mesh(&m, b.normals.as_deref());
+    out.cage = m.cage.clone();
+    // #440's planted bevels: one that drops its own faces' face attributes, one that leaves them
+    // out of every part.
+    if run.planted("bevel_drops_wear") {
+        for values in out.face_attributes.values_mut() {
+            for (t, v) in values.iter_mut().enumerate() {
+                if out.weak[t] {
+                    *v = f64::NAN;
+                }
+            }
+        }
+    }
+    if run.planted("bevel_faces_unparted") {
+        let weak = out.weak.clone();
+        for tris in out.parts.values_mut() {
+            tris.retain(|t| !weak[*t as usize]);
+        }
+    }
+    Ok(out)
+}
+
+/// Modifier: normals: corner normals only; nothing moves.
+fn normals(m: Mesh, p: &Value, run: &Run) -> Result<Mesh, String> {
+    let by_angle = word(p, "mode", "weighted", &["weighted", "by_angle"])? == "by_angle";
+    let weight = word(p, "weight", "area", &["area", "angle", "both"])?;
+    let opts = crate::bevel::Normals {
+        by_angle,
+        angle: number(p, "angle", 30.0, |a| (0.0..=180.0).contains(&a))?,
+        area: weight != "angle",
+        corner_angle: weight != "area",
+        keep_sharp: truth(p, "keep_sharp", true)?,
+    };
+    let poly = Poly::of(&m);
+    // The edges the mesh already shades sharp: its corner normals differ across them.
+    let w = m.welded();
+    let mut seen: BTreeMap<(u32, u32), Vec<(u32, V3)>> = BTreeMap::new();
+    for t in 0..m.triangles() {
+        for j in 0..3 {
+            let (a, b) = (
+                m.indices[3 * t + j] as usize,
+                m.indices[3 * t + (j + 1) % 3] as usize,
+            );
+            for (v, n) in [(a, m.normals[a]), (b, m.normals[b])] {
+                seen.entry(crate::poly::key(w[a], w[b]))
+                    .or_default()
+                    .push((w[v], n));
+            }
+        }
+    }
+    let sharp: BTreeMap<(u32, u32), bool> = seen
+        .into_iter()
+        .map(|(e, list)| {
+            let split = list.iter().any(|(v, n)| {
+                list.iter()
+                    .any(|(u, q)| u == v && crate::geom::length(sub(*n, *q)) > 1e-6)
+            });
+            (e, split)
+        })
+        .collect();
+    let n = crate::bevel::normals(&poly, &opts, &poly.weak, &sharp, run.blocks());
+    let mut out = poly.mesh(&m, Some(&n));
+    keep_annotations(&m, &mut out);
+    Ok(out)
+}
+
+/// A per-face field, one value per triangle, read at each face's centroid (the mean of its
+/// distinct welded points): `height`, `x`, `y`, `z` or `distance` from the item's origin.
+fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
+    let w = m.welded();
+    let mut points: BTreeMap<u32, BTreeMap<u32, V3>> = BTreeMap::new();
+    for t in 0..m.triangles() {
+        for j in 0..3 {
+            let v = m.indices[3 * t + j] as usize;
+            points
+                .entry(m.faces[t])
+                .or_default()
+                .insert(w[v], m.positions[v]);
+        }
+    }
+    let [lo, hi] = m.bounds();
+    let centre: BTreeMap<u32, V3> = points
+        .into_iter()
+        .map(|(f, ps)| {
+            let n = ps.len() as f64;
+            (f, scale(ps.into_values().fold([0.0; 3], add), 1.0 / n))
+        })
+        .collect();
+    (0..m.triangles())
+        .map(|t| {
+            let c = centre[&m.faces[t]];
+            Some(match field {
+                "height" => ((c[1] - lo[1]) / (hi[1] - lo[1]).max(1e-12)).clamp(0.0, 1.0),
+                "x" | "y" | "z" => c[axis_of(field)?],
+                "distance" => crate::geom::length(c),
+                _ => return None,
+            })
+        })
+        .collect()
+}
+
+/// The welded points, edges, faces and corners of a polygon view.
+fn topology(p: &Poly) -> (u64, u64, u64, u64) {
+    (
+        p.points.len() as u64,
+        p.edges().len() as u64,
+        p.faces.len() as u64,
+        p.corners() as u64,
+    )
+}
+
+/// What a stack declares before it builds: the vertices it leaves, and its welded points, edges
+/// and faces.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Declared {
+    pub vertices: u64,
+    pub welded: Option<[u64; 3]>,
+}
+
+/// The vertices (and welded counts) the stack leaves of a builder's `(vertices, triangles)`,
+/// counted from the params: array and mirror multiply, subdivide counts by the design's formulas
+/// from the polygon view of the mesh it takes, normals leaves one vertex per corner, bevel counts
+/// the faces it makes on the mesh it takes; `before(k)` is the mesh modifier `k` takes.
+pub fn estimate(
+    counts: (u64, u64),
+    item: &Value,
+    before: &dyn Fn(usize) -> Result<Mesh, Fault>,
+) -> Result<Declared, Fault> {
+    let (mut v, mut t) = counts;
+    let mut topo: Option<(u64, u64, u64, u64)> = None;
+    let list = list(item);
+    for (k, m) in list.iter().enumerate() {
+        if !enabled(m) {
+            continue;
+        }
+        let at = |f: &str| format!("modifiers/{k}/params/{f}");
+        let params = m.get("params").cloned().unwrap_or(json!({}));
+        let view = |scheme: Scheme| -> Result<(u64, u64, u64, u64), Fault> {
+            Ok(topology(&subdivision_view(&before(k)?, scheme)))
+        };
+        match m.get("kind").and_then(Value::as_str).unwrap_or("") {
+            "mod.array@1" => {
+                let c = array_count(m).ok_or_else(|| at("count"))?;
+                (v, t) = (v * c, t * c);
+                topo = topo.map(|(a, b, f, d)| (a * c, b * c, f * c, d * c));
+            }
+            "mod.mirror@1" => {
+                let a = axes(m).ok_or_else(|| at("axes"))?.len();
+                (v, t) = (v << a, t << a);
+                topo = None;
+            }
+            "mod.subdivide@1" => {
+                let scheme = scheme_of(&params).map_err(|_| at("scheme"))?;
+                let mut c = match (topo, scheme) {
+                    (Some(c), Scheme::CatmullClark | Scheme::Simple) => c,
+                    _ => view(scheme)?,
+                };
+                for _ in 0..levels(m).ok_or_else(|| at("levels"))? {
+                    c = crate::poly::counts(scheme, c);
+                }
+                v = c.3;
+                t = if scheme == Scheme::Loop { c.2 } else { 2 * c.2 };
+                topo = Some(c);
+            }
+            "mod.bevel@1" => {
+                let (_, b) =
+                    beveled(&before(k)?, &params).map_err(|f| format!("modifiers/{k}/{f}"))?;
+                let c = topology(&b.poly);
+                v = c.3;
+                t = b.poly.faces.iter().map(|f| f.len() as u64 - 2).sum();
+                topo = Some(c);
+            }
+            "mod.normals@1" => {
+                let c = match topo {
+                    Some(c) => c,
+                    None => view(Scheme::CatmullClark)?,
+                };
+                v = c.3;
+                topo = Some(c);
+            }
+            "mod.build@1" => {
+                t = kept(m, t).ok_or_else(|| at("from"))?.len() as u64;
+                topo = None;
+            }
+            "mod.solidify@1" => {
+                let after = before(k + 1)?;
+                (v, t) = (after.positions.len() as u64, after.triangles() as u64);
+                topo = None;
+            }
+            _ => {}
+        }
+    }
+    let (a, b, c, _) = match topo {
+        Some(c) => c,
+        None => topology(&Poly::of(&before(list.len())?)),
+    };
+    Ok(Declared {
+        vertices: v,
+        welded: Some([a, b, c]),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1024,7 +1263,9 @@ mod tests {
 
     fn run(m: Mesh, modifiers: Value, t: f64) -> Mesh {
         let item = json!({"modifiers": modifiers});
-        apply(m, &item, &json!({"items": {}}), "it", t).unwrap().0
+        apply(m, &item, &json!({"items": {}}), "it", t, &Run::default())
+            .unwrap()
+            .0
     }
 
     /// Every closed part's welded V − E + F, with its open edges: what `close_components` and
@@ -1056,20 +1297,24 @@ mod tests {
 
     fn declared(modifiers: Value, base: &Mesh) -> u64 {
         let item = json!({"modifiers": modifiers});
-        let full = || -> Result<usize, Fault> {
-            Ok(
-                apply(base.clone(), &item, &json!({"items": {}}), "it", 0.0)?
-                    .0
-                    .positions
-                    .len(),
-            )
+        let before = |k: usize| -> Result<Mesh, Fault> {
+            Ok(apply(
+                base.clone(),
+                &prefix(&item, k),
+                &json!({"items": {}}),
+                "it",
+                0.0,
+                &Run::default(),
+            )?
+            .0)
         };
         estimate(
             (base.positions.len() as u64, base.triangles() as u64),
             &item,
-            &full,
+            &before,
         )
         .unwrap()
+        .vertices
     }
 
     #[test]
@@ -1161,6 +1406,7 @@ mod tests {
             &json!({}),
             "it",
             0.0,
+            &Run::default(),
         )
         .unwrap()
         .1;
@@ -1225,18 +1471,31 @@ mod tests {
             ),
         ] {
             let item = json!({"modifiers": [{"kind": "mod.array@1", "params": params}]});
-            let m = apply(base.clone(), &item, &doc, "it", 0.0).unwrap().0;
+            let m = apply(base.clone(), &item, &doc, "it", 0.0, &Run::default())
+                .unwrap()
+                .0;
             assert_eq!(m.positions.len(), copies * base.positions.len(), "{params}");
-            let full = || -> Result<usize, Fault> { Ok(0) };
+            let before = |k: usize| -> Result<Mesh, Fault> {
+                Ok(apply(
+                    base.clone(),
+                    &prefix(&item, k),
+                    &doc,
+                    "it",
+                    0.0,
+                    &Run::default(),
+                )?
+                .0)
+            };
             let n = estimate(
                 (base.positions.len() as u64, base.triangles() as u64),
                 &item,
-                &full,
+                &before,
             )
-            .unwrap();
+            .unwrap()
+            .vertices;
             assert_eq!(n as usize, m.positions.len(), "{params}");
         }
-        let along = apply(base.clone(), &json!({"modifiers": [{"kind": "mod.array@1", "params": {"count": 3, "along": "rail"}}]}), &doc, "it", 0.0).unwrap().0;
+        let along = apply(base.clone(), &json!({"modifiers": [{"kind": "mod.array@1", "params": {"count": 3, "along": "rail"}}]}), &doc, "it", 0.0, &Run::default()).unwrap().0;
         assert!((along.bounds()[1][0] - 4.5).abs() < 1e-9);
     }
 
@@ -1267,6 +1526,6 @@ mod tests {
             );
         }
         let item = json!({"modifiers": [{"kind": "mod.subdivide@1", "on": "screen"}]});
-        assert!(apply(d, &item, &doc, "it", 0.0).is_err());
+        assert!(apply(d, &item, &doc, "it", 0.0, &Run::default()).is_err());
     }
 }

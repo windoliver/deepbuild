@@ -1982,6 +1982,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "taffy 0.14.0",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -2016,6 +2017,7 @@ name = "deep-canvas-scene3d"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
  "serde_json",

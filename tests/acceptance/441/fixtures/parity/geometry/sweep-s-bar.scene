@@ -1,0 +1,17 @@
+{
+  "scene": "sweep-s-bar",
+  "format": 1,
+  "about": "Parity fixture for #441 AC4 (Builder extrude: sweep along a curve). The S curve is one cubic Bezier span in the xz plane (curve@1 mode bezier): (0, 0, 0) to (1, 0, 1), its controls (0.5, 0, 0) and (0.5, 0, 1). It is point-symmetric about (0.5, 0, 0.5), so its inflection is at its middle, u = 0.5 by arc length as well as by parameter; its tightest radius is 0.375 m, at the ends. The bar is a 0.10 x 0.01 m outline, 0.10 m along the outline's x (which the sweep sets along curve@1's normal, here +y) and 0.01 m along its y (set along the binormal T x N, in the xz plane), its centre 0.05 m to one side: y from 0.045 to 0.055. Swept with 64 rings over the whole curve, ring k is at u = k / 63, so rings 31 and 32 straddle the inflection. Expected: at every ring each of the bar's vertices sits between 0.045 and 0.055 m (within 1e-6 m) along T x up from the curve's own point at that u (this suite's reference), the ring's frame is within 1e-6 rad of curve@1's frame read at that u with the geometry call's `at`, and curve@1's normal there is within 1e-6 rad of +y, the rotation-minimizing frame of a planar curve started from up = (0, 1, 0). The twin is a planted program, reachable only through the scenario's `planted`, that must fail, the failure naming each text in `names`: Frenet frames flip the bar to the other side at the first ring past the inflection.",
+  "items": {
+    "s": { "kind": "curve@1", "params": { "points": [[0, 0, 0], [1, 0, 1]], "mode": "bezier", "handles": { "in": [[0, 0, 0], [-0.5, 0, 0]], "out": [[0.5, 0, 0], [0, 0, 0]] } } },
+    "bar": { "kind": "extrude@1", "params": { "outline": [[-0.05, 0.045], [0.05, 0.045], [0.05, 0.055], [-0.05, 0.055]], "along": { "curve": "s", "range": [0, 1], "rings": 64 } } }
+  },
+  "rings": 64,
+  "side": [0.045, 0.055],
+  "side_tolerance_m": 1e-6,
+  "tolerance_rad": 1e-6,
+  "inflection_between_rings": [31, 32],
+  "twins": [
+    { "planted": "sweep_frenet", "names": ["ring 32 "], "first_ring": 32, "wrong": "the sweep's frames are Frenet frames (normal along the curvature), turned once to match the first ring's rotation-minimizing frame; past the inflection the curvature changes side and the frame turns 180 degrees" }
+  ]
+}

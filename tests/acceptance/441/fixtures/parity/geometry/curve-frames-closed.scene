@@ -1,0 +1,20 @@
+{
+  "scene": "curve-frames-closed",
+  "format": 1,
+  "about": "Parity fixture for #441 AC2 (Curve curve@1: closed frames). One closed curve@1 through twelve points of a trefoil knot (0.1 x (sin s + 2 sin 2s, cos s - 2 cos 2s, -sin 3s) at s = k x 30 deg, rounded to 1e-4 m), mode catmull_rom. A trefoil is chiral, so its rotation-minimizing frame carried once around the loop comes back turned: about 124 deg for this curve at alpha 0.5 by this suite's own double reflection on a 2,000-step-per-span grid, and over 100 deg at alpha 0, 0.5 or 1, so a seam twist left in place can't hide. The frame at u = 1, read both at u = 1 and at its left limit u = 1 - 1e-9 (so a curve that wraps u = 1 to 0 can't hide a twist), must equal the frame at u = 0 within 1e-6 rad: the largest angle between their tangents, normals and binormals. `closure` must report the mismatch the closed frames spread (at least 1 deg here). The twin is a planted program, reachable only through the scenario's `planted`, that must fail, the failure naming each text in `names`.",
+  "curve": {
+    "id": "loop",
+    "kind": "curve@1",
+    "params": {
+      "points": [[0, -0.1, 0], [0.2232, -0.0134, -0.1], [0.2598, 0.15, 0], [0.1, 0.2, 0.1], [-0.0866, 0.05, 0], [-0.1232, -0.1866, -0.1], [0, -0.3, 0], [0.1232, -0.1866, 0.1], [0.0866, 0.05, 0], [-0.1, 0.2, -0.1], [-0.2598, 0.15, 0], [-0.2232, -0.0134, 0.1]],
+      "mode": "catmull_rom",
+      "closed": true
+    }
+  },
+  "at": [0, 1, 0.999999999],
+  "tolerance_rad": 1e-6,
+  "closure_min_deg": 1,
+  "twins": [
+    { "planted": "seam_twist_left", "names": ["loop", "u = 1"], "wrong": "closed frames left unspread: the rotation-minimizing frame carried around the loop keeps its mismatch at the seam" }
+  ]
+}
