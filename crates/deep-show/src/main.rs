@@ -1144,6 +1144,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "keeps_priming" => Planted::KeepsPriming,
                 "encodes_in_decode_worker" => Planted::EncodesInDecodeWorker,
                 "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
+                "probe_stores_normalized" => Planted::ProbeStoresNormalized,
                 "assumes_bt601" => Planted::AssumesBt601,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,

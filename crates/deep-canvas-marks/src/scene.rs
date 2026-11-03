@@ -35,7 +35,7 @@ use deep_canvas::schedule::{Key, KeyTree};
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
     "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
-    "group@1", "star@1", "frame@1",
+    "group@1", "star@1", "frame@1", "series@1",
 ];
 
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
@@ -620,6 +620,35 @@ pub struct Drawn {
 }
 
 impl Drawn {
+    /// The mark as its item draws after moving by `d` u and nothing else (#397: a frame where an
+    /// item only moved reuses its marks); `None` for a mark a frame must rebuild: an outline, a
+    /// gradient, or one inside a scope.
+    pub fn translated(&self, d: [f64; 2]) -> Option<Drawn> {
+        if !self.scopes.is_empty() {
+            return None;
+        }
+        let shift = |p: [f64; 2]| [p[0] + d[0], p[1] + d[1]];
+        let shift4 = |b: [f64; 4]| [b[0] + d[0], b[1] + d[1], b[2], b[3]];
+        let mut mark = self.mark.clone();
+        match &mut mark {
+            Mark::Rect {
+                bounds,
+                fill: Fill::Solid(_),
+                ..
+            }
+            | Mark::Image { bounds, .. } => *bounds = shift4(*bounds),
+            Mark::Circle { center, .. } => *center = shift(*center),
+            Mark::Path { offset, .. } => *offset = shift(*offset),
+            Mark::Text { origin, .. } => *origin = shift(*origin),
+            _ => return None,
+        }
+        Some(Drawn {
+            mark,
+            clip: self.clip.map(shift4),
+            scopes: Vec::new(),
+        })
+    }
+
     /// What a layer's key reads of the mark: its key at a zoom bucket.
     fn key(&self, bucket: i32) -> ContentKey {
         let mut k = KeyBuilder::new("drawn@marks2d.1");
@@ -2648,6 +2677,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 .unwrap_or(&data::BoundRows::new()),
         )?,
         "axis@1" => data::axis(id, item, ctx.items, ctx.palette, pos)?,
+        "series@1" => data::series(id, item, ctx.palette, pos)?,
         "image@1" => {
             let Some(Value::String(asset)) = params.get("asset") else {
                 return refuse("bad_doc", format!("{path}/params/asset"));

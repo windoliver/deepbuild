@@ -1,0 +1,429 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/397
+
+ ❯ candles.test.ts (3 tests | 3 failed) 100467ms
+   ❯ AC1 five days of one-minute candles draw within the frame budget (3)
+     × AC1 (draw) the 7,200 candles pass the check as a series@1 item and draw in their up and down roles 7373ms
+     × AC1 (live) the chart is a live data_view session in the app's live window and draws in every frame 6827ms
+     × AC1 (budget) each of five runs keeps its p95 frame GPU and CPU time within the data view class's 2 ms 31125ms
+ ❯ quantize.test.ts (2 tests | 2 failed) 32618ms
+   ❯ AC4 a quantize scale over five palette roles colors each of 400 cells with its band's role (2)
+     × AC4 (bands) each cell takes the role of its value's band, the band edges included, and the set passes the check 1480ms
+     × AC4 (no literal) under a look that gives the five roles other colors every cell follows its role, so no cell takes a literal color 135ms
+ ❯ honest.test.ts (3 tests | 3 failed) 53555ms
+   ❯ AC2 a bar chart from a fetched table passes honest numbers, traced to it; from an agent's table it passes only where no status is bound (3)
+     × AC2 (fetched) a table fetched by URL is a table asset whose source the hub wrote: the URL and its fetch time 1468ms
+     × AC2 (fetched) the chart passes honest numbers with every value label and tick traced to the fetched table, with and without a status binding 25ms
+     × AC2 (agent) the same chart from a table an agent wrote passes with no status binding and, with one, fails naming each value label's row 38ms
+ ❯ columns.test.ts (4 tests | 4 failed) 20693ms
+   ❯ AC6 the column view: column.source@1, one narrowing rule, its kit and module_missing (4)
+     × AC6 (narrowing) a mark set reading the i32 column as u16 hides row 3 and raises column.out_of_range naming the set, the column, row 3 and 70,000, while every other row draws 34ms
+     × AC6 (seek) the core declares column.source@1, the test module fills it, and its kit fails a planted source that keeps the previous frame's rows after a seek, naming the frame 12ms
+     × AC6 (changed ranges) the kit fails a planted source that reports no changed ranges while values change, on clean-rebuild equality 4ms
+     × AC6 (module_missing) the same mark set in a build no module of which fills its source is refused with module_missing 1420ms
+ ❯ legend.test.ts (3 tests | 3 failed) 8176ms
+   ❯ AC3 categories a legend tells apart by color alone keep the data distance under simulated color-vision deficiency (3)
+     × AC3 (refused) a red and a green role whose simulated deuteranopia colors lie 0.02 apart, solid lines both, are refused naming both roles 2585ms
+     × AC3 (dashed) the same pair passes once the second series takes a dashed line 273ms
+     × AC3 (blue and orange) a blue and orange pair, solid lines both, passes unchanged 277ms
+ ❯ crlf.test.ts (4 tests | 4 failed) 11266ms
+   ❯ AC5 a CRLF table with a decomposed é keeps raw bytes, draws NFC, and traces its numbers by raw byte range (4)
+     × AC5 (raw bytes) each label cell keeps its raw bytes and their range in the file: the decomposed é and no CR 2573ms
+     × AC5 (NFC) the label draws its display form, NFC, with one é 32ms
+     × AC5 (trace) the chart passes honest numbers with the 3 of Q3 Café traced to its row by the cell's raw byte range 28ms
+     × AC5 (planted) a probe that stores the cell normalized fails the comparison with the file's bytes, naming the row 20ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  candles.test.ts > AC1 five days of one-minute candles draw within the frame budget > AC1 (draw) the 7,200 candles pass the check as a series@1 item and draw in their up and down roles
+AssertionError: series@1 is a kind this build draws: [{"code":"module_missing","severity":"error","ids":["candles"],"path":"items/candles/kind: series@1"}]: expected [ 'module_missing candles', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "module_missing candles",
++   "unknown_kind candles",
++ ]
+
+ ❯ candles.test.ts:110:126
+    108|     const check = checked(c, 'check of the candle chart');
+    109|     const skipped = [...check.issues, ...issuesOf(check.raw['notices']…
+    110|     expect(skipped.map((i) => `${i.code} ${i.ids.join(',')}`), `series…
+       |                                                                                                                              ^
+    111|     expect(check.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `t…
+    112|     const out = `${temp()}/candles.png`;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  candles.test.ts > AC1 five days of one-minute candles draw within the frame budget > AC1 (live) the chart is a live data_view session in the app's live window and draws in every frame
+AssertionError: the session is live, not refused: {"session":"s-0","writer":"agent:candles","state":"refused","class":null,"issues":[{"code":"ref_unresolved","severity":"error","ids":[],"path":"camera","actual":null,"what":"the document can't be evaluated"}],"revisions":[{"rev":1,"outcome":"refused","issues":[{"code":"ref_unresolved","severity":"error","ids":[],"path":"camera","actual":null,"what":"the document can't be evaluated"}],"check_ms":18.795125}]}: expected 'refused' to be 'live' // Object.is equality
+
+Expected: "live"
+Received: "refused"
+
+ ❯ candles.test.ts:125:97
+    123|     const [run] = live(temp(), look, [60]);
+    124|     const s = run!.session;
+    125|     expect(s['state'], `the session is live, not refused: ${JSON.strin…
+       |                                                                                                 ^
+    126|     expect(s['class'], 'the session draws under the data view budget c…
+    127|     const issues = issuesOf(s['issues'], 'session issues');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+ FAIL  candles.test.ts > AC1 five days of one-minute candles draw within the frame budget > AC1 (budget) each of five runs keeps its p95 frame GPU and CPU time within the data view class's 2 ms
+AssertionError: run 0: the session is live: expected 'refused' to be 'live' // Object.is equality
+
+Expected: "live"
+Received: "refused"
+
+ ❯ candles.test.ts:139:69
+    137|     const runs = live(temp(), look, Array.from({ length: 5 }, () => WA…
+    138|     for (const [k, run] of runs.entries()) {
+    139|       expect(run.session['state'], `run ${k}: the session is live`).to…
+       |                                                                     ^
+    140|       const judged = run.frames.slice(WARM_UP);
+    141|       expect(judged.length, `run ${k}: ${JUDGED} judged frames`).toBe(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+ FAIL  columns.test.ts > AC6 the column view: column.source@1, one narrowing rule, its kit and module_missing > AC6 (narrowing) a mark set reading the i32 column as u16 hides row 3 and raises column.out_of_range naming the set, the column, row 3 and 70,000, while every other row draws
+AssertionError: the binary builds: deep-show+test-column-source: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --features test-column-source failed:
++ error: none of the selected packages contains this feature: test-column-source
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.path helpers.ts:159:69
+    157|       const entry = made.get(buildName(build));
+    158|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    159|       expect(entry.error, `the binary builds: ${buildName(build)}`).to…
+       |                                                                     ^
+    160|       return entry.path;
+    161|     },
+ ❯ withModule columns.test.ts:29:41
+ ❯ columns.test.ts:81:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/19]⎯
+
+ FAIL  columns.test.ts > AC6 the column view: column.source@1, one narrowing rule, its kit and module_missing > AC6 (seek) the core declares column.source@1, the test module fills it, and its kit fails a planted source that keeps the previous frame's rows after a seek, naming the frame
+AssertionError: the binary builds: deep-show+test-column-source: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --features test-column-source failed:
++ error: none of the selected packages contains this feature: test-column-source
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.path helpers.ts:159:69
+    157|       const entry = made.get(buildName(build));
+    158|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    159|       expect(entry.error, `the binary builds: ${buildName(build)}`).to…
+       |                                                                     ^
+    160|       return entry.path;
+    161|     },
+ ❯ withModule columns.test.ts:29:41
+ ❯ registry columns.test.ts:61:23
+ ❯ columns.test.ts:104:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/19]⎯
+
+ FAIL  columns.test.ts > AC6 the column view: column.source@1, one narrowing rule, its kit and module_missing > AC6 (changed ranges) the kit fails a planted source that reports no changed ranges while values change, on clean-rebuild equality
+AssertionError: the binary builds: deep-show+test-column-source: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --features test-column-source failed:
++ error: none of the selected packages contains this feature: test-column-source
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.path helpers.ts:159:69
+    157|       const entry = made.get(buildName(build));
+    158|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    159|       expect(entry.error, `the binary builds: ${buildName(build)}`).to…
+       |                                                                     ^
+    160|       return entry.path;
+    161|     },
+ ❯ withModule columns.test.ts:29:41
+ ❯ registry columns.test.ts:61:23
+ ❯ columns.test.ts:117:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/19]⎯
+
+ FAIL  columns.test.ts > AC6 the column view: column.source@1, one narrowing rule, its kit and module_missing > AC6 (module_missing) the same mark set in a build no module of which fills its source is refused with module_missing
+AssertionError: with module_missing: [{"code":"bad_column","severity":"error","ids":[],"path":"items/cells/params/columns/v/len"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ columns.test.ts:127:138
+    125|     expect(reply['outcome'], `the document is refused: ${JSON.stringif…
+    126|     const issues = issuesOf(reply['issues'], 'deep_show: issues');
+    127|     expect(issues.some((i) => i.code === 'module_missing' && i.severit…
+       |                                                                                                                                          ^
+    128|   }, TIMEOUT);
+    129| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/19]⎯
+
+ FAIL  crlf.test.ts > AC5 a CRLF table with a decomposed é keeps raw bytes, draws NFC, and traces its numbers by raw byte range > AC5 (raw bytes) each label cell keeps its raw bytes and their range in the file: the decomposed é and no CR
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ fetched crlf.test.ts:33:31
+ ❯ crlf.test.ts:66:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/19]⎯
+
+ FAIL  crlf.test.ts > AC5 a CRLF table with a decomposed é keeps raw bytes, draws NFC, and traces its numbers by raw byte range > AC5 (NFC) the label draws its display form, NFC, with one é
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ fetched crlf.test.ts:33:31
+ ❯ crlf.test.ts:82:68
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/19]⎯
+
+ FAIL  crlf.test.ts > AC5 a CRLF table with a decomposed é keeps raw bytes, draws NFC, and traces its numbers by raw byte range > AC5 (trace) the chart passes honest numbers with the 3 of Q3 Café traced to its row by the cell's raw byte range
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ fetched crlf.test.ts:33:31
+ ❯ crlf.test.ts:95:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/19]⎯
+
+ FAIL  crlf.test.ts > AC5 a CRLF table with a decomposed é keeps raw bytes, draws NFC, and traces its numbers by raw byte range > AC5 (planted) a probe that stores the cell normalized fails the comparison with the file's bytes, naming the row
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ fetched crlf.test.ts:33:31
+ ❯ crlf.test.ts:107:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/19]⎯
+
+ FAIL  honest.test.ts > AC2 a bar chart from a fetched table passes honest numbers, traced to it; from an agent's table it passes only where no status is bound > AC2 (fetched) a table fetched by URL is a table asset whose source the hub wrote: the URL and its fetch time
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ fetched honest.test.ts:32:21
+ ❯ honest.test.ts:102:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/19]⎯
+
+ FAIL  honest.test.ts > AC2 a bar chart from a fetched table passes honest numbers, traced to it; from an agent's table it passes only where no status is bound > AC2 (fetched) the chart passes honest numbers with every value label and tick traced to the fetched table, with and without a status binding
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ fetched honest.test.ts:32:21
+ ❯ honest.test.ts:117:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/19]⎯
+
+ FAIL  honest.test.ts > AC2 a bar chart from a fetched table passes honest numbers, traced to it; from an agent's table it passes only where no status is bound > AC2 (agent) the same chart from a table an agent wrote passes with no status binding and, with one, fails naming each value label's row
+AssertionError: deep-show run accepts the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:378:94
+    376| export function replies(out: JsonValue | undefined, calls: number): Js…
+    377|   const o = obj(out, 'deep-show run: the answer');
+    378|   expect(o['ok'], `deep-show run accepts the scenario: ${JSON.stringif…
+       |                                                                                              ^
+    379|   const list = arr(o['replies'], 'deep-show run: replies').map((r, i) …
+    380|   expect(list.length, 'deep-show run: one reply per call').toBe(calls);
+ ❯ written honest.test.ts:40:21
+ ❯ honest.test.ts:129:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/19]⎯
+
+ FAIL  legend.test.ts > AC3 categories a legend tells apart by color alone keep the data distance under simulated color-vision deficiency > AC3 (refused) a red and a green role whose simulated deuteranopia colors lie 0.02 apart, solid lines both, are refused naming both roles
+AssertionError: an error names both roles as data, outside what and fix: [{"code":"scale_type","severity":"error","ids":["colors"],"path":"items/colors/params/type"}]: expected 0 to be greater than 0
+ ❯ legend.test.ts:65:105
+     63|     expect(c.ok, `the check refuses the pair: ${shownIssues(c)}`).toBe…
+     64|     const naming = c.errors.filter((e) => holdsAsData(e.raw, 'series_r…
+     65|     expect(naming.length, `an error names both roles as data, outside …
+       |                                                                                                         ^
+     66|   }, TIMEOUT);
+     67|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/19]⎯
+
+ FAIL  legend.test.ts > AC3 categories a legend tells apart by color alone keep the data distance under simulated color-vision deficiency > AC3 (dashed) the same pair passes once the second series takes a dashed line
+AssertionError: the dashed second series tells the pair apart: [{"code":"scale_type","severity":"error","ids":["colors"],"path":"items/colors/params/type"}]: expected [ 'scale_type colors' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "scale_type colors",
++ ]
+
+ ❯ legend.test.ts:71:133
+     69|     expectRedGreen();
+     70|     const c = check(twoSeries(['series_red', 'series_green'], true), R…
+     71|     expect(c.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `the d…
+       |                                                                                                                                     ^
+     72|     expect(c.ok, 'the check passes').toBe(true);
+     73|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/19]⎯
+
+ FAIL  legend.test.ts > AC3 categories a legend tells apart by color alone keep the data distance under simulated color-vision deficiency > AC3 (blue and orange) a blue and orange pair, solid lines both, passes unchanged
+AssertionError: the pair passes: [{"code":"scale_type","severity":"error","ids":["colors"],"path":"items/colors/params/type"}]: expected [ 'scale_type colors' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "scale_type colors",
++ ]
+
+ ❯ legend.test.ts:81:103
+     79|     }
+     80|     const c = check(twoSeries(['series_blue', 'series_orange'], false)…
+     81|     expect(c.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `the p…
+       |                                                                                                       ^
+     82|     expect(c.ok, 'the check passes').toBe(true);
+     83|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/19]⎯
+
+ FAIL  quantize.test.ts > AC4 a quantize scale over five palette roles colors each of 400 cells with its band's role > AC4 (bands) each cell takes the role of its value's band, the band edges included, and the set passes the check
+AssertionError: the heat map passes the check: [{"code":"scale_type","severity":"error","ids":["heat"],"path":"items/heat/params/type"}]: expected [ 'scale_type heat' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "scale_type heat",
++ ]
+
+ ❯ quantize.test.ts:87:127
+     85|     const [c] = lines(render(), ['check'], [{ doc: heatmap(), look: lo…
+     86|     const result = checked(c, 'check');
+     87|     expect(result.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `…
+       |                                                                                                                               ^
+     88|     expectBands(drawn('heat-a', roles), roles, 'look A');
+     89|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/19]⎯
+
+ FAIL  quantize.test.ts > AC4 a quantize scale over five palette roles colors each of 400 cells with its band's role > AC4 (no literal) under a look that gives the five roles other colors every cell follows its role, so no cell takes a literal color
+AssertionError: raster draws the heat map: {"ok":false,"code":"scale_type","issues":[{"check":"document.validate","code":"scale_type","severity":"error","ids":["heat"],"path":"items/heat/params/type","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ drawn quantize.test.ts:66:110
+     64|   const out = `${temp()}/${name}.png`;
+     65|   const [answer] = lines(render(), ['raster'], [{ out, doc: heatmap(),…
+     66|   expect(obj(answer, 'raster')['ok'], `raster draws the heat map: ${JS…
+       |                                                                                                              ^
+     67|   const image = readPng(out);
+     68|   return VALUES.map((_, i) => { const [x, y] = cellBox(i); return pixe…
+ ❯ quantize.test.ts:95:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/19]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  19 failed (19)
+   Start at  16:49:27
+   Duration  228.07s (tests 100%)
+

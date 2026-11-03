@@ -417,7 +417,8 @@ fn write_string(s: &str, out: &mut Vec<u8>) {
     out.push(b'"');
 }
 
-fn nfc(s: &str) -> String {
+/// `s` in NFC, the display form a label draws a table's cell in (#397).
+pub fn nfc(s: &str) -> String {
     nfc_cow(s).into_owned()
 }
 
