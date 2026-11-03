@@ -66,8 +66,9 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
             let (l, r) = curve.split(curve.solve(u).s);
             (Some(bezier_json(&l)), bezier_json(&r))
         }
-        // A spring segment is solved from rest at its start: no key splits it on its own curve.
-        Interp::Spring { .. } => {
+        // A spring is solved from its start, an ease or an auto span over its whole span: no key
+        // splits one on its own curve.
+        Interp::Spring(_) | Interp::Ease(_) | Interp::Auto { .. } | Interp::CatmullRom => {
             return refused("bad_interp", format!("channels/{channel}/keys/{}", a.id))
         }
     };

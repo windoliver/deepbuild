@@ -1989,7 +1989,6 @@ name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
- "deep-canvas-marks",
  "serde_json",
 ]
 
@@ -2182,6 +2181,16 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "vello_cpu",
+]
+
+[[package]]
+name = "deep-motion"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "serde_json",
 ]
 
 [[package]]
