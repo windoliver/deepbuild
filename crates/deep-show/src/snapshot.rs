@@ -427,7 +427,13 @@ impl Renderer {
         }
         ctx.flush();
         let mut pixmap = Pixmap::new(size[0], size[1]);
-        ctx.render(&mut pixmap, &mut self.resources);
+        // The f32 pipeline, as deep-marks-vello pins it: a build that also enables vello_cpu's
+        // u8 pipeline would otherwise draw on that one, a code or two off (#674).
+        ctx.render_with(
+            &mut pixmap,
+            &mut self.resources,
+            deep_marks_vello::rasterizer(),
+        );
         (
             pixmap.take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha),
             batches,

@@ -2925,6 +2925,67 @@ export interface DefinitionLockedV4 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@5 */
+export interface DefinitionLockedV5 {
+  v: 5;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -3090,7 +3151,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -4642,6 +4703,52 @@ export interface RunStartedV2 {
       expected_ms: number | null;
     };
     lane: "fast" | "slow";
+  };
+  evidence?: Array<string>;
+}
+
+/** run.started@3 */
+export interface RunStartedV3 {
+  v: 3;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    commit: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+    argv: Array<string>;
+    cwd: string;
+    env: { [key: string]: string };
+    grant: {
+      read?: Array<string>;
+      write?: Array<string>;
+      hosts?: Array<string>;
+      sockets?: Array<string>;
+      listen?: Array<string>;
+      run_as_you?: boolean;
+    };
+    deadline_ms: number | null;
+    environment?: boolean;
+    command?: string;
+    stand_ins?: Array<string>;
+    withheld: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -6256,6 +6363,21 @@ export interface WorkItem {
   authors: Array<{
     handle: string;
     role: "owner" | "collaborator" | "outside";
+  }>;
+  updated: string;
+}
+
+/** work.item@2 */
+export interface WorkItemV2 {
+  source_id: string;
+  link: string;
+  title: string;
+  body: string;
+  criteria: Array<string>;
+  authors: Array<{
+    handle: string;
+    role: "owner" | "collaborator" | "outside";
+    automated?: boolean;
   }>;
   updated: string;
 }

@@ -1,0 +1,15 @@
+{
+  "scene": "uv1-charts",
+  "format": 1,
+  "about": "Parity fixture for #440 AC4 (Builder: uv; the builders with known charts emit uv1 analytically). One item per builder with known charts: a slab box, a lathe vase with flat caps, an extrusion with a hole, a plate grid, a UV ball and a tube on a bent path with flat caps. Expected: every item has a uv1, one per vertex; every triangle's uv1 has positive area (at least min_area_rel of the uv1 extent squared, so no chart collapses); and no two triangles' uv1 interiors overlap by more than overlap_eps_rel of the uv1 extent (touching along an edge or at a corner is allowed), so no two charts overlap and no chart folds over itself. A box projection, whose opposite faces land on the same square, fails this.",
+  "min_area_rel": 1e-12,
+  "overlap_eps_rel": 1e-9,
+  "items": {
+    "crate": { "kind": "slab@1", "params": { "size": [1, 0.5, 0.8] } },
+    "vase": { "kind": "lathe@1", "params": { "outline": [[0.3, 0, false], [0.35, 0.3, true], [0.2, 0.7, true], [0.15, 0.9, false]], "segments": 24, "caps": "flat" } },
+    "frame": { "kind": "extrude@1", "params": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "holes": [[[0.5, 0.25], [1.5, 0.25], [1.5, 0.75], [0.5, 0.75]]], "depth": 0.5 } },
+    "ground": { "kind": "plate@1", "params": { "grid": [6, 4], "size": [3, 2] } },
+    "globe": { "kind": "ball@1", "params": { "radius": 0.5, "segments": 16 } },
+    "pipe": { "kind": "tube@1", "params": { "path": [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1]], "radius": 0.05, "segments": 12, "caps": "flat" } }
+  }
+}

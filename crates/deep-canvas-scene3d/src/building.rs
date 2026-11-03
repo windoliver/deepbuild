@@ -497,7 +497,7 @@ fn opening(doc: &Value, p: &Value) -> Result<Mesh, Fault> {
         let u = hinge + along * x;
         let px = plan.a[0] + plan.d[0] * u + plan.n[0] * z;
         let pz = plan.a[1] + plan.d[1] * u + plan.n[1] * z;
-        [px, q[1] + height / 2.0 + sill, pz]
+        [px, q[1] + sill, pz]
     };
     let mut m = leaf.mapped(place, |_, n| n);
     // Normals turned as the leaf turns.
@@ -972,4 +972,27 @@ fn guard_rail(doc: &Value, item: &Value, p: &Value) -> Result<Mesh, Fault> {
         m.append(&rail, &format!(".{k}"));
     }
     Ok(m)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn door_leaf_fills_its_hole_from_the_sill() {
+        let doc = house();
+        for (sill, height) in [(0.0, 2.1), (0.9, 1.2)] {
+            let item = json!({"kind": "arch.opening@1",
+                "params": {"wall": "wa", "type": "door", "at_along": 1, "width": 0.9, "height": height, "sill": sill}});
+            let b = build(&doc, "door", &item).unwrap().bounds();
+            assert!(
+                (b[0][1] - sill).abs() < 1e-9 && (b[1][1] - (sill + height)).abs() < 1e-9,
+                "leaf y runs {}..{}, the hole {}..{}",
+                b[0][1],
+                b[1][1],
+                sill,
+                sill + height
+            );
+        }
+    }
 }
