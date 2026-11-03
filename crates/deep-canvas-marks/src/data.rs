@@ -58,7 +58,7 @@ impl Column {
     }
 }
 
-fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
+pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
     let Value::Object(c) = c else {
         return refuse("bad_column", path);
     };

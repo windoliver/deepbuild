@@ -839,3 +839,144 @@ fn subpaths_of(verbs: &[Verb], by: [f64; 2]) -> Vec<Value> {
         .map(|(names, points, closed)| json!({"closed": closed, "verbs": names, "points": points}))
         .collect()
 }
+
+/// #160: a `path` line (tests/acceptance/160/README.md, The surface under test): the item's
+/// frames at each time, with its copies, ends, anchors, columns and tessellation digest.
+pub struct PathRequest {
+    pub doc: Map<String, Value>,
+    pub item: String,
+    pub times: Vec<i64>,
+    pub anchors: Vec<String>,
+    pub timing: bool,
+    pub planted: Planted,
+    pub look: Option<crate::look::Look>,
+    pub vectors: crate::Vectors,
+}
+
+/// A `path` line's planted value, or `None` for one the surface doesn't name.
+pub fn planted_path(name: &str) -> Option<Planted> {
+    const OPS: [&str; 7] = [
+        "trim",
+        "round_corners",
+        "offset_path",
+        "zigzag",
+        "pucker",
+        "twist",
+        "repeater",
+    ];
+    match name {
+        "merge_zero_fills" => Some(Planted::MergeZeroFills),
+        "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
+        _ => {
+            let op = name.strip_prefix("moved:")?;
+            OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
+        }
+    }
+}
+
+/// Answers a `path` line: one frame per time, in order; `built` holds the digests this process
+/// built so far, so a frame says whether it rebuilt or reused the item's tessellation.
+pub fn path_answer(
+    req: PathRequest,
+    built: &mut std::collections::BTreeSet<deep_canvas_marks::key::ContentKey>,
+) -> Value {
+    let mut run = || -> Result<Value, Value> {
+        let program = Program::compile(&req.doc).map_err(|r| refused(r.code, &r.path))?;
+        let (palette, ty): (scene::Palette, scene::Type) = match &req.look {
+            Some(look) => (
+                palette_of(look, crate::Theme::Light).clone(),
+                crate::type_of(look, crate::Theme::Light).clone(),
+            ),
+            None => {
+                let mut palette = scene::Palette::new();
+                palette.insert("ground".into(), [255, 255, 255]);
+                any_roles(&Value::Object(req.doc.clone()), &mut palette);
+                (palette, scene::Type::default())
+            }
+        };
+        let (palette, ty) = (&palette, &ty);
+        let mut frames = Vec::with_capacity(req.times.len());
+        for &t in &req.times {
+            let started = std::time::Instant::now();
+            let placed = crate::place::evaluated(&req.doc, &program, t, &req.vectors)?;
+            let items = deep_canvas_vector::lower_items(
+                &placed,
+                &req.vectors,
+                deep_canvas_vector::Write::Honest,
+            );
+            let report =
+                scene::path_report(&req.doc, &items, (palette, ty), &req.item, req.planted)
+                    .map_err(|r| refused(r.code, &r.path))?
+                    .ok_or_else(|| refused("ref_unresolved", &format!("items/{}", req.item)))?;
+            let rebuilt = built.insert(report.digest);
+            let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let subpaths: Vec<Value> = report
+                .placed
+                .iter()
+                .flat_map(|v| subpaths_of(v, [0.0, 0.0]))
+                .collect();
+            let mut frame = json!({
+                "t": t,
+                "subpaths": subpaths,
+                "segments": report.segments,
+                "declared": report.declared,
+                "tessellation": report.digest.hex(),
+                "rebuilt": rebuilt,
+            });
+            if let Some(copies) = &report.copies {
+                let lag = report.built.as_ref().map_or(0, |b| b.lag);
+                frame["copies"] = Value::Array(
+                    copies
+                        .iter()
+                        .map(|(m, opacity, k)| {
+                            json!({"transform": m, "opacity": opacity, "t": t - (*k as i64) * lag})
+                        })
+                        .collect(),
+                );
+            }
+            if !report.ends.is_empty() {
+                let mut ends = Map::new();
+                for h in &report.ends {
+                    ends.insert(
+                        h.at.to_string(),
+                        json!({"kind": h.kind, "tip": h.tip, "angle": h.angle, "length": h.length, "width": h.width}),
+                    );
+                }
+                frame["ends"] = Value::Object(ends);
+            }
+            if !req.anchors.is_empty() {
+                let whole: Vec<deep_canvas_marks::path::Verb> =
+                    report.placed.iter().flatten().copied().collect();
+                let mut anchors = Map::new();
+                for name in &req.anchors {
+                    let value = if name == "#length" {
+                        json!(deep_canvas_marks::pathops::length(&whole))
+                    } else if let Some(f) = name
+                        .strip_prefix("#at:")
+                        .and_then(|f| f.parse::<f64>().ok())
+                    {
+                        match deep_canvas_marks::pathops::at(&whole, f) {
+                            Some((p, angle)) => json!({"point": p, "angle": angle}),
+                            None => Value::Null,
+                        }
+                    } else {
+                        Value::Null
+                    };
+                    anchors.insert(name.clone(), value);
+                }
+                frame["anchors"] = Value::Object(anchors);
+            }
+            if !report.columns.is_empty() {
+                frame["columns"] = json!(report.columns);
+            }
+            if req.timing {
+                frame["build_ms"] = json!(if rebuilt { ms } else { 0.0 });
+            }
+            frames.push(frame);
+        }
+        Ok(json!({"ok": true, "frames": frames}))
+    };
+    match run() {
+        Ok(v) | Err(v) => v,
+    }
+}
