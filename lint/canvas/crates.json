@@ -91,5 +91,8 @@
   "kurbo": { "version": "0.13.1", "class": "display only", "why": "Curves and affine transforms for vello and glyph outlines; its libm calls feed drawn pixels only." },
   "euclid": { "version": "0.22.14", "class": "display only", "why": "Geometry types under guillotiere and kurbo; feeds the atlas's placement and drawn pixels only." },
   "polycool": { "version": "0.4.0", "class": "display only", "why": "Polynomial roots for kurbo's curve math; feeds drawn pixels only." },
-  "num-traits": { "version": "0.2.19", "class": "display only", "why": "Numeric traits euclid's geometry is generic over; feeds drawn pixels only." }
+  "num-traits": { "version": "0.2.19", "class": "display only", "why": "Numeric traits euclid's geometry is generic over; feeds drawn pixels only." },
+  "wasmparser": { "version": "0.258.3", "class": "no float math", "why": "The sandbox module's subset check and the rewrite's reader (#238): decodes and validates WebAssembly, holding a float constant as its bits and computing none." },
+  "wasm-encoder": { "version": "0.258.3", "class": "no float math", "why": "Writes the sandbox module's rewritten program (#238): encodes instructions and sections, a float constant as its bits; integer code only." },
+  "leb128fmt": { "version": "0.1.0", "class": "no float math", "why": "LEB128 integers in wasm-encoder's output; integer code only." }
 }
