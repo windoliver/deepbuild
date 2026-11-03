@@ -42,7 +42,7 @@ pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
 pub use requires::{derived_kinds, write_required_kinds};
-pub use rules::STATUS_ROLE;
+pub use rules::{shown_inside, STATUS_ROLE};
 pub use shape::{canonical, canonical_in, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.

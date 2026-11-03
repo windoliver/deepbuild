@@ -1,0 +1,10 @@
+{
+  "id": "test/hosted",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["run_as_you"] },
+  "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] },
+  "panels": [{ "name": "terminals", "area": "tab" }],
+  "actions": ["ext.hosted.open", "ext.hosted.tabs", "ext.hosted.read", "ext.hosted.close"],
+  "requires": { "preview": ["deep.registerAction", "deep.terminal.close", "deep.terminal.list", "deep.terminal.open", "deep.terminal.read"] }
+}

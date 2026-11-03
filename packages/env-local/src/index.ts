@@ -7,7 +7,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants, copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import http from 'node:http';
+import type { ClientRequest } from 'node:http';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -180,10 +180,11 @@ export function newRun(ms = Date.now()): string {
   return `run:${time}${Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('')}`;
 }
 
-/** One GET of the health URL: its status, or why it got none. */
-function get(url: string): Promise<{ status: number | null; error?: string }> {
+/** One GET of the health URL: its status, or why it got none. node:http loads with a stack's first check, not with the hub. */
+async function get(url: string): Promise<{ status: number | null; error?: string }> {
+  const http = await import('node:http');
   return new Promise((resolve) => {
-    let req: http.ClientRequest;
+    let req: ClientRequest;
     try {
       req = http.get(url, { timeout: 1000 }, (res) => { res.resume(); resolve({ status: res.statusCode ?? null }); });
     } catch (error) {
