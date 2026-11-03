@@ -39,6 +39,7 @@ import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDire
 import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
+import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { GateRunner, type ClaimCheck } from './gate-runner.js';
@@ -88,6 +89,8 @@ const TURN_GRACE = 100;
 const CURSOR_SAVE = 200;
 /** How long a working session's hooks may go quiet before its transcript's tail is read and, unchanged, it reads unknown. */
 const QUIET_MS = 30_000;
+/** How often the hub checks that the programs its hook entries run are there to run (#993). */
+const HOOK_CHECK_MS = 10 * 60_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
 const CALL_GRACE = 2_000;
 /** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
@@ -421,6 +424,8 @@ export class Core {
   private readonly live = new Map<string, Live>();
   /** The sessions that got their reading for a version past their facts. */
   private readonly versioned = new Set<string>();
+  /** Sessions whose caller name the payload contradicted, each read once (#993). */
+  private readonly miscalled = new Set<string>();
   /** The commits recorded, so one made across two hooks is recorded once. */
   private readonly committed = new Set<string>();
   /** The watch on Claude Code's user settings, and the readings it and the session-start recheck took. */
@@ -485,7 +490,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
@@ -589,6 +594,9 @@ export class Core {
       if (pos > ticked) { ticked = pos; return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
     };
+    // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
+    await this.hookPrograms().catch(() => undefined);
+    this.every('hook-programs', 1000, () => this.hookPrograms());
     if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => {
       const now = { wall: Date.now(), at: this.now() };
       if (now.wall - beat.wall > SLEPT) await asks.away(beat.at, now.at);
@@ -832,6 +840,30 @@ export class Core {
     this.lost = true;
     this.blocked = `BLOCKED: lock lost: ${path} is no longer the file this hub holds locked; stop this hub and start it again`;
   }
+  /**
+   * Checks the programs the hook entries run (#993), when due: the agents a failing program's settings serve have their
+   * gates watch-only, and each of their open sessions reads BLOCKED until a check finds the program again. A session
+   * already reading the same is left as it is, so a restart or the next check appends nothing new.
+   */
+  private async hookPrograms(): Promise<void> {
+    if (this.now() < this.hookCheckDue) return;
+    this.hookCheckDue = this.now() + HOOK_CHECK_MS;
+    const found = unrunnable(this.root.dir);
+    this.cantRun = [...new Set(found.flatMap((u) => RUN_BY[u.agent]))].sort();
+    this.askingSoon();
+    for (const [owner, agents] of Object.entries(RUN_BY)) {
+      const problem = found.filter((u) => u.agent === owner).map(describe).join('; ');
+      const open = (await this.record.raw(`SELECT id, agent, last_seen FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone') AND session_id IS NOT NULL)`, [...agents])) as { id: string; agent: string; last_seen: number | null }[];
+      for (const s of open) {
+        // A reading counts as the session seen, so one quiet for a day reads BLOCKED only if it already did.
+        const quiet = (s.last_seen ?? 0) < this.now() - DAY;
+        const [last] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [s.id, `${CANT_RUN}%`, `${CAN_RUN}%`])) as { text: string }[];
+        if (problem && quiet && !last?.text.startsWith(CANT_RUN)) continue;
+        const text = problem ? `${CANT_RUN}, so this session's gates are watch-only: ${problem}. Run \`deep setup\` to point them at a deep-hook that runs.` : last?.text.startsWith(CANT_RUN) ? `${CAN_RUN}: this session's gates hold again.` : undefined;
+        if (text && text !== last?.text) await this.queue(() => this.appendReading(s.id, s.agent, text));
+      }
+    }
+  }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {
     const ts = this.now();
@@ -951,6 +983,10 @@ export class Core {
     if (!meta.version && meta.transcript) {
       const version = versionOf(meta.transcript);
       if (version) Object.assign(meta, { version, ...(coveredBy(meta.agent, version) ? {} : { watchOnly: true }) });
+    }
+    if (meta.caller && meta.session && !this.miscalled.has(meta.session)) {
+      this.miscalled.add(meta.session);
+      await this.appendReading(meta.session, meta.agent, meta.caller).catch(() => undefined);
     }
     const verified = meta.watchOnly ? false : await this.verify(meta);
     if (meta.watchOnly && meta.session && !this.versioned.has(meta.session)) {
@@ -2066,6 +2102,10 @@ export class Core {
   }
   private askingQueued = false;
   private askingSent = '';
+  /** The agents whose hook entries run a program that can't run, as the last check found (#993): their gates are watch-only. */
+  private cantRun: string[] = [];
+  /** When the next check of the hook programs is due, on the hub's clock (#993). */
+  private hookCheckDue = 0;
   /**
    * Sends the event loop the sessions with an ask still to deliver, and those whose next stop the stop rule would read
    * as a claim, so it is held for its line (#83); once per turn of appends, when it changed.
@@ -2091,10 +2131,10 @@ export class Core {
     const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
     // A session whose cut-off turn started a send with no recorded end has its tool calls held for the gate (#85).
     const resend = [...this.unknownSends].filter(([, sends]) => sends.size).map(([id]) => id).sort();
-    const key = `${sessions.join(' ')}|${judged.join(' ')}|${resend.join(' ')}`;
+    const key = `${sessions.join(' ')}|${judged.join(' ')}|${resend.join(' ')}|${this.cantRun.join(' ')}`;
     if (key === this.askingSent) return;
     this.askingSent = key;
-    this.asking(sessions, judged, resend);
+    this.asking(sessions, judged, resend, this.cantRun);
   }
 
   /**

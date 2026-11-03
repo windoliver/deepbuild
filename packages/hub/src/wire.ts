@@ -93,6 +93,8 @@ export interface HookMeta {
   denied?: string;
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
+  /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
+  caller?: string;
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
