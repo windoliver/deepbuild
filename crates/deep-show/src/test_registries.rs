@@ -30,6 +30,19 @@ pub fn modules() -> Vec<Module> {
     out.push(deep_canvas_test_modules::registries::mark());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
+    // Issue #412's test canvas modules.
+    #[cfg(feature = "test-preview")]
+    out.push(deep_canvas_test_modules::kinds::preview());
+    #[cfg(feature = "test-cue")]
+    out.push(deep_canvas_test_modules::kinds::cue());
+    #[cfg(feature = "test-cue-span")]
+    out.push(deep_canvas_test_modules::kinds::cue_span());
+    #[cfg(feature = "test-ring-a")]
+    out.push(deep_canvas_test_modules::kinds::ring_a());
+    #[cfg(feature = "test-ring-b")]
+    out.push(deep_canvas_test_modules::kinds::ring_b());
+    #[cfg(feature = "test-sheet-wordy")]
+    out.push(deep_canvas_test_modules::kinds::wordy());
     #[cfg(feature = "test-mark-dot-9")]
     out.push(deep_canvas_test_modules::registries::mark_dot_9());
     #[cfg(feature = "test-mark-no-planted")]

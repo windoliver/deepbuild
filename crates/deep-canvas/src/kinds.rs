@@ -72,6 +72,9 @@ pub struct Migration {
     pub from: u32,
     pub to: u32,
     pub renames: Vec<Rename>,
+    /// The params the next major retires, each dropped from the params it migrates (#412: the
+    /// retirement record `deep kinds --diff` reads).
+    pub retires: Vec<&'static str>,
     /// A canvas module's kind may also migrate by a pure function over the params, run after the
     /// renames (Migration: `kind.migrate`).
     pub map: Option<MigrateFn>,
@@ -149,6 +152,9 @@ pub fn migrate_step(step: &Migration, params: &mut Map<String, Value>) {
         if let Some(value) = params.shift_remove(rename.from) {
             params.insert(rename.to.to_string(), value);
         }
+    }
+    for retired in &step.retires {
+        params.shift_remove(*retired);
     }
     if let Some(map) = step.map {
         map(params);
@@ -434,6 +440,7 @@ fn build() -> Registry {
                     from: "w",
                     to: "width",
                 }],
+                retires: vec![],
                 map: None,
             },
             Migration {
@@ -443,6 +450,7 @@ fn build() -> Registry {
                     from: "h",
                     to: "height",
                 }],
+                retires: vec![],
                 map: None,
             },
         ],
