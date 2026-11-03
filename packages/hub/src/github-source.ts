@@ -65,22 +65,27 @@ export function criteriaOf(body: string): string[] {
   return [...m[1]!.matchAll(/^\s*- \[[ xX]\] (.+)$/gm)].map(([, text]) => text!.trim()).filter(Boolean);
 }
 
+/** Every page of a list the API gives, following `link: rel="next"`; undefined when any page fails, so a read cut short is never taken as complete. */
+async function pages(fetch: Fetch, path: string): Promise<Obj[] | undefined> {
+  const out: Obj[] = [];
+  for (let page = 1; ; page++) {
+    const r = await fetch(path, page);
+    if (r.status !== 200 || !Array.isArray(r.body)) return undefined;
+    out.push(...r.body.filter(isObj));
+    if (!/<[^>]+>;\s*rel="next"/.test(r.headers.link ?? '')) return out;
+  }
+}
 /** The repo's membership as one complete read: its owner and every collaborator, or incomplete when any page failed. */
 async function membership(fetch: Fetch, owner: string, repo: string): Promise<{ owner: string | null; members: Map<string, { admin: boolean; bot: boolean }>; complete: boolean }> {
   const about = await fetch(`/repos/${owner}/${repo}`, 1);
   const login = about.status === 200 && isObj(about.body) && isObj(about.body.owner) && typeof about.body.owner.login === 'string' ? about.body.owner.login : null;
   const members = new Map<string, { admin: boolean; bot: boolean }>();
-  let complete = true;
-  for (let page = 1; ; page++) {
-    const r = await fetch(`/repos/${owner}/${repo}/collaborators`, page);
-    if (r.status !== 200 || !Array.isArray(r.body)) { complete = false; break; }
-    for (const c of r.body) {
-      if (!isObj(c) || typeof c.login !== 'string') continue;
-      members.set(c.login, { admin: c.role_name === 'admin' || (isObj(c.permissions) && c.permissions.admin === true), bot: c.type === 'Bot' });
-    }
-    if (!/<[^>]+>;\s*rel="next"/.test(r.headers.link ?? '')) break;
+  const collaborators = await pages(fetch, `/repos/${owner}/${repo}/collaborators`);
+  for (const c of collaborators ?? []) {
+    if (typeof c.login !== 'string') continue;
+    members.set(c.login, { admin: c.role_name === 'admin' || (isObj(c.permissions) && c.permissions.admin === true), bot: c.type === 'Bot' });
   }
-  return { owner: login, members, complete };
+  return { owner: login, members, complete: collaborators !== undefined };
 }
 
 /**
@@ -91,7 +96,7 @@ async function membership(fetch: Fetch, owner: string, repo: string): Promise<{ 
 export async function readIssue(fetch: Fetch, owner: string, repo: string, n: number, plant: Plant | undefined): Promise<Reading[] | undefined> {
   const issue = await fetch(`/repos/${owner}/${repo}/issues/${n}`, 1);
   if (issue.status !== 200 || !isObj(issue.body)) return undefined;
-  const comments = await fetch(`/repos/${owner}/${repo}/issues/${n}/comments`, 1);
+  const comments = await pages(fetch, `/repos/${owner}/${repo}/issues/${n}/comments`);
   const who = await membership(fetch, owner, repo);
   const authorOf = (user: unknown, text: string): Author => {
     const login = isObj(user) && typeof user.login === 'string' ? user.login : 'unknown';
@@ -113,7 +118,7 @@ export async function readIssue(fetch: Fetch, owner: string, repo: string, n: nu
     source_id: id, link, title: typeof issue.body.title === 'string' ? issue.body.title : id, body, criteria: criteriaOf(body),
     authors: [authorOf(issue.body.user, body)], updated: typeof issue.body.updated_at === 'string' ? issue.body.updated_at : '',
   }];
-  for (const c of comments.status === 200 && Array.isArray(comments.body) ? comments.body.filter(isObj) : []) {
+  for (const c of comments ?? []) {
     const text = typeof c.body === 'string' ? c.body : '';
     readings.push({
       source_id: `${id}.c${String(c.id)}`, link: typeof c.html_url === 'string' ? c.html_url : `${link}#issuecomment-${String(c.id)}`, title: `Comment on ${id}`, body: text, criteria: [],
