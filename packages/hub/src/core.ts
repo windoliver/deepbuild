@@ -5108,7 +5108,7 @@ export class Core {
     await this.appendCore('run.finished', {
       run: run.run, outcome, tests_run: counts.tests_run, passed: counts.passed, runs: 1, evidence, check: run.check, assertion: counts.assertion, expected: null, actual: null, step: null,
       points_to: counts.points_to, findings, environment: `${process.platform}-${process.arch}`, ...(key ? { key: { ...key } } : {}),
-    }, { subject: run.run });
+    }, { subject: run.run, v: 2 });
     // The journal keeps the run until its finish is durable, so a cut before then reruns it.
     await this.record.sync();
     this.writeJournal((runs) => { delete runs[run.run]; });

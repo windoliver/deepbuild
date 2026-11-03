@@ -1,0 +1,40 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "run.finished",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "outcome": "failed",
+    "tests_run": 29,
+    "passed": 17,
+    "runs": 1,
+    "evidence": [
+      "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    ],
+    "check": "contracts.unit",
+    "assertion": "seq refused",
+    "expected": "refused",
+    "actual": "accepted",
+    "step": null,
+    "points_to": "packages/contracts/src/validate.ts:12",
+    "findings": [],
+    "environment": "node-25.7.0/darwin-arm64",
+    "key": {
+      "id": "3b2c8f0d6a1e4b7c9d5f2a8e6c4b1d7f0a3e5c9b2d8f6a4c1e7b3d5f9a2c6e80",
+      "stem": "7e1d4a9c2f6b8e3d5a0c7f2b9e4d6a1c8f3b5e7d2a9c4f6b1e8d3a5c7f0b2e94",
+      "paths": [
+        ".deepbuild/checks/seq-number.sh",
+        "packages/contracts/src/validate.ts"
+      ],
+      "claim": "claim:01K74G3A5C7E9G1J3M5P7R9T1W",
+      "session": "session:01K74FKZVK8Q2X5R7M3N9P4T60",
+      "base": false,
+      "withheld": false,
+      "plain": true
+    }
+  }
+}
