@@ -11,6 +11,10 @@ rust-version = "1.95"
 # which then carries no test support.
 [features]
 panel-check = ["gpui-kit/test-support"]
+# Issue #1141's wrong programs, in no shipped build: a fold that drops every ask.moot, and a reader that keeps every
+# event and reads the record by walking them all.
+plant-drops-close = []
+plant-walks-events = []
 
 # Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
 # milestone M0 and unpublished. No `webview` feature: the app has no web view.
