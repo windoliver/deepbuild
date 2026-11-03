@@ -132,9 +132,11 @@ const SESSION_KIND = (name: string) => ({ name, match: 'exact', cap: 1000, coold
 /** env-local's resource kinds, as its manifest declares them in the kernel's lease table (#237). */
 export const leaseKinds = [PORT_KIND, COMPOSE_KIND, ...SESSION_KINDS.map(SESSION_KIND)];
 const HOSTS = ['127.0.0.1', '0.0.0.0', '::'];
+/** lsof, where the platform ships it: /usr/sbin on macOS, /usr/bin on Linux. */
+const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof';
 /** Whether lsof shows no listener on the port, on any address; a failed lsof is not proof, so not free. */
 const unlisted = (port: number): Promise<boolean> => new Promise((resolve) => {
-  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+  execFile(LSOF, ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
     // lsof exits 1 with no output when nothing matches.
     resolve(stdout.trim() === '' && (!error || ((error as { code?: unknown }).code === 1 && stderr.trim() === '')));
   });
