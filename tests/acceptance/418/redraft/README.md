@@ -1,5 +1,7 @@
 # #418.186ac2bb kit redraft: the shipped look module's `look@1`
 
+Swapped in with the owner's approval on Nov 3, 2026 for the first test of `../kit.test.ts`, which is deleted there (`DISPUTE.md`). The planted side stays in `../kit.test.ts`.
+
 This is a blind redraft of the shipped side of the last Scope item of #418. The item says: "The look module's interface `look@1` (#185), apart from the look asset of that name: its manifest names the implementation, and its conformance kit is every part of the canvas kit (#138) on this module's fixtures, with no behavior part, so it seals only bit, canonical implementations".
 
 The test is in `kit-shipped-redraft.test.ts`. It is one test, `#418.186ac2bb …`, and it imports its generic tools from `../../185/redraft/helpers.ts`, which is already at the base: a cargo build per feature set, `deep-show run`, and the strict reply readers. The planted implementation's side of the item is not covered here.

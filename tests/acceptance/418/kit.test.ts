@@ -16,37 +16,19 @@ import {
   interfacesOf, kitCall, kitFailures, kitModule, releaseBuild, showRun, shown, startupRefusal, useOut, useShowBuilds, type JsonObject, type ShowFeature,
 } from './helpers.ts';
 
-const SHIPPED: ShowFeature[] = ['full'];
 const PLANTED: ShowFeature[] = ['full', 'test-look-finish-off'];
 const LOOK = 'look@1';
-const builds = useShowBuilds([SHIPPED, PLANTED]);
+const builds = useShowBuilds([PLANTED]);
 const evidence = useOut();
 let dir = '';
 beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'deep-418-release-')); });
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); dir = ''; });
 
 describe('#418.186ac2bb the look module seals only bit, canonical implementations of look@1, by the whole canvas kit', () => {
-  it('#418.186ac2bb look@1 names the shipped implementation, bit and canonical, with no behavior part and every kit part, and the shipped look passes that kit on its own fixtures', () => {
-    const [schedule, report] = showRun(builds.bin(SHIPPED), evidence(), [{ call: 'schedule' }, kitCall({ modules: ['look'] })]);
-    const all = interfacesOf(schedule!);
-    const i = all[LOOK];
-    expect(i, `the plan names ${LOOK}; it names ${Object.keys(all).join(', ')}`).toBeDefined();
-    expect(i!.module, `${LOOK} is the look module's interface`).toBe('look');
-    expect(i!.implementation.name.length, 'its manifest names the implementation').toBeGreaterThan(0);
-    expect([i!.implementation.equivalence, i!.implementation.state], 'the shipped implementation is bit and canonical').toEqual(['bit', 'canonical']);
-    expect(i!.reference, 'the shipped implementation is look@1\'s reference').toBe(i!.implementation.name);
-    expect(i!.behavior, `${LOOK} holds no behavior part`).toBe('none');
-    const every = new Set(Object.values(all).flatMap((x) => x.kit.filter((p) => p !== x.behavior)));
-    const missing = [...every].filter((p) => !i!.kit.includes(p));
-    expect(missing, `${LOOK}'s kit is every part of the canvas kit (${[...every].join(', ')})`).toEqual([]);
-
-    const look = kitModule(report!, 'look');
-    expect(look.verdict, `the shipped look passes its kit: ${shown(kitFailures(look).slice(0, 5) as JsonObject[])}`).toBe('PASS');
-    expect(new Set(look.parts.map((p) => p.part)), `the kit ran ${LOOK}'s parts on the look module`).toEqual(new Set(i!.kit));
-    const fixtures = look.parts.flatMap((p) => p.cases.flatMap((c) => (c.fixture ? [c.fixture] : [])));
-    expect(fixtures.length, 'the kit ran the look module\'s fixtures').toBeGreaterThan(0);
-    expect(fixtures.filter((f) => !f.startsWith('parity/look/')), 'every fixture it ran is the look module\'s own (parity/look/…)').toEqual([]);
-  }, 7_200_000);
+  // "look@1 names the shipped implementation, bit and canonical, with no behavior part and every kit part, and the
+  // shipped look passes that kit on its own fixtures" is proven by the blind redraft redraft/kit-shipped-redraft.test.ts,
+  // swapped in with the owner's approval: this draft counted sandbox@1's own `sandbox` part as #138's and needed the kit
+  // to report parts with nothing to run on look (redraft/DISPUTE.md).
 
   it('#418.186ac2bb a planted implementation declared bit whose finish at identity changes one pixel fails the kit, naming the fixture and the first field, and a release build refuses it', () => {
     const bin = builds.bin(PLANTED);
