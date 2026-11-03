@@ -393,6 +393,28 @@ pub fn verbs_of(subs: &[Sub]) -> Vec<Verb> {
     out
 }
 
+/// The verbs traced the other way: each sub-path from its end back to its start, so a closed
+/// outline winds the opposite way and cuts a hole from one it overlays under the non-zero rule.
+pub fn reversed(verbs: &[Verb]) -> Vec<Verb> {
+    let subs: Vec<Sub> = subs_of(verbs)
+        .into_iter()
+        .map(|s| Sub {
+            segs: s
+                .segs
+                .iter()
+                .rev()
+                .map(|seg| match *seg {
+                    Seg::Line(a, b) => Seg::Line(b, a),
+                    Seg::Quad(a, c, b) => Seg::Quad(b, c, a),
+                    Seg::Cubic(a, c1, c2, b) => Seg::Cubic(b, c2, c1, a),
+                })
+                .collect(),
+            closed: s.closed,
+        })
+        .collect();
+    verbs_of(&subs)
+}
+
 /// The segments the verbs hold.
 pub fn segments(verbs: &[Verb]) -> u64 {
     subs_of(verbs).iter().map(|s| s.segs.len() as u64).sum()

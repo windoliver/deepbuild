@@ -4040,9 +4040,10 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     }))
 }
 
-/// A filled outline with its shade: the fill, then the shade (a flat of the shape moved away from
-/// the light), the highlight (toward it) and the rim (a band inside the edge), each clipped to the
-/// shape, then the stroke. Any other mark draws as it is.
+/// A filled outline with its shade: the fill, then the shade (the shape less a copy of it moved
+/// toward the light, so a crescent of shade sits on the far side), the highlight (the shape less a
+/// copy moved away from the light: a crescent on the near side) and the rim (a band inside the
+/// edge), each clipped to the shape, then the stroke. Any other mark draws as it is.
 fn shaded(
     id: &str,
     mark: Mark,
@@ -4095,9 +4096,12 @@ fn shaded(
             scopes: inside.clone(),
         })
     };
-    let moved = |by: [f64; 2]| -> Vec<Verb> {
+    // The shape with a copy of itself moved by `by` cut out of it: the copy traced the other way
+    // winds against the shape, so under the non-zero rule their overlap is a hole and what shows,
+    // inside the clip, is the crescent the move uncovers.
+    let less_moved = |by: [f64; 2]| -> Vec<Verb> {
         let m = |p: [f64; 2]| [p[0] + by[0], p[1] + by[1]];
-        verbs
+        let copy: Vec<Verb> = verbs
             .iter()
             .map(|v| match *v {
                 Verb::Move(p) => Verb::Move(m(p)),
@@ -4106,7 +4110,10 @@ fn shaded(
                 Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
                 Verb::Close => Verb::Close,
             })
-            .collect()
+            .collect();
+        let mut out = verbs.clone();
+        out.extend(pathops::reversed(&copy));
+        out
     };
     let mut out = vec![plain(Mark::Shape {
         item: item.clone(),
@@ -4116,14 +4123,14 @@ fn shaded(
     })];
     out.push(clipped(Mark::Shape {
         item: format!("{id}#shade"),
-        verbs: moved(shade.away(shade.offset)),
+        verbs: less_moved(shade.away(-shade.offset)),
         fill: Some((Fill::Solid(shade.color), shade.opacity)),
         stroke: None,
     }));
     if let Some((color, offset)) = shade.highlight {
         out.push(clipped(Mark::Shape {
             item: format!("{id}#highlight"),
-            verbs: moved(shade.away(-offset)),
+            verbs: less_moved(shade.away(offset)),
             fill: Some((Fill::Solid(color), shade.opacity)),
             stroke: None,
         }));
@@ -4754,6 +4761,79 @@ mod tests {
         by_path["items"]["shot"]["params"]["asset"] = json!("/tmp/shot.png");
         assert_eq!(draw(&by_path).unwrap_err().code, "bad_asset");
     }
+    /// The non-zero winding of `verbs` about `p`, from its sub-paths flattened at 64 points a
+    /// segment.
+    fn winding(verbs: &[Verb], p: [f64; 2]) -> i32 {
+        let mut w = 0;
+        for sub in pathops::subs_of(verbs) {
+            let mut pts: Vec<[f64; 2]> = Vec::new();
+            for seg in &sub.segs {
+                for i in 0..64 {
+                    pts.push(seg.at(i as f64 / 64.0));
+                }
+            }
+            let n = pts.len();
+            for i in 0..n {
+                let (a, b) = (pts[i], pts[(i + 1) % n]);
+                if a[1] <= p[1] {
+                    if b[1] > p[1] && (b[0] - a[0]) * (p[1] - a[1]) > (p[0] - a[0]) * (b[1] - a[1])
+                    {
+                        w += 1;
+                    }
+                } else if b[1] <= p[1]
+                    && (b[0] - a[0]) * (p[1] - a[1]) < (p[0] - a[0]) * (b[1] - a[1])
+                {
+                    w -= 1;
+                }
+            }
+        }
+        w
+    }
+
+    #[test]
+    fn a_crescent_shade_sits_on_the_far_side_and_its_highlight_on_the_near_side() {
+        // #160, Paint: shade: a 40 u circle lit from the left (light 180°) shaded by 8 u with a
+        // 10 u highlight. The shade covers a point near the right edge and none near the left
+        // edge; the highlight the other way round; the middle keeps the fill.
+        let doc = board(json!({
+            "ball": {"kind": "circle@1", "layer": "main", "order": "a0", "params": {
+                "center": [100, 50], "r": 40,
+                "paint": {"fill": {"role": "ink"}, "shade": {"kind": "crescent", "role": "ink", "offset": 8, "light": 180,
+                    "highlight": {"role": "ground", "offset": 10}}}}},
+        }));
+        let f = draw(&doc).unwrap();
+        let verbs_of = |item: &str| -> Vec<Verb> {
+            f.layers[0]
+                .marks
+                .iter()
+                .find_map(|m| match &m.mark {
+                    Mark::Shape { item: i, verbs, .. } if i == item => Some(verbs.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{item} is drawn"))
+        };
+        let (shade, highlight) = (verbs_of("ball#shade"), verbs_of("ball#highlight"));
+        let (far, near, middle) = ([136.0, 50.0], [64.0, 50.0], [100.0, 50.0]);
+        assert_ne!(winding(&shade, far), 0, "the shade covers the far side");
+        assert_eq!(winding(&shade, near), 0, "the shade leaves the near side");
+        assert_eq!(winding(&shade, middle), 0, "the shade leaves the middle");
+        assert_ne!(
+            winding(&highlight, near),
+            0,
+            "the highlight covers the near side"
+        );
+        assert_eq!(
+            winding(&highlight, far),
+            0,
+            "the highlight leaves the far side"
+        );
+        assert_eq!(
+            winding(&highlight, middle),
+            0,
+            "the highlight leaves the middle"
+        );
+    }
+
     #[test]
     fn marks_draw_by_z_then_by_the_tree_not_by_flat_order_keys() {
         // #160: a group's child draws with its group, after an earlier top-level item, whatever
