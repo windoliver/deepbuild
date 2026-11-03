@@ -104,8 +104,15 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         Some(Planted::SectorsSourceOver) => scene::Planted::SectorsSourceOver,
         _ => scene::Planted::None,
     };
-    let frame = scene::frame_planted(&flat_doc, &flat, &palette, &record, 1.0, planted)
-        .map_err(|r| refused(r.code, r.path))?;
+    let frame = scene::frame_planted(
+        &flat_doc,
+        &flat,
+        (&palette, &scene::Type::default()),
+        &record,
+        1.0,
+        planted,
+    )
+    .map_err(|r| refused(r.code, r.path))?;
     let layers = frame
         .layers
         .iter()
@@ -542,14 +549,19 @@ mod linear {
     }
 }
 
+/// The marks a 2D surface draws, which the film's frames replace (#417).
+pub(crate) type Marks2 = Arc<Mutex<Arc<Vec<Arc<Drawn>>>>>;
+
 /// A 2D writer layer drawn by Vello GPU into a GPU surface's slot, one pass a frame.
 struct Module2 {
-    marks: Arc<Vec<Arc<Drawn>>>,
+    marks: Marks2,
     vello: Option<Arc<Mutex<Vello2d>>>,
     built: Option<u64>,
     options: Options,
     /// The last frame's refusal, if Vello GPU refused to draw it.
     error: Arc<Mutex<Option<Value>>>,
+    /// When the film's frame finished encoding Vello GPU's passes (#417).
+    encoded: Option<crate::film::Encoded>,
 }
 
 impl RenderModule for Module2 {
@@ -589,7 +601,8 @@ impl RenderModule for Module2 {
             return Vec::new();
         };
         let (dev, queue) = (device.device.clone(), device.queue.clone());
-        let (marks, options, error) = (self.marks.clone(), self.options, self.error.clone());
+        let marks = self.marks.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let (options, error, encoded) = (self.options, self.error.clone(), self.encoded.clone());
         let target = target.clone();
         let job: Job = Box::new(move |encoder| {
             let mut v = vello.lock().unwrap_or_else(|e| e.into_inner());
@@ -602,6 +615,9 @@ impl RenderModule for Module2 {
                 &target.view,
                 options,
             );
+            if let Some(at) = &encoded {
+                *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+            }
             *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
         });
         vec![("vello2d".into(), job)]
@@ -609,18 +625,19 @@ impl RenderModule for Module2 {
 }
 
 /// Where a 2D surface's last frame leaves Vello GPU's refusal, if it refused.
-type Refusal = Arc<Mutex<Option<Value>>>;
+pub(crate) type Refusal = Arc<Mutex<Option<Value>>>;
 
 /// A 2D layer's GPU surface: a view of [`Module2`] on the render thread, its UI side watched for
-/// GPUI's surface reports.
-fn open2(
+/// GPUI's surface reports; with `encoded`, when each frame's Vello GPU passes were encoded (#417).
+pub(crate) fn open2(
     app: &App,
-    marks: Vec<Arc<Drawn>>,
+    marks: Marks2,
     size: [u32; 2],
+    encoded: Option<crate::film::Encoded>,
 ) -> Result<(deep_gpu::view::Ui, Refusal), Value> {
     let error = Arc::new(Mutex::new(None));
     let module = Module2 {
-        marks: Arc::new(marks),
+        marks,
         vello: None,
         built: None,
         options: Options {
@@ -628,6 +645,7 @@ fn open2(
             ..Options::default()
         },
         error: error.clone(),
+        encoded,
     };
     let path = app.decision.path;
     let ui = app
@@ -670,7 +688,7 @@ fn render2(app: &App, n: u64) -> Result<(usize, Duration), Value> {
         .map_err(|e| refused("render_failed", e))
 }
 
-fn close2(app: &mut App, ui: &deep_gpu::view::Ui) {
+pub(crate) fn close2(app: &mut App, ui: &deep_gpu::view::Ui) {
     deep_app::gpu_view::unwatch(ui);
     if let Some(win) = app.window.as_ref() {
         let mut p = win.paint.borrow_mut();
@@ -690,7 +708,7 @@ fn picture_of(image: &image::RgbaImage) -> Arc<gpui_kit::RenderImage> {
 }
 
 /// The window shows the frame `n` the 2D surface rendered, presenting until it does.
-fn show(app: &mut App, n: u64) -> Result<(), Value> {
+pub(crate) fn show(app: &mut App, n: u64) -> Result<(), Value> {
     let started = Instant::now();
     loop {
         let win = app.window.as_ref().expect("opened");
@@ -747,7 +765,12 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
         over.push(picture_of(&status_picture(app, call, &ev)?));
         app.window(ev.size)?;
         let opened = match surface {
-            Some(marks) => Some(open2(app, marks, ev.size)?),
+            Some(marks) => Some(open2(
+                app,
+                Arc::new(Mutex::new(Arc::new(marks))),
+                ev.size,
+                None,
+            )?),
             None => None,
         };
         {
@@ -851,7 +874,12 @@ pub fn spike2d(app: &mut App, out: &str, call: &Value) -> Value {
             p.ui = None;
         }
         let baseline = frames::baseline_ns(app);
-        let (ui, error) = open2(app, l.marks.clone(), ev.size)?;
+        let (ui, error) = open2(
+            app,
+            Arc::new(Mutex::new(Arc::new(l.marks.clone()))),
+            ev.size,
+            None,
+        )?;
         app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
         ui.record(false);
         ui.take_record();

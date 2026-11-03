@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The canvas's one text shaper (#390): parley over HarfRust and skrifa on the bundled fonts only, the glyph atlas rasterized by Vello CPU at the scalar level, and the fit check; the shaper's UAX #14, #29 and #9 readings (#381); and one shaped-run cache per process, with long text shaped on the render worker (#856). deep-canvas-marks, deep-canvas-scene3d, deep-text-gpui and the render binaries call it; the `deep-text` binary is its JSON-lines proof surface.
+The canvas's one text shaper (#390): parley over HarfRust and skrifa on the bundled fonts only, the glyph atlas rasterized by Vello CPU at the scalar level, and the fit check; a family's fallback families and the graphemes none can draw (#417); the shaper's UAX #14, #29 and #9 readings (#381); and one shaped-run cache per process, with long text shaped on the render worker (#856). deep-canvas-marks, deep-canvas-scene3d, deep-text-gpui and the render binaries call it; the `deep-text` binary is its JSON-lines proof surface.
 
 ## Where new code goes
 
@@ -18,7 +18,7 @@ The bottom of the canvas text stack: no workspace crate but deep-canvas-seams (t
 
 ## Deviations
 
-- `fonts`: Inter and JetBrains Mono binaries checked in, the only fonts the canvas's text uses on every platform, each with its SIL Open Font License file beside it.
+- `fonts`: Inter, JetBrains Mono, and (#417) STIX Two Math, Caveat, Noto Sans SC, Noto Sans Arabic and Noto Emoji binaries checked in, the only fonts the canvas's text uses on every platform, each with its SIL Open Font License file beside it; the last three are the looks' fallback faces.
 - `Cargo.toml`: fearless_simd is listed only for its `force_support_fallback` feature, so the atlas rasterizes at the scalar level and every platform computes the same alpha; icu_segmenter's `unstable` feature gives UAX #14 at Unicode 17.0, which parley's stable segmenter lacks.
 - `src/lib.rs`: `FONTS` reads the `test-fonts-next` feature, a build of the same fonts backend at its next version for #140's test that a new version misses the caches it keyed; no shipped build has it. The canvas lint reports the feature predicate.
 - `src/cache.rs`: the `Planted` caches are #856's wrong programs for the acceptance suite, each set only by the binary's `--planted`.

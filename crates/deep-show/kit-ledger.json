@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "019b358fe4f0928c9dd36181ed1889bbe91bfd4b037a4832e2197555337bec43",
+    "digest": "bb4368a4338e8a00ca9860b9f8db203e7143d4479982b2638c5054245cdc7daf",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -34,7 +34,7 @@
   },
   "data": {
     "version": "1.0.0",
-    "digest": "a5b023a5583874792cf8c0fce3016fcf53166dc51cfdf632bb705314f97fc0c2",
+    "digest": "4bdd0190573c6a2fd523ce32e4fe42192c0199e4448e5896f9b99b5653a1e5ca",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -98,7 +98,7 @@
   },
   "marks2d": {
     "version": "1.0.0",
-    "digest": "437f76d546681c933724cee9c189db0d9bbf6cb75088f1f5b2e92f90ee94b268",
+    "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -142,6 +142,17 @@
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"
+    }
+  },
+  "sandbox": {
+    "version": "1.0.0",
+    "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS",
+      "sandbox": "PASS"
     }
   },
   "scene3d": {

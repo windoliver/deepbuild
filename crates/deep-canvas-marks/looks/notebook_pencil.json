@@ -1,0 +1,191 @@
+{
+  "id": "notebook_pencil",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "Colored pencil on ruled paper: a cream page with blue rules and a red margin, graphite lines with a gentle wobble and a boil between drawings, hatched fills and a handwriting face; at night the page goes dark and the pencil light.",
+  "palette": {
+    "cream": "#fbf7ea",
+    "graphite": "#2e3a59",
+    "hatch": "#c6d4ea",
+    "pink": "#e35d9c",
+    "rule_blue": "#a9c3e8",
+    "margin_red": "#e8a3a3",
+    "night_paper": "#101318",
+    "chalk_white": "#ece6d2",
+    "night_hatch": "#2d3448",
+    "night_pink": "#f28cbe",
+    "night_rule": "#283247",
+    "night_margin": "#4a2a33"
+  },
+  "roles": {
+    "ground": "cream",
+    "ink": "graphite",
+    "muted": "hatch",
+    "accent": "pink",
+    "rule": "rule_blue",
+    "margin": "margin_red",
+    "body": "hand",
+    "math": "math"
+  },
+  "themes": {
+    "light": {},
+    "dark": {
+      "roles": {
+        "ground": "night_paper",
+        "ink": "chalk_white",
+        "muted": "night_hatch",
+        "accent": "night_pink",
+        "rule": "night_rule",
+        "margin": "night_margin"
+      }
+    }
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "lines": {
+    "line": {
+      "kind": "pencil",
+      "width": 2,
+      "wobble_px": 0.8,
+      "segment_px": 12,
+      "passes": 2,
+      "opacity": 0.9
+    }
+  },
+  "fills": {
+    "fill": {
+      "kind": "hatch",
+      "seed": "item"
+    }
+  },
+  "ground": {
+    "kind": "paper",
+    "params": {
+      "role": "ground",
+      "rules": {
+        "pitch": 24,
+        "first": 48,
+        "width": 1,
+        "role": "rule",
+        "opacity": 0.8
+      },
+      "margin": {
+        "x": 56,
+        "width": 1,
+        "role": "margin",
+        "opacity": 0.8
+      },
+      "spine": {
+        "kind": "none"
+      },
+      "grid": null,
+      "seed": "document"
+    }
+  },
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "math": {
+      "family": "STIX Two Math",
+      "file": "STIXTwoMath-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "cjk": {
+      "family": "Noto Sans SC",
+      "file": "NotoSansSC-Regular.otf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "arabic": {
+      "family": "Noto Sans Arabic",
+      "file": "NotoSansArabic-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "emoji": {
+      "family": "Noto Emoji",
+      "file": "NotoEmoji-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "hand": {
+      "family": "Caveat",
+      "file": "Caveat-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "fallback": [
+    "cjk",
+    "arabic",
+    "emoji"
+  ],
+  "time": {
+    "state": {
+      "span": "0.25s",
+      "interp": {
+        "ease": {
+          "name": "in_out_cubic"
+        }
+      }
+    },
+    "boil": {
+      "hz": 8,
+      "amount_px": 0.6,
+      "scope": "lines",
+      "while": "always",
+      "cycle": 3,
+      "seed": "document"
+    }
+  },
+  "finish": []
+}

@@ -9,6 +9,7 @@ pub mod budget;
 pub mod camera;
 pub mod canon;
 pub mod color;
+pub mod columns;
 pub mod cost;
 pub mod document;
 pub mod draw;

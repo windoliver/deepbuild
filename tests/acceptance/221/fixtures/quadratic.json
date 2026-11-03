@@ -1,0 +1,116 @@
+{
+ "format": 1,
+ "id": "rel-221-quadratic",
+ "profile": "figure",
+ "title": "The quadratic formula with labels",
+ "description": "Issue #221 proof: labels placed beside the parts of a quadratic-formula vector@1 item, each by its part (beside quad#part).",
+ "size": [
+  1280,
+  720
+ ],
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a0"
+  }
+ },
+ "items": {
+  "quad": {
+   "id": "quad",
+   "kind": "vector@1",
+   "layer": "main",
+   "name": "Quadratic formula",
+   "order": "a1",
+   "at": {
+    "pos": [
+     400,
+     280,
+     0
+    ]
+   },
+   "params": {
+    "src": "@quadratic.svg",
+    "size": [
+     480,
+     160
+    ],
+    "colors": {
+     "#000000": "ink"
+    },
+    "alt": "x = (-b ± sqrt(b^2 - 4ac)) / 2a"
+   }
+  },
+  "disc-label": {
+   "id": "disc-label",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Discriminant label",
+   "order": "a2",
+   "at": {
+    "place": {
+     "beside": "quad#disc",
+     "side": "n"
+    }
+   },
+   "params": {
+    "text": "discriminant",
+    "font": "body",
+    "size": 16,
+    "paint": {
+     "fill": {
+      "role": "accent"
+     }
+    }
+   }
+  },
+  "pm-label": {
+   "id": "pm-label",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Plus-or-minus label",
+   "order": "a3",
+   "at": {
+    "place": {
+     "beside": "quad#pm",
+     "side": "n",
+     "gap": 40
+    }
+   },
+   "params": {
+    "text": "plus or minus",
+    "font": "body",
+    "size": 16,
+    "paint": {
+     "fill": {
+      "role": "accent"
+     }
+    }
+   }
+  },
+  "den-label": {
+   "id": "den-label",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Denominator label",
+   "order": "a4",
+   "at": {
+    "place": {
+     "beside": "quad#den",
+     "side": "s",
+     "gap": 12
+    }
+   },
+   "params": {
+    "text": "denominator",
+    "font": "body",
+    "size": 16,
+    "paint": {
+     "fill": {
+      "role": "accent"
+     }
+    }
+   }
+  }
+ }
+}

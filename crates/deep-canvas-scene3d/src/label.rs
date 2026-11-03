@@ -117,7 +117,9 @@ impl Labels {
     pub(crate) fn run(&mut self, text: &str, role: Role, size: f32) -> ([f64; 2], Vec<Glyph>) {
         let size = if self.fixed_em { MASK_EM_PX } else { size };
         let spec = Spec {
-            role,
+            family: role.family(),
+            fallback: &[],
+            lang: None,
             size,
             ..Spec::label(text)
         };
@@ -170,7 +172,9 @@ impl Labels {
             .entry((text.to_string(), role, size.to_bits()))
             .or_insert_with(|| {
                 shaper.shape(&Spec {
-                    role,
+                    family: role.family(),
+                    fallback: &[],
+                    lang: None,
                     size,
                     ..Spec::label(text)
                 })

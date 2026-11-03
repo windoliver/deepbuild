@@ -1,0 +1,898 @@
+{
+ "interface": "sandbox@1",
+ "fixtures": [
+  {
+   "fixture": "refuse.import",
+   "program": "refuse_import.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "import",
+      "what": "the program imports the function env.forbidden_fn; a program imports nothing",
+      "import": {
+       "module": "env",
+       "name": "forbidden_fn"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.vector",
+   "program": "refuse_vector.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "function 1 uses a vector instruction, v128.const, from the simd proposal",
+      "instruction": "v128.const",
+      "function": 1,
+      "proposal": "simd"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.atomic",
+   "program": "refuse_atomic.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "function 1 uses an atomic instruction, i32.atomic.load, from the threads proposal",
+      "instruction": "i32.atomic.load",
+      "function": 1,
+      "proposal": "threads"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.memory_grows",
+   "program": "refuse_memory_grows.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "limit",
+      "what": "memory 0 can grow: its maximum must equal its minimum (1 pages)",
+      "limit": {
+       "name": "memory",
+       "max": 1,
+       "actual": 4
+      }
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.table_set",
+   "program": "refuse_table_set.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "instruction",
+      "what": "function 1 uses table.set, which changes a table or uses a segment later",
+      "instruction": "table.set",
+      "function": 1
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.data_drop",
+   "program": "refuse_data_drop.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "instruction",
+      "what": "function 1 uses memory.init, which changes a table or uses a segment later",
+      "instruction": "memory.init",
+      "function": 1
+     },
+     {
+      "rule": "instruction",
+      "what": "function 1 uses data.drop, which changes a table or uses a segment later",
+      "instruction": "data.drop",
+      "function": 1
+     },
+     {
+      "rule": "segment",
+      "what": "data 0 is a passive segment, kept to use later",
+      "segment": {
+       "kind": "data",
+       "index": 0
+      }
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.mutable_funcref_global",
+   "program": "refuse_mutable_funcref_global.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "global",
+      "what": "global 3 is a mutable global of a reference type (funcref)",
+      "global": 3
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.over_4mib",
+   "program": "pass_subset.wat",
+   "pad_to": 4194305,
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "limit",
+      "what": "the program is 4194305 bytes, past the subset's 4194304 (4 MiB)",
+      "limit": {
+       "name": "program",
+       "max": 4194304,
+       "actual": 4194305
+      }
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.table_65537",
+   "program": "refuse_table_65537.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "limit",
+      "what": "table 0 has 65537 entries, past the subset's 65536",
+      "limit": {
+       "name": "table",
+       "max": 65536,
+       "actual": 65537
+      }
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.tail_call",
+   "program": "refuse_tail_call.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "function 1 uses an instruction, return_call, from the tail_call proposal",
+      "instruction": "return_call",
+      "function": 1,
+      "proposal": "tail_call"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.exceptions",
+   "program": "refuse_exceptions.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "the program declares a tag, from the exceptions proposal",
+      "proposal": "exceptions"
+     },
+     {
+      "rule": "proposal",
+      "what": "function 1 uses an instruction, try_table, from the exceptions proposal",
+      "instruction": "try_table",
+      "function": 1,
+      "proposal": "exceptions"
+     },
+     {
+      "rule": "proposal",
+      "what": "function 1 uses an instruction, throw, from the exceptions proposal",
+      "instruction": "throw",
+      "function": 1,
+      "proposal": "exceptions"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.multi_memory",
+   "program": "refuse_multi_memory.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "memory 1 is a second memory, from the multi_memory proposal; a program has one",
+      "proposal": "multi_memory"
+     },
+     {
+      "rule": "proposal",
+      "what": "function 1 uses i32.load on memory 1, from the multi_memory proposal",
+      "instruction": "i32.load",
+      "function": 1,
+      "proposal": "multi_memory"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.memory64",
+   "program": "refuse_memory64.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "memory 0 is a 64-bit memory, from the memory64 proposal",
+      "proposal": "memory64"
+     },
+     {
+      "rule": "proposal",
+      "what": "function 1 uses i32.load on a 64-bit memory, from the memory64 proposal",
+      "instruction": "i32.load",
+      "function": 1,
+      "proposal": "memory64"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.gc",
+   "program": "refuse_gc.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "type 0 is a garbage-collected type from the gc proposal",
+      "proposal": "gc"
+     },
+     {
+      "rule": "proposal",
+      "what": "function 1 uses an instruction, struct.new, from the gc proposal",
+      "instruction": "struct.new",
+      "function": 1,
+      "proposal": "gc"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "refuse.extended_const",
+   "program": "refuse_extended_const.wat",
+   "role": "provider",
+   "expect": {
+    "refusals": [
+     {
+      "rule": "proposal",
+      "what": "global 3 uses i32.add from the extended_const proposal",
+      "instruction": "i32.add",
+      "global": 3,
+      "proposal": "extended_const"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "nan.f32",
+   "program": "nan_f32.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 12
+    }
+   ],
+   "expect": {
+    "hash": "db47b586f664d116c1c75b12afdb12fd82a3773b435b5d114a2b3ff862ae4aee",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "d670ec4a2785f13f56597fd323f18a0338dacf70dafb1a79ca7210621b96437e"
+    ],
+    "trap": null,
+    "result": 0,
+    "reads": [
+     {
+      "at": 0,
+      "len": 12,
+      "hex": "0000c07f0000c07f0000c07f"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "nan.f64",
+   "program": "nan_f64.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 24
+    }
+   ],
+   "expect": {
+    "hash": "c17c561ef19ff39c7caf2cb76de94f7c42b7781187ab7142aaf4b31d535ac338",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "4b4deb5cf93a3285f2ed99ffd3f8b3c13ec75eaade709dc6a615ad0d7aa1fd98"
+    ],
+    "trap": null,
+    "result": 0,
+    "reads": [
+     {
+      "at": 0,
+      "len": 24,
+      "hex": "000000000000f87f000000000000f87f000000000000f87f"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "fuel.loop",
+   "program": "fuel_loop.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [],
+   "expect": {
+    "hash": "062d48f97b8f82245217a5a3e96ee09f8f152e0fc4716512cf2d05ad9f80c8a9",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "3119059b7490c3774340c968efed9a8d11935181f8a0f41a91e9f3f46c9a6740"
+    ],
+    "trap": {
+     "kind": "fuel",
+     "function": 1,
+     "offset": 325
+    },
+    "result": null,
+    "reads": []
+   }
+  },
+  {
+   "fixture": "fuel.fill",
+   "program": "fuel_fill.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 10000000,
+    "memory_mib": 16
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    },
+    {
+     "at": 8454144,
+     "len": 16
+    },
+    {
+     "at": 9502704,
+     "len": 16
+    },
+    {
+     "at": 9502720,
+     "len": 16
+    }
+   ],
+   "expect": {
+    "hash": "a79fed95389bfea021ef752ad74f21f22dad4b2756c519e92d13e40f40869524",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "bdeec31038eaf31f9c84ddfc0fffedc70aceb39a2c69d652f9fec8371f8306ce"
+    ],
+    "trap": {
+     "kind": "fuel",
+     "function": 1,
+     "offset": 388
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "0a000000"
+     },
+     {
+      "at": 8454144,
+      "len": 16,
+      "hex": "abababababababababababababababab"
+     },
+     {
+      "at": 9502704,
+      "len": 16,
+      "hex": "abababababababababababababababab"
+     },
+     {
+      "at": 9502720,
+      "len": 16,
+      "hex": "00000000000000000000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "stack.recursion",
+   "program": "stack_small.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 100000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    }
+   ],
+   "expect": {
+    "hash": "9c95baad838268efa71172a0f49e6a5c031b3d090cb2748ec7cdb50f09d47aad",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "cd77e85ba183164b4a845155968937077dec801b027bc94aa2950ed7a43d33d9"
+    ],
+    "trap": {
+     "kind": "stack",
+     "function": 1,
+     "offset": 281
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "a20b0000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "stack.small.65536",
+   "program": "stack_small.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 100000000,
+    "stack": 65536
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    }
+   ],
+   "expect": {
+    "hash": "9c95baad838268efa71172a0f49e6a5c031b3d090cb2748ec7cdb50f09d47aad",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "cd77e85ba183164b4a845155968937077dec801b027bc94aa2950ed7a43d33d9"
+    ],
+    "trap": {
+     "kind": "stack",
+     "function": 1,
+     "offset": 281
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "e7020000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "stack.small.262144",
+   "program": "stack_small.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 100000000,
+    "stack": 262144
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    }
+   ],
+   "expect": {
+    "hash": "9c95baad838268efa71172a0f49e6a5c031b3d090cb2748ec7cdb50f09d47aad",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "cd77e85ba183164b4a845155968937077dec801b027bc94aa2950ed7a43d33d9"
+    ],
+    "trap": {
+     "kind": "stack",
+     "function": 1,
+     "offset": 281
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "a20b0000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "stack.large.65536",
+   "program": "stack_large.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 100000000,
+    "stack": 65536
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    }
+   ],
+   "expect": {
+    "hash": "322bf3525b2697082303ffc58d206fa01f21fff3103a70e4559e7843b3146c3a",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "edf28e1363322f8983a7b413836e2ced524186029112876d649ce5375d646ffa"
+    ],
+    "trap": {
+     "kind": "stack",
+     "function": 1,
+     "offset": 284
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "08000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "stack.large.262144",
+   "program": "stack_large.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 100000000,
+    "stack": 262144
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    }
+   ],
+   "expect": {
+    "hash": "322bf3525b2697082303ffc58d206fa01f21fff3103a70e4559e7843b3146c3a",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "edf28e1363322f8983a7b413836e2ced524186029112876d649ce5375d646ffa"
+    ],
+    "trap": {
+     "kind": "stack",
+     "function": 1,
+     "offset": 284
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "20000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.unreachable",
+   "program": "trap_unreachable.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "582a2f72f4d91d5977c3afba6263de44e949afc0dacd4bad72db21978eb85286",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "f19fefcf9229d4a3a8ac8298d461b1ccfcf80f98efb3eae05902a7613bc79056"
+    ],
+    "trap": {
+     "kind": "unreachable",
+     "function": 1,
+     "offset": 305
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.divide",
+   "program": "trap_divide.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "8a4cca3aaccd1e4aedfb5eaf7643d18c71be961a45a71b0e939d1b6737ce7276",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "5481fcc5309d6ac3919f6da4b39102fe7de1820107296063c7f0a8666194dc5d"
+    ],
+    "trap": {
+     "kind": "divide",
+     "function": 1,
+     "offset": 317
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.overflow",
+   "program": "trap_overflow.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "8f9cc173070c34726cadd562cdf17bfda5af606005c741a2aef1765ffd6058d6",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "5481fcc5309d6ac3919f6da4b39102fe7de1820107296063c7f0a8666194dc5d"
+    ],
+    "trap": {
+     "kind": "overflow",
+     "function": 1,
+     "offset": 317
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.conversion",
+   "program": "trap_conversion.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "5514773ce85157afd4b0614a2b2ef701217ebb2bb2fc7a35e0f0209f0b6d822a",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "8fa7547e25c17d1f43353a8192fd2fb4ed05168a882039134b301b760a55f56b"
+    ],
+    "trap": {
+     "kind": "conversion",
+     "function": 1,
+     "offset": 311
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.bounds",
+   "program": "trap_bounds.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "02a4b43fd0f336143f5b341201340c8080e65897e6ac3902a3eea2d4e7d32cec",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "d8e5a4798524a414ae7e63c298e3bb67afd0071a0fb8caa09f3017cafdb969bb"
+    ],
+    "trap": {
+     "kind": "bounds",
+     "function": 1,
+     "offset": 309
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.call",
+   "program": "trap_call.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "c4e568636eb9a5e06f0ed956c0d6ea3aa83d8fcedfd3bc6c4c3f481ddb4a5d87",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "387017f0e831f85401fa2c86b1a1557970ed7ecfaad5426ace34ba1fac033199",
+     "f57996bf906b5fd5c803c90ad7ccb0e89392fd9ff95e44755b508dbfb60d7f0d"
+    ],
+    "trap": {
+     "kind": "call",
+     "function": 1,
+     "offset": 330
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "trap.grow",
+   "program": "trap_grow.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 8
+    }
+   ],
+   "expect": {
+    "hash": "5a018949ee12f78e9ef68431563427023b26409eda1de105f1eb157da7fb0fbd",
+    "functions": [
+     "c7d4ffbc132fb5e317c35406cb669ab7bb283fc09725d6545592d624c38e3566",
+     "6a97f93c7fa979aa6a18e1cf71896f60a6ecd09d53f2a264644cdb893343420f"
+    ],
+    "trap": {
+     "kind": "grow",
+     "function": 1,
+     "offset": 314
+    },
+    "result": null,
+    "reads": [
+     {
+      "at": 0,
+      "len": 8,
+      "hex": "0000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "pass.subset",
+   "program": "pass_subset.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [
+    {
+     "at": 0,
+     "len": 4
+    }
+   ],
+   "expect": {
+    "hash": "9ab06b524c3f804a164351cc28792b9dba727a336656b5f68ae1b486d4a830f1",
+    "functions": [
+     "063ae25edac2a66b88f6544c2faf06bf0576851b45176b308359396be6d35a77",
+     "8c60b3a1396028811c758691f1652f016ead1191f1c3f7579b46958efe705225"
+    ],
+    "trap": null,
+    "result": 5050,
+    "reads": [
+     {
+      "at": 0,
+      "len": 4,
+      "hex": "ba130000"
+     }
+    ]
+   }
+  },
+  {
+   "fixture": "pass.table_call",
+   "program": "pass_table_call.wat",
+   "role": "provider",
+   "budget": {
+    "fuel": 1000000
+   },
+   "read": [],
+   "expect": {
+    "hash": "d1b6903e09f8c94b1bf13e2f5a6b84a17670de4777c44730438c2bb50cc89b78",
+    "functions": [
+     "853572dc78bf10c761a68447f2fab9caf7c1742db0b365ed172110106dd75e00",
+     "337be1e72e1bd870f42d51d829052d8cb34a9eefba11dfd1939bfac13ef641ae",
+     "d7112e15e6beb74bdf65de42e7a36b3e6c206c4fe9c70e1196ba148ba0be8374"
+    ],
+    "trap": null,
+    "result": 4207,
+    "reads": []
+   }
+  }
+ ]
+}

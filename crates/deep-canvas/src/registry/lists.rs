@@ -52,6 +52,13 @@ pub struct RegistryDef {
     /// For a registry whose entries carry a planted twin (`gpu.step@1`): the entry's own fixture
     /// run on its twin, which must fail naming the entry.
     pub twin: Option<fn(&str, &Value) -> KitResult>,
+    /// For a registry of timed entries (cue kinds, shot moves, transitions): an entry's moves at
+    /// its defaults, printed from the same expansion the check runs (#412), never stored.
+    pub moves: Option<fn(&Value) -> Vec<Value>>,
+    /// For a registry whose entries are programs (#238): the role they run in. Each entry names
+    /// its program's asset by sha256 in `program`; its kit reads the program's bytes, in hex, in
+    /// `wasm`, and only a build with the sandbox module, which admits and runs it, takes one.
+    pub program: Option<&'static str>,
 }
 
 impl RegistryDef {
@@ -70,6 +77,8 @@ impl RegistryDef {
             deprecated_since: None,
             replaced_by: None,
             twin: None,
+            moves: None,
+            program: None,
         }
     }
 
@@ -174,7 +183,13 @@ impl KitResult {
             "rules": self.rules.iter().map(|r| if r.pass {
                 json!({"rule": r.rule, "verdict": "PASS"})
             } else {
-                json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why})
+                let mut out = json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why});
+                // A rule that fails at a frame says so first, `frame <n>: …`, and names it.
+                let frame = r.why.strip_prefix("frame ").and_then(|w| w.split(':').next()?.parse::<u64>().ok());
+                if let Some(frame) = frame {
+                    out["frame"] = json!(frame);
+                }
+                out
             }).collect::<Vec<_>>(),
         })
     }
@@ -526,7 +541,15 @@ pub(super) fn seal(
             .iter()
             .map(|p| def.run_kit(&p.name, &p.value))
             .collect();
-        if let Some((p, _)) = def.planted.iter().zip(&planted).find(|(_, r)| r.pass()) {
+        // Every planted entry the kit admits is named (#221: a registry with two).
+        let admitted: Vec<&PlantedEntry> = def
+            .planted
+            .iter()
+            .zip(&planted)
+            .filter(|(_, r)| r.pass())
+            .map(|(p, _)| p)
+            .collect();
+        if let Some(p) = admitted.first() {
             let rules: Vec<&str> = def.kit.iter().map(|k| k.rule).collect();
             return Err(SealError::new(
                 "kit_admits_planted",
@@ -539,7 +562,10 @@ pub(super) fn seal(
             )
             .at(
                 &def.name,
-                vec![json!({"name": p.name, "value": p.value})],
+                admitted
+                    .iter()
+                    .map(|p| json!({"name": p.name, "value": p.value}))
+                    .collect(),
                 &rules,
             ));
         }
