@@ -37,6 +37,9 @@ import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
+import { KINDS, place, remotesOf, targetsOf, UNCOVERED, type CardTarget, type Target } from './targets.js';
+
+export type { CardTarget, Target, TargetOrigin } from './targets.js';
 
 export type AskKind = 'authority' | 'unblock' | 'taste' | 'exception' | 'choice' | 'definition';
 export type Decision = 'allow' | 'deny' | 'none';
@@ -48,7 +51,11 @@ export interface AskSource {
   fixture: { ask: JsonValue; at_deadline: { decision: Decision } };
 }
 /** A plan's step: what it does, what it changes, its undo (null when it has none) and its cost in USD. */
-export interface PlanStep { does: string; changes: string[]; undo: string | null; public: boolean; cost: number }
+export interface PlanStep {
+  does: string; changes: string[]; undo: string | null; public: boolean; cost: number;
+  /** Every place the step goes to that leaves the machine (#1098): the core places where each came from. */
+  targets?: Target[];
+}
 /** plan.proposed@1's data, less the ask and the digest the core computes. */
 export interface PlanInput { steps: PlanStep[]; diff: string }
 /** What the core marks a step with no undo, in the plan it records and shows (#69). */
@@ -118,8 +125,14 @@ export type ResolverAsk = Omit<Card, 'saves' | 'receipt'> & { session: string; k
 export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;
 /** One refusal the core made of a resolver's answer. */
 export interface Refusal { ask: string; resolver: string; decision: string | null; reason: string }
-/** The planted wrong core the criteria name; tests only: it applies any answer naming a decision that exists. */
-export type AsksPlant = 'decision-exists-only';
+/**
+ * The planted wrong cores the criteria name; tests only. decision-exists-only applies any answer naming a decision
+ * that exists. #1098's: a target's origin from the agent's messages, every target of a step at its first one's
+ * origin, a decision covering whatever its targets' origins, every remote read as the repo's, and a card with a
+ * target only the agent read saving your answer as wide as any other.
+ */
+export type AsksPlant = 'decision-exists-only'
+  | 'origin-from-agent-message' | 'first-recipient-origin' | 'rule-by-recipient-kind' | 'push-target-as-repo' | 'wider-scope-offered';
 /** The scopes a decision is saved at: this session, its repo, or everywhere. */
 export type DecisionScope = 'session' | 'repo' | 'all';
 
@@ -153,6 +166,11 @@ export interface Card {
   saves: { scope: string; also: number } | null;
   /** The answered card's one-line receipt: your answer, and every other ask it closed, those decided for you included. null while open. */
   receipt: { answer: string; also: string[] } | null;
+  /**
+   * Every target of every step of the plan, in step order, with where it came from, placed by the core from the
+   * record (#1098). [] for an ask whose plan names none.
+   */
+  targets: CardTarget[];
 }
 /** What a task's check still finds missing (#85). */
 export interface Missing { check: string; reasons: string[]; link: string | null }
@@ -464,6 +482,8 @@ interface Ask {
   /** On a drafted request: who it's for and the block it asks them to clear. */
   request?: { to: string; block: string };
   plan?: { hash: string; steps: PlanStep[] };
+  /** Its plan's targets, placed when it was raised (#1098). */
+  targets?: CardTarget[];
   closed?: { outcome: string; at: number; answer?: string; decision?: string };
   /** Resolvers' answers that covered it and disagreed, when they were last asked. */
   conflict: Card['conflict'];
@@ -666,14 +686,19 @@ class AsksCore implements Asks {
         // A step with no undo is marked so by the core, never by its raiser's words.
         const steps = plan.steps.map(markStep) as unknown as JsonValue;
         proposed = { ask: `ask:${id}`, steps, diff: plan.diff, hash: sha256Hex(canonicalize({ steps, diff: plan.diff })) };
-        const planned = validate('plan.proposed@1', { v: 1, id: ulid(now), kind: 'plan.proposed', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data: proposed });
-        if (!planned.ok) throw new AskRefused(`plan.proposed@1 refuses the plan at ${planned.issues[0]!.path}`, { field: `plan${planned.issues[0]!.path.replace(/^\/data/, '')}` });
+        // A plan whose steps name targets is @2, placed below; one that names none stays @1.
+        if (plan.steps.some((st) => isObj(st) && 'targets' in st)) proposed.targets = [];
+        const v = 'targets' in proposed ? 2 : 1;
+        const planned = validate(`plan.proposed@${v}`, { v, id: ulid(now), kind: 'plan.proposed', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data: proposed });
+        if (!planned.ok) throw new AskRefused(`plan.proposed@${v} refuses the plan at ${planned.issues[0]!.path}`, { field: `plan${planned.issues[0]!.path.replace(/^\/data/, '')}` });
       }
       // The same question asked again in its thread, showing the same thing, is one record.
       const thread = this.threadOf(connection.session);
       const same = this.openIn(thread).find((a) => a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
         && sha256Hex(canonicalize(a.data.pinned_to!)) === sha256Hex(canonicalize(data.pinned_to!)) && (a.plan?.hash ?? null) === ((proposed?.hash as string | undefined) ?? null));
       if (same) return { handle: same.handle, fresh: false };
+      // Where each target came from, read from the record for the ask's session, never from its raiser's words (#1098).
+      if (proposed && 'targets' in proposed) proposed.targets = await this.place({ data, handle: `ask:${id}`, session: connection.session ?? '' } as Ask, plan!.steps) as unknown as JsonValue;
       // Past the threshold drafted at setup, the thread's further asks fold into one exception. It's raised first,
       // so the log alone says which asks it holds: each one created while it's open.
       const foldAt = this.settingsFor(connection.session).fold;
@@ -684,7 +709,7 @@ class AsksCore implements Asks {
         await this.raiseFold(thread, connection.session, { actor: connection.actor, scope: connection.scope }, [`ask:${id}`], data.deadline as number);
       }
       await this.options.record.append(connection, { v, id, kind: 'ask.created', ts: now, data: data });
-      if (proposed) await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
+      if (proposed) await this.options.record.append(this.core(connection), { v: 'targets' in proposed ? 2 : 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
       await this.sync();
       const ask = this.asks.get(id)!;
       // A provisional taste call or choice goes on with the recommended option at once.
@@ -804,7 +829,8 @@ class AsksCore implements Asks {
       }
       // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
-      const scope = chosen && !ask.fold && !ask.block ? this.scopeOf(ask) : null;
+      // A card with a target only the agent read saves your answer for this ask only (#1098).
+      const scope = chosen && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
       if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
@@ -1014,6 +1040,8 @@ class AsksCore implements Asks {
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
       const answer = ask.closed?.outcome === 'answered' ? ask.closed.answer : undefined;
       if (answer === undefined || !ask.options.some((o) => o.id === answer)) throw new AskRefused(`${ask.handle} wasn't answered with an option, so there is no decision to save`, { ask: ask.handle });
+      const unplaced = this.unplaced(ask);
+      if (unplaced.length) throw new AskRefused(`${ask.handle} goes to ${unplaced.map((t) => t.ref).join(', ')}, which nothing you typed or approved names, so your answer holds for this ask only`, { field: 'scope', ask: ask.handle });
       let at: string;
       if (scope === 'all') at = 'all';
       else if (scope === 'session') {
@@ -1078,7 +1106,7 @@ class AsksCore implements Asks {
       if (held.state !== 'active') throw new AskRefused(`${decision} is ${held.state}, so it can't widen`, { field: 'decision', ask: ask.handle });
       if (held.key !== ask.data.key) throw new AskRefused(`${decision} answers another question than ${ask.handle}, so a wider scope wouldn't cover it`, { field: 'decision', ask: ask.handle });
       const lines = linesOf(ask.data.subject);
-      if (needsPerson(ask.data).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
+      if (needsPerson(ask.data).length || this.unplaced(ask).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
       const option = ask.options.find((o) => o.id === held.answer);
       if (!option) throw new AskRefused(`${ask.handle} has no option ${held.answer}`, { option: held.answer });
       const widened = await this.saveAt(connection, ask, 'all', held.answer, false);
@@ -1189,7 +1217,7 @@ class AsksCore implements Asks {
       const counted = answers.filter((a) => !a.budget).filter(({ resolver, answer, decision: named }) => {
         const decision = this.decisions.get(named);
         if (!decision) { refuse(resolver, named, `${resolver} named ${named}, which the record holds no decision for`); return false; }
-        const why = this.options.plant === 'decision-exists-only' ? null : this.uncovered(decision, ask);
+        const why = this.options.plant === 'decision-exists-only' ? null : this.uncovered(decision, ask) ?? this.unplacedWhy(ask);
         if (why !== null) { refuse(resolver, named, `${resolver} named ${named}, which ${why}`); return false; }
         if (!ask.options.some((o) => o.id === answer) || answer !== decision.answer) { refuse(resolver, named, `${resolver} answered ${answer}, not what ${named} decided (${decision.answer})`); return false; }
         return true;
@@ -1441,6 +1469,47 @@ class AsksCore implements Asks {
       && !b.theirs && !b.fold && b.who.actor === ask.who.actor && b.who.scope === ask.who.scope && sha256Hex(canonicalize(b.data.pinned_to!)) === pin);
   }
 
+  /**
+   * The targets of an ask's plan no decision covers and no wider scope is offered for: those only the agent read, or
+   * that nothing names (#1098). The planted wrong cores ignore them.
+   */
+  private unplaced(ask: Ask): CardTarget[] {
+    if (this.options.plant === 'rule-by-recipient-kind' || this.options.plant === 'wider-scope-offered') return [];
+    return (ask.targets ?? []).filter((t) => UNCOVERED.has(t.origin));
+  }
+  private unplacedWhy(ask: Ask): string | null {
+    const t = this.unplaced(ask)[0];
+    return t ? `can't cover ${ask.handle}'s ${t.kind} ${t.ref}, which nothing you typed or approved names (${t.origin}${t.first ? `, first in ${t.first}` : ''})` : null;
+  }
+  /**
+   * Places each target of a plan from the record of the ask's session (#1098): the prompts a person typed in it, the
+   * decisions covering the ask and the plans they were saved from, the remotes its worktree configures, and its
+   * archived transcript.
+   */
+  private async place(ask: Ask, steps: PlanStep[]): Promise<CardTarget[]> {
+    for (const [n, st] of steps.entries()) {
+      for (const t of st.targets ?? []) {
+        if (!isObj(t) || !KINDS.has(t.kind) || typeof t.ref !== 'string' || !t.ref.trim()) throw new AskRefused(`step ${n}'s targets each name a kind (${[...KINDS].join(', ')}) and a ref`, { field: `plan/steps/${n}/targets` });
+      }
+    }
+    const { session } = ask;
+    const record = this.options.record;
+    const prompts = session
+      ? ((await record.raw(`SELECT json_extract(data, '$.text') AS text FROM events WHERE session_id = ? AND kind = 'user.ask' AND json_extract(data, '$.from') IN ('person', 'app')`, [session])) as { text: string }[]).map((r) => String(r.text))
+      : [];
+    const decisions: { handle: string; targets: Set<string> }[] = [];
+    for (const d of this.covering(ask)) {
+      let planned = this.asks.get(bare(d.ask))?.plan?.steps;
+      if (!planned) {
+        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [d.ask])) as { data: string }[];
+        planned = row ? (JSON.parse(row.data) as { steps: PlanStep[] }).steps : [];
+      }
+      decisions.push({ handle: d.handle, targets: targetsOf(planned) });
+    }
+    const transcript = (session ? await record.transcript(letters(session)) : undefined) ?? [];
+    return place(steps, { session: letters(session), prompts, transcript, remotes: remotesOf(this.sessions.get(session)?.worktree), decisions }, this.options.plant);
+  }
+
   /** The scope your answer to an ask is saved at: its session's project, or its session when it started in none; null with neither. */
   private scopeOf(ask: Ask): string | null {
     const project = letters(this.sessions.get(ask.session)?.project ?? '');
@@ -1530,12 +1599,14 @@ class AsksCore implements Asks {
       missing: ask.missing && !ask.closed ? { ...ask.missing, reasons: [...ask.missing.reasons] } : null,
       saves: ask.saves ?? null,
       receipt: ask.closed?.outcome === 'answered' && ask.closed.answer !== undefined ? { answer: ask.closed.answer, also: [...ask.receiptAlso] } : null,
+      targets: (ask.targets ?? []).map((t) => ({ ...t })),
     };
   }
 
   /** What an answer to the ask would be saved as, said in words, and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
+    if (this.unplaced(ask).length) return { scope: 'Saved for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
@@ -1758,7 +1829,10 @@ class AsksCore implements Asks {
       case 'plan.proposed': {
         // The plan an ask shows is the first one proposed for it; your yes binds that one.
         const ask = this.asks.get(bare(String(d.ask)));
-        if (ask && !ask.plan && e.writer === 'core') ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
+        if (ask && !ask.plan && e.writer === 'core') {
+          ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
+          if (Array.isArray(d.targets)) ask.targets = d.targets as unknown as CardTarget[];
+        }
         return;
       }
       case 'decision.created': {
