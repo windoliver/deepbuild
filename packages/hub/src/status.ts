@@ -29,6 +29,8 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const due = await duePromises(query);
   // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
   const notes = new Map(((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
+  // A session waiting on its monitor (#997): the newest of its monitor readings says so, with no stop of its own or end since.
+  const watching = new Map(((await query("SELECT r.session_id, json_extract(r.data, '$.reading') AS text FROM events r WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL AND json_extract(r.data, '$.reading') LIKE 'Waiting on its monitor%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND json_extract(later.data, '$.reading') LIKE 'Its monitor%')))")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   // A turn you interrupted, with no prompt since (#39).
   const interrupted = new Set(((await query("SELECT e.session_id FROM events e WHERE e.kind = 'session.reading' AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
@@ -42,6 +44,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
       : s.status === 'failed' ? ['flagged', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`]
       : gone.has(s.id) && s.status !== 'finished' ? ['flagged', 'its process is gone mid-turn']
       : s.status === 'unknown' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
+      : s.status === 'finished' && watching.has(s.id) ? ['working', watching.get(s.id)!]
       : s.status === 'finished' && interrupted.has(s.id) ? ['finished', `its turn was interrupted ${ago(s.last_seen)} ago`]
       : s.status === 'finished' ? ['finished', `its turn stopped ${ago(s.last_seen)} ago`]
       : ['working', `last seen ${ago(s.last_seen)} ago`];
