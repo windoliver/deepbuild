@@ -43,6 +43,8 @@ test-deprecated = ["dep:deep-canvas-test-modules"]
 # logic module left out of the full set's list.
 test-check-kind = ["dep:deep-canvas-test-modules"]
 test-leave-out-logic = []
+# Issue #489: the full set without the data module, so motion@1's digest is compared without it.
+test-leave-out-data = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
