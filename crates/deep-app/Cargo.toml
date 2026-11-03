@@ -91,3 +91,13 @@ harness = false
 [[test]]
 name = "acceptance_34"
 path = "../../tests/acceptance/34/app/record_reader.rs"
+
+# Issue #1141: the folded record reader's acceptance tests, written blind in tests/acceptance/1141. The memory test is
+# a binary of its own, so its process holds the record reader and nothing another test allocated.
+[[test]]
+name = "acceptance_1141"
+path = "../../tests/acceptance/1141/app/folded.rs"
+
+[[test]]
+name = "acceptance_1141_memory"
+path = "../../tests/acceptance/1141/app/memory.rs"
