@@ -7,6 +7,7 @@
 //! same steps, and [`module`] registers it through the registry and seal.
 
 pub mod check;
+pub mod dirt;
 pub mod emit;
 pub mod graph;
 pub mod interp;
