@@ -134,6 +134,8 @@ pub enum Planted {
     StatusBeforeUpscale,
     StatusWithoutDepth,
     OutlinesBeforeUpscale,
+    /// #1174's wrong program: screen-size labels drawn in the geometry pass, before the upscale.
+    LabelsBeforeUpscale,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -217,6 +219,7 @@ impl Planted {
             "status_before_upscale" => Planted::StatusBeforeUpscale,
             "status_without_depth" => Planted::StatusWithoutDepth,
             "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
+            "labels_before_upscale" => Planted::LabelsBeforeUpscale,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
