@@ -1,6 +1,7 @@
 // Size and scope's measure (#324): a change read from git with no model, on a real repository. What the acceptance
 // suite (tests/acceptance/324) doesn't reach: a committed range, a binary file, a nested manifest's dev dependency,
-// a median over an even count, and a document's items compared by value rather than key order.
+// a median over an even count, a document's items compared by value rather than key order, a session in a subfolder,
+// the services and cloud resources a change adds, and the lines it adds in duplicated blocks.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,6 +55,24 @@ describe('#324 measure', () => {
     expect(m.files).toEqual([{ path: 'app/package.json', added: 1, removed: 1 }, { path: 'app/src/a.js', added: 1, removed: 0 }, { path: 'app/src/new.js', added: 1, removed: 0 }, { path: 'app/zero', added: 0, removed: 0 }]);
     expect(m.dependencies).toEqual([{ name: 'dayjs', from: 'app/package.json' }]);
     expect(m.folders).toEqual([]);
+  });
+});
+
+describe('#324 services, cloud resources and duplicated blocks', () => {
+  const block = (tag: string) => Array.from({ length: 6 }, (_, i) => `const ${tag}${i} = compute(${i});`).join('\n');
+  it('lists a compose service and a Terraform resource the change adds, with the file each came from', async () => {
+    const r = repo({ 'compose.yaml': 'services:\n  api:\n    image: api\n', 'infra/main.tf': 'resource "aws_s3_bucket" "logs" {}\n' });
+    r.put('compose.yaml', 'services:\n  api:\n    image: api\n  cache:\n    image: redis\n');
+    r.put('infra/main.tf', 'resource "aws_s3_bucket" "logs" {}\nresource "aws_sqs_queue" "jobs" {}\n');
+    expect((await measure(r.dir, r.base)).resources).toEqual([{ name: 'service cache', from: 'compose.yaml' }, { name: 'aws_sqs_queue.jobs', from: 'infra/main.tf' }]);
+  });
+  it('counts the added lines of a block copied from a changed file, and none for a block that only moved', async () => {
+    const r = repo({ 'src/a.js': `${block('a')}\n`, 'src/b.js': `${block('b')}\n` });
+    r.put('src/c.js', `${block('a')}\nconst other = 1;\n`);
+    r.put('src/a.js', `// moved below\n${block('a')}\n`);
+    r.put('src/b.js', `const first = 0;\n${block('b')}\n`.replace(block('b'), `${block('b').split('\n').slice(3).join('\n')}\n${block('b').split('\n').slice(0, 3).join('\n')}`));
+    // c.js copies a's block (6 added lines in a duplicate); a.js gains a comment; b.js only reorders its own lines.
+    expect((await measure(r.dir, r.base)).duplicated).toBe(6);
   });
 });
 

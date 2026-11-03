@@ -19747,6 +19747,30 @@ impl Contract for ClaimSizedDataFoldersItem {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimSizedDataResourcesItem {
+    pub name: String,
+    pub from: String,
+}
+
+impl Contract for ClaimSizedDataResourcesItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["name", "from"])?;
+        deep_contracts::check_member(members, at, "name", &RULE_9)?;
+        deep_contracts::check_member(members, at, "from", &RULE_9)?;
+        Ok(Self {
+            name: deep_contracts::required(members, at, "name")?,
+            from: deep_contracts::required(members, at, "from")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("name".to_string(), self.name.to_json()));
+        members.push(("from".to_string(), self.from.to_json()));
+        Value::Object(members)
+    }
+}
+
 static RULE_94: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_13);
 
 static PATTERN_95: &[deep_contracts::Inst] = &[
@@ -19827,6 +19851,8 @@ pub struct ClaimSizedData {
     pub biggest: Vec<ClaimSizedDataBiggestItem>,
     pub dependencies: Vec<ClaimSizedDataDependenciesItem>,
     pub folders: Vec<ClaimSizedDataFoldersItem>,
+    pub resources: Vec<ClaimSizedDataResourcesItem>,
+    pub duplicated: i64,
     pub unreached: Option<Vec<String>>,
     pub items: Vec<ClaimSizedDataItemsItem>,
     pub sent_back: Vec<String>,
@@ -19835,11 +19861,12 @@ pub struct ClaimSizedData {
 
 impl Contract for ClaimSizedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["claim", "task_ref", "kind", "lines", "files", "usual", "over", "biggest", "dependencies", "folders", "unreached", "items", "sent_back", "asked"])?;
+        let members = deep_contracts::members(value, at, &["claim", "task_ref", "kind", "lines", "files", "usual", "over", "biggest", "dependencies", "folders", "resources", "duplicated", "unreached", "items", "sent_back", "asked"])?;
         deep_contracts::check_member(members, at, "claim", &RULE_84)?;
         deep_contracts::check_member(members, at, "task_ref", &RULE_92)?;
         deep_contracts::check_member(members, at, "kind", &RULE_14)?;
         deep_contracts::check_member(members, at, "files", &RULE_7)?;
+        deep_contracts::check_member(members, at, "duplicated", &RULE_7)?;
         deep_contracts::check_member(members, at, "unreached", &RULE_94)?;
         deep_contracts::check_member(members, at, "sent_back", &RULE_13)?;
         deep_contracts::check_member(members, at, "asked", &RULE_13)?;
@@ -19854,6 +19881,8 @@ impl Contract for ClaimSizedData {
             biggest: deep_contracts::required(members, at, "biggest")?,
             dependencies: deep_contracts::required(members, at, "dependencies")?,
             folders: deep_contracts::required(members, at, "folders")?,
+            resources: deep_contracts::required(members, at, "resources")?,
+            duplicated: deep_contracts::required(members, at, "duplicated")?,
             unreached: deep_contracts::required(members, at, "unreached")?,
             items: deep_contracts::required(members, at, "items")?,
             sent_back: deep_contracts::required(members, at, "sent_back")?,
@@ -19872,6 +19901,8 @@ impl Contract for ClaimSizedData {
         members.push(("biggest".to_string(), self.biggest.to_json()));
         members.push(("dependencies".to_string(), self.dependencies.to_json()));
         members.push(("folders".to_string(), self.folders.to_json()));
+        members.push(("resources".to_string(), self.resources.to_json()));
+        members.push(("duplicated".to_string(), self.duplicated.to_json()));
         members.push(("unreached".to_string(), self.unreached.to_json()));
         members.push(("items".to_string(), self.items.to_json()));
         members.push(("sent_back".to_string(), self.sent_back.to_json()));

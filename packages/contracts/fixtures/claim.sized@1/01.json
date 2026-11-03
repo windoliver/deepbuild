@@ -40,6 +40,13 @@
         "from": "vendor/pad.js"
       }
     ],
+    "resources": [
+      {
+        "name": "service cache",
+        "from": "compose.yaml"
+      }
+    ],
+    "duplicated": 0,
     "unreached": [
       "src/billing.js"
     ],
