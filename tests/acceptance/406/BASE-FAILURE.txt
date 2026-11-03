@@ -1,0 +1,143 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/406
+
+ ❯ quote.test.ts (2 tests | 2 failed) 75436ms
+   ❯ AC3 a quote's digits are quotation listed by raw byte range, and its raw bytes alone decide whether it matches (2)
+     × AC3 the quote passes, listing its 3 as quotation at raw bytes [11, 12] and counting no number 1713ms
+     × AC3 a twin whose raw drops the CR fails quote_mismatch naming the item, never honest numbers 275ms
+ ❯ formula.test.ts (2 tests | 2 failed) 71647ms
+   ❯ AC4 a formula's integers are notation; a fractional or mapped number in its alt must trace to a source (2)
+     × AC4 alt `n = 1.33` fails honest numbers naming 1.33 and eq, and passes once 1.33 maps to data/n_water with a source 5625ms
+     × AC4 alt `a^2 + b^2 = c^2` passes with 2 listed as notation 223ms
+ ❯ story.test.ts (2 tests | 2 failed) 105444ms
+   ❯ AC1 a story number passes only where nothing binds a status or a reading and nothing that does shows it (2)
+     × AC1 the art film with no bindings passes, listing 3 as a story number; once it binds a status or a reading it fails naming the item 7799ms
+     × AC1 the same film, binding nothing, shown on a return card is refused naming the item 2441ms
+ ❯ names.test.ts (1 test | 1 failed) 43547ms
+   ❯ AC2 an unsourced number fails naming its item; a name with digits passes only when marked (1)
+     × AC2 the literal 3 fails naming eta; T-800 fails naming model unmarked and passes marked as a name 1774ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  formula.test.ts > AC4 a formula's integers are notation; a fractional or mapped number in its alt must trace to a source > AC4 alt `n = 1.33` fails honest numbers naming 1.33 and eq, and passes once 1.33 maps to data/n_water with a source
+AssertionError: unmapped: the check fails: []: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ formula.test.ts:27:72
+     25|     const store = temp();
+     26|     const bare = check(render, formula(store, 'n = 1.33'), store);
+     27|     expect(bare.ok, `unmapped: the check fails: ${shownErrors(bare)}`)…
+       |                                                                        ^
+     28|     const named = naming(bare, 'number_unsourced', ITEM);
+     29|     expect(named.length, `unmapped: number_unsourced names ${ITEM}: ${…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  formula.test.ts > AC4 a formula's integers are notation; a fractional or mapped number in its alt must trace to a source > AC4 alt `a^2 + b^2 = c^2` passes with 2 listed as notation
+AssertionError: the check lists eq's 2 as notation: {"ok":true,"numbers":[],"notices":[{"code":"unknown_kind","severity":"notice","ids":["eq"],"path":"items/eq/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected 0 to be greater than 0
+ ❯ formula.test.ts:41:117
+     39|     expect(c.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `the f…
+     40|     expect(c.ok, 'the check passes').toBe(true);
+     41|     expect(listed(c, ITEM, '2', /notation/i).length, `the check lists …
+       |                                                                                                                     ^
+     42|   }, TIMEOUT);
+     43| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  names.test.ts > AC2 an unsourced number fails naming its item; a name with digits passes only when marked > AC2 the literal 3 fails naming eta; T-800 fails naming model unmarked and passes marked as a name
+AssertionError: marked: no error names model, a marked name: [{"code":"number_unsourced","ids":["eta"],"path":"items/eta/params/text","actual":"Arrives in 3 days"},{"code":"number_unsourced","ids":["model"],"path":"items/model/params/text","actual":"T-800"}]: expected [ 'number_unsourced' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "number_unsourced",
++ ]
+
+ ❯ names.test.ts:24:156
+     22|     const marked = check(render, doc(true));
+     23|     expect(naming(marked, 'number_unsourced', 'eta').length, `marked: …
+     24|     expect(marked.errors.filter((e) => e.ids.includes('model')).map((e…
+       |                                                                                                                                                            ^
+     25|   }, TIMEOUT);
+     26| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  quote.test.ts > AC3 a quote's digits are quotation listed by raw byte range, and its raw bytes alone decide whether it matches > AC3 the quote passes, listing its 3 as quotation at raw bytes [11, 12] and counting no number
+AssertionError: the quote matches its source and counts no number: [{"code":"bad_doc","ids":["cfg"],"path":"items/cfg/params/text","actual":null}]: expected [ 'bad_doc cfg' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc cfg",
++ ]
+
+ ❯ quote.test.ts:34:137
+     32|     const store = temp();
+     33|     const c = check(bin('deep-canvas-render'), quoting(LINE, put(store…
+     34|     expect(c.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `the q…
+       |                                                                                                                                         ^
+     35|     expect(c.ok, 'the check passes').toBe(true);
+     36|     expect(listed(c, ITEM, '3', /quot/i, [11, 12]).length, `the check …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  quote.test.ts > AC3 a quote's digits are quotation listed by raw byte range, and its raw bytes alone decide whether it matches > AC3 a twin whose raw drops the CR fails quote_mismatch naming the item, never honest numbers
+AssertionError: quote_mismatch names cfg: [{"code":"bad_doc","ids":["cfg"],"path":"items/cfg/params/text","actual":null}]: expected 0 to be greater than 0
+ ❯ quote.test.ts:45:105
+     43|     const c = check(bin('deep-canvas-render'), quoting(twin, put(store…
+     44|     expect(c.ok, `the check fails: ${shownErrors(c)}`).toBe(false);
+     45|     expect(naming(c, 'quote_mismatch', ITEM).length, `quote_mismatch n…
+       |                                                                                                         ^
+     46|     expect(c.errors.filter((e) => e.code === 'number_unsourced').map((…
+     47|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  story.test.ts > AC1 a story number passes only where nothing binds a status or a reading and nothing that does shows it > AC1 the art film with no bindings passes, listing 3 as a story number; once it binds a status or a reading it fails naming the item
+AssertionError: alone: the check lists round-label's 3 as a story number: {"ok":true,"numbers":[],"notices":[{"code":"unknown_kind","severity":"notice","ids":["round-label"],"path":"items/round-label/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"}]}: expected 0 to be greater than 0
+ ❯ story.test.ts:26:135
+     24|     expect(alone.errors.map((e) => `${e.code} ${e.ids.join(',')}`), `a…
+     25|     expect(alone.ok, 'alone: the check passes').toBe(true);
+     26|     expect(listed(alone, ITEM, '3', /story/i).length, `alone: the chec…
+       |                                                                                                                                       ^
+     27|     for (const [what, doc] of [['a status bound', withStatus(FILM)], […
+     28|       const c = check(render, doc);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  story.test.ts > AC1 a story number passes only where nothing binds a status or a reading and nothing that does shows it > AC1 the same film, binding nothing, shown on a return card is refused naming the item
+AssertionError: the return card refuses the film with its check's issues: {"code":"ref_unresolved","reason":"camera"}: expected undefined to be false // Object.is equality
+
+- Expected:
+false
+
++ Received:
+undefined
+
+ ❯ story.test.ts:36:126
+     34|   it('AC1 the same film, binding nothing, shown on a return card is re…
+     35|     const reply = onReturnCard(bin('deep-gpu'), temp(), FILM);
+     36|     expect(reply['ok'], `the return card refuses the film with its che…
+       |                                                                                                                              ^
+     37|     const c = checkedOf(reply, 'the host reply');
+     38|     expect(naming(c, 'number_unsourced', ITEM).length, `number_unsourc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  7 failed (7)
+   Start at  23:03:22
+   Duration  297.35s (tests 100%)
+

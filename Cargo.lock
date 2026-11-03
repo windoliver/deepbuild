@@ -1982,6 +1982,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "taffy 0.14.0",
+ "unicode-normalization",
 ]
 
 [[package]]
