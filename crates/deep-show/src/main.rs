@@ -1623,7 +1623,12 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
-        deep_canvas_marks::modules::look(),
+        // #418: `test-look-finish-off` seals the planted look@1 implementation in its place.
+        if cfg!(feature = "test-look-finish-off") {
+            deep_canvas_marks::modules::look_finish_off()
+        } else {
+            deep_canvas_marks::modules::look()
+        },
     ];
     if set >= BuildSet::R1 {
         out.extend([
@@ -1816,9 +1821,17 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
+            // #418: look@1's reference is the shipped look, whichever a test build holds.
+            let reference = if sandbox {
+                deep_canvas_sandbox::module::module()
+            } else if interface == "look@1" {
+                deep_canvas_marks::modules::look()
+            } else {
+                m
+            };
             deep_canvas::registry::Interface {
                 name: interface,
-                reference: if sandbox { deep_canvas_sandbox::module::module() } else { m },
+                reference,
                 kit: parts,
                 behavior: None,
             }
