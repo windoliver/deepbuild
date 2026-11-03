@@ -61,3 +61,7 @@ $ top CPU
   308  12.1 355152 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
 74930  11.8  21488 /System/Library/PrivateFrameworks/FileProvider.framework/Support/fileproviderd
 69807  10.4 191600 /Applications/Claude.app/Contents/MacOS/Claude
+
+# 2026-11-03T02:01:05Z
+$ ls -d $TMPDIR/deep-proof-run-*
+ls: $TMPDIR//deep-proof-run-*: No such file or directory

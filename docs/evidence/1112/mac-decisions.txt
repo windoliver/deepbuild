@@ -52,7 +52,8 @@ Kept, listed for the owner:
   deepbuild-core (main checkout)   `M package-lock.json`, 432 live processes
   feat-761-scrub-field-names       PR 778 merged at tip, clean, but 13 live processes run in it
   issue-30-ac12-counting           PR 720 merged at tip, untracked .claude/, 7 live processes
-  issue-22-implementation-14b8cf   PR 877 merged, but 368 uncommitted lines and a 7.7 GiB target/
+  issue-22-implementation-14b8cf   PR 877 merged, but mid-merge: 368 porcelain entries (staged and modified paths,
+                                   one unresolved `UU packages/hub/src/server.ts`) and a 7.7 GiB target/
   issue-63-read-by-reference       in origin/main, two modified files
   issue-303-implementation-814647  in origin/main, clean, but an ignored packages/tasks/ that is not generated
   agent-* with untracked tests/acceptance/<n>/ (blind drafts): a02a6b7e, a201604a, a5248a97, a5a1aa40,
@@ -77,8 +78,16 @@ Large targets, listed for the owner and never deleted by an agent:
 
 ## Orphaned proof-run copies under $TMPDIR
 Seven deep-proof-run-* folders (2,424,652 KiB = 2.3 GiB, 50 to 215 hours old). For each, `lsof +D` found no
-process holding a file or cwd inside it and no running command line named it, read twice (before
-the go-ahead and again just before deleting). All seven were removed with rm -rf.
+process holding a file or cwd inside it and no running command line named it (mac-before.txt). The
+second reading, just before deleting, gave the same seven lines with empty PID lists:
+  $TMPDIR/deep-proof-run-j4rQxm size_kb=755100 mtime_age_h=215 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-iuchsJ size_kb=755404 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-7uxEmf size_kb=212 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-g4XJXA size_kb=913704 mtime_age_h=54 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-SHuE7H size_kb=52 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-Q7bu9q size_kb=4 mtime_age_h=50 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-oJAZ7o size_kb=176 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+All seven were removed with rm -rf, naming each folder; mac-after.txt ends with a listing that finds none.
 
 ## Free disk (/System/Volumes/Data, df -h)
   before cleanup (mac-before.txt)                       34Gi available
@@ -90,8 +99,9 @@ the go-ahead and again just before deleting). All seven were removed with rm -rf
 
 ## Resident sessions and swap
 Before: swap 37,308 of 37,888 MiB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
-Eight Claude Code processes were resident. The rest of the load came from long-lived processes that
-this session did not start, so it did not stop them (rules: stop only processes you started, by PID).
+Eight Claude Code processes were resident, and another session's `npm ci` (44972, 77% CPU, seconds
+old) ran during that reading. The rest came mostly from long-lived processes that this session did
+not start, so it did not stop them (rules: stop only processes you started, by PID).
 They were listed for the owner to close by hand. Reading at about 01:38:46Z, after the removals (from the elapsed times; command lines cut to the
 part that names them; the before/after files cut them at 160-200 columns):
   $ ps -o pid,ppid,etime,pcpu,command -p ...
