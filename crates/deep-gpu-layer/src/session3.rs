@@ -38,6 +38,7 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
+        labels_before_upscale: p == Some(Planted::LabelsBeforeUpscale),
     }
 }
 

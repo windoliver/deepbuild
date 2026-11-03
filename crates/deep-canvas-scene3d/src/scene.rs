@@ -1852,7 +1852,7 @@ pub(crate) fn evaluate_compiled(
             } else {
                 l.em
             };
-            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px);
+            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px, l.world);
         }
         if pass == 1 || !labels.make_room() {
             break;
