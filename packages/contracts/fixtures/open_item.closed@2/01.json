@@ -1,0 +1,15 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "open_item.closed",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "text": "Still open: the e2e test for expired tokens was not run",
+    "item": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "by": "your answer: waive it"
+  }
+}
