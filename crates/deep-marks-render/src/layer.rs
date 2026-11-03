@@ -27,7 +27,7 @@ pub fn palette(look: &Value, theme: &str) -> Result<Palette, Value> {
         "dark" => Theme::Dark,
         _ => return Err(refused("bad_input", "view/theme")),
     };
-    match crate::look(Some(look)) {
+    match crate::look(Some(look), deep_canvas_marks::look::Distance::Everywhere) {
         Some(Ok((look, _))) => Ok(palette_of(&look, theme).clone()),
         Some(Err(refusal)) => Err(refusal.to_json()),
         None => Err(refused("bad_input", "look")),
@@ -73,7 +73,7 @@ pub fn status(
     look: &Value,
     frame: &deep_canvas_marks::scene::Frame,
 ) -> Result<image::RgbaImage, Value> {
-    let (look, _) = match crate::look(Some(look)) {
+    let (look, _) = match crate::look(Some(look), deep_canvas_marks::look::Distance::Everywhere) {
         Some(Ok(found)) => found,
         Some(Err(refusal)) => return Err(refusal.to_json()),
         None => return Err(refused("bad_input", "look")),

@@ -21,7 +21,13 @@ use deep_canvas::show::{stamp, Writer, WriterKind};
 use deep_canvas_scene3d::frames::Frames;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Labels;
-use deep_gpu::cache::{self, Cache, Reader};
+use deep_gpu::cache::{self, Cache, Reader, Retired};
+
+/// A shared result: `test.gpu`'s texture or mesh in the test build, nothing otherwise.
+#[cfg(feature = "test-meter")]
+type Made = crate::testgpu::Made;
+#[cfg(not(feature = "test-meter"))]
+type Made = ();
 use deep_gpu::compile::{CompileThread, Compiling, THREAD as COMPILE_THREAD};
 use deep_gpu::device::{Backend, Device};
 use deep_gpu::memory;
@@ -32,7 +38,9 @@ use deep_gpu::surface::Path;
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
-use crate::liveview::{compile_upscale, surface_of, Drawing, Kit, Timer, Upscale, View, SLOTS};
+use crate::liveview::{
+    compile_upscale, surface_of, Content, Drawing, Kit, Timer, Upscale, View, SLOTS,
+};
 use crate::{refused, App, Planted};
 use deep_scene3d_render::surface::Surface;
 
@@ -54,6 +62,9 @@ pub struct Plants {
     shares_meter_with_worker: bool,
     exports_live_surface: bool,
     upscale: deep_scene3d_render::surface::Planted,
+    /// #420 AC7's wrong cache: a result's memory goes back when a revision drops its last
+    /// reader, while a frame that binds it is still in flight.
+    releases_at_revision: bool,
 }
 
 impl Plants {
@@ -70,6 +81,7 @@ impl Plants {
             sums_pass_intervals: p == Some(Planted::SumsPassIntervals),
             allocates_per_frame: p == Some(Planted::AllocatesPerFrame),
             compiles_at_swap: p == Some(Planted::CompilesAtSwap),
+            releases_at_revision: p == Some(Planted::ReleasesAtRevision),
             cache: cache::Planted {
                 charges_first_holder: p == Some(Planted::ChargesFirstHolder),
                 keeps_unread: p == Some(Planted::KeepsUnreadResults),
@@ -142,6 +154,9 @@ enum Event {
     Open(Open),
     Close(String),
     Revise(String, PathBuf),
+    /// #420's fault fixture: the session's frame is encoded as usual and handed to the queue
+    /// only once frame `until` is presented, so it is in flight across the frames between.
+    Hold(String, u64),
     Camera(String, f64),
     Rung(String, Rung),
     Canonical(String, Purpose, u64, [u32; 2]),
@@ -176,6 +191,10 @@ struct Reports {
     memory: bool,
     allocs: bool,
     meter: bool,
+    /// #420: the fence record, each view's bound results, and the device's errors.
+    fences: bool,
+    binds: bool,
+    errors: bool,
 }
 
 struct Args {
@@ -306,6 +325,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 return Err(bad("revise is {session, doc}"));
             };
             Event::Revise(s.to_string(), PathBuf::from(d))
+        } else if let Some(h) = e.get("hold") {
+            let (Some(s), Some(until)) = (h["session"].as_str(), h["until"].as_u64()) else {
+                return Err(bad("hold is {session, until}"));
+            };
+            if until <= frame {
+                return Err(bad("a hold ends after its frame"));
+            }
+            Event::Hold(s.to_string(), until)
         } else if let Some(c) = e.get("camera") {
             let (Some(s), Some(a)) = (c["session"].as_str(), c["azimuth"].as_f64()) else {
                 return Err(bad("camera is {session, azimuth}"));
@@ -331,7 +358,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
             Event::Canonical(s.to_string(), p, f, size)
         } else {
             return Err(bad(
-                "an event is open, close, revise, camera, rung or canonical",
+                "an event is open, close, revise, hold, camera, rung or canonical",
             ));
         };
         events.push((frame, ev));
@@ -346,7 +373,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
             Some("memory") => reports.memory = true,
             Some("meter") => reports.meter = true,
             Some("allocs") if test_build => reports.allocs = true,
-            _ => return Err(bad("report holds passes, hashes, memory, allocs or meter")),
+            Some("fences") => reports.fences = true,
+            Some("binds") => reports.binds = true,
+            Some("errors") => reports.errors = true,
+            _ => {
+                return Err(bad(
+                    "report holds passes, hashes, memory, allocs, meter, fences, binds or errors",
+                ))
+            }
         }
     }
     let stub = match call.get("stub_meter") {
@@ -448,7 +482,7 @@ struct Rev {
     number: u64,
     doc: Value,
     /// Its compiled frames, until it latches and its view takes them.
-    frames: Option<Frames>,
+    frames: Option<Content>,
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
@@ -530,7 +564,7 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 /// A revision that passed admission.
 struct Admitted {
     doc: Value,
-    frames: Frames,
+    frames: Content,
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
@@ -597,16 +631,26 @@ fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let frames = program
-        .and_then(|p| Frames::with_program(&doc, p, look, labels))
-        .map_err(|r| {
-            vec![issue(
-                r.code,
-                &r.path,
-                Value::Null,
-                "the document can't be evaluated",
-            )]
-        })?;
+    let unevaluated = |(code, path): (&str, String)| {
+        vec![issue(
+            code,
+            &path,
+            Value::Null,
+            "the document can't be evaluated",
+        )]
+    };
+    // A document with no camera is 2D, as a chart is, and draws by marks2d (#397).
+    let frames = if crate::flat::is_flat(&doc) {
+        Content::Flat(Box::new(
+            crate::flat::Flat::new(&doc, &look.roles).map_err(unevaluated)?,
+        ))
+    } else {
+        Content::Scene(Box::new(
+            program
+                .and_then(|p| Frames::with_program(&doc, p, look, labels))
+                .map_err(|r| unevaluated((r.code, r.path)))?,
+        ))
+    };
     let moving = camera_moves(&doc);
     let base_scale = if moving { limits.scale_moving } else { 1.0 };
     let effects = doc["items"]
@@ -657,9 +701,11 @@ fn camera_moves(doc: &Value) -> bool {
 // ------------------------------------------------------------------------------------------
 // What a frame reports, kept in buffers reserved before the first frame.
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct ViewRow {
     session: usize,
+    /// The results its draws bound (#420).
+    binds: Vec<String>,
     rung: Option<Rung>,
     drawn: bool,
     gpu: f64,
@@ -734,10 +780,19 @@ struct Live {
     /// window opens, before any change needs them.
     warming: Option<Compiling<Arc<Upscale>>>,
     labels: Labels,
-    #[cfg(feature = "test-meter")]
-    results: Cache<crate::testgpu::Made>,
-    #[cfg(not(feature = "test-meter"))]
-    results: Cache<()>,
+    results: Cache<Made>,
+    /// Results out of the cache whose memory waits on a submitted frame that binds them: each
+    /// with its writer and the last frame that bound it (#420).
+    retired: Vec<(Retired<Made>, String, u64)>,
+    /// The last frame that bound each result.
+    last_bound: BTreeMap<String, u64>,
+    /// Frames submitted, or held, whose `gpu_done` hasn't signalled.
+    in_flight: std::collections::BTreeSet<u64>,
+    /// The held frames: session, frame, until, and the frame's encoded work.
+    holds: Vec<(usize, u64, u64)>,
+    held: Vec<(usize, u64, u64, wgpu::CommandBuffer)>,
+    fences: Vec<Value>,
+    errors: Vec<Value>,
     sessions: Vec<Session>,
     next_rev: u64,
     frames: Vec<FrameRow>,
@@ -774,6 +829,13 @@ impl Live {
             warming,
             labels: Labels::new(),
             results: Cache::new(plants.cache),
+            retired: Vec::new(),
+            last_bound: BTreeMap::new(),
+            in_flight: Default::default(),
+            holds: Vec::new(),
+            held: Vec::new(),
+            fences: Vec::new(),
+            errors: Vec::new(),
             sessions: Vec::new(),
             next_rev: 1,
             frames: Vec::with_capacity(frames),
@@ -1018,7 +1080,9 @@ impl Live {
         let failed = rev.placed.iter().find_map(|p| {
             let (device, pipes, assets) = (&self.device, &self.kit.test, &self.args.assets);
             self.results
-                .read(&p.key, &reader, || pipes.make(device, &p.need, assets))
+                .read(&p.key, &reader, || {
+                    pipes.make(device, &p.need, assets, &p.key)
+                })
                 .err()
         });
         #[cfg(not(feature = "test-meter"))]
@@ -1091,7 +1155,83 @@ impl Live {
         }
         let old = ses.current.replace(rev);
         if let Some(old) = old {
-            self.results.release(old.id);
+            let writer = ses.writer.clone();
+            for r in self.results.retire(old.id) {
+                self.retire(r, &writer);
+            }
+        }
+    }
+
+    /// A result its last revision dropped: out of the cache at once, its memory back once no
+    /// frame in flight binds it; the planted cache gives it back now (#420 AC7).
+    fn retire(&mut self, r: Retired<Made>, writer: &str) {
+        let last = self.last_bound.get(&r.key).copied().unwrap_or(0);
+        if self.plants.releases_at_revision {
+            #[cfg(feature = "test-meter")]
+            if let crate::testgpu::Made::Texture(_, texture) = &r.result {
+                texture.destroy();
+            }
+            self.fence("release", None, None, Some((&r.key, r.bytes.unwrap_or(0))));
+            return;
+        }
+        self.retired.push((r, writer.to_string(), last));
+    }
+
+    /// Gives back each retired result no frame in flight binds.
+    fn release_retired(&mut self) {
+        let mut keep = Vec::new();
+        for (r, writer, last) in std::mem::take(&mut self.retired) {
+            if self.in_flight.iter().any(|f| *f <= last) {
+                keep.push((r, writer, last));
+                continue;
+            }
+            let (key, bytes) = (r.key.clone(), r.bytes.unwrap_or(0));
+            drop(r);
+            memory::drain(&self.device);
+            self.fence("release", None, None, Some((&key, bytes)));
+        }
+        self.retired = keep;
+    }
+
+    /// One fence event, numbered in the order they came.
+    fn fence(
+        &mut self,
+        event: &str,
+        session: Option<usize>,
+        frame: Option<u64>,
+        resource: Option<(&str, u64)>,
+    ) {
+        let mut e = json!({"seq": self.fences.len(), "event": event});
+        if let Some(s) = session {
+            e["session"] = json!(self.sessions[s].id);
+        }
+        if let Some(f) = frame {
+            e["frame"] = json!(f);
+        }
+        if let Some((key, bytes)) = resource {
+            e["resource"] = json!(key);
+            e["bytes"] = json!(bytes);
+        }
+        self.fences.push(e);
+    }
+
+    /// What the device raised through its uncaptured-error callback, on `frame`.
+    fn raised(&mut self, frame: u64, session: Option<usize>, raised: Vec<(String, String)>) {
+        for (kind, message) in raised {
+            let resource = self
+                .last_bound
+                .keys()
+                .find(|k| message.contains(k.as_str()))
+                .cloned();
+            let code = if message.contains("destroyed") {
+                "destroyed_resource"
+            } else {
+                kind.as_str()
+            };
+            self.errors.push(json!({
+                "frame": frame, "session": session.map(|s| self.sessions[s].id.clone()),
+                "code": code, "resource": resource, "message": message,
+            }));
         }
     }
 
@@ -1188,6 +1328,7 @@ impl Live {
             let began = Instant::now();
             canonical_queue.clear();
             self.take_effect(frame);
+            self.release_retired();
             while next_event < events.len() && events[next_event].0 == frame {
                 match &events[next_event].1 {
                     Event::Open(o) => self.open(frame, o),
@@ -1202,6 +1343,11 @@ impl Live {
                             .filter(|s| self.sessions[*s].state == State::Live)
                         {
                             self.revise(s, doc);
+                        }
+                    }
+                    Event::Hold(id, until) => {
+                        if let Some(s) = self.find(id) {
+                            self.holds.push((s, frame, *until));
                         }
                     }
                     Event::Camera(id, azimuth) => {
@@ -1244,10 +1390,23 @@ impl Live {
                     .create_command_encoder(&Default::default())
             });
             let views_start = self.views.len();
+            let mut drew = Vec::new();
             for s in 0..self.sessions.len() {
                 if self.sessions[s].state != State::Live {
                     continue;
                 }
+                let hold = self
+                    .holds
+                    .iter()
+                    .find(|h| h.0 == s && h.1 == frame)
+                    .map(|h| h.2);
+                let mut held = hold.map(|_| {
+                    let enc = self
+                        .device
+                        .device
+                        .create_command_encoder(&Default::default());
+                    (enc, Timer::new(&self.device))
+                });
                 let rung = self.sessions[s].drawn;
                 let drawn = match rung {
                     Rung::Freeze => false,
@@ -1265,6 +1424,13 @@ impl Live {
                 let (scale, upscale, history) = match ses.view.as_mut() {
                     Some(view) => {
                         if drawn {
+                            let (enc, tim) = match held.as_mut() {
+                                Some((e, t)) => {
+                                    t.begin_frame();
+                                    (e, t)
+                                }
+                                None => (&mut encoder, &mut timer),
+                            };
                             let _ = view.draw(
                                 &self.device,
                                 &self.kit,
@@ -1272,8 +1438,8 @@ impl Live {
                                 t,
                                 &drawing,
                                 &mut self.labels,
-                                &mut encoder,
-                                &mut timer,
+                                enc,
+                                tim,
                                 s,
                             );
                         }
@@ -1282,8 +1448,28 @@ impl Live {
                     None => (1.0, "none", 0),
                 };
                 cpu_of[s % 64] = started.elapsed().as_secs_f64() * 1e3;
+                #[cfg(feature = "test-meter")]
+                let binds: Vec<String> = match (drawn, self.sessions[s].view.as_ref()) {
+                    (true, Some(v)) => v.test.bound.clone(),
+                    _ => Vec::new(),
+                };
+                #[cfg(not(feature = "test-meter"))]
+                let binds: Vec<String> = Vec::new();
+                for k in &binds {
+                    self.last_bound.insert(k.clone(), frame);
+                }
+                match (held, hold) {
+                    (Some((mut enc, tim)), Some(until)) => {
+                        tim.resolve(&mut enc);
+                        self.held.push((s, frame, until, enc.finish()));
+                        self.in_flight.insert(frame);
+                    }
+                    _ if drawn => drew.push(s),
+                    _ => {}
+                }
                 self.views.push(ViewRow {
                     session: s,
+                    binds,
                     rung: Some(rung),
                     drawn,
                     gpu: 0.0,
@@ -1296,7 +1482,42 @@ impl Live {
             timer.resolve(&mut encoder);
             let cpu_ms = began.elapsed().as_secs_f64() * 1e3;
             deep_gpu::alloc::outside(|| self.device.queue.submit([encoder.finish()]));
+            for &s in &drew {
+                self.fence("submit", Some(s), Some(frame), None);
+            }
             memory::drain(&self.device);
+            for &s in &drew {
+                self.fence("gpu_done", Some(s), Some(frame), None);
+                self.fence("present", Some(s), Some(frame), None);
+            }
+            let raised = self
+                .device
+                .take_raised()
+                .into_iter()
+                .map(|r| (r.kind.to_string(), r.error))
+                .collect();
+            self.raised(frame, None, raised);
+            // A held frame goes to the queue once its `until` is presented, and is done then.
+            let due: Vec<usize> = (0..self.held.len())
+                .filter(|&i| self.held[i].2 == frame)
+                .collect();
+            for i in due.into_iter().rev() {
+                let (s, of, _, buffer) = self.held.remove(i);
+                let scope = self
+                    .device
+                    .device
+                    .push_error_scope(wgpu::ErrorFilter::Validation);
+                deep_gpu::alloc::outside(|| self.device.queue.submit([buffer]));
+                self.fence("submit", Some(s), Some(of), None);
+                let error = crate::effects::pollster_block(scope.pop());
+                memory::drain(&self.device);
+                self.in_flight.remove(&of);
+                self.fence("gpu_done", Some(s), Some(of), None);
+                self.fence("present", Some(s), Some(of), None);
+                if let Some(e) = error {
+                    self.raised(of, Some(s), vec![("validation".to_string(), e.to_string())]);
+                }
+            }
             timer.read(&self.device);
             let views_end = self.views.len();
             for ses in &mut self.sessions {
@@ -1562,6 +1783,12 @@ impl Live {
                 e.0 += bytes.unwrap_or(0);
                 e.1.push(json!({"key": key, "bytes": bytes.unwrap_or(0)}));
             }
+            // A result out of the cache still counts until its memory goes back (#420).
+            for (r, w, _) in &self.retired {
+                if w == writer {
+                    e.0 += r.bytes.unwrap_or(0);
+                }
+            }
         }
         let (entries, bytes) = self.results.totals();
         json!({
@@ -1638,6 +1865,9 @@ impl Live {
                         });
                         if let Some(h) = f.extra.get("hashes") {
                             o["pixel_hash"] = h.get(v.session.to_string()).cloned().unwrap_or(Value::Null);
+                        }
+                        if self.args.reports.binds {
+                            o["binds"] = json!(v.binds);
                         }
                         o
                     })
@@ -1740,6 +1970,12 @@ impl Live {
             "backends": {"gpu": deep_gpu::seam::BACKEND.json()},
             "device_before": device_before,
         });
+        if self.args.reports.fences {
+            out["fences"] = json!(self.fences);
+        }
+        if self.args.reports.errors {
+            out["errors"] = json!(self.errors);
+        }
         if self.args.reports.meter {
             let mut rows: Vec<Value> = sessions
                 .iter()
@@ -1797,7 +2033,8 @@ fn render_canonical(
         Ok(f) => f,
         Err(r) => return refused(r.code, r.path),
     };
-    let mut view = match View::new(device, Path::Copy, size, 1, frames, 1.0, 0, look, labels) {
+    let content = Content::Scene(Box::new(frames));
+    let mut view = match View::new(device, Path::Copy, size, 1, content, 1.0, 0, look, labels) {
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
     };
@@ -1815,8 +2052,9 @@ fn render_canonical(
             writer: "canonical".into(),
         };
         for p in &placed {
-            if let Err(e) = results.read(&p.key, &reader, || kit.test.make(device, &p.need, assets))
-            {
+            if let Err(e) = results.read(&p.key, &reader, || {
+                kit.test.make(device, &p.need, assets, &p.key)
+            }) {
                 return refused("asset_unreadable", e);
             }
         }

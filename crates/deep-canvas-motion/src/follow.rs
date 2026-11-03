@@ -6,14 +6,14 @@
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 
 use crate::curve::Bezier;
-use crate::ease::Ease;
+use crate::ease::Named;
 use crate::spring::Spring;
 
 /// How a transition moves from where the value is to its new target.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Along {
     Linear,
-    Ease(Ease),
+    Ease(Named),
     Bezier(Bezier),
 }
 

@@ -259,6 +259,8 @@ pub enum Planted {
     EncodesInDecodeWorker,
     /// #498: the probe rounds each presentation time to the nearest flick.
     ProbeRoundsToFlicks,
+    /// #397: the table probe keeps each text cell NFC instead of its raw bytes.
+    ProbeStoresNormalized,
     /// #498: untagged streams are assumed BT.601 at every height.
     AssumesBt601,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -493,6 +495,10 @@ pub enum Call {
     Revisions(String),
     /// The sealed set as the build holds it (#305).
     Registry,
+    /// #420: an item's built mesh, or its count from its params.
+    Geometry(Box<crate::geometry::Geometry>),
+    /// #420: every kind's schema, dirty map, reads, fixture and sweep.
+    KindSchemas,
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -755,6 +761,8 @@ pub struct Scenario {
     pub placement_planted: placement::Planted,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
+    /// A canvas module's wrong program by name, which the scheduler hands its operators (#420).
+    pub module_planted: Option<String>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -954,6 +962,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
         forgets_changes: scenario.planted == Some(Planted::RebuildsDrawList),
+        module: scenario.module_planted.clone(),
     };
     Options {
         access_log: startup.test_build,
@@ -1380,6 +1389,8 @@ impl<'a> Hub<'a> {
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Geometry(g) => self.geometry(g),
+            Call::KindSchemas => self.kind_schemas_reply(),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir, session } => {
@@ -1831,13 +1842,25 @@ impl<'a> Hub<'a> {
         let visible = self.doc_visible(&show.doc);
         // The form that draws: the document with each recipe instance's derived items in its
         // place (#306), less the items skipped as `unknown_kind` (#403).
-        let drawn_form = stamped.as_ref().map(|doc| {
+        let mut drawn_form = stamped.as_ref().map(|doc| {
             let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
             crate::verdict::without(
                 &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
                 &skipped,
             )
         });
+        // Mark set columns that read a column source, resolved and narrowed by the core's
+        // column view at the frame's step (#397).
+        if let Some(form) = drawn_form.as_mut() {
+            let entries = self
+                .startup
+                .sealed
+                .registry(deep_canvas::columns::REGISTRY)
+                .map_or(&[][..], |r| r.entries.as_slice());
+            // A step is a 60 fps frame: 11,760,000 flicks.
+            let step = show.t.max(0) as u64 / 11_760_000;
+            issues.extend(deep_canvas::columns::view(form, entries, step));
+        }
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))

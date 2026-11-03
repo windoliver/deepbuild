@@ -3,7 +3,7 @@
   "format": 1,
   "basis": "drawing",
   "license": "Apache-2.0",
-  "description": "The clean pipeline look: flat ground and ink for the line, Needs you and receipts, one status map with a glyph and a word for each state, an automatic legend, and the app's chrome roles in light and dark.",
+  "description": "The clean pipeline look: flat ground and exact lines for the line, Needs you and receipts, one status map with a glyph and a word for each state, an automatic legend, the app's chrome roles in light and dark, and bundled faces for text, code, math and the Han, Arabic and emoji fallbacks.",
   "palette": {
     "white": "#ffffff",
     "graphite": "#1b1d22",
@@ -44,7 +44,8 @@
     "hover": "graphite_hover",
     "selected": "graphite_selected",
     "session_readout": "orchid",
-    "session_line": "indigo"
+    "session_line": "indigo",
+    "math": "math"
   },
   "themes": {
     "light": {},
@@ -97,6 +98,20 @@
     "glyph": "⚠"
   },
   "legend": "auto",
+  "lines": {
+    "line": {
+      "kind": "exact",
+      "width": 2
+    }
+  },
+  "fills": {
+    "fill": {
+      "kind": "flat"
+    }
+  },
+  "ground": {
+    "kind": "flat"
+  },
   "fonts": {
     "body": {
       "family": "Inter",
@@ -111,6 +126,50 @@
       "license": "OFL-1.1",
       "embed": true,
       "single_line": false
+    },
+    "math": {
+      "family": "STIX Two Math",
+      "file": "STIXTwoMath-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "cjk": {
+      "family": "Noto Sans SC",
+      "file": "NotoSansSC-Regular.otf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "arabic": {
+      "family": "Noto Sans Arabic",
+      "file": "NotoSansArabic-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "emoji": {
+      "family": "Noto Emoji",
+      "file": "NotoEmoji-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
     }
-  }
+  },
+  "fallback": [
+    "cjk",
+    "arabic",
+    "emoji"
+  ],
+  "time": {
+    "state": {
+      "span": "0.25s",
+      "interp": {
+        "ease": {
+          "name": "in_out_cubic"
+        }
+      }
+    }
+  },
+  "finish": []
 }

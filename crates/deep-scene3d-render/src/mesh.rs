@@ -73,6 +73,8 @@ fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
                 }
             }
         }
+        // A builder's mesh comes with its solid (`Mesh::of`).
+        Shape::Built(_) => {}
         Shape::Sphere => {
             for r in 0..=RINGS {
                 let phi = std::f32::consts::PI * r as f32 / RINGS as f32;
@@ -97,16 +99,29 @@ fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
 impl Mesh {
     pub fn build(device: &Device, shape: Shape) -> Mesh {
         let (v, i) = geometry(shape);
+        Mesh::upload(device, &v, &i)
+    }
+
+    /// A builder's mesh, in its item's space (#420).
+    pub fn of(device: &Device, m: &deep_canvas_scene3d::geom::Mesh) -> Mesh {
+        let mut v = Vec::with_capacity(m.positions.len() * 6);
+        for (p, n) in m.positions.iter().zip(&m.normals) {
+            push(&mut v, p.map(|x| x as f32), n.map(|x| x as f32));
+        }
+        Mesh::upload(device, &v, &m.indices)
+    }
+
+    fn upload(device: &Device, v: &[f32], i: &[u32]) -> Mesh {
         let d = &device.device;
         Mesh {
             vertices: d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d mesh"),
-                contents: bytemuck::cast_slice(&v),
+                contents: bytemuck::cast_slice(v),
                 usage: wgpu::BufferUsages::VERTEX,
             }),
             indices: d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d mesh indices"),
-                contents: bytemuck::cast_slice(&i),
+                contents: bytemuck::cast_slice(i),
                 usage: wgpu::BufferUsages::INDEX,
             }),
             count: i.len() as u32,

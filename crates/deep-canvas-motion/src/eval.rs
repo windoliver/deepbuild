@@ -132,6 +132,8 @@ pub struct Frame {
     /// Channel ID → its value at the timeline position.
     pub channels: Vec<(String, Sample)>,
     pub placements: Vec<(String, Option<Local>)>,
+    /// Camera ID → its target at `t` (#417).
+    pub cameras: Vec<(String, [f64; 3])>,
     /// The earliest `t` at which anything this frame shows changes next, or never.
     pub valid_until: Option<i64>,
 }
@@ -326,7 +328,7 @@ pub fn frame_with(
     let state = &*state;
     let motion = &program.motion;
     let mut at = 0;
-    let channels = motion
+    let mut channels: Vec<(String, Sample)> = motion
         .channels
         .iter()
         .zip(&state.iterations)
@@ -336,6 +338,27 @@ pub fn frame_with(
             at += width;
             (c.id.clone(), Sample { value, iterations })
         })
+        .collect();
+    // Follow channels report as keyed ones do, every channel in ID order.
+    if !motion.follows.is_empty() {
+        let follows = motion.follows.iter().enumerate().map(|(f, follow)| {
+            let value = vec![state.values[program.values_len + f]];
+            (
+                follow.id.clone(),
+                Sample {
+                    value,
+                    iterations: 0,
+                },
+            )
+        });
+        channels.extend(follows);
+        channels.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+    let cameras = motion
+        .cameras
+        .iter()
+        .zip(&state.cameras)
+        .map(|((id, _), target)| (id.clone(), *target))
         .collect();
     let placements = motion
         .placements
@@ -350,6 +373,7 @@ pub fn frame_with(
         items: items(doc, program, state),
         channels,
         placements,
+        cameras,
         valid_until: state.valid_until,
     }
 }

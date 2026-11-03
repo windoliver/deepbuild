@@ -15,7 +15,7 @@
 //! The planted wrong programs the acceptance suite names are runtime variants on
 //! [`Planted`], never features: this crate has none.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
@@ -108,6 +108,11 @@ pub struct Step {
     pub lets: Vec<(String, Template)>,
     /// `{count, as}`; `None` makes one item.
     pub repeat: Option<(Template, String)>,
+    /// A repeat along a curve (#420): the curve (an input naming a `curve@1` item, or literal
+    /// points) and the spacing that counts the copies when no count does.
+    pub along: Option<(Template, Option<Template>)>,
+    /// Its condition, over the recipe's inputs and lets: false leaves the step out (#420).
+    pub when: Option<Template>,
 }
 
 /// A recipe as its pack ships it.
@@ -120,7 +125,13 @@ pub struct Recipe {
     pub inputs: BTreeMap<String, Input>,
     pub lets: Vec<(String, Template)>,
     pub steps: Vec<Step>,
+    /// Its channels, each targeting a step (`step:<id>/<field>…`), written into the document
+    /// with derived targets when it expands (#420).
+    pub channels: Vec<(String, Value)>,
 }
+
+/// How deep recipes nest: a recipe step four recipes down is the last (#420).
+pub const MAX_DEPTH: usize = 4;
 
 /// An admitted pack version.
 #[derive(Clone, Debug, PartialEq)]
@@ -140,7 +151,7 @@ pub struct Pack {
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
-const STEP_OPS: &[&str] = &["mark", "item"];
+const STEP_OPS: &[&str] = &["mark", "item", "builder", "recipe"];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
     "number", "integer", "bool", "choice", "vec3", "range", "text", "ID",
@@ -568,9 +579,10 @@ const RECIPE_KEYS: &[&str] = &[
     "let",
     "steps",
     "outputs",
+    "channels",
 ];
 /// A step's keys in this slice.
-const STEP_KEYS: &[&str] = &["op", "kind", "params", "at", "repeat", "let"];
+const STEP_KEYS: &[&str] = &["op", "kind", "params", "at", "repeat", "let", "when"];
 
 fn check_recipe(
     pack: &str,
@@ -697,7 +709,7 @@ fn check_recipe(
                 for k in s.keys() {
                     if !STEP_KEYS.contains(&k.as_str()) {
                         let what = match k.as_str() {
-                            "when" | "channels" | "modifiers" | "material" | "steps" => {
+                            "channels" | "modifiers" | "material" | "steps" => {
                                 "lands with 3D scenes, not this slice"
                             }
                             _ => "not a field of a step",
@@ -712,11 +724,7 @@ fn check_recipe(
                 }
                 let op = s.get("op").and_then(Value::as_str).unwrap_or_default();
                 if !STEP_OPS.contains(&op) {
-                    let what = if op == "recipe" {
-                        "a recipe step nests, which lands with 3D scenes; nothing recurses here"
-                    } else {
-                        "not a step op of this slice (mark, item)"
-                    };
+                    let what = "not a step op of this slice (mark, item, builder, recipe)";
                     issues.push(bad(&format!("{at}/op"), json!(op), what));
                     continue;
                 }
@@ -750,20 +758,72 @@ fn check_recipe(
                         continue;
                     }
                 };
+                // What a count, spacing or condition may read: the recipe's inputs and lets,
+                // fixed at check, never `t`.
+                let unfixed = |v: &Value| {
+                    Template::of(v)
+                        .names()
+                        .iter()
+                        .any(|n| !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n))
+                };
+                let mut along = None;
                 let repeat = match s.get("repeat") {
                     None => None,
                     Some(r) => {
-                        let count = member(r, "count").cloned();
+                        let mut count = member(r, "count").cloned();
                         let as_ = member(r, "as").and_then(Value::as_str);
                         let keys: Vec<&String> = r
                             .as_object()
                             .map(|o| o.keys().collect())
                             .unwrap_or_default();
-                        if keys.iter().any(|k| !["count", "as"].contains(&k.as_str())) {
-                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "only `{count, as}` repeats in this slice; over, on, along and pack land with 3D scenes"));
+                        if keys
+                            .iter()
+                            .any(|k| !["count", "as", "along", "spacing"].contains(&k.as_str()))
+                        {
+                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "a repeat is `{count, as}`, or `{along, count | spacing, as}`; over, on and pack land later"));
                             continue;
                         }
+                        if let Some(path) = member(r, "along") {
+                            let spacing = member(r, "spacing");
+                            // The curve: an input that names a `curve@1` item, or points.
+                            let curve_ok = match path {
+                                Value::String(n) => inputs.contains_key(n),
+                                Value::Array(points) => points.len() >= 2,
+                                _ => false,
+                            };
+                            if !curve_ok {
+                                issues.push(bad(&format!("{at}/repeat/along"), path.clone(), &format!("step `{step_id}` repeats along an input that names a curve, or two or more points")));
+                                continue;
+                            }
+                            match (&count, spacing) {
+                                (Some(_), None) => {}
+                                (None, Some(sp)) if !unfixed(sp) => count = Some(json!(0)),
+                                (None, Some(sp)) => {
+                                    issues.push(bad(&format!("{at}/repeat/spacing"), sp.clone(), &format!("step `{step_id}` spaces its copies by more than the recipe's inputs and lets, so no check can fix their count")));
+                                    continue;
+                                }
+                                _ => {
+                                    issues.push(bad(&format!("{at}/repeat"), r.clone(), &format!("step `{step_id}` repeats along a curve by a count or a spacing, one of them")));
+                                    continue;
+                                }
+                            }
+                            along = Some((Template::of(path), spacing.map(Template::of)));
+                        }
                         match (count, as_) {
+                            // A count is fixed at check (Recipe: "repeats have counts fixed at
+                            // check"): it reads only the recipe's inputs and lets, never `t`.
+                            (Some(c), Some(_))
+                                if Template::of(&c).names().iter().any(|n| {
+                                    !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n)
+                                }) =>
+                            {
+                                issues.push(bad(
+                                    &format!("{at}/repeat/count"),
+                                    c.clone(),
+                                    &format!("step `{step_id}` repeats by a count that reads more than the recipe's inputs and lets, so no check can fix it"),
+                                ));
+                                continue;
+                            }
                             (Some(c), Some(a)) if well_named(a) => {
                                 Some((Template::of(&c), a.to_string()))
                             }
@@ -771,12 +831,20 @@ fn check_recipe(
                                 issues.push(bad(
                                     &format!("{at}/repeat"),
                                     r.clone(),
-                                    "a repeat is `{count, as}`",
+                                    &format!("step `{step_id}`'s repeat is `{{count, as}}`: one without a count has no count fixed at check"),
                                 ));
                                 continue;
                             }
                         }
                     }
+                };
+                let when = match s.get("when") {
+                    None => None,
+                    Some(w) if unfixed(w) => {
+                        issues.push(bad(&format!("{at}/when"), w.clone(), &format!("step `{step_id}`'s condition reads more than the recipe's inputs and lets, so no check can fix it")));
+                        continue;
+                    }
+                    Some(w) => Some(Template::of(w)),
                 };
                 let step_lets = read_lets(s.get("let"), &format!("{path}/{at}/let"), &mut issues);
                 steps.push(Step {
@@ -787,10 +855,38 @@ fn check_recipe(
                     at: s.get("at").map(Template::of),
                     lets: step_lets,
                     repeat,
+                    along,
+                    when,
                 });
             }
         }
         Some(other) => issues.push(bad("steps", other.clone(), "not an object")),
+    }
+    // Its channels target its steps; each is written into the document as it expands.
+    let mut channels = Vec::new();
+    match fields.get("channels") {
+        None => {}
+        Some(Value::Object(map)) => {
+            for (name, c) in map {
+                let target = member(c, "target")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let step = target
+                    .strip_prefix("step:")
+                    .and_then(|t| t.split_once('/'))
+                    .map(|(s, _)| s);
+                if !well_named(name) || !step.is_some_and(|s| steps.iter().any(|x| x.id == s)) {
+                    issues.push(bad(
+                        &format!("channels/{name}/target"),
+                        json!(target),
+                        "a recipe's channel targets one of its steps: `step:<id>/<field>…`",
+                    ));
+                    continue;
+                }
+                channels.push((name.clone(), c.clone()));
+            }
+        }
+        Some(other) => issues.push(bad("channels", other.clone(), "not an object")),
     }
     if !issues.is_empty() {
         return Err(issues);
@@ -802,6 +898,7 @@ fn check_recipe(
         inputs,
         lets,
         steps,
+        channels,
     })
 }
 
@@ -1146,6 +1243,8 @@ pub struct Expansion {
     pub derived: Map<String, Value>,
     /// The derived IDs a patch broke out, which the instance no longer writes.
     pub broken_out: Vec<String>,
+    /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
+    pub channels: Map<String, Value>,
 }
 
 impl Expansion {
@@ -1163,6 +1262,7 @@ impl Expansion {
             "derived": self.derived,
             "seeds": seeds,
             "broken_out": self.broken_out,
+            "channels": self.channels,
         })
     }
 }
@@ -1200,8 +1300,9 @@ pub fn expand(
             items,
             &id,
             item.clone(),
-            pack,
-            recipe,
+            (pack, recipe),
+            resolved,
+            &[recipe.id.clone()],
             planted,
             &mut order,
             issues,
@@ -1209,6 +1310,57 @@ pub fn expand(
             continue;
         };
         out.push(expansion);
+    }
+    out
+}
+
+/// A channel or driver of `doc` on an instance's input that one of its recipe's repeat counts
+/// reads: the count would change while playing, so it is no longer fixed at check (Recipe:
+/// "repeats have counts fixed at check"; #420).
+pub fn driven_counts(
+    doc: &Value,
+    items: &Map<String, Value>,
+    resolved: &Resolved<'_>,
+) -> Vec<Issue> {
+    let mut out = Vec::new();
+    if resolved.is_empty() {
+        return out;
+    }
+    for (id, item) in items {
+        let Some((_, recipe)) = super::kind_text(item).and_then(|k| resolved.recipe(k)) else {
+            continue;
+        };
+        let counted: BTreeSet<String> = recipe
+            .steps
+            .iter()
+            .filter_map(|s| s.repeat.as_ref())
+            .flat_map(|(count, _)| count.names())
+            .filter(|n| recipe.inputs.contains_key(n))
+            .collect();
+        for section in ["channels", "drivers"] {
+            for (cid, c) in member(doc, section)
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+            {
+                let Some(target) = member(c, "target").and_then(Value::as_str) else {
+                    continue;
+                };
+                let hit = counted.iter().find(|n| {
+                    let at = format!("items/{id}/params/{n}");
+                    target == at || target.starts_with(&format!("{at}/"))
+                });
+                if let Some(n) = hit {
+                    out.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        format!("{section}/{cid}/target"),
+                        json!(target),
+                        &format!("`{target}` drives `{n}`, which a repeat of `{}` counts by: a count is fixed at check, so no channel or driver may move it", recipe.id),
+                    ));
+                }
+            }
+        }
     }
     out
 }
@@ -1241,8 +1393,9 @@ pub fn derived_of(
         &mut scratch,
         instance,
         item.clone(),
-        pack,
-        recipe,
+        (pack, recipe),
+        resolved,
+        &[recipe.id.clone()],
         Planted::default(),
         &mut order,
         &mut issues,
@@ -1290,13 +1443,76 @@ fn derives(recipe: &Recipe, instance: &str, id: &str) -> bool {
         .any(|s| s.id == step && matches!((&s.repeat, index), (Some(_), Some(_)) | (None, None)))
 }
 
+/// Points a curve value gives: literal `[[x, y, z]…]`, or a `curve@1` item's points by ID.
+fn curve_points(items: &Map<String, Value>, v: &Value) -> Option<Vec<[f64; 3]>> {
+    let list = match v {
+        Value::String(id) => member(items.get(id)?, "params")
+            .and_then(|p| member(p, "points"))?
+            .as_array()?,
+        Value::Array(list) => list,
+        _ => return None,
+    };
+    let points: Option<Vec<[f64; 3]>> = list
+        .iter()
+        .map(|p| {
+            let a = p.as_array().filter(|a| a.len() == 3)?;
+            Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
+        })
+        .collect();
+    points.filter(|p| p.len() >= 2)
+}
+
+/// The point at arc length `s` along a polyline and its yaw (degrees about +Y that turn +X to
+/// its direction there).
+fn along_at(points: &[[f64; 3]], s: f64) -> ([f64; 3], f64) {
+    let mut left = s.max(0.0);
+    for (k, w) in points.windows(2).enumerate() {
+        let d = [w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2]];
+        let len = crate::ops::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if left <= len || k + 2 == points.len() {
+            let f = if len > 0.0 {
+                (left / len).min(1.0)
+            } else {
+                0.0
+            };
+            let yaw = crate::ops::deg(crate::ops::atan2(-d[2], d[0]));
+            return (
+                [w[0][0] + d[0] * f, w[0][1] + d[1] * f, w[0][2] + d[2] * f],
+                yaw,
+            );
+        }
+        left -= len;
+    }
+    (points[0], 0.0)
+}
+
+fn polyline_length(points: &[[f64; 3]]) -> f64 {
+    points
+        .windows(2)
+        .map(|w| {
+            let d = [w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2]];
+            crate::ops::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+        })
+        .sum()
+}
+
+/// Truthy: a non-zero number, `true`, or anything but null and `false`.
+fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Null | Value::Bool(false) => false,
+        Value::Number(n) => n.as_f64().is_some_and(|x| x != 0.0),
+        _ => true,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn expand_one(
     items: &mut Map<String, Value>,
     id: &str,
     item: Value,
-    pack: &Pack,
-    recipe: &Recipe,
+    (pack, recipe): (&Pack, &Recipe),
+    resolved: &Resolved<'_>,
+    chain: &[String],
     planted: Planted,
     order: &mut u64,
     issues: &mut Vec<Issue>,
@@ -1448,12 +1664,70 @@ fn expand_one(
     }
     let mut derived = Vec::new();
     let mut derived_items = Map::new();
+    // Each step's derived IDs, which the recipe's channels target, and the channels.
+    let mut ids_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut channels = Map::new();
     // One scope for every derived item: the inputs and lets, then each item's own names.
     let base = env.len();
     let mut scope = env;
     for step in &recipe.steps {
+        // A repeat along a curve: its points, and its count from the spacing when it has one.
+        let curve = match &step.along {
+            None => None,
+            Some((path, _)) => {
+                let named = match path.source() {
+                    Value::String(n) => inputs.get(n).cloned().unwrap_or(Value::Null),
+                    v => v.clone(),
+                };
+                match curve_points(items, &named) {
+                    Some(points) => Some(points),
+                    None => {
+                        issues.push(Issue::error(
+                            "ref_unresolved",
+                            id,
+                            at(&format!("steps/{}/repeat/along", step.id)),
+                            named,
+                            "names no curve@1 item with two or more points, nor two or more points",
+                        ));
+                        return None;
+                    }
+                }
+            }
+        };
+        let spaced = match (&step.along, &curve) {
+            (Some((_, Some(spacing))), Some(points)) => {
+                let gap = spacing.eval(&scope[..base]).ok().and_then(|v| v.as_f64());
+                match gap.filter(|g| *g > 0.0) {
+                    Some(g) => Some((((polyline_length(points) / g).floor() + 1.0).min(1e9), g)),
+                    None => {
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            id,
+                            at(&format!("steps/{}/repeat/spacing", step.id)),
+                            spacing.source().clone(),
+                            "a repeat's spacing is a length above zero",
+                        ));
+                        return None;
+                    }
+                }
+            }
+            _ => None,
+        };
         let count: Option<u64> = match &step.repeat {
             None => None,
+            Some(_) if spaced.is_some() => match spaced {
+                Some((n, _)) if n <= MAX_REPEAT as f64 => Some(n as u64),
+                _ => {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/repeat", step.id)),
+                        json!(spaced.map(|s| s.0)),
+                        &format!("a repeat count is a whole number from 0 to {MAX_REPEAT}"),
+                    ));
+                    return None;
+                }
+            },
             Some((count, _)) => match count.eval(&scope[..base]) {
                 Ok(v) => match v.as_f64() {
                     Some(n) if n.fract() == 0.0 && (0.0..=MAX_REPEAT as f64).contains(&n) => {
@@ -1482,6 +1756,23 @@ fn expand_one(
                 }
             },
         };
+        // A condition false at check leaves the step out: it derives nothing.
+        if let Some(when) = &step.when {
+            match when.eval(&scope[..base]) {
+                Ok(v) if !truthy(&v) => continue,
+                Ok(_) => {}
+                Err(what) => {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/when", step.id)),
+                        when.source().clone(),
+                        &what,
+                    ));
+                    return None;
+                }
+            }
+        }
         let n = count.unwrap_or(1);
         for index in 0..n {
             let derived_id = match count {
@@ -1604,7 +1895,147 @@ fn expand_one(
                     }
                 }
             }
+            // Along a curve: the copy stands at its arc length, turned to the curve's direction.
+            if let Some(points) = &curve {
+                let length = polyline_length(points);
+                let s = match spaced {
+                    Some((_, gap)) => gap * index as f64,
+                    None if n > 1 => length * index as f64 / (n - 1) as f64,
+                    None => 0.0,
+                };
+                let (p, yaw) = along_at(points, s);
+                let at = fields
+                    .entry("at")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .map(std::mem::take)
+                    .unwrap_or_default();
+                let three = |key: &str, base: [f64; 3]| -> [f64; 3] {
+                    let mut out = base;
+                    if let Some(list) = at.get(key).and_then(Value::as_array) {
+                        for (o, v) in out.iter_mut().zip(list) {
+                            *o += v.as_f64().unwrap_or(0.0);
+                        }
+                    }
+                    out
+                };
+                // Without an `at` of its own, the copy starts at the instance's origin.
+                let origin3 = if step.at.is_some() {
+                    [0.0; 3]
+                } else {
+                    let o = origin.clone().unwrap_or_default();
+                    [0, 1, 2].map(|k| o.get(k).copied().unwrap_or(0.0))
+                };
+                let pos = three(
+                    "pos",
+                    [p[0] + origin3[0], p[1] + origin3[1], p[2] + origin3[2]],
+                );
+                let rot = three("rot", [0.0, yaw, 0.0]);
+                let mut placed = at.clone();
+                placed.insert("pos".into(), json!(pos.map(number)));
+                placed.insert("rot".into(), json!(rot.map(number)));
+                fields.insert("at".into(), Value::Object(placed));
+            }
+            // A recipe step nests: its item is an instance of the recipe it names, expanded here
+            // with its own derived items under its ID, at most MAX_DEPTH recipes down.
+            if step.op == "recipe" {
+                let Some((child_pack, child)) = resolved.recipe(&step.kind) else {
+                    issues.push(Issue::error(
+                        "ref_unresolved",
+                        id,
+                        at(&format!("steps/{}/kind", step.id)),
+                        json!(step.kind),
+                        "names no recipe of a pack the document names",
+                    ));
+                    return None;
+                };
+                if chain.contains(&child.id) {
+                    issues.push(Issue::error(
+                        "cycle",
+                        id,
+                        at(&format!("steps/{}/kind", step.id)),
+                        json!(chain.iter().chain([&child.id]).collect::<Vec<_>>()),
+                        &format!("recipe `{}` nests itself", child.id),
+                    ));
+                    return None;
+                }
+                if chain.len() >= MAX_DEPTH {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/kind", step.id)),
+                        json!(chain.len() + 1),
+                        &format!("recipes nest at most {MAX_DEPTH} deep"),
+                    ));
+                    return None;
+                }
+                let nested = Value::Object(fields);
+                // The document's items, which the nested recipe's curves and IDs are read from.
+                let mut scratch = items.clone();
+                scratch.insert(derived_id.clone(), nested.clone());
+                let mut deeper = chain.to_vec();
+                deeper.push(child.id.clone());
+                let inner = expand_one(
+                    &mut scratch,
+                    &derived_id,
+                    nested,
+                    (child_pack, child),
+                    resolved,
+                    &deeper,
+                    planted,
+                    order,
+                    issues,
+                )?;
+                let instance = scratch.remove(&derived_id).unwrap_or(Value::Null);
+                derived_items.insert(derived_id.clone(), instance);
+                for (k, v) in inner.derived {
+                    if items.contains_key(&k) {
+                        issues.push(Issue::error(
+                            "bad_id",
+                            id,
+                            format!("items/{k}"),
+                            json!(k),
+                            &format!(
+                                "the document holds an item at the ID `{}` expands to",
+                                recipe.id
+                            ),
+                        ));
+                        return None;
+                    }
+                    derived_items.insert(k, v);
+                }
+                derived.extend(inner.items);
+                channels.extend(inner.channels);
+                ids_of.entry(step.id.clone()).or_default().push(derived_id);
+                continue;
+            }
+            ids_of
+                .entry(step.id.clone())
+                .or_default()
+                .push(derived_id.clone());
             derived_items.insert(derived_id, Value::Object(fields));
+        }
+    }
+    // The recipe's channels, one per item of the step each targets.
+    for (name, c) in &recipe.channels {
+        let target = member(c, "target")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let Some((step, rest)) = target.strip_prefix("step:").and_then(|t| t.split_once('/'))
+        else {
+            continue;
+        };
+        let targets = ids_of.get(step).cloned().unwrap_or_default();
+        let many = targets.len() > 1;
+        for (k, derived_id) in targets.iter().enumerate() {
+            let mut out = c.clone();
+            out["target"] = json!(format!("items/{derived_id}/{rest}"));
+            let cid = if many {
+                format!("{id}.{name}.{k}")
+            } else {
+                format!("{id}.{name}")
+            };
+            channels.insert(cid, out);
         }
     }
     // Written only once the whole expansion went through: a refused instance writes nothing.
@@ -1619,6 +2050,7 @@ fn expand_one(
         items: derived,
         derived: derived_items,
         broken_out,
+        channels,
     })
 }
 
@@ -1684,6 +2116,30 @@ impl Template {
     /// The value as the recipe wrote it.
     pub fn source(&self) -> &Value {
         &self.source
+    }
+
+    /// The names its expressions read.
+    pub fn names(&self) -> Vec<String> {
+        fn walk(e: &Expr, out: &mut Vec<String>) {
+            match e {
+                Expr::Num(_) => {}
+                Expr::Name(n) => out.push(n.clone()),
+                Expr::Neg(a) => walk(a, out),
+                Expr::Bin(_, a, b) => {
+                    walk(a, out);
+                    walk(b, out);
+                }
+                Expr::Call(_, args) => args.iter().for_each(|a| walk(a, out)),
+            }
+        }
+        let mut out = Vec::new();
+        match &self.form {
+            Form::Expr(e) => walk(e, &mut out),
+            Form::Literal => {}
+            Form::List(l) => l.iter().for_each(|t| out.extend(t.names())),
+            Form::Map(m) => m.iter().for_each(|(_, t)| out.extend(t.names())),
+        }
+        out
     }
 
     pub fn eval(&self, scope: &[(String, Value)]) -> Result<Value, String> {
@@ -2241,5 +2697,273 @@ mod tests {
             ..Planted::default()
         };
         assert!(check_pack(&manifest, &registry::core(), planted).is_ok());
+    }
+    // ---- #420: nesting, conditions, repeats along a curve, channels, lights in the budget ----
+
+    fn nest_pack(recipes: Value) -> Value {
+        json!({
+            "id": "test/nest", "name": "nest", "version": "1.0.0", "license": "MIT",
+            "description": "recipes in recipes",
+            "requires": {"core": ">=0.0.0", "modules": {}},
+            "recipes": recipes
+        })
+    }
+
+    fn rect_step() -> Value {
+        json!({"op": "mark", "kind": "test.rect@1", "params": {"w": 10, "h": 10}})
+    }
+
+    fn nested(name: &str, child: &str) -> Value {
+        json!({"id": format!("nest.{name}"), "version": "1.0",
+               "steps": {"inner": {"op": "recipe", "kind": format!("nest.{child}@1")}}})
+    }
+
+    fn nest_doc(kind: &str, extra: Value) -> Value {
+        let mut doc = json!({
+            "format": 1, "id": "doc-1", "profile": "figure", "title": "T", "description": "D",
+            "size": [640, 360], "packs": ["test/nest@1.0.0"],
+            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "items": {"n1": {"id": "n1", "kind": kind, "layer": "main", "name": "n1", "order": "a0",
+                             "at": {"pos": [10, 0, 0]}}}
+        });
+        if let (Some(d), Some(e)) = (doc.as_object_mut(), extra.as_object()) {
+            for (k, v) in e {
+                if k == "items" {
+                    let items = d
+                        .get_mut("items")
+                        .and_then(Value::as_object_mut)
+                        .expect("items");
+                    items.extend(v.as_object().cloned().unwrap_or_default());
+                } else {
+                    d.insert(k.clone(), v.clone());
+                }
+            }
+        }
+        doc
+    }
+
+    fn checked(recipes: Value, kind: &str, extra: Value) -> crate::document::CheckResult {
+        let packs = packs_with(&nest_pack(recipes));
+        super::super::check_packed(&nest_doc(kind, extra), &registry::core(), &packs)
+    }
+
+    #[test]
+    fn a_recipe_step_nests_its_recipe_under_its_own_derived_id() {
+        let result = checked(
+            json!({
+                "nest.leaf@1": {"id": "nest.leaf", "version": "1.0", "steps": {"r": rect_step()}},
+                "nest.box@1": nested("box", "leaf"),
+            }),
+            "nest.box@1",
+            json!({}),
+        );
+        assert!(result.ok, "{:?}", result.issues);
+        let derived: Vec<&String> = result.expansions[0].derived.keys().collect();
+        assert_eq!(derived, ["n1.inner", "n1.inner.r"]);
+        assert_eq!(
+            result.expansions[0].derived["n1.inner"]["kind"],
+            json!("nest.leaf@1")
+        );
+    }
+
+    #[test]
+    fn recipes_nest_four_deep_and_a_fifth_is_refused_naming_its_step() {
+        let chain = |deep: usize| {
+            let mut recipes = Map::new();
+            for k in 1..deep {
+                recipes.insert(
+                    format!("nest.d{k}@1"),
+                    nested(&format!("d{k}"), &format!("d{}", k + 1)),
+                );
+            }
+            recipes.insert(
+                format!("nest.d{deep}@1"),
+                json!({"id": format!("nest.d{deep}"), "version": "1.0", "steps": {"r": rect_step()}}),
+            );
+            Value::Object(recipes)
+        };
+        let four = checked(chain(4), "nest.d1@1", json!({}));
+        assert!(four.ok, "{:?}", four.issues);
+        assert!(four.expansions[0]
+            .derived
+            .contains_key("n1.inner.inner.inner.r"));
+        let five = checked(chain(5), "nest.d1@1", json!({}));
+        assert!(!five.ok);
+        assert!(
+            five.issues.iter().any(|i| i.code == "out_of_range"
+                && i.path == "items/n1.inner.inner.inner/steps/inner/kind"),
+            "{:?}",
+            five.issues
+        );
+        assert!(
+            five.expansions.is_empty(),
+            "a refused nesting writes nothing"
+        );
+    }
+
+    #[test]
+    fn a_recipe_that_nests_itself_is_refused_as_a_cycle() {
+        let result = checked(
+            json!({"nest.a@1": nested("a", "b"), "nest.b@1": nested("b", "a")}),
+            "nest.a@1",
+            json!({}),
+        );
+        assert!(
+            result.issues.iter().any(|i| i.code == "cycle"),
+            "{:?}",
+            result.issues
+        );
+        assert!(result.expansions.is_empty());
+    }
+
+    #[test]
+    fn a_false_condition_leaves_its_step_out_and_one_reading_t_is_refused_at_the_pack_check() {
+        let recipes = |when: &str| {
+            json!({"nest.opt@1": {
+                "id": "nest.opt", "version": "1.0",
+                "inputs": {"lamp": {"type": "bool", "default": false}},
+                "steps": {"base": rect_step(),
+                          "lamp": {"op": "mark", "kind": "test.rect@1", "when": when, "params": {"w": 2, "h": 2}}}
+            }})
+        };
+        let off = checked(recipes("lamp"), "nest.opt@1", json!({}));
+        assert!(off.ok, "{:?}", off.issues);
+        assert_eq!(
+            off.expansions[0].derived.keys().collect::<Vec<_>>(),
+            ["n1.base"]
+        );
+        let lit = json!({"items": {"n1": {"id": "n1", "kind": "nest.opt@1", "layer": "main", "name": "n1",
+                                          "order": "a0", "params": {"lamp": true}}}});
+        let on = checked(recipes("lamp"), "nest.opt@1", lit);
+        assert_eq!(
+            on.expansions[0].derived.keys().collect::<Vec<_>>(),
+            ["n1.base", "n1.lamp"]
+        );
+        let mut packs = Packs::default();
+        let refused = packs
+            .admit(&nest_pack(recipes("t * 2")), &registry::core())
+            .expect_err("a condition reading t is refused");
+        assert!(
+            refused.iter().any(|i| i.path.ends_with("steps/lamp/when")),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn copies_along_a_curve_stand_at_their_arc_lengths_turned_to_it() {
+        let recipes = |repeat: Value| {
+            json!({"nest.row@1": {
+                "id": "nest.row", "version": "1.0",
+                "inputs": {"rail": {"type": "ID", "default": "rail"}},
+                "steps": {"post": {"op": "mark", "kind": "test.rect@1", "repeat": repeat, "params": {"w": 1, "h": 1}}}
+            }})
+        };
+        let rail = json!({"items": {"rail": {"id": "rail", "kind": "test.rect@1", "layer": "main",
+            "name": "rail", "order": "a1", "params": {"points": [[0, 0, 0], [4, 0, 0], [4, 0, -2]]}}}});
+        let counted = checked(
+            recipes(json!({"along": "rail", "count": 4, "as": "i"})),
+            "nest.row@1",
+            rail.clone(),
+        );
+        let at = |r: &crate::document::CheckResult, k: usize| {
+            r.expansions[0].derived[&format!("n1.post.{k}")]["at"].clone()
+        };
+        // Six metres in four copies: 0, 2, 4 (the corner) and 6, each from the instance's origin.
+        assert_eq!(at(&counted, 0)["pos"], json!([10, 0, 0]));
+        assert_eq!(at(&counted, 1)["pos"], json!([12, 0, 0]));
+        assert_eq!(at(&counted, 3)["pos"], json!([14, 0, -2]));
+        assert_eq!(at(&counted, 1)["rot"], json!([0, 0, 0]));
+        // Past the corner it runs along −z: a quarter turn about +Y.
+        assert_eq!(at(&counted, 3)["rot"], json!([0, 90, 0]));
+        let spaced = checked(
+            recipes(json!({"along": "rail", "spacing": 1.5, "as": "i"})),
+            "nest.row@1",
+            rail,
+        );
+        assert_eq!(
+            spaced.expansions[0].derived.len(),
+            5,
+            "floor(6 / 1.5) + 1 copies"
+        );
+        assert_eq!(
+            spaced.expansions[0].derived["n1.post.3"]["at"]["pos"],
+            json!([14, 0, -0.5])
+        );
+        let mut packs = Packs::default();
+        let refused = packs
+            .admit(
+                &nest_pack(recipes(json!({"along": "rail", "spacing": "t", "as": "i"}))),
+                &registry::core(),
+            )
+            .expect_err("a spacing reading t is refused");
+        assert!(
+            refused
+                .iter()
+                .any(|i| i.path.ends_with("steps/post/repeat/spacing")),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn a_recipes_channels_join_the_document_targeting_the_items_it_derived() {
+        let result = checked(
+            json!({"nest.grow@1": {
+                "id": "nest.grow", "version": "1.0",
+                "steps": {"bars": {"op": "mark", "kind": "test.rect@1", "repeat": {"count": 2, "as": "i"},
+                                   "params": {"w": 4, "h": 4}}},
+                "channels": {"rise": {"target": "step:bars/params/h", "type": "f32",
+                    "keys": {"k0": {"t": "0s", "value": 4, "interp": "linear"}, "k1": {"t": "1s", "value": 8}}}}
+            }}),
+            "nest.grow@1",
+            json!({}),
+        );
+        assert!(result.ok, "{:?}", result.issues);
+        let channels = &result.lowered["channels"];
+        assert_eq!(
+            channels["n1.rise.0"]["target"],
+            json!("items/n1.bars.0/params/h")
+        );
+        assert_eq!(
+            channels["n1.rise.1"]["target"],
+            json!("items/n1.bars.1/params/h")
+        );
+        let bad = json!({"nest.bad@1": {"id": "nest.bad", "version": "1.0",
+            "steps": {"bars": rect_step()},
+            "channels": {"rise": {"target": "step:nothing/params/h"}}}});
+        let mut packs = Packs::default();
+        let refused = packs
+            .admit(&nest_pack(bad), &registry::core())
+            .expect_err("a channel on no step is refused");
+        assert!(
+            refused
+                .iter()
+                .any(|i| i.path.ends_with("channels/rise/target")),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn lights_a_recipe_derives_count_against_the_documents_light_cap() {
+        let recipes = json!({"nest.lamps@1": {
+            "id": "nest.lamps", "version": "1.0",
+            "steps": {"lamp": {"op": "item", "kind": "light.sun@1", "repeat": {"count": 3, "as": "i"}}}
+        }});
+        let over = checked(
+            recipes.clone(),
+            "nest.lamps@1",
+            json!({"budget": {"lights": 2}}),
+        );
+        let issue = over.issues.iter().find(|i| i.path == "budget/lights");
+        assert!(
+            issue.is_some_and(|i| i.code == "over_budget" && i.ids.len() == 3),
+            "{:?}",
+            over.issues
+        );
+        let fits = checked(recipes, "nest.lamps@1", json!({"budget": {"lights": 3}}));
+        assert!(
+            !fits.issues.iter().any(|i| i.path == "budget/lights"),
+            "{:?}",
+            fits.issues
+        );
     }
 }

@@ -1,0 +1,8 @@
+{
+  "about": "Role pairs for criterion 3 and the five quantize roles for criterion 4, as sRGB [r, g, b]. series_red and series_green: as seen 0.370 apart in OKLab, under Machado et al. 2009 deuteranopia (severity 100, applied in linear sRGB) 0.020 apart. series_blue and series_orange: at least 0.25 apart as seen and under each of the three simulations. Every role used with the clean look (series_*, candle_*) lies at least 0.16 from each of its status colors, past its 0.10 status distance. The tests recompute the criterion's distances before they use a pair.",
+  "red_green": { "series_red": [255, 90, 80], "series_green": [0, 193, 29] },
+  "blue_orange": { "series_blue": [90, 169, 230], "series_orange": [255, 127, 14] },
+  "heat_a": { "heat_1": [255, 247, 188], "heat_2": [254, 196, 79], "heat_3": [254, 153, 41], "heat_4": [217, 95, 14], "heat_5": [153, 52, 4] },
+  "heat_b": { "heat_1": [49, 54, 149], "heat_2": [69, 117, 180], "heat_3": [116, 173, 209], "heat_4": [171, 217, 233], "heat_5": [224, 243, 248] },
+  "candles": { "candle_up": [76, 155, 232], "candle_down": [255, 176, 74] }
+}

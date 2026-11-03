@@ -9,6 +9,7 @@
 //! calls") the run is the headless canvas worker instead: it answers `snapshot` alone, with one GPU
 //! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
 //! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
+//! #417 adds `film2d`: a 2D film in the window under a look, with its look switches timed.
 
 #[cfg(feature = "test-meter")]
 mod allocations;
@@ -16,7 +17,9 @@ mod compare;
 mod compile;
 mod conformance;
 mod effects;
+mod film;
 mod fixtures;
+mod flat;
 mod frames;
 mod golden;
 mod guard;
@@ -137,6 +140,15 @@ pub enum Planted {
     ShiftsGlyphQuads,
     IgnoresSpike,
     SectorsSourceOver,
+    /// #420's wrong programs (tests/acceptance/420/README.md: Planted programs): particles
+    /// stepped from the last frame; mesh edges read unwelded, or drawn without the depth test;
+    /// a shared result released when a revision drops its last reader.
+    ParticlesIntegrate,
+    EdgesUnwelded,
+    EdgesSkipDepth,
+    ReleasesAtRevision,
+    /// #417's: the look switch's clock stops at the request, before the new look is on screen.
+    StopsAtRequest,
 }
 
 impl Planted {
@@ -206,6 +218,11 @@ impl Planted {
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
+            "particles_integrate" => Planted::ParticlesIntegrate,
+            "edges_unwelded" => Planted::EdgesUnwelded,
+            "edges_skip_depth" => Planted::EdgesSkipDepth,
+            "releases_at_revision" => Planted::ReleasesAtRevision,
+            "stops_at_request" => Planted::StopsAtRequest,
             _ => return None,
         })
     }
@@ -419,6 +436,7 @@ impl App {
             Some("window2d") => marks2d::window2d(self, out, call),
             Some("vello_gpu") => marks2d::vello_gpu(self),
             Some("spike2d") => marks2d::spike2d(self, out, call),
+            Some("film2d") => film::film2d(self, call),
             Some("canonical") => live::canonical(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),

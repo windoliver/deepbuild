@@ -183,7 +183,13 @@ impl KitResult {
             "rules": self.rules.iter().map(|r| if r.pass {
                 json!({"rule": r.rule, "verdict": "PASS"})
             } else {
-                json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why})
+                let mut out = json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why});
+                // A rule that fails at a frame says so first, `frame <n>: …`, and names it.
+                let frame = r.why.strip_prefix("frame ").and_then(|w| w.split(':').next()?.parse::<u64>().ok());
+                if let Some(frame) = frame {
+                    out["frame"] = json!(frame);
+                }
+                out
             }).collect::<Vec<_>>(),
         })
     }

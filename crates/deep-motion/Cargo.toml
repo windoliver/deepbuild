@@ -15,4 +15,6 @@ path = "src/main.rs"
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #417: `deep-motion eval` takes a shipped look by its ID, for its time feel.
+deep-canvas-marks = { path = "../deep-canvas-marks" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

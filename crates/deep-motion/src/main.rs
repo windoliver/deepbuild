@@ -1,16 +1,22 @@
-//! `deep-motion <eval|insert|run>` (#391, #489): JSON lines in, one JSON line out per input line, in order,
+//! `deep-motion <eval|insert|run>`: JSON lines in, one JSON line out per input line, in order,
 //! exit 0; a line that can't be read, lacks a required field or names an unknown `planted` value
-//! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's.
+//! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's,
+//! `eval`'s `look`, `track`, `cameras` and `hash` the #417 one's, and its `input`, `view`,
+//! `unwrap`, `timing`, `order` and `constraints` the #489 one's.
 
 use std::io::{self, BufRead, Write};
 
+use deep_canvas::canon::revision_hash;
+use deep_canvas::document::DocShape;
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas_motion::clock::{run, Mode};
-use deep_canvas_motion::doc::Refused;
+use deep_canvas_motion::curve::Ease;
+use deep_canvas_motion::doc::{feel_of, Feel, Refused};
 use deep_canvas_motion::eval::{frame_with, position, Validity};
 use deep_canvas_motion::follow::Source;
+use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
-use deep_canvas_motion::program::{track_hash, Entry, Options, Planted, Program};
+use deep_canvas_motion::program::{track_hash, Options, Planted, Program};
 use serde_json::{json, Map, Value};
 
 fn bad_input() -> Value {
@@ -41,20 +47,43 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
     })
 }
 
-/// The line's input-track entries, `{t, seq, control, value, writer}`.
-fn entries_of(v: Option<&Value>) -> Option<Vec<Entry>> {
-    let Some(v) = v else { return Some(Vec::new()) };
-    v.as_array()?
+/// A request's input track (#417 `track`, #489 `input`), or `None` for an entry that isn't
+/// `{t, seq, control, value}`; #489's entries also carry their `writer`.
+fn track_of(value: Option<&Value>) -> Option<Vec<Entry>> {
+    let Some(value) = value else {
+        return Some(Vec::new());
+    };
+    value
+        .as_array()?
         .iter()
         .map(|e| {
             Some(Entry {
-                t: e.get("t")?.as_i64()?,
-                seq: e.get("seq")?.as_u64()?,
-                control: e.get("control")?.as_str()?.to_string(),
-                value: e.get("value")?.as_f64()?,
+                t: flicks(e.get("t"))?,
+                seq: e.get("seq").and_then(Value::as_i64)?,
+                control: e.get("control").and_then(Value::as_str)?.to_string(),
+                value: e.get("value")?.clone(),
             })
         })
         .collect()
+}
+
+/// The look's time feel: a look@1, or a shipped look's ID; at its defaults with no look.
+fn look_feel(look: Option<&Value>, frame_rate: (u32, u32)) -> Result<Feel, Value> {
+    let def = match look {
+        None => return Ok(Feel::default()),
+        Some(Value::String(id)) => deep_canvas_marks::look::shipped(id).ok_or_else(|| {
+            refusal(Refused {
+                code: "ref_unresolved",
+                path: "look".into(),
+            })
+        })?,
+        Some(def @ Value::Object(_)) => def.clone(),
+        Some(_) => return Err(bad_input()),
+    };
+    let Value::Object(def) = def else {
+        return Err(bad_input());
+    };
+    feel_of(&def, frame_rate).map_err(refusal)
 }
 
 fn eval_line(input: &Map<String, Value>) -> Value {
@@ -79,7 +108,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             Some(_) => return bad_input(),
         },
     };
-    let (Some(planted), Some(entries)) = (planted_of(input.get("planted")), entries_of(input.get("input"))) else {
+    // The planted twin (#417 AC10) reads time.state's ease as linear; #489's plants are motion's.
+    let linear = input.get("planted").and_then(Value::as_str) == Some("state_ease_linear");
+    let planted = if linear { Some(Planted::None) } else { planted_of(input.get("planted")) };
+    let (Some(planted), Some(track), Some(entries)) = (planted, track_of(input.get("track")), track_of(input.get("input"))) else {
         return bad_input();
     };
     let options = Options {
@@ -91,6 +123,25 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     let program = match Program::compile_with(doc, options) {
         Ok(p) => p,
         Err(r) => return refusal(r),
+    };
+    let mut feel = match look_feel(input.get("look"), program.motion.frame_rate) {
+        Ok(feel) => feel,
+        Err(answer) => return answer,
+    };
+    if linear {
+        feel.ease = Ease::Linear;
+    }
+    let Some(program) = program.with_inputs(feel, &track) else {
+        return bad_input();
+    };
+    // The document's own revision hash: the look, the track and the times never enter it.
+    let value = Value::Object(doc.clone());
+    let hash = match revision_hash(
+        &value,
+        &DocShape::new(&value, &deep_canvas::kinds::registry()),
+    ) {
+        Ok(hash) => hash,
+        Err(e) => return json!({"ok": false, "code": "out_of_range", "path": e.path}),
     };
     let motion = &program.motion;
     let mut state = program.state();
@@ -128,7 +179,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
                     many => json!(many),
                 };
                 let mut out = json!({"value": value, "iterations": s.iterations});
-                if let (Some(spec), Some(follow)) = (&motion.channels[c].follow, &program.follows[c]) {
+                if let (Some(spec), Some(follow)) = (&motion.channels[c].follow, &program.channel_follows[c]) {
                     let o = state.follow[c];
                     if spec.rate {
                         out["rate"] = json!(o.rate);
@@ -182,6 +233,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             "channels": channels,
             "constraints": constraints,
             "placements": placements,
+            "cameras": f.cameras.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect::<Map<String, Value>>(),
             "valid_until": f.valid_until,
         });
         if let Some(track) = &track {
@@ -205,7 +257,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .iter()
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
-    json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts})
+    json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash})
 }
 
 fn insert_line(input: &Map<String, Value>) -> Value {
