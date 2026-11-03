@@ -11,9 +11,38 @@ use std::{
 /// What the click says once it's done; the first `deep` command says the same (packages/hub/src/setup.ts).
 pub const SET_UP_LINE: &str = "DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo's checks, and started the hub at login; deep setup --undo removes it all.";
 
-/// Whether this home has nothing of DeepBuild in it yet, so the window shows the Set up button.
+/// Whether setup hasn't finished in this home, so the window shows the Set up button (#1002): nothing of DeepBuild
+/// is here yet, or a setup started and didn't finish. Setup's first step writes `~/.deepbuild/setup-stopped.json` and
+/// its last writes `setup-finished.json` and takes the first away (packages/hub/src/setup.ts).
 pub fn needed() -> bool {
-    !crate::hub::root().exists()
+    let root = crate::hub::root();
+    !root.join("setup-finished.json").exists()
+        && (!root.exists() || root.join("setup-stopped.json").exists())
+}
+
+/// Why the last setup stopped, and its fix, as it kept them in `~/.deepbuild/setup-stopped.json`; `None` when it
+/// kept none.
+pub fn stopped() -> Option<(String, String)> {
+    let text = std::fs::read_to_string(crate::hub::root().join("setup-stopped.json")).ok()?;
+    let kept: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let text = |key: &str| kept[key].as_str().map(str::to_owned);
+    Some((text("reason")?, text("fix").unwrap_or_default()))
+}
+
+/// What the count reads while setup hasn't finished, in place of a number of asks (#1002); `None` once it has.
+pub fn count() -> Option<&'static str> {
+    if !needed() {
+        None
+    } else if crate::hub::root().join("setup-stopped.json").exists() {
+        Some("Setup didn't finish")
+    } else {
+        Some("Not set up yet")
+    }
+}
+
+/// The line under Set up: why the last setup stopped and its fix, when it kept them.
+pub fn reason() -> Option<String> {
+    stopped().map(|(reason, fix)| format!("Setup stopped: {}. {fix}", reason.trim_end_matches('.')))
 }
 
 /// Runs `deep setup` and returns the one line, or what went wrong.
