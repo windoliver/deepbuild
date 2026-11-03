@@ -28,6 +28,8 @@ pub fn modules() -> Vec<Module> {
     let mut out: Vec<Module> = Vec::new();
     #[cfg(feature = "test-mark")]
     out.push(deep_canvas_test_modules::registries::mark());
+    #[cfg(feature = "test-column-source")]
+    out.push(deep_canvas_test_modules::registries::columns());
     #[cfg(feature = "test-mark-dot-9")]
     out.push(deep_canvas_test_modules::registries::mark_dot_9());
     #[cfg(feature = "test-mark-no-planted")]

@@ -46,6 +46,38 @@
     }
   },
   {
+    "registry": "column.source@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "check",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "string"
+        },
+        "types": {
+          "type": "array"
+        },
+        "fixture": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "form",
+        "types",
+        "fixture"
+      ]
+    }
+  },
+  {
     "registry": "device.class@1",
     "owner": "core",
     "fill": [
