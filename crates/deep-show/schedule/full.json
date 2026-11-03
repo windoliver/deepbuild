@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "26747d57c194c9ee8e1ff1f768f98c089ebfdae3c1fafa7cca9ae1f9175551e0",
+  "set_digest": "14476ac519fd3d967b5d6d4559eb28e2fd28c41e49345c58514175772c7c56a8",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -150,7 +150,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "437f76d546681c933724cee9c189db0d9bbf6cb75088f1f5b2e92f90ee94b268",
+      "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -617,6 +617,37 @@
         "per": "item"
       },
       {
+        "operator": "marks2d.relations",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "core.world",
+          "core.transform",
+          "core.fields",
+          "text.run",
+          "text.counter",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "marks2d.places"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "marks2d.place",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.world",
+          "marks2d.places"
+        ],
+        "writes": [
+          "marks2d.at"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.animate",
         "module": "text",
         "version": "1.0.0",
@@ -639,6 +670,7 @@
         "reads": [
           "core.fields",
           "core.world",
+          "marks2d.at",
           "text.counter",
           "look.palette",
           "view(locale)"
@@ -656,6 +688,7 @@
           "refs",
           "reading",
           "core.world",
+          "marks2d.at",
           "core.fields",
           "text.counter",
           "text.run",
