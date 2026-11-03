@@ -41,7 +41,8 @@ const TABLES: readonly TableDef[] = [
   T('runs', ['id'], 'id TEXT, check_id TEXT, claim_id TEXT, host TEXT, needs TEXT, commit_sha TEXT, env_fingerprint TEXT, started INTEGER, ended INTEGER, outcome TEXT, tests_run INTEGER, passed INTEGER, evidence TEXT, assertion TEXT, expected TEXT, actual TEXT, step TEXT, points_to TEXT'),
   T('verdicts', ['id'], 'id TEXT, handle TEXT, claim_id TEXT, outcome TEXT, reasons TEXT, requirements TEXT, smallest TEXT, points_to TEXT, commit_sha TEXT, key TEXT, created INTEGER, stale INTEGER NOT NULL DEFAULT 0, because TEXT'),
   T('asks', ['id'], 'id TEXT, kind TEXT, key TEXT, question TEXT, options TEXT, recommended TEXT, default_option TEXT, provisional INTEGER, session_id TEXT, owner TEXT, fallback TEXT, deadline INTEGER, later_until INTEGER, pinned_to TEXT, status TEXT NOT NULL DEFAULT \'open\', outcome TEXT NOT NULL DEFAULT \'unanswered\', batch_id TEXT, created INTEGER, answered INTEGER, answer TEXT, decision TEXT'),
-  T('decisions', ['id'], 'id TEXT, key TEXT, scope TEXT, answer TEXT, by TEXT, ask_id TEXT, state TEXT, created INTEGER, overruled_by TEXT, applied INTEGER NOT NULL DEFAULT 0'),
+  // Indexed by scope: a session starting reads its own decisions back (#824).
+  T('decisions', ['id'], 'id TEXT, key TEXT, scope TEXT, answer TEXT, by TEXT, ask_id TEXT, state TEXT, created INTEGER, overruled_by TEXT, applied INTEGER NOT NULL DEFAULT 0', ['scope']),
   T('leases', ['kind', 'key'], 'kind TEXT, key TEXT, host TEXT, mode TEXT, holder TEXT, expires INTEGER, state TEXT'),
   T('evidence', ['hash'], 'hash TEXT, kind TEXT, type TEXT, size INTEGER, source TEXT, origin TEXT, redaction TEXT, license TEXT, step_times TEXT, derived_from TEXT'),
   T('commits', ['sha'], 'sha TEXT, session_id TEXT, worktree TEXT, created INTEGER'),
@@ -77,6 +78,7 @@ const TABLES: readonly TableDef[] = [
 ];
 /** The record's reading of turns is keyed by event IDs; it serves `session()` and is not a listed projection; the wiki's text is wiki_claims' index. */
 const INTERNAL = new Set(['turns', 'turn_events', 'wiki_text']);
+const TURNS_CACHED = 64;
 export const PROJECTIONS: readonly string[] = TABLES.filter((t) => !INTERNAL.has(t.name)).map((t) => t.name);
 const byName = new Map(TABLES.map((t) => [t.name, t]));
 export const tableDef = (name: string): TableDef | undefined => byName.get(name);
@@ -322,6 +324,12 @@ export class Projector {
         if (e.writer !== 'core') break;
         this.stmt("UPDATE asks SET status = 'open', outcome = 'unanswered', answered = NULL, answer = NULL, decision = NULL, deadline = ? WHERE id = ? AND status = 'defaulted'").run(int(d.deadline), bare(e.subject));
         break;
+      case 'deadline.moved':
+        // The core moves an open ask's deadline later by time it couldn't be seen (#908). Its minimum notice once it
+        // shows holds its default back but is no deadline move, so the column keeps the deadline.
+        if (e.writer !== 'core' || d.because === 'notice') break;
+        this.stmt("UPDATE asks SET deadline = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.deadline), bare(e.subject));
+        break;
       case 'ask.escalated':
       case 'ask.cancelled':
       case 'ask.moot':
@@ -388,6 +396,15 @@ export class Projector {
       case 'definition.revised':
         this.up('definitions', { ...this.definition(d, 'revised', e.ts), dispute_ask: str(d.dispute_ask) });
         break;
+      case 'definition.stood_in': {
+        // A stand-in a requirement's check was proven on (#874): kept on the requirement as its `stand_in`.
+        const row = this.stmt('SELECT requirements FROM definitions WHERE task_ref = ?').get(str(d.task_ref)) as { requirements: string } | undefined;
+        if (!row) break;
+        const found = new Map((d.requirements as Obj[]).map((r) => [r.id, r.stand_in]));
+        const requirements = (JSON.parse(row.requirements) as Obj[]).map((r) => (found.has(r.id) ? { ...r, stand_in: found.get(r.id) } : r));
+        this.stmt('UPDATE definitions SET requirements = ? WHERE task_ref = ?').run(JSON.stringify(requirements), str(d.task_ref));
+        break;
+      }
       case 'run.started':
       {
         // A run's claim, check and commit are the core's start, whenever it lands; until then the first start's.
@@ -604,6 +621,8 @@ export class Projector {
       const rows = this.stmt('SELECT idx, number, start_seq, start_id, stop_seq, stopped, last_seq, last_id FROM turns WHERE session_id = ? ORDER BY idx').safeIntegers(true).all(session) as
         { idx: bigint; number: bigint | null; start_seq: bigint | null; start_id: string; stop_seq: bigint | null; stopped: bigint; last_seq: bigint | null; last_id: string }[];
       turns = rows.map((r) => ({ idx: Number(r.idx), number: r.number === null ? null : Number(r.number), startSeq: r.start_seq, startId: r.start_id, stopSeq: r.stop_seq, stopped: r.stopped !== 0n, lastSeq: r.last_seq, lastId: r.last_id }));
+      // A cache of the turns table, which each change is saved to at once: the oldest read leaves when it's full.
+      if (this.turns.size >= TURNS_CACHED) this.turns.delete(this.turns.keys().next().value!);
       this.turns.set(session, turns);
     }
     return turns;

@@ -118,18 +118,21 @@ export function staleRuns(events: RecordEvent[]) {
   return { sessions };
 }
 
+/**
+ * A looping session's held places (#965's check.held@1): each is appended again, whole, each time it changes, so the
+ * newest record for a check and snapshot stands. A place a newer snapshot took before it started is a run the loop saved.
+ */
 export function loopHolds(events: RecordEvent[]) {
   const sessions: { session: string; places_taken: number; runs_saved: number; runs_started: number; starts: { check: string; claim: string; by: string; waited_ms: number | null }[] }[] = [];
   for (const [session, list] of bySession(events)) {
-    const holds = list.filter((e) => e.kind === 'check.held');
-    const begun = list.filter((e) => e.kind === 'check.held_start');
-    if (!holds.length && !begun.length) continue;
-    const places = holds.filter((e) => e.data.replaced !== null && e.data.replaced !== undefined).length;
-    const starts = begun.map((e) => {
-      const reply = list.find((x) => x.kind === 'stop.held' && x.data.claim === e.data.claim);
-      return { check: String(e.data.check), claim: String(e.data.claim), by: String(e.data.by), waited_ms: reply ? e.ts - reply.ts : null };
-    });
-    sessions.push({ session, places_taken: places, runs_saved: places, runs_started: starts.length, starts });
+    const places = new Map<string, Record<string, unknown>>();
+    for (const e of list) if (e.kind === 'check.held') places.set(`${str(e.data.check)}\0${str(e.data.snapshot)}`, e.data);
+    if (!places.size) continue;
+    const taken = [...places.values()].filter((p) => p.replaced_by !== null && p.replaced_by !== undefined).length;
+    const starts = [...places.values()].filter((p) => typeof p.started_at === 'number').map((p) => ({
+      check: String(p.check), claim: String(p.claim), by: String(p.started_by), waited_ms: typeof p.held_at === 'number' ? (p.started_at as number) - p.held_at : null,
+    }));
+    sessions.push({ session, places_taken: taken, runs_saved: taken, runs_started: starts.length, starts });
   }
   return { sessions };
 }

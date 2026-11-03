@@ -14,7 +14,7 @@ import { isStatusQuestion } from './verdict-chat.js';
 const HOUR = 3_600_000;
 /** How long each outside source stays fresh; the record is read as it lands, so it never goes stale. */
 const FRESH_FOR: Record<string, number> = { github: 24 * HOUR };
-const KINDS = ['user.ask', 'agent.stop', 'stop.held', 'run.started', 'run.finished', 'run.stale', 'check.held', 'check.held_start', 'turn.usage', 'session.start', 'reading.recorded', 'ask.created', 'ask.answered', 'verdict.made', 'claim.made'];
+const KINDS = ['user.ask', 'agent.stop', 'stop.held', 'run.started', 'run.finished', 'run.stale', 'check.held', 'turn.usage', 'session.start', 'reading.recorded', 'ask.created', 'ask.answered', 'verdict.made', 'claim.made'];
 const CLASSIFIERS = { is_it_done: isItDone, rework: isRework };
 const quoted = KINDS.map((k) => `'${k}'`).join(', ');
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');

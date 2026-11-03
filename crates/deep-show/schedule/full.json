@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "3cd5884f2c0feb226a0c2ac424f3f75d29b0fd735b2805fe6aa3baa5037ad69f",
+  "set_digest": "019b358fe4f0928c9dd36181ed1889bbe91bfd4b037a4832e2197555337bec43",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -317,6 +317,35 @@
       "module": "text",
       "implementation": {
         "name": "text",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "vector@1": {
+      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "reference": "vector",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "vector",
+      "implementation": {
+        "name": "vector",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",

@@ -1,0 +1,266 @@
+#874 redrafted acceptance suite on the base a7e140b2 (origin/main), 2026-11-02, Node 24.22.0, macOS, load average
+35 to 86 on 12 cores. Built with `npm ci`, `npm run build --workspaces` and `cargo build -p deep-hook`; run with
+`npx vitest run --root tests/acceptance/874/redraft --no-file-parallelism`. Typecheck
+(`node node_modules/typescript/bin/tsc -p tests/acceptance/874/redraft/tsconfig.json`): exit 0.
+
+Results on the base, per test:
+
+- AC1 the check for GET /health fails on the stand-in's {} ...: FAILS at its assertion that the base run reached the
+  stand-in. The hub doesn't carry R1's declared surface to `baseCheckout`, so no stand-in is built and no
+  DEEP_SURFACE_URL is given; in the empty base the check finds no app.mjs and throws before any assertion, at
+  .deepbuild/checks/health.test.mjs:22 ("seen {... "error":"Cannot find module .../app.mjs" ...}"). Run 1 below.
+- AC3 a check that asserts only 200 passes on the stand-in ...: FAILS at its assertion that the base run passed on the
+  stand-in: the same missing stand-in, the base run failed at .deepbuild/checks/health.test.mjs:22 (expected 'failed'
+  to be 'passed'). Run 3 below (in run 1 it was BLOCKED by load, see there).
+- AC2 the check for the new GET /health runs on the real base, and R1 records no stand_in: PASSES on the base, which
+  builds no stand-in anywhere; the base run saw the real base's 404 and {"error":"not found"} and failed at its named
+  assert.equal (.deepbuild/checks/health.test.mjs:25). Its proof on a wrong program is the stand-in-always plant.
+  Run 2 below (in run 1 it was BLOCKED by load).
+- The five wrong-program tests (AC1 x2, AC2 x1, AC3 x2): BLOCKED, as designed. The base hub refuses to start with a
+  DEEP_HUB_PLANT it doesn't list ("DEEP_HUB_PLANT=<plant> names no planted program"): stand-in-surface-dropped,
+  stand-in-unrecorded, stand-in-always, stand-in-pass-proves.
+
+BLOCKED by machine load, not by the base: deep-hook's "could not spool ... within the hook's 50 ms" or "its sync didn't
+finish within the hook's 50 ms" left a prompt with no task or a stop with no claim. Seen in run 1 (AC3's and AC2's main
+tests) and in four reruns of those two tests at load 55 to 68; each went through when run again.
+
+==== Run 1: the whole suite (8 failed: AC1 at its assertion, AC2 and AC3 main BLOCKED by load, 5 plants BLOCKED)
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/874/redraft
+
+ ❯ empty.test.ts (3 tests | 3 failed) 12872ms
+   ❯ AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash (3)
+     × AC1 the check for GET /health fails on the stand-in's {} on the base at its named assertion, and R1's stand_in holds the stand-in's hash 10942ms
+     × AC1 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in 1019ms
+     × AC1 (wrong program) a hub that builds the stand-in but records no hash fails this test, naming stand_in 905ms
+ ❯ invalid.test.ts (3 tests | 3 failed) 72673ms
+   ❯ AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID (3)
+     × AC3 a check that asserts only 200 passes on the stand-in, and the claim is INVALID naming it 64751ms
+     × AC3 (wrong program) a hub that counts a pass on a stand-in as proof fails this test, naming INVALID 3873ms
+     × AC3 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in 4033ms
+ ❯ starts.test.ts (2 tests | 2 failed) 74783ms
+   ❯ AC2 #874.f1e74512 through a real hub, in a repo whose app already starts, a check for a new route gets no stand-in (2)
+     × AC2 the check for the new GET /health runs on the real base, and R1 records no stand_in 68694ms
+     × AC2 (wrong program) a hub that builds a stand-in where the app already starts fails this test, naming the stand-in 6064ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 the check for GET /health fails on the stand-in's {} on the base at its named assertion, and R1's stand_in holds the stand-in's hash
+AssertionError: .deepbuild/checks/health.sh on the base must reach the stand-in of its declared surface, a service answering 200 and {} (run:01M6DN0H0M7ZDXCCAMM1514JS5 on 71abd2fa2214: failed, points_to .deepbuild/checks/health.test.mjs:22, findings ["R1 GET /health answers 200 with the JSON body status ok (.deepbuild/checks/health.test.mjs:22): seen {\"cwd\":\"/private/tmp/dh874-Mf44sM/h/.deepbuild/checkouts/c-dyx5aF\",\"via\":\"app\",\"app\":false,\"status\":null,\"body\":null,\"error\":\"Cannot find module '/private/tmp/dh874-Mf44sM/h/.deepbuild/checkouts/c-dyx5aF/app.mjs' imported from /private/tmp/dh874-Mf44sM/h/.deepbuild/checkouts/c-dyx5aF/.deepbuild/checks/health.test.mjs\"}"]): expected { status: null, body: null, …(1) } to deeply equal { status: 200, body: '{}', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "body": "{}",
+-   "error": undefined,
+-   "status": 200,
++   "body": null,
++   "error": "Cannot find module '/private/tmp/dh874-Mf44sM/h/.deepbuild/checkouts/c-dyx5aF/app.mjs' imported from /private/tmp/dh874-Mf44sM/h/.deepbuild/checkouts/c-dyx5aF/.deepbuild/checks/health.test.mjs",
++   "status": null,
+  }
+
+ ❯ judge empty.test.ts:20:8
+
+ ❯ empty.test.ts:33:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file://<repo>/packages/hub/dist/plant.js:45
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-surface-dropped names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:45:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1131:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:48:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:245:20
+ ❯ empty.test.ts:37:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 (wrong program) a hub that builds the stand-in but records no hash fails this test, naming stand_in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-unrecorded did not start: file://<repo>/packages/hub/dist/plant.js:45
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-unrecorded names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:45:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1131:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:48:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:245:20
+ ❯ empty.test.ts:42:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 a check that asserts only 200 passes on the stand-in, and the claim is INVALID naming it
+Error: BLOCKED: the prompt's task (none) never had its definition locked: no user.ask or task.created among 1 events (session.start); hooks: SessionStart exit 0 {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"DeepBuild is watching this session. No checks are active in this repo yet. When you finish a piece of work, declare it with t  | UserPromptSubmit exit 0  deep-hook: could not spool 01M6DN0TJAZYWAV9HY2BCPQ51Z within the hook's 50 ms
+ (hub stderr: )
+ ❯ claimThroughHub helpers.ts:260:13
+
+ ❯ invalid.test.ts:24:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 (wrong program) a hub that counts a pass on a stand-in as proof fails this test, naming INVALID
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-pass-proves did not start: file://<repo>/packages/hub/dist/plant.js:45
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-pass-proves names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:45:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1131:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:48:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:245:20
+ ❯ invalid.test.ts:28:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file://<repo>/packages/hub/dist/plant.js:45
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-surface-dropped names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:45:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1131:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:48:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:245:20
+ ❯ invalid.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  starts.test.ts > AC2 #874.f1e74512 through a real hub, in a repo whose app already starts, a check for a new route gets no stand-in > AC2 the check for the new GET /health runs on the real base, and R1 records no stand_in
+Error: BLOCKED: the prompt's task (none) never had its definition locked: no user.ask or task.created among 0 events (); hooks: SessionStart exit 0  deep-hook: spooled 01M6DN3ESXA5YAFFWZX0TXAFBK, but its sync didn't finish within the hook's 50 ms
+ | UserPromptSubmit exit 0  deep-hook: could not spool 01M6DN3EVNP5T7KPFYD4912XGE within the hook's 50 ms
+ (hub stderr: )
+ ❯ claimThroughHub helpers.ts:260:13
+
+ ❯ starts.test.ts:24:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  starts.test.ts > AC2 #874.f1e74512 through a real hub, in a repo whose app already starts, a check for a new route gets no stand-in > AC2 (wrong program) a hub that builds a stand-in where the app already starts fails this test, naming the stand-in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-always did not start: file://<repo>/packages/hub/dist/plant.js:45
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-always names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:45:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1131:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:48:28)
+    at file://<repo>/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:245:20
+ ❯ starts.test.ts:28:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+   Start at  00:11:22
+   Duration  173.84s (tests 93%, import 6%, transform 1%)
+
+
+==== Run 2: AC2 main test alone (passes)
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/874/redraft
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 1 skipped (2)
+   Start at  00:23:05
+   Duration  7.74s (tests 89%, import 6%, transform 5%)
+
+
+==== Run 3: AC3 main test alone (fails at its assertion)
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/874/redraft
+
+ ❯ invalid.test.ts (3 tests | 1 failed | 2 skipped) 6933ms
+   ❯ AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID (3)
+     × AC3 a check that asserts only 200 passes on the stand-in, and the claim is INVALID naming it 6931ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 a check that asserts only 200 passes on the stand-in, and the claim is INVALID naming it
+AssertionError: .deepbuild/checks/health.sh on the base must reach the stand-in of its declared surface and pass there (run:01M6DNP9YQ2AR1MM6G26XKDWJK on efd93baf25ca: failed, points_to .deepbuild/checks/health.test.mjs:22, findings ["R1 GET /health answers 200 (.deepbuild/checks/health.test.mjs:22): seen {\"cwd\":\"/private/tmp/dh874-zGKH5u/h/.deepbuild/checkouts/c-Vb97iq\",\"via\":\"app\",\"app\":false,\"status\":null,\"body\":null,\"error\":\"Cannot find module '/private/tmp/dh874-zGKH5u/h/.deepbuild/checkouts/c-Vb97iq/app.mjs' imported from /private/tmp/dh874-zGKH5u/h/.deepbuild/checkouts/c-Vb97iq/.deepbuild/checks/health.test.mjs\"}"]): expected 'failed' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "failed"
+
+ ❯ judge invalid.test.ts:15:127
+     13|   expect(base.length, `${CHECK} must run on the base, the empty root c…
+     14|   for (const r of base) {
+     15|     expect(r.outcome, `${CHECK} on the base must reach the stand-in of…
+       |                                                                                                                               ^
+     16|   }
+     17|   const verdicts = verdictsOf(c);
+ ❯ invalid.test.ts:24:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  00:23:20
+   Duration  7.57s (tests 93%, import 4%, transform 3%)
+

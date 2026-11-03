@@ -801,6 +801,10 @@
         "deep-gpu": {
           "spec": "* path=../deep-gpu",
           "why": "Issue #385: the GPUI live view opens the GPU layer's device the first time a writer layer needs Vello GPU."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #398: check, raster and geometry import each vector@1 item's SVG from the line's store and draw it as marks2d's items."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -979,6 +983,10 @@
         "deep-relay": {
           "spec": "* path=../deep-relay",
           "why": "Issue #309: the network seam's macOS backend, which the seam_suite and relay_client calls run, and relay@1's wire."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #398: the vector canvas module, in the r2 build set and up."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1501,6 +1509,26 @@
         "tungstenite": {
           "spec": "^0.29",
           "why": "Issue #309: the WebSocket relay@1 rides on over https, so a browser's web player can speak it too; already in the lockfile."
+        }
+      }
+    },
+    "crates/deep-canvas-vector/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #398: the registry and seal the vector module registers through, the document issues its import answers, and the ops module every number of its geometry goes through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #398: the path verbs and flattening a vector's outlines are drawn and measured with, as marks2d's own items."
+        },
+        "roxmltree": {
+          "spec": "^0.21",
+          "why": "Issue #398: the SVG's XML read once, refusing a DTD; no float math (lint/canvas/crates.json). Already in the lockfile, through usvg."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #398: a vector item's params and the items it draws as, as the document holds them. Already in the workspace tree."
         }
       }
     }

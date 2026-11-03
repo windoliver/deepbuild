@@ -1,0 +1,21 @@
+// The test glance plug-in (#262, AC7): a source that runs only while shown, every 10 s, a view binding it, and the
+// notice kind ext.glance.rate_passed, whose only check is in its panel (panel/main.js). It declares no job, scheduled
+// or not, that checks the notice.
+interface Answer { status: number; headers: Record<string, string>; body: string }
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerSource('ext.glance.errors', {
+    variant: 'polled',
+    host: 'api.metrics.example',
+    path: '/s/ext.glance.errors',
+    quota: { per_minute: 600, per_day: 100_000 },
+    timeout: 5_000,
+    freshFor: 10_000,
+    while_shown: { every: 10_000 },
+    parse(answer: Answer): { value: number; unit: string } {
+      if (answer.status !== 200) throw Error(`no error rate in a ${answer.status} answer`);
+      return { value: Number(JSON.parse(answer.body).value), unit: '%' };
+    },
+  });
+  await deep.registerView('ext.glance.board', 'panel', 'home', { binds: ['reading:ext.glance.errors'] });
+}

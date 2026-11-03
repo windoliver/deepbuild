@@ -75,8 +75,8 @@ async function judge(w: World, job: string, thread: string, control_: Thread | u
   }
 }
 
-describe('#39 a Codex job the runner started leaves no session row, claim or task spend', () => {
-  it('a job through `codex exec` whose hooks carry the thread ID it printed reads as the job\'s events, with no session row, claim or task spend, while a plain Codex session beside it has its row', async () => {
+describe('AC6 #39.edfd0196 a Codex job the runner started leaves no session row, claim or task spend', () => {
+  it('AC6 #39.edfd0196 a job through `codex exec` whose hooks carry the thread ID it printed reads as the job\'s events, with no session row, claim or task spend, while a plain Codex session beside it has its row', async () => {
     const { w, hub } = await withHub();
     let job = '';
     let thread: Thread | undefined;
@@ -101,7 +101,7 @@ describe('#39 a Codex job the runner started leaves no session row, claim or tas
     await judge(w, job, thread!.id, plain);
   }, 300_000);
 
-  it('hooks that reach the hub from the job\'s folder before the runner has read its thread ID still read as the job\'s, never as a session', async () => {
+  it('AC6 #39.edfd0196 hooks that reach the hub from the job\'s folder before the runner has read its thread ID still read as the job\'s, never as a session', async () => {
     const { w, hub } = await withHub();
     let job = '';
     const id = crypto.randomUUID();
