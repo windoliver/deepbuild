@@ -505,7 +505,10 @@ pub fn tan(x: Iv) -> Iv {
     if x.is_empty() {
         return x;
     }
-    if !x.is_bounded() || x.width() >= ops::PI || holds_one_of(x, ops::PI / 2.0, ops::PI) {
+    // Poles are cos's zeros, π apart: a range no wider than f64's π, which is under the real
+    // π, holds one only where cos changes sign between its ends. libm's cos keeps its sign that
+    // near a zero, so this is exact.
+    if !x.is_bounded() || x.width() > ops::PI || ops::cos(x.lo) * ops::cos(x.hi) <= 0.0 {
         return Iv::ENTIRE;
     }
     Iv::new(down(ops::tan(x.lo), ULPS), up(ops::tan(x.hi), ULPS))
@@ -530,7 +533,9 @@ pub fn atan2(y: Iv, x: Iv) -> Iv {
         return Iv::EMPTY;
     }
     let pi = Iv::new(down(-ops::PI, 1), up(ops::PI, 1));
-    if x.lo <= 0.0 && y.lo <= 0.0 && y.hi >= 0.0 {
+    // Zero is one value, unsigned, as IEEE 1788 reads it and the point form takes it: y on 0 or
+    // above sits on the cut's upper side, where the angle reaches π and its corners bound it.
+    if x.lo <= 0.0 && y.lo < 0.0 && y.hi >= 0.0 {
         return pi;
     }
     if !x.is_bounded() || !y.is_bounded() {
