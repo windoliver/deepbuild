@@ -1,0 +1,17 @@
+{
+  "scene": "sweep-picture-frame",
+  "format": 1,
+  "about": "Parity fixture for #441 AC5 (Builder extrude: sweep along a curve). The rail is a closed linear curve@1, a 0.40 x 0.30 m rectangle in the xz plane centred on the origin, its points ids 1 to 4 (so its corners are addressed rect#p1 ... rect#p4), starting at a corner: corners at u = 0, 0.4/1.4, 0.7/1.4 and 1.1/1.4. The frame is a 0.02 x 0.02 m square outline centred on the curve, swept over the whole closed curve with no caps. Expected (closed forms): watertight on positions welded at 1e-6 m (every edge on exactly two triangles, wound opposite ways), V - E + F = 0 (one closed part of genus 1), and a volume of 0.0004 m^2 x 1.40 m = 0.00056 m^3 within 1e-9 relative by the divergence theorem: the mitered frame's plan is the outer 0.42 x 0.32 rectangle less the inner 0.38 x 0.28 one, 0.028 m^2, times 0.02 m. Each corner's ring lies in the plane that bisects the corner, stretched across it by 1 / cos 45 deg: outline point (x, y) at corner P is P + x N + y (B_in + B_out), with N = +y (the planar curve's rotation-minimizing normal from up) and B = T x N on the segments in and out. The twin is a planted program, reachable only through the scenario's `planted`, that must fail, the failure naming each text in `names`.",
+  "items": {
+    "rect": { "kind": "curve@1", "params": { "points": [[-0.2, 0, -0.15], [0.2, 0, -0.15], [0.2, 0, 0.15], [-0.2, 0, 0.15]], "ids": [1, 2, 3, 4], "mode": "linear", "closed": true } },
+    "frame": { "kind": "extrude@1", "params": { "outline": [[-0.01, -0.01], [0.01, -0.01], [0.01, 0.01], [-0.01, 0.01]], "along": { "curve": "rect", "range": [0, 1] }, "caps": "none" } }
+  },
+  "volume": 0.00056,
+  "volume_formula": "0.0004 m^2 x 1.40 m (outline area x centreline length)",
+  "volume_rel": 1e-9,
+  "euler": 0,
+  "corner_tolerance_m": 1e-9,
+  "twins": [
+    { "planted": "corner_square", "names": ["volume", "corner rect#p1 ", "corner rect#p2 ", "corner rect#p3 ", "corner rect#p4 "], "wrong": "each corner's ring is set square to one side, in the plane normal to the segment into the corner and unstretched, instead of mitered" }
+  ]
+}

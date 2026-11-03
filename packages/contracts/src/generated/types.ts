@@ -5381,6 +5381,25 @@ export interface TaskCreated {
   evidence?: Array<string>;
 }
 
+/** terminal.refused@1 */
+export interface TerminalRefused {
+  v: 1;
+  id: string;
+  kind: "terminal.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    terminal: string;
+    pid: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** tool.after@1 */
 export interface ToolAfter {
   v: 1;

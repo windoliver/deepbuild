@@ -1982,6 +1982,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "taffy 0.14.0",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -1989,7 +1990,6 @@ name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
- "deep-canvas-marks",
  "serde_json",
 ]
 
@@ -2017,6 +2017,7 @@ name = "deep-canvas-scene3d"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
  "serde_json",
@@ -2182,6 +2183,16 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "vello_cpu",
+]
+
+[[package]]
+name = "deep-motion"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "serde_json",
 ]
 
 [[package]]

@@ -7,7 +7,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants, copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import http from 'node:http';
+import type { ClientRequest } from 'node:http';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -132,9 +132,11 @@ const SESSION_KIND = (name: string) => ({ name, match: 'exact', cap: 1000, coold
 /** env-local's resource kinds, as its manifest declares them in the kernel's lease table (#237). */
 export const leaseKinds = [PORT_KIND, COMPOSE_KIND, ...SESSION_KINDS.map(SESSION_KIND)];
 const HOSTS = ['127.0.0.1', '0.0.0.0', '::'];
+/** lsof, where the platform ships it: /usr/sbin on macOS, /usr/bin on Linux. */
+const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof';
 /** Whether lsof shows no listener on the port, on any address; a failed lsof is not proof, so not free. */
 const unlisted = (port: number): Promise<boolean> => new Promise((resolve) => {
-  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+  execFile(LSOF, ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
     // lsof exits 1 with no output when nothing matches.
     resolve(stdout.trim() === '' && (!error || ((error as { code?: unknown }).code === 1 && stderr.trim() === '')));
   });
@@ -178,10 +180,11 @@ export function newRun(ms = Date.now()): string {
   return `run:${time}${Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('')}`;
 }
 
-/** One GET of the health URL: its status, or why it got none. */
-function get(url: string): Promise<{ status: number | null; error?: string }> {
+/** One GET of the health URL: its status, or why it got none. node:http loads with a stack's first check, not with the hub. */
+async function get(url: string): Promise<{ status: number | null; error?: string }> {
+  const http = await import('node:http');
   return new Promise((resolve) => {
-    let req: http.ClientRequest;
+    let req: ClientRequest;
     try {
       req = http.get(url, { timeout: 1000 }, (res) => { res.resume(); resolve({ status: res.statusCode ?? null }); });
     } catch (error) {
