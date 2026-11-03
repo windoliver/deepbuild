@@ -8,7 +8,7 @@ import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFile
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { availableParallelism, homedir, networkInterfaces } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
@@ -58,7 +58,7 @@ import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
+import { copySynced, disk, keepAside, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
@@ -282,7 +282,9 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
   command?: string;
   /** The commands a base run of it finds as stand-ins by name (#874). */
-  stand_ins?: string[] }
+  stand_ins?: string[];
+  /** Rebuilt from the record (#996), its environment named variables whose values the record doesn't keep: it can't run again as it was. */
+  withheld?: string[] }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -382,6 +384,8 @@ export class Core {
   /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
   private extensions: ExtensionHost | undefined;
   private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
+  /** The run journal (`runs.json`), read once at start: what the file holds, each change written through. */
+  private journal: Record<string, Run> = {};
   /** The stack `deep env up` started in each worktree, by the worktree's real path, and each one on its way up. */
   private readonly stacks = new Map<string, Stack>();
   /** Each worktree's env up and down, one after another. */
@@ -555,6 +559,7 @@ export class Core {
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
+    await this.openJournal();
     // The continues the hub carried before this start are those recorded before it; opening the core below settles
     // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
     // continue that records is routed right after, never skipped as already carried (#85).
@@ -678,7 +683,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = await openTrust({ record: this.record, now: this.now });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
@@ -4898,18 +4903,56 @@ export class Core {
 
   // ---- The supervisor's runs.
 
-  private journal(): Record<string, Run> {
+  /**
+   * The journal as this start finds it (#996). One it can't read is kept aside under a name with its time, never read
+   * as empty: its runs in flight are rebuilt from their run.started, and one reading names the file.
+   */
+  private async openJournal(): Promise<void> {
+    let bytes: Buffer;
     try {
-      return JSON.parse(readFileSync(this.root.runs, 'utf8')) as Record<string, Run>;
-    } catch {
-      return {};
+      bytes = readFileSync(this.root.runs);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
     }
+    try {
+      const runs = JSON.parse(bytes.toString('utf8')) as unknown;
+      if (isObj(runs)) {
+        this.journal = runs as Record<string, Run>;
+        return;
+      }
+    } catch {
+      // Damaged: kept aside below.
+    }
+    const aside = keepAside(this.root.runs, bytes, this.now());
+    // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
+    // other writer's start or finish counts.
+    const rows = (await this.record.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
+      (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
+    this.writeJournal((runs) => {
+      for (const row of rows) {
+        const d = JSON.parse(row.data) as Obj;
+        const needs = (isObj(d.needs) ? d.needs : {}) as Obj;
+        runs[String(d.run)] = {
+          run: String(d.run), check: String(d.check), claim: String(d.claim), commit: String(d.commit), argv: d.argv as string[], env: d.env as Record<string, string>,
+          cwd: String(d.cwd), grant: d.grant as Grant, lane: d.lane === 'fast' ? 'fast' : 'slow', expected_ms: typeof needs.expected_ms === 'number' ? needs.expected_ms : null,
+          ...(typeof d.deadline_ms === 'number' ? { deadline: d.deadline_ms } : {}), ...(d.environment === true ? { environment: true } : {}),
+          ...(typeof d.command === 'string' ? { command: d.command } : {}), ...(Array.isArray(d.stand_ins) ? { stand_ins: d.stand_ins as string[] } : {}),
+          ...(Array.isArray(d.env_withheld) && d.env_withheld.length ? { withheld: d.env_withheld as string[] } : {}),
+        };
+      }
+    });
+    const now = this.now();
+    await this.appendCore('reading.recorded', {
+      reading: `reading:${ulid(now)}`, value: rows.length, unit: 'runs rebuilt from the record', as_of: now,
+      source: `${basename(this.root.runs)} couldn't be read, so it was kept aside as ${basename(aside)}`, n: 1, outside: false,
+    });
   }
+  /** Changes the journal and writes it whole: a temp file, synced, renamed and its folder synced, one numbered point. */
   private writeJournal(update: (runs: Record<string, Run>) => void): void {
-    const runs = this.journal();
-    update(runs);
-    writeFileSync(`${this.root.runs}.tmp`, JSON.stringify(runs), { mode: 0o600 });
-    renameSync(`${this.root.runs}.tmp`, this.root.runs);
+    update(this.journal);
+    writeSynced(this.root.runs, Buffer.from(JSON.stringify(this.journal)));
+    this.durable.point('journal_rewrite');
   }
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
@@ -4957,9 +5000,22 @@ export class Core {
     const lease = await slot(this.leases, holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.now();
+    // The record keeps no value the evidence store would scrub: each such variable is named as withheld instead.
+    const withheld = Object.entries(run.env).filter(([, v]) => scrubText(v, { env: run.env, held: this.options.held }) !== v).map(([k]) => k);
     await this.append(this.connection('core'), {
-      v: 2, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
-      data: { run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow' },
+      v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
+      data: {
+        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
+        // What it runs (#996): a journal that can't be read is rebuilt from it.
+        argv: run.argv, cwd: run.cwd, env: Object.fromEntries(Object.entries(run.env).filter(([k]) => !withheld.includes(k))), env_withheld: withheld,
+        grant: run.grant as JsonValue, deadline_ms: run.deadline ?? null, ...(run.environment ? { environment: true } : {}),
+        ...(run.command !== undefined ? { command: run.command } : {}), ...(run.stand_ins ? { stand_ins: run.stand_ins } : {}),
+      },
+    }).catch(async (error: unknown) => {
+      // A start the record refused never ran: it leaves neither the journal nor its slot.
+      this.writeJournal((runs) => { delete runs[run.run]; });
+      await this.leases.release(lease.id, []).catch(() => undefined);
+      throw error;
     });
     const token = randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
@@ -5092,7 +5148,7 @@ export class Core {
   /** After a start with runs still in the journal: each was in flight when the hub stopped without a clean stop. */
   private async recoverRuns(): Promise<void> {
     const recorded = async (kind: string, run: string) => (await this.record.raw(`SELECT 1 FROM events WHERE kind = ? AND json_extract(data, '$.run') = ? LIMIT 1`, [kind, run.replace(/'/g, "''")])).length > 0;
-    for (const run of Object.values(this.journal())) {
+    for (const run of Object.values({ ...this.journal })) {
       if (await recorded('run.finished', run.run)) {
         this.writeJournal((runs) => { delete runs[run.run]; });
         continue;
@@ -5101,10 +5157,11 @@ export class Core {
       if (await recorded('run.started', run.run)) await this.finish(run, 'stopped', ['hub restarted'], []);
       else this.writeJournal((runs) => { delete runs[run.run]; });
       // Its checkout went as the service opened, so it isn't run again where nothing is left: what it would have shown stays unknown.
-      if (run.cwd && isUnder(run.cwd, realpathSync(join(this.root.dir, 'checkouts')))) {
+      // One rebuilt without values its environment had can't run again as it was either (#996).
+      if (run.withheld?.length || (run.cwd && isUnder(run.cwd, realpathSync(join(this.root.dir, 'checkouts'))))) {
         const [claim] = (await this.record.raw(`SELECT commit_sha, verdict_id FROM claims WHERE id = '${sql(run.claim.slice(6))}'`)) as { commit_sha: string | null; verdict_id: string | null }[];
         // A verdict it already has stands.
-        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart`, 'INCONCLUSIVE');
+        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart${run.withheld?.length ? `, and the record doesn't keep the values of ${run.withheld.join(', ')}` : ''}`, 'INCONCLUSIVE');
         continue;
       }
       // Its claim's check runs again.

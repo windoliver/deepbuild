@@ -4646,6 +4646,52 @@ export interface RunStartedV2 {
   evidence?: Array<string>;
 }
 
+/** run.started@3 */
+export interface RunStartedV3 {
+  v: 3;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    commit: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+    argv: Array<string>;
+    cwd: string;
+    env: { [key: string]: string };
+    grant: {
+      read?: Array<string>;
+      write?: Array<string>;
+      hosts?: Array<string>;
+      sockets?: Array<string>;
+      listen?: Array<string>;
+      run_as_you?: boolean;
+    };
+    deadline_ms: number | null;
+    environment?: boolean;
+    command?: string;
+    stand_ins?: Array<string>;
+    env_withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** runner.answered@1 */
 export interface RunnerAnswered {
   v: 1;

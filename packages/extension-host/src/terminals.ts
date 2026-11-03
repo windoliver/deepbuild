@@ -4,8 +4,8 @@
 // program, so it needs nobody attached: a piece whose manifest's host lives past_app keeps its terminals running when
 // the app quits or the hub restarts (the supervisor keeps their runs), and the next launch reads them on from the
 // same files, from the first byte. Input reaches a terminal only through `input`, which the host calls for the app.
-import { closeSync, constants, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync, writeSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { closeSync, constants, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { ulid } from '@deepbuild/record';
 import { HELPER, type Supervisor } from '@deepbuild/supervisor';
 
@@ -20,6 +20,8 @@ export interface Terminal {
   title: string;
   /** It lives past the app: its manifest's host does. */
   kept: boolean;
+  /** Its entry in the index couldn't be read (#996): it shows as lost, never as closed, and nothing reads or writes it. */
+  lost?: true;
 }
 export interface OpenSpec { argv: string[]; cwd: string; env?: Record<string, string>; cols: number; rows: number; title: string }
 
@@ -30,6 +32,68 @@ const START_MS = 10_000;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 const size = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= 1000;
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Writes `bytes` to `path` whole and synced: a temp file, synced, renamed, and its folder synced. */
+function writeSynced(path: string, bytes: Uint8Array): void {
+  const fd = openSync(`${path}.tmp`, 'w', 0o600);
+  try {
+    writeSync(fd, bytes);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(`${path}.tmp`, path);
+  syncFolder(dirname(path));
+}
+function syncFolder(dir: string): void {
+  const fd = openSync(dir, 'r');
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** A terminal as the index holds it: anything else in its place is damage. */
+const isTerminal = (key: string, t: unknown): t is Terminal => isObj(t) && t.terminal === key && typeof t.id === 'string' && typeof t.run === 'string' && typeof t.kept === 'boolean';
+
+/** A terminal whose entry can't be read, from what of it can (#996); taken as kept: nothing stops what it can't prove it started. */
+function lostOne(terminal: string, field: (name: string) => unknown): Terminal {
+  const [id, run, pid, title] = [field('id'), field('run'), field('pid'), field('title')];
+  return { terminal, id: typeof id === 'string' ? id : '', run: typeof run === 'string' ? run : '', pid: typeof pid === 'number' ? pid : 0, title: typeof title === 'string' ? title : terminal, kept: true, lost: true };
+}
+
+/**
+ * The entries of an index that can't be read whole, as save() writes it, one key a line (#996): each entry that parses
+ * on its own, and each that doesn't as lost, named by its key or, with its key damaged, by its own terminal field.
+ */
+function salvage(text: string): Record<string, Terminal> {
+  const keys = [...text.matchAll(/^ {2}"([^\n]*)": (?=\{)/gm)];
+  const read: Record<string, Terminal> = {};
+  keys.forEach((key, i) => {
+    let body = text.slice(key.index + key[0].length, keys[i + 1]?.index ?? text.length).trimEnd();
+    // The last entry ends with the index's own brace.
+    if (i === keys.length - 1) body = body.replace(/\}$/, '').trimEnd();
+    body = body.replace(/,$/, '');
+    try {
+      const t = JSON.parse(body) as unknown;
+      if (isTerminal(key[1]!, t)) {
+        read[t.terminal] = t;
+        return;
+      }
+    } catch {
+      // Lost: named below by what can be read.
+    }
+    const field = (name: string): unknown => {
+      const value = new RegExp(`"${name}": ("(?:[^"\\\\\\u0000-\\u001f]|\\\\.)*"|\\d+)`).exec(body)?.[1];
+      try { return value === undefined ? undefined : JSON.parse(value); } catch { return undefined; }
+    };
+    const named = [key[1], field('terminal')].find((v): v is string => typeof v === 'string' && /^term:[0-9A-Za-z]+$/.test(v));
+    if (named) read[named] = lostOne(named, field);
+  });
+  return read;
+}
 
 /** How many bytes of `buf` end on a whole UTF-8 character: a character the read cut is left for the next one. */
 function whole(buf: Buffer): number {
@@ -46,16 +110,40 @@ export class Terminals {
   private readonly index: string;
   private readonly open_: Record<string, Terminal>;
 
-  constructor(private readonly home: string, private readonly supervisor: Supervisor) {
+  /** What this start found the index unable to say (#996): where it was kept aside, and the terminals it lost. */
+  readonly damaged: { aside: string; lost: string[] } | undefined;
+
+  constructor(private readonly home: string, private readonly supervisor: Supervisor, private readonly point: () => void = () => {}) {
     this.index = join(home, 'extensions', 'terminals.json');
-    const saved = existsSync(this.index) ? JSON.parse(readFileSync(this.index, 'utf8')) as Record<string, Terminal> : {};
+    const bytes = existsSync(this.index) ? readFileSync(this.index) : Buffer.from('{}');
+    let index: unknown;
+    try {
+      index = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      // Damaged: read entry by entry below.
+    }
+    let saved: Record<string, Terminal>;
+    if (isObj(index) && Object.entries(index).every(([key, t]) => isTerminal(key, t))) saved = index as Record<string, Terminal>;
+    else {
+      // One bad byte loses only its own entry. The index's bytes are kept aside, synced, under a name with its time
+      // before it is written again, so a cut in between finds the damaged index, never an empty one.
+      saved = isObj(index)
+        ? Object.fromEntries(Object.entries(index).filter(([key]) => /^term:[0-9A-Za-z]+$/.test(key))
+          .map(([key, t]) => [key, isTerminal(key, t) ? t : lostOne(key, (name) => (isObj(t) ? t[name] : undefined))]))
+        : salvage(bytes.toString('utf8'));
+      const aside = `${this.index}.${new Date().toISOString().replace(/:/g, '-')}`;
+      writeSynced(aside, bytes);
+      this.damaged = { aside, lost: Object.values(saved).filter((t) => t.lost).map((t) => t.terminal) };
+    }
     // One that didn't live past the app was reaped with its run when the supervisor opened.
     this.open_ = Object.fromEntries(Object.entries(saved).filter(([, t]) => t.kept));
+    if (this.damaged) this.save();
   }
+  /** Writes the index whole and synced, one numbered durable write point. */
   private save(): void {
     mkdirSync(join(this.home, 'extensions'), { recursive: true });
-    writeFileSync(`${this.index}.tmp`, JSON.stringify(this.open_, null, 2));
-    renameSync(`${this.index}.tmp`, this.index);
+    writeSynced(this.index, Buffer.from(JSON.stringify(this.open_, null, 2)));
+    this.point();
   }
   private dir(terminal: string): string {
     return join(this.home, 'terminals', terminal.slice('term:'.length));
@@ -102,6 +190,7 @@ export class Terminals {
   read(id: string, terminal: string, from: number): { text: string; next: number } {
     const t = this.open_[terminal];
     if (!t || t.id !== id) throw Error(`${id} has no terminal ${String(terminal)}`);
+    if (t.lost) throw Error(`${terminal} is lost: its entry in the terminals index couldn't be read`);
     if (!Number.isSafeInteger(from) || from < 0) throw Error('deep.terminal.read takes the terminal and a byte offset from 0');
     const fd = openSync(join(this.dir(terminal), 'out'), 'r');
     try {
@@ -117,6 +206,7 @@ export class Terminals {
   /** Writes `text` to the terminal's program, through its host process. */
   input(terminal: string, text: string): void {
     if (!this.open_[terminal]) throw Error(`no terminal ${String(terminal)} is open`);
+    if (this.open_[terminal]!.lost) throw Error(`${terminal} is lost: its entry in the terminals index couldn't be read`);
     if (typeof text !== 'string') throw Error('raw input is text');
     let fd: number;
     try {
@@ -134,7 +224,7 @@ export class Terminals {
 
   /** Stops every process the terminal's run owns: its host process, its program and everything they started. */
   async stop(t: Terminal): Promise<void> {
-    await this.supervisor.cleanup(t.run);
+    if (t.run) await this.supervisor.cleanup(t.run);
     delete this.open_[t.terminal];
     this.save();
   }
