@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "e83dde0463ccaf28cfcf0603617b57cb69bcabe396906617862b0e36da4758c7",
+    "digest": "fc8c659c54539a38ff5de707fe24851bd00750e83d1a7e220127bc61608252b4",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -142,6 +142,17 @@
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"
+    }
+  },
+  "sandbox": {
+    "version": "1.0.0",
+    "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS",
+      "sandbox": "PASS"
     }
   },
   "scene3d": {
