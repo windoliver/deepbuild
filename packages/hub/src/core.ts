@@ -2496,7 +2496,7 @@ export class Core {
     const key = subjectKey({ kind: 'authority', subject: about.subject, options } as unknown as Parameters<typeof subjectKey>[0], '');
     const answer = await this.precheck({
       ask: 'ask:0', kind: 'authority', options, plan: null, words: [], changed: null, folded: [], undo: false, cost_usd: null, suggested: null, conflict: [],
-      needs_person: [], budget: null, missing: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
+      needs_person: [], budget: null, missing: null, targets: [], session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
     });
     return answer !== undefined && !answer.also?.length;
   }
