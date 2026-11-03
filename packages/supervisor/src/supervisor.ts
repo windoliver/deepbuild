@@ -16,7 +16,7 @@ import { readSince, ulid, type Connection, type Event, type EventInput } from '@
 import type { JsonValue } from '@deepbuild/contracts';
 import { HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
 import { bubblewrapWith } from './bubblewrap.js';
-import { openEgress, type Egress } from './egress.js';
+import type { Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
 import type { Cleanup, Exit, Grant, HostFacts, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
 
@@ -539,8 +539,9 @@ class LocalSupervisor implements Supervisor {
     const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));
     // A credential with hosts goes in as a stand-in, its value only into requests through the run's egress filter.
     const creds = spec.credentials ?? [];
+    // The egress filter, and node:http, https and tls with it, load only for a run that holds such a credential.
     const egress = creds.some((c) => c.hosts?.length)
-      ? await openEgress(creds, (r) => void this.append('sandbox.denied', { run: spec.run, ...r }, spec.run).catch(() => undefined), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
+      ? await (await import('./egress.js')).openEgress(creds, (r) => void this.append('sandbox.denied', { run: spec.run, ...r }, spec.run).catch(() => undefined), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
       : undefined;
     const given = Object.fromEntries(creds.flatMap((c) => [
       [c.env, egress?.standIns[c.env] ?? c.value],
