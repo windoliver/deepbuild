@@ -2017,6 +2017,7 @@ name = "deep-canvas-scene3d"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
  "serde_json",
