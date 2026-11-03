@@ -121,7 +121,7 @@ pub struct Line {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgesOf {
     pub mesh: Arc<crate::geom::Mesh>,
-    pub all: bool,
+    pub kind: crate::geom::EdgeKind,
     pub model: Affine3,
     pub width: f64,
 }
@@ -130,8 +130,13 @@ impl EdgesOf {
     /// The segments it draws, on welded positions unless `welded` is false (the planted
     /// `edges_unwelded` reader).
     pub fn segments(&self, welded: bool) -> Vec<Segment> {
-        self.mesh
-            .edges(self.all, welded)
+        let edges = if welded {
+            self.mesh.edge_list(self.kind, None)
+        } else {
+            self.mesh
+                .edges(self.kind == crate::geom::EdgeKind::All, false)
+        };
+        edges
             .into_iter()
             .map(|[a, b]| Segment {
                 a: apply(&self.model, a),
@@ -979,7 +984,8 @@ fn mesh_of(doc: &Value, id: &str, item: &Value, t: f64) -> Result<crate::geom::M
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
-        crate::build::built(doc, id, item, None, t).map(|b| b.mesh.unwrap_or_default())
+        crate::build::built(doc, id, item, &Default::default(), t)
+            .map(|b| b.mesh.unwrap_or_default())
     };
     built.map_err(|path| Refused {
         code: "out_of_range",
@@ -1003,10 +1009,10 @@ fn edge_line(
     let Some(item) = items.get(target) else {
         return refused("ref_unresolved", format!("{path}/edges/of"));
     };
-    let all = match edges.get("kind").and_then(Value::as_str).unwrap_or("quads") {
-        "all" => true,
-        "quads" | "cage" => false,
-        _ => return refused("out_of_range", format!("{path}/edges/kind")),
+    let Some(kind) =
+        crate::geom::EdgeKind::named(edges.get("kind").and_then(Value::as_str).unwrap_or("quads"))
+    else {
+        return refused("out_of_range", format!("{path}/edges/kind"));
     };
     let width = match params.get("width") {
         None | Some(Value::Null) => 1.5,
@@ -1039,7 +1045,7 @@ fn edge_line(
     }
     let source = EdgesOf {
         mesh: Arc::new(mesh),
-        all,
+        kind,
         model: world(items, target),
         width,
     };
