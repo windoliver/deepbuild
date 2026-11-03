@@ -37253,11 +37253,12 @@ pub struct RunFinishedDataKey {
     pub session: String,
     pub base: bool,
     pub withheld: bool,
+    pub plain: bool,
 }
 
 impl Contract for RunFinishedDataKey {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["id", "stem", "paths", "claim", "session", "base", "withheld"])?;
+        let members = deep_contracts::members(value, at, &["id", "stem", "paths", "claim", "session", "base", "withheld", "plain"])?;
         deep_contracts::check_member(members, at, "id", &RULE_62)?;
         deep_contracts::check_member(members, at, "stem", &RULE_62)?;
         deep_contracts::check_member(members, at, "paths", &RULE_13)?;
@@ -37271,6 +37272,7 @@ impl Contract for RunFinishedDataKey {
             session: deep_contracts::required(members, at, "session")?,
             base: deep_contracts::required(members, at, "base")?,
             withheld: deep_contracts::required(members, at, "withheld")?,
+            plain: deep_contracts::required(members, at, "plain")?,
         })
     }
     fn to_json(&self) -> Value {
@@ -37282,6 +37284,7 @@ impl Contract for RunFinishedDataKey {
         members.push(("session".to_string(), self.session.to_json()));
         members.push(("base".to_string(), self.base.to_json()));
         members.push(("withheld".to_string(), self.withheld.to_json()));
+        members.push(("plain".to_string(), self.plain.to_json()));
         Value::Object(members)
     }
 }

@@ -12,13 +12,13 @@ const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 5));
 const SHA = 'a'.repeat(64);
-const record = (run: string): RecordedRun => ({
-  run, outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: ['src/a.ts'], mask: null, exit: null,
+const record = (run: string, read = ['src/a.ts']): RecordedRun => ({
+  run, outcome: 'passed', testsRun: 1, failures: [], evidence: [], read, mask: null, exit: null,
   output: { stdout: '', stderr: '', sha256: { stdout: SHA, stderr: SHA } }, attempts: [], seeded: [], contract: null,
 });
 
 /** A gate whose runs end as the hub's do: recorded and keyed before `ended` resolves; `release` ends the runs held. */
-function world(o: { kept?: boolean; hold?: boolean; dir?: string } = {}) {
+function world(o: { kept?: boolean; hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' } = {}) {
   const started: { check: string; claim: string }[] = [];
   const finished: { run: string; check: string; key: KeyFacts }[] = [];
   const readings: { source: string; value: number; unit: string }[] = [];
@@ -33,7 +33,10 @@ function world(o: { kept?: boolean; hold?: boolean; dir?: string } = {}) {
   const checkouts = {
     budget: () => ({ since: 0 }),
     snapshot: async () => ({ commit: 'c1', wrote: true }),
-    checkout: async () => ({ dir: checkout, commit: 'c1' }),
+    checkout: async (r: { runs: string[] }) => {
+      if (o.variants === 'unstartable' && r.runs.some((t) => t.includes('variant'))) throw Error('the snapshot is gone');
+      return { dir: checkout, commit: 'c1' };
+    },
     ended: async () => undefined,
   };
   let now = 0;
@@ -44,8 +47,8 @@ function world(o: { kept?: boolean; hold?: boolean; dir?: string } = {}) {
     ended: async (run) => {
       if (o.hold) await new Promise<void>((done) => held.push(done));
       now += 1500;
-      gate.recorded(run, record(run));
-      finished.push({ run, check: keys.get(run)!.check, key: await gate.keyed(keys.get(run)!, run, record(run)) });
+      gate.recorded(run, record(run, o.read));
+      finished.push({ run, check: keys.get(run)!.check, key: await gate.keyed(keys.get(run)!, run, record(run, o.read)) });
       return 'passed';
     },
     slots: () => ({ free: 4 }), budget_ms: 60_000, hold_ms: 60_000,
@@ -54,7 +57,7 @@ function world(o: { kept?: boolean; hold?: boolean; dir?: string } = {}) {
   });
   const claim = (session: string, n: number) => gate.stop({
     session, claim: `claim:${n}`, task: 'task:1', cwd: checkout, base: 'b', requirements: [], stopAt: now,
-    checks: [{ check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 1 }],
+    checks: [{ check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 1, ...(o.variants ? { held_out: [{ files: { 'test/fixture.json': SHA } }] } : {}) }],
   });
   return { gate, started, finished, readings, held, claim, checkout };
 }
@@ -106,5 +109,32 @@ describe('#1018 kept in the record, by key', () => {
     await after.claim('s2', 2);
     expect(after.started).toEqual([]);
     expect(after.gate.verdictOf('claim:2')?.checks.find((c) => c.check === 'c.sh')?.counted).toEqual([ran!.run]);
+  });
+});
+
+describe('#1018 what never carries', () => {
+  it('a key whose held-out variant never ran neither passes its own claim nor carries to another', async () => {
+    const w = world({ variants: 'unstartable' });
+    await w.claim('s1', 1);
+    expect(w.gate.verdictOf('claim:1')?.outcome).not.toBe('PASS');
+    await w.claim('s2', 2);
+    expect(w.started.map((s) => s.claim)).toEqual(['claim:1', 'claim:2']);
+  });
+
+  it('a run that read only its check\'s own files saw no code under test, so the next claim runs its own', async () => {
+    const w = world({ read: ['test/a.test.ts'] });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.started.map((s) => s.claim)).toEqual(['claim:1', 'claim:2']);
+  });
+
+  it('after a restart, a kept run whose record isn\'t whole in the record (a retried test) is not read again', async () => {
+    const before = world();
+    await before.claim('s1', 1);
+    const [ran] = before.finished;
+    const after = world({ dir: before.checkout });
+    after.gate.kept([{ run: ran!.run, check: ran!.check, outcome: 'passed', tests_run: 1, findings: [], evidence: [SHA, SHA], key: { ...ran!.key, plain: false } }]);
+    await after.claim('s2', 2);
+    expect(after.started.map((s) => s.claim)).toEqual(['claim:2']);
   });
 });

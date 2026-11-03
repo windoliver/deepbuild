@@ -15,7 +15,7 @@ import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type Clai
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
 import type { Plant } from './plant.js';
-import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, repoOf, SharedRuns, stemOf, withheld, type KeyFacts, type Source } from './shared-runs.js';
+import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeyFacts, type Source } from './shared-runs.js';
 
 /** The surface a drafted check declares it enters through (#874): #31's shape, its check the requirement's own. */
 export type Surface = { kind: string } & Record<string, unknown>;
@@ -97,7 +97,7 @@ interface Entry {
 }
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo?: Promise<string>; installs?: Promise<string> }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo?: Promise<string>; installs?: Promise<string>; names?: Promise<string> }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -135,14 +135,17 @@ export class GateRunner {
   async keyed(key: RunKey, run: string, record: RecordedRun): Promise<KeyFacts> {
     const paths = key.paths ?? (this.o.plant === 'key-leaves-out-reads' ? [] : keyPaths(record.read));
     const id = key.id ?? keyId(key.stem, paths, await contents(key.dir, paths));
-    const facts: KeyFacts = { id, stem: key.stem, paths, claim: key.claim, session: key.session, base: key.base, withheld: key.withheld };
-    if (KEPT.has(record.outcome)) this.keyOf.set(run, this.shared.add(key.check, facts, run).id);
+    const facts: KeyFacts = { id, stem: key.stem, paths, claim: key.claim, session: key.session, base: key.base, withheld: key.withheld, plain: plain(record) };
+    // A head run that read nothing but its check's own files saw none of the code under test, as a program the tracers
+    // can't see into reads nothing they record: its key can't tell a change to that code, so it never carries.
+    const blind = key.paths === undefined && this.o.plant !== 'key-leaves-out-reads' && !paths.some((p) => !ownRead(p));
+    if (KEPT.has(record.outcome) && !blind) this.keyOf.set(run, this.shared.add(key.check, facts, run).id);
     return facts;
   }
   /** The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again. */
   kept(rows: { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }[]): void {
     for (const r of rows) {
-      if (!KEPT.has(r.outcome)) continue;
+      if (!KEPT.has(r.outcome) || !r.key.plain) continue;
       if (!this.records.has(r.run)) this.records.set(r.run, keptRecord(r.run, r));
       this.keyOf.set(r.run, this.shared.add(r.check, r.key, r.run).id);
     }
@@ -151,8 +154,11 @@ export class GateRunner {
   private async stemOf(c: Claim, e: Entry, base: string | null, dir: string): Promise<string> {
     c.repo ??= repoOf(c.cwd);
     c.installs ??= installsOf(dir);
+    c.names ??= namesOf(dir);
+    // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it.
     return stemOf({
-      repo: await c.repo, check: e.check.check, approved: e.check.approved, command: e.check.command, held_out: e.check.held_out ?? null, installs: await c.installs, base,
+      repo: await c.repo, check: e.check.check, approved: e.check.approved, command: e.check.command, deadline_ms: e.check.deadline_ms ?? null, held_out: e.check.held_out ?? null,
+      installs: await c.installs, names: base === null ? await c.names : null, base,
       ...(this.o.plant === 'keys-runs-by-session' ? { session: c.session } : {}),
     });
   }
@@ -161,9 +167,14 @@ export class GateRunner {
     const runs = this.shared.group(id)?.runs ?? [];
     return this.o.plant === 'keeps-latest-result-per-key' ? runs.slice(-1) : runs;
   }
-  /** Whether a key's result is known for a check: a failure, a run that ran nothing, or the clean runs it needs. */
+  /**
+   * Whether a key's result is known for a check: its held-out variants have each run on it, and it holds a failure, a
+   * run that ran nothing, or the clean runs it needs. A key whose variants are still to run, or never ran, isn't.
+   */
   private decided(e: Entry, id: string): boolean {
-    const outcomes = this.runsOn(id).map((s) => this.records.get(s.run)?.outcome);
+    const runs = this.runsOn(id);
+    if (runs.filter((s) => s.withheld).length < (e.check.held_out?.length ?? 0)) return false;
+    const outcomes = runs.map((s) => this.records.get(s.run)?.outcome);
     return outcomes.some((o) => o === 'failed' || o === 'overran' || o === 'ran_nothing') || outcomes.filter((o) => o === 'passed').length >= (e.check.runs ?? 1);
   }
   /**
@@ -234,32 +245,43 @@ export class GateRunner {
       ran?.(run);
       e.outcome = await this.o.ended(run);
       const id = this.keyOf.get(run);
-      if (id) {
-        e.group = id;
-        await this.variants(c, e, id, lane);
-      }
+      if (id) e.group = id;
+      if (KEPT.has(e.outcome)) await this.variants(c, e, id, lane);
     })();
     this.goingOn(`${stem}\0${c.snapshot}`, key.session, own);
     await own;
     if (e.group) await this.rejudge(e.group, c.claim);
   }
-  /** The held-out variants of a check whose run landed on `id`: each a run of its own on that key, its output withheld. */
-  private async variants(c: Claim, e: Entry, id: string, lane: 'fast' | 'slow'): Promise<void> {
-    const g = this.shared.group(id)!;
+  /** The held-out variants of a check whose run ended: each a run of its own, on the key `id` when it landed on one, its output withheld. */
+  private async variants(c: Claim, e: Entry, id: string | undefined, lane: 'fast' | 'slow'): Promise<void> {
+    const g = id ? this.shared.group(id) : undefined;
     for (const [i, v] of (e.check.held_out ?? []).entries()) {
       const token = `${e.claim} ${e.check.check} variant ${i + 1}`;
-      const t = await this.o.checkouts().checkout({ worktree: c.cwd, commit: c.snapshot, dependencies: DEPENDENCIES, runs: [token] });
+      // A variant that can't be checked out or started is a missing run of its check, never one left out.
+      const t = await this.o.checkouts().checkout({ worktree: c.cwd, commit: c.snapshot, dependencies: DEPENDENCIES, runs: [token] }).catch((error: unknown) => this.unrun(e, error));
+      if (!t) continue;
       try {
         const run = await this.o.start({
           claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: t.dir, lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null,
-          overlay: v.files, key: { check: e.check.check, stem: g.stem, dir: t.dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: true, id: g.key, paths: g.paths },
+          overlay: v.files, ...(g ? { key: { check: e.check.check, stem: g.stem, dir: t.dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: true, id: g.key, paths: g.paths } } : {}),
         });
         (e.variants ??= []).push(run);
         await this.o.ended(run);
+      } catch (error) {
+        this.unrun(e, error);
       } finally {
         await this.o.checkouts().ended(t, token);
       }
     }
+  }
+  /** A held-out variant's run that never started: recorded missing on its check, so the check never passes without it. */
+  private unrun(e: Entry, error: unknown): undefined {
+    const ts = this.o.now();
+    const run = `run:${ulid(ts)}`;
+    const message = `a held-out variant never ran: ${error instanceof Error ? error.message : String(error)}`;
+    this.records.set(run, { run, outcome: 'missing', testsRun: 0, failures: [{ test: 'held-out variant', file: '.', line: 1, stack: null, assertion: false, message }], evidence: [], read: [], mask: null, exit: null, output: { stdout: '', stderr: '', sha256: { stdout: EMPTY, stderr: EMPTY } }, attempts: [], seeded: [], contract: null });
+    (e.variants ??= []).push(run);
+    return undefined;
   }
   /** Runs landed on a key: every other claim whose check reads it is judged again. */
   private async rejudge(id: string, from: string): Promise<void> {
@@ -525,7 +547,7 @@ export class GateRunner {
     const session = reading?.session ?? c?.session;
     if (!session) return;
     const loop = { origin: reading?.origin, due: reading?.due ?? null, background, starter: reading?.starter ?? null };
-    const slow = c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.runs.length && !e.running && !e.stale) : [];
+    const slow = c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.runs.length && !e.running && !e.waiting && !e.group && !e.stale) : [];
     const looping = AUTOMATIC.has(loop.origin ?? '') && plant !== 'starts-on-every-green-stop';
     const starter = loop.starter === 'claim' && plant === 'holds-claim-stop-for-loop' ? null : loop.starter;
     const writes: Promise<void>[] = [];
@@ -565,7 +587,7 @@ export class GateRunner {
   /** A claim's slow checks not started yet, for want of a CPU slot. */
   slowUnstarted(claim: string): string[] {
     const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
-    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.runs.length).map((e) => e.check.check) : [];
+    return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.waiting && !e.group && !e.runs.length).map((e) => e.check.check) : [];
   }
   /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
   slowStanding(claim: string): { pending: boolean; failed: string[] } {
@@ -703,6 +725,7 @@ export class GateRunner {
           void read.wait.then(() => {
             e.waiting = false;
             if (!e.stale && !this.queue.has(key)) this.queue.set(key, e);
+            else this.cleanup(c);
             void this.pump();
           });
           continue;
