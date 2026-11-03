@@ -304,3 +304,14 @@ runs the linked tests against `deep-show`'s `fn` output. The twelve criteria are
 tests.
 
 `BASE-FAILURE.txt` is the run at the base.
+
+## Disputes
+
+Criterion 2's two comparisons against the merge base (opening.test.ts) stopped, on the merge base's own build,
+at the first shipped fixture the base refuses in this suite's scenario (text/counter, whose bound value needs a
+record the scenario doesn't give), before comparing anything. A blind redraft of that half
+(`tests/acceptance/490-redraft-2/`) presents each fixture as it needs and compares refusals too. It also compared
+each presentation's notices, which the criterion doesn't name, and which conflict with criterion 8 (the original
+test and its blind redraft): the base notices `unknown_kind` ("the item is skipped") on every `rect@1`, `text@1` and
+`path@1` it draws. The owner decided, once, on 2026-11-03: the false notice goes, the redraft replaces the original
+comparisons, and the redraft's notice comparison is dropped. Every other part of both drafts stands unedited.

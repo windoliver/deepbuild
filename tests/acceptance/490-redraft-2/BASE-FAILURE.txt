@@ -1,0 +1,86 @@
+
+ RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/agent-aa988707e723c0711/tests/acceptance/490-redraft-2
+
+ ❯ opening.test.ts (3 tests | 3 failed) 521ms
+   ❯ #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same (3)
+     × AC2 every content key, golden and corpus snapshot of the shipped fixtures, and of a channel keyed with in_out_cubic, is the merge base's after the opening 65ms
+     × AC2 a planted opening that renumbers the entries changes the key of a channel keyed with in_out_cubic and fails, naming the ease and the item 1ms
+     × AC2 the snapshots and goldens only a GPU draws were compared too (INCONCLUSIVE where the merge base can't draw them here) 57ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  opening.test.ts > #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same > AC2 every content key, golden and corpus snapshot of the shipped fixtures, and of a channel keyed with in_out_cubic, is the merge base's after the opening
+AssertionError: the shipped build opens ease@1:
+  deep://registries lists no ease@1; it lists builder@1, check.kind.doc@1, column.source@1, constraint@1, data.layout@1, device.class@1, gpu.function@1, gpu.output@1, gpu.step@1, logic.service@1, mark@1, modifier@1, check.kind@1, resolver@1, source@1, reading.source@1, environment@1, panel@1, adapter@1, route@1, index@1, action@1: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep://registries lists no ease@1; it lists builder@1, check.kind.doc@1, column.source@1, constraint@1, data.layout@1, device.class@1, gpu.function@1, gpu.output@1, gpu.step@1, logic.service@1, mark@1, modifier@1, check.kind@1, resolver@1, source@1, reading.source@1, environment@1, panel@1, adapter@1, route@1, index@1, action@1",
++ ]
+
+ ❯ none opening.test.ts:51:60
+     49| const pick = (o: JsonObject, keys: readonly string[]): JsonObject => O…
+     50| function none(failures: readonly string[], what: string): void {
+     51|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     52| }
+     53|
+ ❯ opening.test.ts:310:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  opening.test.ts > #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same > AC2 a planted opening that renumbers the entries changes the key of a channel keyed with in_out_cubic and fails, naming the ease and the item
+AssertionError: deep-show builds with features full,test-ease-renumbered: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-ease-renumbered failed:
++ error: none of the selected packages contains this feature: test-ease-renumbered
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-motion, deep-sandbox-wasmtime, deep-show, deep-text-render
++ help: there is a similarly named feature: test-mode-renumbered
++
+
+ ❯ bin opening.test.ts:86:70
+     84| function bin(set: string[]): string {
+     85|   const m = made.get(set.join(','))!;
+     86|   expect(m.error, `deep-show builds with features ${set.join(',')}`).t…
+       |                                                                      ^
+     87|   return m.bin;
+     88| }
+ ❯ opening.test.ts:318:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  opening.test.ts > #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same > AC2 the snapshots and goldens only a GPU draws were compared too (INCONCLUSIVE where the merge base can't draw them here)
+AssertionError: the shipped build opens ease@1:
+  deep://registries lists no ease@1; it lists builder@1, check.kind.doc@1, column.source@1, constraint@1, data.layout@1, device.class@1, gpu.function@1, gpu.output@1, gpu.step@1, logic.service@1, mark@1, modifier@1, check.kind@1, resolver@1, source@1, reading.source@1, environment@1, panel@1, adapter@1, route@1, index@1, action@1: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep://registries lists no ease@1; it lists builder@1, check.kind.doc@1, column.source@1, constraint@1, data.layout@1, device.class@1, gpu.function@1, gpu.output@1, gpu.step@1, logic.service@1, mark@1, modifier@1, check.kind@1, resolver@1, source@1, reading.source@1, environment@1, panel@1, adapter@1, route@1, index@1, action@1",
++ ]
+
+ ❯ none opening.test.ts:51:60
+     49| const pick = (o: JsonObject, keys: readonly string[]): JsonObject => O…
+     50| function none(failures: readonly string[], what: string): void {
+     51|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     52| }
+     53|
+ ❯ opening.test.ts:329:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  03:38:38
+   Duration  610ms (tests 94%, transform 4%, import 1%)
+
