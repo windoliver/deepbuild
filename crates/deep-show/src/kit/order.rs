@@ -82,6 +82,10 @@ fn targets(sealed: &Sealed, doc: &Value, look: &deep_canvas::schedule::Tokens) -
 /// the access log refused.
 pub fn read_set(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let sealed = &hub.startup.sealed;
+    // A module with no fixture document (#238's sandbox) has no read set or order to test.
+    if documents(sealed, ctx).is_empty() {
+        return None;
+    }
     let look = deep_canvas_marks::modules::tokens(&hub.look.light);
     let module = ctx.module;
     let mut cases = Vec::new();
@@ -199,6 +203,10 @@ fn first_moved(a: &Evaluated, b: &Evaluated, module: &str) -> Option<String> {
 /// `order`: 8 shuffled legal orders per fixture, each on its own instance, against the plan's.
 pub fn order(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let sealed = &hub.startup.sealed;
+    // A module with no fixture document (#238's sandbox) has no read set or order to test.
+    if documents(sealed, ctx).is_empty() {
+        return None;
+    }
     let look = deep_canvas_marks::modules::tokens(&hub.look.light);
     let module = ctx.module;
     let seeds = order_seeds(ctx.call.seed, module);
