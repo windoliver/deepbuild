@@ -169,15 +169,15 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; sc
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; session?: string; values?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
-    if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? []);
+    if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
     if (m.op === 'scrub') return onScrub(m.values ?? []);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
@@ -199,7 +199,7 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame, onAsking, onAcking, onScrub);
@@ -322,6 +322,8 @@ class Hub {
   private readonly acking = new Set<string>();
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
+  /** The agents whose hook entries run a program that can't run, as the core's last check found (#993): their gates are watch-only. */
+  private cantRun = new Set<string>();
   /** The published JSON-RPC methods: a deprecated one is served through its replacement, with a notice (#139). */
   private readonly adapter = contractAdapter(rpcTable());
   readonly start = ulid(Date.now());
@@ -366,7 +368,7 @@ class Hub {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
     };
-    const asking = (sessions: string[], judged: string[], resend: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); this.resend = new Set(resend); };
+    const asking = (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); this.resend = new Set(resend); this.cantRun = new Set(cantRun); };
     const acking = (session: string) => { this.acking.add(session); };
     const scrub = (values: string[]) => { this.parsers.scrub(values); };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
@@ -592,6 +594,7 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
+    if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
