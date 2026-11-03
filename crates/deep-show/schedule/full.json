@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "ab6db941b69b94a4e36ad64e795469533b0ff79bc4f07eeeabdcc089834e71d9",
+  "set_digest": "de38502462918234eb01e32a1b316b8ba8ac563b8399b9cca6a4ad0b0993c0d0",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -150,7 +150,7 @@
       }
     },
     "look@1": {
-      "digest": "3c6d78a02a1f3b25e61af1eab8c45d020f3113a92f61aa16a0d222634f957ada",
+      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
       "reference": "look",
       "kit": [
         "fixtures",
@@ -266,7 +266,7 @@
       }
     },
     "sandbox@1": {
-      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "digest": "d1233de9867cda6436ef3387c2b172be6fc73120a3d17b58406e7dcaeee6452a",
       "reference": "sandbox",
       "kit": [
         "fixtures",
@@ -513,6 +513,19 @@
           "look.status"
         ],
         "per": "document"
+      },
+      {
+        "operator": "look.finish",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look.palette"
+        ],
+        "writes": [
+          "look.finish"
+        ],
+        "per": "item"
       },
       {
         "operator": "motion.channels",

@@ -169,6 +169,22 @@ const GROUPS: [([usize; 4], f64); 5] = [
     ([6, 7, 11, 12], 0.125),
 ];
 
+/// The bloom's threshold on the chain's first step (#418): with `cut` (a luminance in scene
+/// linear, 0 for none), only the light above it, `rgb × max(L − cut, 0) ÷ L`.
+fn prefilter(g: &mut G, rgb: &str) -> String {
+    let l = g.s("luminance@1", json!({"rgb": rgb}));
+    let over = g.sub(&l, "cut");
+    let zero = g.c(json!(0.0));
+    let over = g.s("max@1", json!({"a": over, "b": zero}));
+    let tiny = g.c(json!(1e-6));
+    let l = g.s("max@1", json!({"a": l, "b": tiny}));
+    let w = g.div(&over, &l);
+    let one = g.c(json!(1.0));
+    let on = g.s("gt@1", json!({"a": "cut", "b": zero}));
+    let w = g.select(&one, &w, &on);
+    g.mul(rgb, &w)
+}
+
 /// A 13-tap downsample of `src` to half its size; `karis` weights each group by 1 ÷ (1 + its
 /// luminance) and renormalizes, the Karis average for the chain's first step.
 pub fn down(karis: bool) -> Value {
@@ -199,7 +215,19 @@ pub fn down(karis: bool) -> Value {
         })
         .collect();
     let mut sum: Option<String> = None;
+    // The plain average beside the Karis one (#418), for the share of light the chain takes.
+    let mut plain: Option<String> = None;
     for (members, weight) in GROUPS {
+        if karis {
+            let a = g.add(&taps[members[0]], &taps[members[1]]);
+            let b = g.add(&taps[members[2]], &taps[members[3]]);
+            let s = g.add(&a, &b);
+            let term = g.mulk(&s, 0.25 * weight);
+            plain = Some(match plain {
+                None => term,
+                Some(p) => g.add(&p, &term),
+            });
+        }
         let avg = match &weights[members[0]] {
             Some(_) => {
                 let terms: Vec<(String, String)> = members
@@ -230,16 +258,45 @@ pub fn down(karis: bool) -> Value {
             Some(p) => g.add(&p, &term),
         });
     }
-    let out = sum.expect("five groups");
+    let sum = sum.expect("five groups");
+    // Alpha carries the share of the scene's light the chain takes here (#418): the Karis
+    // average's luminance over the plain average's, 1 where nothing is lit, so the mix takes from
+    // the scene exactly what the bloom spreads and the frame keeps its energy; the later
+    // downsamples write 0, so the upsamples carry this level's share alone to the mix.
+    let rgb = g.split(&sum, "rgb");
+    let share = match plain {
+        Some(p) => {
+            let p = g.split(&p, "rgb");
+            let lp = g.s("luminance@1", json!({"rgb": p}));
+            let lk = g.s("luminance@1", json!({"rgb": rgb}));
+            let tiny = g.c(json!(1e-6));
+            let lit = g.s("gt@1", json!({"a": lp, "b": tiny}));
+            let floor = g.s("max@1", json!({"a": lp, "b": tiny}));
+            let r = g.div(&lk, &floor);
+            let one = g.c(json!(1.0));
+            g.select(&one, &r, &lit)
+        }
+        None => g.c(json!(0.0)),
+    };
+    let rgb = if karis { prefilter(&mut g, &rgb) } else { rgb };
+    let out = g.s("compose@1", json!({"x": rgb, "y": share}));
     let (id, about) = if karis {
         ("glow.down_karis@1", "Glow's first downsample: 13 bilinear taps in five boxes, each tap weighted within its box by 1 ÷ (1 + its luminance) (the Karis average), to half size.")
     } else {
         ("glow.down@1", "Glow's downsample: 13 bilinear taps in five boxes, the centre box half the weight, to half size.")
     };
+    let inputs = if karis {
+        json!({
+            "src": texture("core", "color", "texture"),
+            "cut": param("bloom.cut", "f32", json!(0.0), [0.0, 1e9]),
+        })
+    } else {
+        json!({"src": texture("core", "color", "texture")})
+    };
     pass(
         id,
         about,
-        json!({"src": texture("core", "color", "texture")}),
+        inputs,
         g,
         &out,
         json!({"of": "src", "scale": 0.5}),
@@ -291,7 +348,11 @@ pub fn up() -> Value {
     )
 }
 
-/// The glow mixed into scene color: `scene × (1 − intensity) + bloom ÷ levels × intensity`.
+/// The glow mixed into scene color: `scene × (1 − conserve × share) + bloom ÷ levels × tint × (1 +
+/// dirt × d) × intensity`, with `conserve` the intensity with no threshold (energy conserving: the
+/// scene gives up the light the chain spreads, its first downsample's share in the bloom's alpha)
+/// and 0 with one, and `d` the lens dirt image's value at the pixel, stretched over the frame
+/// (#418). The planted overlay adds `dirt × d` to every pixel instead.
 pub fn mix() -> Value {
     let mut g = G::new();
     let uv = g.s("screen_uv@1", json!({}));
@@ -299,18 +360,43 @@ pub fn mix() -> Value {
     let bloom = g.sample("bloom", &uv);
     let levels = g.convert("levels", "f32");
     let b = g.div(&bloom, &levels);
-    let m = g.s("mix@1", json!({"a": scene, "b": b, "t": "intensity"}));
+    let b = g.split(&b, "rgb");
+    let b = g.mul(&b, "tint");
+    let dirt = g.sample("dirt", &uv);
+    let d = g.split(&dirt, "r");
+    let k = g.mul(&d, "dirt_intensity");
+    let one = g.c(json!(1.0));
+    let lens = g.add(&one, &k);
+    let b = g.mul(&b, &lens);
+    let b = g.mul(&b, "intensity");
+    // What the chain took from the scene: the share the first downsample passed on, by the
+    // intensity with no threshold (energy conserving), none with one.
+    let share = g.split(&bloom, "a");
+    let taken = g.mul(&share, "conserve");
+    let keep = g.sub(&one, &taken);
+    let kept = g.split(&scene, "rgb");
+    let kept = g.mul(&kept, &keep);
+    let rgb = g.add(&kept, &b);
+    // The planted overlay: the dirt laid over the frame wherever it is, bloom or not.
+    let over = g.split(&dirt, "rgb");
+    let over = g.mul(&over, "dirt_intensity");
+    let over = g.mul(&over, "overlay");
+    let rgb = g.add(&rgb, &over);
     // Alpha stays the scene's.
-    let rgb = g.split(&m, "rgb");
     let a = g.split(&scene, "a");
     let out = g.s("compose@1", json!({"x": rgb, "y": a}));
     pass(
         "glow.mix@1",
-        "Glow mixed into scene color before tone mapping, energy conserving: the chain's sum over its levels, by the look's intensity.",
+        "Glow mixed into scene color before tone mapping, energy conserving with no threshold, tint or dirt: the chain's sum over its levels, by the look's intensity and tint, the lens dirt multiplying it where bloom is bright.",
         json!({
             "scene": texture("core", "color", "texture"),
             "bloom": texture("glow", "up0", "texture"),
+            "dirt": texture("glow", "dirt", "texture"),
             "intensity": param("bloom.intensity", "f32", json!(0.04), [0.0, 1.0]),
+            "conserve": param("bloom.conserve", "f32", json!(0.04), [0.0, 1.0]),
+            "overlay": param("bloom.overlay", "f32", json!(0.0), [0.0, 1.0]),
+            "tint": param("bloom.tint", "vec3<f32>", json!([1.0, 1.0, 1.0]), [0.0, 16.0]),
+            "dirt_intensity": param("bloom.dirt_intensity", "f32", json!(0.0), [0.0, 16.0]),
             "levels": param("bloom.levels", "u32", json!(5), [1.0, 8.0]),
         }),
         g,
