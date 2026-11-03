@@ -2,6 +2,7 @@
 //! with its extra (the round a claim was sent back in, the checks' expected time, when a quiet session was last
 //! seen), and draws the look's status-map entry and glyph for it. The state comes from the record alone.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde_json::Value;
@@ -177,56 +178,102 @@ pub fn closes(event: &Value, handle: &str) -> bool {
 }
 
 /// The open asks, oldest first; of one session when `session` names one. Events carry their session as the
-/// record's `session` column.
+/// record's `session` column. One pass over the events reads every ask, so a long record costs one walk, not one
+/// per ask.
 pub fn open_asks<'a>(events: &'a [Value], session: Option<&str>) -> Vec<&'a Value> {
+    let readings = readings(events);
     events
         .iter()
         .filter(|event| event["kind"] == "ask.created")
         .filter(|ask| session.is_none_or(|session| ask["session"] == session))
-        .filter(|ask| reading(events, &handle(ask)).0)
+        .filter(|ask| readings.get(handle(ask).as_str()).is_none_or(Reading::open))
         .collect()
 }
 
 /// Whether the ask `handle` is open, as the core reads the record.
 pub fn is_open(events: &[Value], handle: &str) -> bool {
-    reading(events, handle).0
+    reading(events, handle).open()
+}
+
+/// The asks the events close, as the core reads the record, in one pass: any other ask is open, as [`is_open`]
+/// reads it, whether or not the events hold its creation.
+pub fn closed_asks(events: &[Value]) -> BTreeSet<&str> {
+    readings(events)
+        .into_iter()
+        .filter(|(_, reading)| !reading.open())
+        .map(|(handle, _)| handle)
+        .collect()
 }
 
 /// When the ask's default applies: the deadline the core last gave it, by an undo of its default or a move (#908),
 /// else its own.
 pub fn deadline(events: &[Value], ask: &Value) -> Option<u64> {
     reading(events, &handle(ask))
-        .1
+        .deadline
         .or_else(|| ask["data"]["deadline"].as_u64())
 }
 
-/// Whether the ask `handle` is open and the deadline the core last gave it, as the core reads the record in order:
-/// the first close decides, only the core's undo of a default opens it again, and the core moves an open ask's
-/// deadline.
-fn reading(events: &[Value], handle: &str) -> (bool, Option<u64>) {
-    let mut closed: Option<&str> = None;
-    let mut deadline = None;
-    for event in events {
-        if closed.is_none() && closes(event, handle) {
-            closed = event["kind"].as_str();
-        } else if closed.is_none()
+/// An ask as the core reads the record in order: the first close decides, only the core's undo of a default opens it
+/// again, and the core moves an open ask's deadline.
+#[derive(Default)]
+struct Reading<'a> {
+    closed: Option<&'a str>,
+    deadline: Option<u64>,
+}
+
+impl<'a> Reading<'a> {
+    fn open(&self) -> bool {
+        self.closed.is_none()
+    }
+
+    /// One event about this ask, in log order.
+    fn read(&mut self, event: &'a Value, handle: &str) {
+        if self.closed.is_none() && closes(event, handle) {
+            self.closed = event["kind"].as_str();
+        } else if self.closed.is_none()
             && event["kind"] == "deadline.moved"
             && event["writer"] == "core"
             && event["subject"] == handle
         {
-            deadline = event["data"]["deadline"].as_u64().or(deadline);
-        } else if closed == Some("ask.defaulted")
+            self.deadline = event["data"]["deadline"].as_u64().or(self.deadline);
+        } else if self.closed == Some("ask.defaulted")
             && event["kind"] == "default.undone"
             && event["writer"] == "core"
             && event["subject"] == handle
         {
             if let Some(again) = event["data"]["deadline"].as_u64() {
-                closed = None;
-                deadline = Some(again);
+                self.closed = None;
+                self.deadline = Some(again);
             }
         }
     }
-    (closed.is_none(), deadline)
+}
+
+/// The ask `handle`, read from every event.
+fn reading<'a>(events: &'a [Value], handle: &str) -> Reading<'a> {
+    let mut reading = Reading::default();
+    for event in events {
+        reading.read(event, handle);
+    }
+    reading
+}
+
+/// Every ask an event names, each read from the events about it alone: what [`reading`] gives each, in one pass.
+/// Only an event about an ask can change one's reading, so the others are passed over.
+fn readings(events: &[Value]) -> BTreeMap<&str, Reading<'_>> {
+    let mut out: BTreeMap<&str, Reading<'_>> = BTreeMap::new();
+    for event in events {
+        // The one ask an event can be about: a decision applied names its ask in its data, any other its subject.
+        let about = if event["kind"] == "decision.applied" {
+            &event["data"]["ask"]
+        } else {
+            &event["subject"]
+        };
+        if let Some(handle) = about.as_str().filter(|handle| handle.starts_with("ask:")) {
+            out.entry(handle).or_default().read(event, handle);
+        }
+    }
+    out
 }
 
 /// The sessions in the record, in the order they first appear.
@@ -456,5 +503,84 @@ mod tests {
             .map(|ask| ask["id"].as_str().unwrap())
             .collect();
         assert_eq!(open, ["a1", "a2"]);
+    }
+
+    /// A record of asks and the events that move them, drawn from `seed`: closes of every kind by every writer,
+    /// decisions applied that name an ask in their data, undone defaults, moved deadlines and events about no ask.
+    fn drawn(seed: u64) -> Vec<Value> {
+        let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+        let mut next = |n: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % n
+        };
+        let kinds = [
+            "ask.created",
+            "ask.answered",
+            "ask.defaulted",
+            "ask.escalated",
+            "ask.cancelled",
+            "ask.superseded",
+            "ask.moot",
+            "decision.applied",
+            "default.undone",
+            "deadline.moved",
+            "tool.before",
+            "agent.stop",
+        ];
+        let writers = ["core", "hook", "mcp:agent", "app"];
+        (0..next(60) + 1)
+            .map(|i| {
+                let kind = kinds[next(kinds.len() as u64) as usize];
+                let about = format!("ask:a{}", next(6));
+                let other = format!("ask:a{}", next(6));
+                let writer = writers[next(writers.len() as u64) as usize];
+                let session = format!("s{}", next(3));
+                match kind {
+                    "ask.created" => json!({"kind": kind, "id": about[4..], "session": session, "writer": "core",
+                                            "data": {"deadline": next(9)}}),
+                    "decision.applied" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about,
+                                                 "data": {"ask": other}}),
+                    "default.undone" | "deadline.moved" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer,
+                                                           "subject": about, "data": {"deadline": next(9)}}),
+                    "tool.before" | "agent.stop" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "session": session,
+                                                    "subject": format!("session:{session}"), "data": {}}),
+                    _ => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about, "data": {}}),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_open_asks_read_in_one_pass_are_those_each_asks_own_reading_leaves_open() {
+        // The reference: each ask read alone over every event, as the core reads it.
+        for seed in 0..2_000 {
+            let events = drawn(seed);
+            for session in [None, Some("s0"), Some("s1")] {
+                let want: Vec<&Value> = events
+                    .iter()
+                    .filter(|event| event["kind"] == "ask.created")
+                    .filter(|ask| session.is_none_or(|session| ask["session"] == session))
+                    .filter(|ask| is_open(&events, &handle(ask)))
+                    .collect();
+                assert_eq!(
+                    open_asks(&events, session),
+                    want,
+                    "seed {seed}, session {session:?}: {events:#?}"
+                );
+            }
+            // Every ask the events name, created in them or not, reads closed in one pass exactly when it reads closed
+            // alone.
+            let closed = closed_asks(&events);
+            for n in 0..7 {
+                let handle = format!("ask:a{n}");
+                assert_eq!(
+                    closed.contains(handle.as_str()),
+                    !is_open(&events, &handle),
+                    "seed {seed}, {handle}: {events:#?}"
+                );
+            }
+        }
     }
 }
