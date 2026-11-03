@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  AC, CAMERA, DOC, add, admitted, arr, canon, clone, evalCall, geometryCall, geometryOf, itemOf, nodeName, nodesOf, none, obj, ofItem, revisionsOf,
+  AC, CAMERA, DOC, add, admitted, arr, canon, clone, evalCall, geometryCall, geometryOf, itemOf, none, obj, revisionsOf,
   runShow, scenario, sceneDoc, show, str, useBins, useDir, weldKey, type Geometry, type JsonObject, type JsonValue, type V3,
 } from './helpers.ts';
 
@@ -99,22 +99,6 @@ describe(`${AC[2]} modifiers in their declared order, pure in params and time`, 
     expect(canon(pointSet(sought.moving.positions)), 'at 1 s the offset is 1 m: the box and its copy 1 m along x').toBe(canon(pointSet(arrayOf(sought.box, 2, [1, 0, 0]))));
     expect(canon(pointSet(again.am.positions)), 'a static stack builds the same in two processes').toBe(canon(pointSet(sought.am.positions)));
     expect(again.am.key, 'and keys the same').toBe(sought.am.key);
-  }, 900_000);
-
-  it(`${AC[2]} while playing 26 frames over 1 s, the item whose modifiers don't read time never rebuilds after the first frame, while the time-reading one rebuilds every frame`, () => {
-    const times = PLAY;
-    const replies = runShow(bins.bin('deep-show'), scenario(dir(), [DOC.a], [show(DOC.a, orderDoc()), ...times.map((t) => evalCall(DOC.a, t))]));
-    admitted(replies[0]!, 'the document');
-    const frames = replies.slice(1).map((r, i) => nodesOf(r, `frame at ${times[i]}`));
-    const first = ofItem(frames[0]!, 'am');
-    expect(first.length, 'frame 0 has nodes for am').toBeGreaterThan(0);
-    const problems: string[] = [];
-    frames.forEach((nodes, i) => {
-      if (i === 0) return;
-      for (const n of ofItem(nodes, 'am')) if (n.run === 'ran') problems.push(`at ${times[i]}: ${nodeName(n)} ran, though am's modifiers read nothing of time`);
-      if (!ofItem(nodes, 'moving').some((n) => n.run === 'ran')) problems.push(`at ${times[i]}: no node of moving ran, though its array's offset moves with time`);
-    });
-    none(problems, 'rebuilds while playing');
   }, 900_000);
 
   it(`${AC[2]} a revision that only reorders am's modifiers is a recorded change: am is listed as changed, a new current revision with another hash, and am's geometry becomes the other order's`, () => {

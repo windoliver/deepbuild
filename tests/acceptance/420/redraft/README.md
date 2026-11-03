@@ -98,3 +98,10 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/420/tsconfig.json   # .
 ```
 
 `BASE-FAILURE.txt` is that run at `0f1e6631` on this Mac.
+
+## Swapped in (owner approved, Nov 2: "close the gaps")
+
+These redrafts replace the tests they redraft: the third test of `../modifiers.test.ts` is removed from that file
+and `../disabled.test.ts` is deleted. Both originals counted a check-phase node (`core.lower`), which #387's `eval`
+lists as the revision's check had them in every frame of a revision, as a rebuild in each frame; every frame-phase
+node met both criteria there, and these redrafts pass on the change.
