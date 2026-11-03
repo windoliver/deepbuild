@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { measureOnce, warm } from './benchmark.mjs';
 import { releaseLanes, runLanes } from './lanes.mjs';
+import { acquire, release } from './throttle.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // Parity and budgets run ./target/debug binaries; a shared Cargo target directory would misplace them.
@@ -13,6 +14,14 @@ delete process.env.CARGO_TARGET_DIR;
 // found, rustup downloads rust-toolchain.toml's pin into that HOME on every run. Named here, they stay put.
 process.env.RUSTUP_HOME ??= join(homedir(), '.rustup');
 process.env.CARGO_HOME ??= join(homedir(), '.cargo');
+// The machine is this run's alone while it is timed: the grant comes before the timer, so no wait is measured, and
+// every lane, perf and proof under it passes through on it.
+const grant = acquire('timed', { wait: 60 });
+if (!grant) {
+  console.log('INCONCLUSIVE no grant: no timed grant came within 60 min, so the checks were not timed\n  Fix: Wait for the other sessions\' builds and proofs on this machine, then run the preflight again.');
+  process.exit(3);
+}
+process.env.DEEP_THROTTLE = grant.token;
 const started = performance.now();
 let observation = {}, checkStatus = 1;
 console.log('Warming builds (not timed)');
@@ -52,3 +61,4 @@ if (checksMs >= budgetMs) {
   console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);
   process.exitCode = 1;
 }
+release(grant);

@@ -45,6 +45,8 @@ export interface ClaimCheck {
   source: Source;
   depth: Depth;
   proof: Proof;
+  /** Absent: code. A model's check is a reading (#68): it can fail a requirement, never pass one alone. */
+  oracle?: Oracle;
   covers: string[];
   /** Declared input globs; absent or empty: the whole commit. */
   inputs?: string[];
