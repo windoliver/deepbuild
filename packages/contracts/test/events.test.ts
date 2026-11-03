@@ -293,17 +293,23 @@ describe('the design says', () => {
     }
   });
 
-  it('every kind shares one envelope; only its kind, subject, writer and data differ', () => {
+  it('every kind shares one envelope; only its kind, subject, writer, data and history differ', () => {
+    // A schema's own history, as the lint's HISTORY list names it: a kind added in R2 says so.
+    const history = ['x-since', 'x-stability', 'x-tracking', 'x-deprecated_since', 'x-replaced_by'];
     const envelope = (name: string) => {
       const { properties, required, ...rest } = getSchema(name) as { properties: Record<string, unknown>; required: string[] };
       const { kind: _kind, subject: _subject, writer: _writer, data: _data, v, ...shared } = properties;
       const { title: _title, description: _description, $defs: _defs, 'x-feeds': _feeds, ...root } = rest as Record<string, unknown>;
+      for (const field of history) delete root[field];
       // Each version fixes its own v.
       const { const: _version, ...version } = v as Record<string, unknown>;
       return { root, shared: { ...shared, v: version }, required: required.filter((key) => key !== 'subject') };
     };
     const kinds = catalogue().map((e) => e.schema);
-    expect(kinds).toHaveLength(158);
+    // Every schema that fixes a kind is catalogued, so none escapes the comparison.
+    const named = listSchemas().filter(({ schema }) => typeof (schema.properties as { kind?: { const?: unknown } } | undefined)?.kind?.const === 'string');
+    expect(kinds).toEqual(named.map((e) => e.name));
+    expect(kinds.length, 'kinds to compare').toBeGreaterThan(1);
     for (const name of kinds) expect(envelope(name), name).toEqual(envelope(kinds[0]!));
   });
 
