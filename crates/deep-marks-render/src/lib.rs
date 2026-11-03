@@ -12,7 +12,12 @@
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
 //! `import_skips_clip_path`; and #221's: every frame places items by relation, `check` refuses a
-//! `relation_cycle`, and `geometry` takes `t` and answers the item's `box` and its nine `points`.
+//! `relation_cycle`, and `geometry` takes `t` and answers the item's `box` and its nine `points`;
+//! and #417's: `look` lists the shipped looks (`{"list": "shipped"}`) and answers font roles and
+//! each theme's roles in OKLab, `check` and `raster` hold the status distance only where the
+//! document binds status (and take the planted `status_distance_0_03`), set text in the look's
+//! fonts with its fallback list and `lang`, and refuse a grapheme no face draws with
+//! `text.glyph_missing`; a session's step may switch the look.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -61,6 +66,14 @@ fn palette_of(look: &Look, theme: Theme) -> &Palette {
     }
 }
 
+/// The look's type in a theme (#417): its fonts and fallback list.
+fn type_of(look: &Look, theme: Theme) -> &deep_canvas_marks::scene::Type {
+    match theme {
+        Theme::Dark => &look.dark_type,
+        Theme::Light => &look.light_type,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Theme {
     Light,
@@ -81,6 +94,8 @@ struct Step {
     view: Option<View>,
     record: Option<Record>,
     frames: u32,
+    /// #417: the look the session is shown in from this step on.
+    look: Option<Look>,
 }
 
 enum Request {
@@ -105,6 +120,8 @@ enum Request {
         look: Look,
         steps: Vec<Step>,
         store: Option<PathBuf>,
+        /// #417 AC2's wrong program: a look switch that empties every node cache.
+        switch_rebuilds: bool,
     },
     /// #854: the document held on screen on the real clock.
     Idle {
@@ -151,9 +168,13 @@ fn palette(value: &Value) -> Option<Palette> {
         .collect()
 }
 
-/// Each theme's roles as `#rrggbb`, or `#rrggbbaa` for a role at an alpha (#882).
+/// Each theme's roles as `#rrggbb`, or `#rrggbbaa` for a role at an alpha (#882), and (#417) a font
+/// role as the name of the look's font it names.
 fn roles(look: &Look) -> Value {
-    let theme = |opaque: &Palette, alpha: &std::collections::BTreeMap<String, look::Rgba>| {
+    type Fonts = std::collections::BTreeMap<String, String>;
+    let theme = |opaque: &Palette,
+                 alpha: &std::collections::BTreeMap<String, look::Rgba>,
+                 fonts: &Fonts| {
         let mut out: Map<String, Value> = opaque
             .iter()
             .map(|(r, [red, g, b])| (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}"))))
@@ -161,15 +182,20 @@ fn roles(look: &Look) -> Value {
         out.extend(alpha.iter().map(|(r, [red, g, b, a])| {
             (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}{a:02x}")))
         }));
+        out.extend(fonts.iter().map(|(r, f)| (r.clone(), json!(f))));
         Value::Object(out)
     };
-    json!({"light": theme(&look.light, &look.light_alpha), "dark": theme(&look.dark, &look.dark_alpha)})
+    json!({
+        "light": theme(&look.light, &look.light_alpha, &look.light_fonts),
+        "dark": theme(&look.dark, &look.dark_alpha, &look.dark_fonts),
+    })
 }
 
 /// A look as a request names it: a shipped look's ID, a look@1 definition, or #391's role map
 /// `{light, dark?}` (with no status map), with the definition it resolved from. The status guard
-/// refuses a look@1 that gives two states one glyph, naming the pair.
-fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
+/// refuses a look@1 that gives two states one glyph, naming the pair, and holds the status
+/// distance `at` where it holds.
+fn look(value: Option<&Value>, at: look::Distance) -> Option<Result<(Look, Value), look::Refusal>> {
     let def = match value? {
         Value::String(id) => look::shipped(id)?,
         Value::Object(map) if map.contains_key("status") || map.contains_key("palette") => {
@@ -184,20 +210,18 @@ fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
             let roles = Look {
                 light,
                 dark,
-                light_alpha: Default::default(),
-                dark_alpha: Default::default(),
-                status: None,
                 data_distance: map
                     .get("data_distance")
                     .and_then(Value::as_f64)
                     .unwrap_or(look::DATA_DISTANCE),
+                ..Look::default()
             };
             return Some(Ok((roles, Value::Object(map.clone()))));
         }
         _ => return None,
     };
     let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-    Some(look::resolve(&def, &bundled).map(|l| (l, def)))
+    Some(look::resolve_in(&def, &bundled, at).map(|l| (l, def)))
 }
 
 /// The record a request pins: `readings` (a number, or `{value, as_of}` with its as-of time on the
@@ -272,7 +296,7 @@ fn check(
     doc: &Map<String, Value>,
     look: Option<&Look>,
     store: Option<&Path>,
-    skips_clip_path: bool,
+    (skips_clip_path, distance_0_03): (bool, bool),
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
     let mut issues = result.issues;
@@ -321,7 +345,9 @@ fn check(
             drawn.insert("items".into(), Value::Object(items));
         }
         // An issue on an item a vector draws as names the vector.
-        for mut issue in deep_canvas_marks::check::check(&drawn, look) {
+        // #417 AC9's wrong check compares against 0.03 in place of the look's status distance.
+        let min = distance_0_03.then_some(0.03);
+        for mut issue in deep_canvas_marks::check::check(&drawn, look, min) {
             for id in issue.ids.iter_mut() {
                 if let Some(v) = vectors.keys().find(|v| id.starts_with(&format!("{v}."))) {
                     *id = v.clone();
@@ -345,6 +371,21 @@ fn check(
 /// `<clipPath>` without an issue. `None` for another planted value, which another command reads.
 fn skips_clip_path(input: &Map<String, Value>) -> bool {
     input.get("planted").and_then(Value::as_str) == Some("import_skips_clip_path")
+}
+
+/// #417 AC9's wrong program, which `check` and `raster` take: a status distance of 0.03.
+fn distance_0_03(input: &Map<String, Value>) -> bool {
+    input.get("planted").and_then(Value::as_str) == Some("status_distance_0_03")
+}
+
+/// A look's answer: its definition, each theme's roles, and (#417) each theme's opaque roles in
+/// OKLab as resolved.
+fn look_answer(look: &Look, def: Value) -> Value {
+    let oklab = |m: &std::collections::BTreeMap<String, [f64; 3]>| {
+        Value::Object(m.iter().map(|(r, l)| (r.clone(), json!(l))).collect())
+    };
+    json!({"ok": true, "look": def, "roles": roles(look),
+           "oklab": {"light": oklab(&look.light_oklab), "dark": oklab(&look.dark_oklab)}})
 }
 
 /// A document the check refuses, as a drawing command answers it: the first error's code.
@@ -387,23 +428,35 @@ fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
 fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // `check` reads the document and the look, `look` the look alone; both answer on every
     // platform. A look the status guard refuses is the answer, and nothing is drawn.
+    if command == "look" && input.get("list").is_some() {
+        if input.get("list").and_then(Value::as_str) != Some("shipped") {
+            return None;
+        }
+        return Some(Answer::Now(json!({"ok": true, "shipped": look::SHIPPED})));
+    }
+    // The look's own guard holds the status distance everywhere, as the app's look; a document's
+    // look, only where the document binds status, which its check judges (#417).
+    let at = if command == "look" {
+        look::Distance::Everywhere
+    } else {
+        look::Distance::WhereStatusShows
+    };
     let look = match (command, input.get("look")) {
         ("check" | "geometry", None) => None,
-        (_, value) => match look(value)? {
+        (_, value) => match look(value, at)? {
             Ok(found) => Some(found),
             Err(refusal) => return Some(Answer::Now(refusal.to_json())),
         },
     };
     if command == "look" {
         let (look, def) = look?;
-        return Some(Answer::Now(
-            json!({"ok": true, "look": def, "roles": roles(&look)}),
-        ));
+        return Some(Answer::Now(look_answer(&look, def)));
     }
     let skips = skips_clip_path(input);
+    let near = distance_0_03(input);
     let store_dir = store(input.get("store"))?;
     if command == "check" || command == "geometry" {
-        if input.get("planted").is_some() && !skips {
+        if input.get("planted").is_some() && !skips && !near {
             return None;
         }
         let doc = doc(input.get("doc"))?;
@@ -411,7 +464,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            skips,
+            (skips, near),
         );
         if command == "check" {
             return Some(Answer::Now(checked));
@@ -436,7 +489,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 (Planted::SectorsSourceOver, false, false)
             }
             Some(Value::String(p))
-                if p == "write_fades_fills_from_start" || p == "import_skips_clip_path" =>
+                if p == "write_fades_fills_from_start"
+                    || p == "import_skips_clip_path"
+                    || p == "status_distance_0_03" =>
             {
                 (Planted::None, false, false)
             }
@@ -499,7 +554,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &request.doc,
             Some(&request.look),
             request.store.as_deref(),
-            skips,
+            (skips, near),
         );
         request.vectors = vectors;
         return Some(Answer::Now(
@@ -590,15 +645,28 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                                 .ok()
                                 .filter(|f| (1..=600).contains(f))?,
                         },
+                        look: match s.get("look") {
+                            None => None,
+                            l => match self::look(l, at)? {
+                                Ok((l, _)) => Some(l),
+                                Err(_) => return None,
+                            },
+                        },
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
             // The first step opens the session, so it carries the document.
             steps.first()?.doc.as_ref()?;
+            let switch_rebuilds = match input.get("planted") {
+                None => false,
+                Some(Value::String(p)) if p == "look_switch_rebuilds" => true,
+                Some(_) => return None,
+            };
             Request::Session {
                 look,
                 steps,
                 store: store(input.get("store"))?,
+                switch_rebuilds,
             }
         }
         "render" => {

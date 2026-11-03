@@ -1,10 +1,12 @@
 //! The parts of a document motion reads: the transport, channels, clips and placements, read
 //! from the document's JSON (canvas primitives: Transport, Channel and key, Clip, Placement).
+//! Issue #417 adds the toggle and stages controls, the shots stages name, `camera@1` items, the
+//! transition follow (#489) and the look's time feel they take.
 
-use deep_canvas::grammar::{Seeded, Time, TimeContext};
+use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
 use serde_json::{Map, Value};
 
-use crate::curve::{Curve, Interp, Key};
+use crate::curve::{Bezier, Curve, Ease, Interp, Key};
 
 /// Why a document can't be evaluated, as a refusal code and the path it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,11 +142,77 @@ pub struct Limit {
     pub bounds: Bounds,
 }
 
+/// The look's time feel for a change of state (#417: `time.state: {span: time = "0.25s", interp =
+/// ease in_out_cubic}`): what a transition follow naming no span or interp and a stage's glide
+/// naming no ease take, so one piece moves with one ease.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Feel {
+    pub span: i64,
+    pub ease: Ease,
+}
+
+impl Default for Feel {
+    fn default() -> Feel {
+        Feel {
+            span: FLICKS_PER_SECOND / 4,
+            ease: Ease::InOutCubic,
+        }
+    }
+}
+
+/// A control motion reads (canvas primitives: Control): a `toggle`, whose options are `false`
+/// and `true`, or `stages`, whose options are its stages, each with its shot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Control {
+    pub id: String,
+    pub kind: &'static str,
+    /// Its options as a follow's `values` name them.
+    pub options: Vec<String>,
+    /// The option it holds before any input.
+    pub default: usize,
+    /// A stages control's shot per option, as an index in [`Motion::shots`].
+    pub shots: Vec<usize>,
+}
+
+/// A channel that follows a control by a transition (#489: `model: transition {span, interp}`):
+/// at each change of its source it moves from the value it holds then to the option's value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Follow {
+    pub id: String,
+    pub target: Target,
+    /// The control, as an index in [`Motion::controls`].
+    pub control: usize,
+    /// The value per option of the control.
+    pub values: Vec<f64>,
+    /// Its own span and interp, or the look's time feel's where it names none.
+    pub span: Option<i64>,
+    pub ease: Option<Ease>,
+}
+
+/// A `hold` shot a stage names (canvas primitives: Control/Shot): its camera's target from the
+/// stage's entry, reached by a glide from the pose shown.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shot {
+    pub id: String,
+    /// The camera, as an index in [`Motion::cameras`].
+    pub camera: usize,
+    pub target: [f64; 3],
+    /// The glide's span: 0.8 s unless the shot names its own, 0 for `join: cut`.
+    pub glide: i64,
+    pub ease: Option<Ease>,
+}
+
 /// Everything motion reads, with each map in ID order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Motion {
     pub transport: Transport,
     pub channels: Vec<Channel>,
+    pub follows: Vec<Follow>,
+    pub controls: Vec<Control>,
+    /// The shots stages name, in the order stages first name them.
+    pub shots: Vec<Shot>,
+    /// Each `camera@1` item, in document order, with its own target.
+    pub cameras: Vec<(String, [f64; 3])>,
     pub drivers: Vec<Driver>,
     pub limits: Vec<Limit>,
     pub clips: Vec<Clip>,
@@ -241,6 +309,274 @@ fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
         // A bare `ease` or `smooth`, and every interpolation R1 doesn't land, is refused.
         Some(_) => refuse("bad_interp", path),
     }
+}
+
+/// A change of state's interp: `{"ease": {"name": …}}` naming an `ease@1` ease motion lands, or
+/// a Bézier as a key writes one.
+fn ease_of(value: &Value, path: &str) -> Result<Ease, Refused> {
+    let single = value.as_object().filter(|o| o.len() == 1);
+    if let Some(Value::Object(e)) = single.and_then(|o| o.get("ease")) {
+        let name = e.get("name").and_then(Value::as_str);
+        return match Ease::NAMES.iter().find(|(n, _)| Some(*n) == name) {
+            Some((_, ease)) => Ok(*ease),
+            None => refuse("bad_interp", format!("{path}/ease/name")),
+        };
+    }
+    if single.is_some_and(|o| o.contains_key("bezier")) {
+        if let Interp::Bezier { x1, y1, x2, y2 } = interp_of(Some(value), path)? {
+            return Ok(Ease::Bezier(Bezier::new(x1, y1, x2, y2)));
+        }
+    }
+    refuse("bad_interp", path)
+}
+
+/// The look's time feel for a change of state, `time.state`, each field at its default where the
+/// look names none; paths name the request's `look`.
+pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel, Refused> {
+    let mut feel = Feel::default();
+    let state = match look.get("time") {
+        None => None,
+        Some(Value::Object(time)) => match time.get("state") {
+            None => None,
+            Some(Value::Object(state)) => Some(state),
+            Some(_) => return refuse("bad_look", "look/time/state"),
+        },
+        Some(_) => return refuse("bad_look", "look/time"),
+    };
+    let ctx = TimeContext {
+        frame_rate,
+        ..TimeContext::default()
+    };
+    if let Some(span) = state.and_then(|s| s.get("span")) {
+        feel.span = time_of(Some(span), &ctx, "look/time/state/span")?;
+    }
+    if let Some(interp) = state.and_then(|s| s.get("interp")) {
+        feel.ease = ease_of(interp, "look/time/state/interp")?;
+    }
+    Ok(feel)
+}
+
+/// The toggle and stages controls, in ID order, and the shots their stages name, each read once,
+/// in the order stages first name them; every other kind of control is read where it lands.
+fn controls_of(
+    doc: &Map<String, Value>,
+    cameras: &[(String, [f64; 3])],
+    ctx: &TimeContext,
+) -> Result<(Vec<Control>, Vec<Shot>), Refused> {
+    let mut controls = Vec::new();
+    let mut read: Vec<Shot> = Vec::new();
+    for (id, c) in section(doc, "controls")? {
+        let path = format!("controls/{id}");
+        let (kind, options, shots, default) = match c.get("kind").and_then(Value::as_str) {
+            Some("toggle") => {
+                let on = match c.get("default") {
+                    None => false,
+                    Some(Value::Bool(b)) => *b,
+                    Some(_) => return refuse("bad_doc", format!("{path}/default")),
+                };
+                let options = vec!["false".to_string(), "true".to_string()];
+                ("toggle", options, Vec::new(), usize::from(on))
+            }
+            Some("stages") => {
+                let stages = match c.get("stages") {
+                    Some(Value::Object(s)) if !s.is_empty() => s,
+                    _ => return refuse("bad_doc", format!("{path}/stages")),
+                };
+                let mut options = Vec::new();
+                let mut shots = Vec::new();
+                for (stage, s) in stages {
+                    let at = format!("{path}/stages/{stage}/shot");
+                    let Some(name) = s.get("shot").and_then(Value::as_str) else {
+                        return refuse("bad_doc", at);
+                    };
+                    let shot = match read.iter().position(|x| x.id == name) {
+                        Some(i) => i,
+                        None => {
+                            let def = doc.get("shots").and_then(|m| m.get(name));
+                            let Some(Value::Object(def)) = def else {
+                                return refuse("ref_unresolved", at);
+                            };
+                            read.push(shot_of(name, def, cameras, ctx)?);
+                            read.len() - 1
+                        }
+                    };
+                    options.push(stage.clone());
+                    shots.push(shot);
+                }
+                let default = match c.get("default") {
+                    None => 0,
+                    Some(Value::String(d)) => match options.iter().position(|o| o == d) {
+                        Some(i) => i,
+                        None => return refuse("ref_unresolved", format!("{path}/default")),
+                    },
+                    Some(_) => return refuse("bad_doc", format!("{path}/default")),
+                };
+                ("stages", options, shots, default)
+            }
+            _ => continue,
+        };
+        controls.push(Control {
+            id: id.clone(),
+            kind,
+            options,
+            default,
+            shots,
+        });
+    }
+    Ok((controls, read))
+}
+
+/// Each `camera@1` item with its target (`params.target`, `[0, 0, 0]` where it names none).
+fn cameras_of(doc: &Map<String, Value>) -> Result<Vec<(String, [f64; 3])>, Refused> {
+    let mut cameras = Vec::new();
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        if item.get("kind").and_then(Value::as_str) != Some("camera@1") {
+            continue;
+        }
+        let path = format!("items/{id}/params/target");
+        let target = match item.get("params").and_then(|p| p.get("target")) {
+            None => [0.0; 3],
+            Some(v) => point_of(v, &path)?,
+        };
+        cameras.push((id.clone(), target));
+    }
+    Ok(cameras)
+}
+
+/// Three numbers.
+fn point_of(value: &Value, path: &str) -> Result<[f64; 3], Refused> {
+    match value.as_array() {
+        Some(list) if list.len() == 3 => {
+            let mut out = [0.0; 3];
+            for (k, v) in list.iter().enumerate() {
+                out[k] = number(Some(v), &format!("{path}/{k}"))?;
+            }
+            Ok(out)
+        }
+        _ => refuse("out_of_range", path),
+    }
+}
+
+/// A `hold` shot: its camera, its target, the glide that joins it (0.8 s unless it names its own
+/// span, 0 for `join: cut`) and its own ease, if any.
+fn shot_of(
+    id: &str,
+    s: &Map<String, Value>,
+    cameras: &[(String, [f64; 3])],
+    ctx: &TimeContext,
+) -> Result<Shot, Refused> {
+    let path = format!("shots/{id}");
+    let camera = s.get("camera").and_then(Value::as_str);
+    let Some(camera) = cameras.iter().position(|(c, _)| Some(c.as_str()) == camera) else {
+        return refuse("ref_unresolved", format!("{path}/camera"));
+    };
+    match s.get("move").and_then(Value::as_str) {
+        None | Some("hold") => {}
+        Some(_) => return refuse("bad_doc", format!("{path}/move")),
+    }
+    let Some(target) = s.get("target") else {
+        return refuse("bad_doc", format!("{path}/target"));
+    };
+    let target = point_of(target, &format!("{path}/target"))?;
+    let default_glide = FLICKS_PER_SECOND * 4 / 5;
+    let glide = match s.get("join") {
+        None => default_glide,
+        Some(Value::String(j)) if j == "cut" => 0,
+        Some(Value::Object(j)) if j.len() == 1 && j.get("glide").is_some_and(Value::is_object) => {
+            match j["glide"].get("span") {
+                None => default_glide,
+                v => time_of(v, ctx, &format!("{path}/join/glide/span"))?,
+            }
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/join")),
+    };
+    let ease = match s.get("ease") {
+        None => None,
+        Some(v) => Some(ease_of(v, &format!("{path}/ease"))?),
+    };
+    Ok(Shot {
+        id: id.to_string(),
+        camera,
+        target,
+        glide,
+        ease,
+    })
+}
+
+/// A channel with `follow` in place of `keys`: a number channel moving by a transition from the
+/// value it holds to the value its source control's option names.
+fn follow_of(
+    id: &str,
+    c: &Map<String, Value>,
+    doc: &Map<String, Value>,
+    controls: &[Control],
+    ctx: &TimeContext,
+) -> Result<Follow, Refused> {
+    let path = format!("channels/{id}");
+    let Some(Value::String(target)) = c.get("target") else {
+        return refuse("bad_path", format!("{path}/target"));
+    };
+    let target = target_of(target, false, &format!("{path}/target"))?;
+    match c.get("type").and_then(Value::as_str) {
+        Some("f32") | None => {}
+        _ => return refuse("bad_type", format!("{path}/type")),
+    }
+    if c.contains_key("keys") {
+        return refuse("bad_doc", format!("{path}/keys"));
+    }
+    let path = format!("{path}/follow");
+    let Some(Value::Object(source)) = c["follow"].get("source") else {
+        return refuse("bad_doc", format!("{path}/source"));
+    };
+    let name = source.get("control").and_then(Value::as_str);
+    let Some(control) = controls.iter().position(|k| Some(k.id.as_str()) == name) else {
+        let exists = name.is_some_and(|n| doc.get("controls").and_then(|cs| cs.get(n)).is_some());
+        let code = if exists { "bad_doc" } else { "ref_unresolved" };
+        return refuse(code, format!("{path}/source/control"));
+    };
+    let Some(Value::Object(given)) = source.get("values") else {
+        return refuse("bad_doc", format!("{path}/source/values"));
+    };
+    let options = &controls[control].options;
+    if let Some(extra) = given.keys().find(|k| !options.contains(k)) {
+        return refuse("ref_unresolved", format!("{path}/source/values/{extra}"));
+    }
+    let mut values = Vec::with_capacity(options.len());
+    for option in options {
+        let at = format!("{path}/source/values/{option}");
+        match given.get(option) {
+            None => return refuse("bad_doc", at),
+            v => values.push(number(v, &at)?),
+        }
+    }
+    let transition = match c["follow"].get("model") {
+        Some(Value::Object(m)) if m.len() == 1 => m.get("transition").and_then(Value::as_object),
+        _ => None,
+    };
+    let Some(transition) = transition else {
+        return refuse("bad_doc", format!("{path}/model"));
+    };
+    let span = match transition.get("span") {
+        None => None,
+        v => Some(time_of(v, ctx, &format!("{path}/model/transition/span"))?),
+    };
+    let ease = match transition.get("interp") {
+        None => None,
+        Some(v) => Some(ease_of(v, &format!("{path}/model/transition/interp"))?),
+    };
+    Ok(Follow {
+        id: id.to_string(),
+        target,
+        control,
+        values,
+        span,
+        ease,
+    })
 }
 
 fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
@@ -505,9 +841,16 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             }
         }
     };
+    let cameras = cameras_of(doc)?;
+    let (controls, shots) = controls_of(doc, &cameras, &ctx)?;
     let mut labels = Vec::new();
     let mut channels = Vec::new();
+    let mut follows = Vec::new();
     for (id, c) in section(doc, "channels")? {
+        if c.contains_key("follow") {
+            follows.push(follow_of(id, c, doc, &controls, &ctx)?);
+            continue;
+        }
         let path = format!("channels/{id}");
         channels.push(channel_of(id, c, false, &ctx, &path, &mut labels)?);
     }
@@ -571,6 +914,10 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     Ok(Motion {
         transport,
         channels,
+        follows,
+        controls,
+        shots,
+        cameras,
         drivers,
         limits,
         clips,
