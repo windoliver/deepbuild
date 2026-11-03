@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
-import { openLedger } from '@deepbuild/budget';
+import { openLedger, type BudgetInput, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ViewShown } from '@deepbuild/extension-host';
@@ -21,7 +21,7 @@ import { openRecord, RecordError, type Connection, type EventInput, type Message
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { openCheckouts, slot, validityGate, type Checkouts, type SessionLog } from '@deepbuild/gate';
+import { freshCount, judgeStop, openCheckouts, priceDefinition, slot, stillOpen, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -42,6 +42,7 @@ import { Holds } from './holds.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
+import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { GateRunner, type ClaimCheck, type DefinitionState } from './gate-runner.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
@@ -380,6 +381,17 @@ export class Core {
   private trust!: ProjectTrust;
   /** Each claim's requirements by handle, with the ID and text a send-back names (#322). */
   private readonly claimRequirements = new Map<string, Map<string, { id: string; text: string }>>();
+  /** The one ledger of the budgets you approved (#86), each issue's budget ask with the budget your yes approves, and each claim's paid checks (#325). */
+  private ledger!: Ledger;
+  private readonly budgetAsks = new Map<string, BudgetInput>();
+  private readonly paidChecks = new Map<string, Map<string, { paid: PaidKind; task: string }>>();
+  /** Each task's count toward a stalled claim, and each stalled claim's one decision by its ask (#325). */
+  private readonly stalls = new Map<string, StallCount>();
+  private readonly stallAsks = new Map<string, { task: string; session: string; agent: string }>();
+  /** The tasks you accepted as proven, and the switches you decided stay off, by folder and name, with each switch's ask (#325). */
+  private readonly accepted = new Set<string>();
+  private readonly offDecided = new Set<string>();
+  private readonly switchAsks = new Map<string, { key: string; name: string; deployed: string; task: string; issue: number; session: string; agent: string }>();
   /** Claims in an untrusted repo whose spec names checks (#322): watch-only, so none of them passes. */
   private readonly watchOnlyClaims = new Set<string>();
   /** Sessions told once that their repo's spec checks are watch-only until the project is trusted. */
@@ -571,7 +583,7 @@ export class Core {
       // The window reading of the account the session's agent runs on, in the hub's own home (#322).
       atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
       pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runClaim(r),
-      invalid: (claim, commit, reason) => this.invalid(claim, commit, reason),
+      invalid: (claim, commit, reason) => this.invalid(claim, commit, reason), locked: (d) => this.priceLocked(d),
     });
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -740,7 +752,8 @@ export class Core {
       : this.supervisor;
     this.every('supervisor', 1000, () => this.supervisor.tick());
     const config = this.config();
-    const ledger = await openLedger({ record: this.record, asks, now: this.now, price: async () => null });
+    // A paid check's price comes from its kind's lookup; none is wired in version 0 but the tests' file, so a paid run with none is BLOCKED (#325).
+    const ledger = this.ledger = await openLedger({ record: this.record, asks, now: this.now, price: async (run) => this.priceOf(run.check) });
     // resolver-decisions ships on by default (#23): your saved decisions, and the budgets you approved, answer the
     // asks they cover, each answer gated by the core.
     asks.registerResolver('resolver-decisions', resolverDecisions({ record: this.record, ledger }));
@@ -2191,6 +2204,7 @@ export class Core {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
+    this.delivery(delivery);
     void this.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.sessions.get(delivery.session);
     if (asker?.agent === 'pi' || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
@@ -2589,9 +2603,254 @@ export class Core {
     const open = await this.tasks.unproven(session, issue);
     if (!open) return undefined;
     if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
-    if (!open.left.length) return undefined;
-    const left = open.left.map((q) => `${q.id} (${q.text})`).join('; ');
+    // What a split moved to a new issue, or all of it once you accepted what's proven, no longer keeps it open (#325).
+    const moved = this.accepted.has(open.task_ref) ? undefined : await this.movedOut(open.task_ref);
+    const unproven = moved ? open.left.filter((q) => !moved.has(q.id)) : [];
+    if (!unproven.length) return this.deliveryHeld(session, issue, open.task_ref);
+    const left = unproven.map((q) => `${q.id} (${q.text})`).join('; ');
     return `DeepBuild blocked this: the pull request can't say Closes #${issue} while a requirement of ${open.task_ref} is unproven. Say Part of #${issue} instead, and list what's left: ${left}.`;
+  }
+  /**
+   * A paid check's price, or its run's cost reading, from the tests' file (DEEP_HUB_TEST_PRICES); null, a price nobody
+   * knows, without one.
+   */
+  private priceOf(check: string, of: 'prices' | 'costs' = 'prices'): number | null {
+    if (!this.options.prices) return null;
+    try {
+      const table = (JSON.parse(readFileSync(this.options.prices, 'utf8')) as Obj)[of];
+      const usd = isObj(table) ? table[check] : undefined;
+      return typeof usd === 'number' && Number.isFinite(usd) && usd >= 0 ? usd : null;
+    } catch {
+      return null;
+    }
+  }
+  /**
+   * A definition just locked (#325; design: One budget): its paid checks priced, and you asked once for the issue's
+   * budget, with the total, for one run of each until a week on. A price nobody knows asks nothing: those runs are
+   * BLOCKED until priced, never free.
+   */
+  private async priceLocked(d: { session: string; agent: string; task_ref: string; requirements: { id: string; check: string | null; paid?: PaidKind }[] }): Promise<void> {
+    const pricing = await priceDefinition(d.requirements, async (c) => this.priceOf(c.check));
+    const n = pricing.checks.length;
+    if (!n) return;
+    if (pricing.total_usd === null) {
+      const unknown = pricing.checks.filter((c) => c.usd === null).map((c) => c.check);
+      return this.appendReading(d.session, d.agent, `${d.task_ref}'s paid check${unknown.length === 1 ? '' : 's'} ${unknown.join(', ')} ${unknown.length === 1 ? 'has' : 'have'} no price, so no budget is asked for yet and ${unknown.length === 1 ? 'its runs are' : 'their runs are'} BLOCKED until priced.`);
+    }
+    const usd = (v: number) => `$${v.toFixed(2)}`;
+    const total = usd(pricing.total_usd);
+    const ends = this.now() + 7 * DAY;
+    const until = new Date(ends).toISOString().slice(0, 10);
+    const budget: BudgetInput = { scope: { kind: 'issue', ref: d.task_ref }, runs: n, cap_usd: pricing.total_usd, ends };
+    const listed = pricing.checks.map((c) => `${basename(c.check)} (${c.paid}) ${usd(c.usd!)}`).join(', ');
+    const question = `${d.task_ref}'s definition locked with ${n} paid check${n === 1 ? '' : 's'}: ${listed}, ${total} in all. Approve a budget of ${total} for ${n === 1 ? 'its run' : `their ${n} runs`} until ${until}?`;
+    const key = sha256Hex(canonicalize({ kind: 'budget.issue', task_ref: d.task_ref, budget } as unknown as JsonValue));
+    const ask = await this.asks.raise(this.connection('core', { session: d.session, agent: d.agent }), 'budget.issue', {
+      kind: 'authority', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
+      recommended: null, deadline: this.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
+    }, { steps: [{ does: `Approve a budget of ${total} for ${d.task_ref}: ${listed}, until ${until}`, changes: [d.task_ref], undo: null, public: false, cost: pricing.total_usd }], diff: key });
+    this.budgetAsks.set(ask, budget);
+  }
+  /** Your answer to an ask the done gate raised (#325): an issue's budget approved, a stalled claim split, funded or accepted, a switch left off. */
+  private delivery(d: Delivery): void {
+    const fail = (what: string) => (error: unknown) => process.stderr.write(`deep hub: ${what} for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
+    const budget = this.budgetAsks.get(d.ask);
+    if (budget) {
+      this.budgetAsks.delete(d.ask);
+      if (d.decision === 'allow') void this.ledger.approveOn(this.connection('core'), d.ask, budget).catch(fail('the budget'));
+      return;
+    }
+    const stall = this.stallAsks.get(d.ask);
+    if (stall) {
+      this.stallAsks.delete(d.ask);
+      if (d.option === 'split') void this.split(d.ask, stall).catch(fail('the split'));
+      // What's proven is accepted: the rest is dropped, and the issue may close.
+      else if (d.option === 'accept') this.accepted.add(stall.task);
+      // Funded: the send-backs start again from round 1.
+      else if (d.option === 'fund') this.stalls.delete(stall.task);
+      return;
+    }
+    const off = this.switchAsks.get(d.ask);
+    if (off && d.option === 'stay-off') {
+      this.switchAsks.delete(d.ask);
+      this.offDecided.add(off.key);
+      void this.followUp(d.ask, off).catch(fail('the follow-up'));
+    }
+  }
+  /** The decision the asks core saved from your answer to `ask`, which lands just after the answer is handed on; null when none does. */
+  private async decisionOf(ask: string): Promise<string | null> {
+    for (let i = 0; i < 30; i++) {
+      const [row] = (await this.record.raw(`SELECT id FROM events WHERE kind = 'decision.created' AND json_extract(data, '$.ask') = ? ORDER BY log_pos DESC LIMIT 1`, [ask])) as { id: string }[];
+      if (row) return `decision:${row.id}`;
+      await new Promise((done) => setTimeout(done, 100));
+    }
+    return null;
+  }
+  /**
+   * A stalled claim you split (#325): what's proven closes now, and the rest moves to a new issue, drafted with what
+   * each item needs. The draft is recorded; nothing is filed for you.
+   */
+  private async split(ask: string, s: { task: string; session: string; agent: string }): Promise<void> {
+    const left = await this.tasks.leftOf(s.task) ?? [];
+    const decision = await this.decisionOf(ask);
+    const items = left.map((r) => ({ id: r.id, text: r.text, needs: r.check ? `its check ${r.check} to pass${r.paid ? `, a ${r.paid} the issue's budget pays for` : ''}` : 'a check that proves it' }));
+    const ts = this.now();
+    await this.append(this.connection('core', { session: s.session, agent: s.agent }), {
+      v: 1, id: ulid(ts), kind: 'issue.drafted', ts, subject: ask,
+      data: {
+        task_ref: s.task, issue: s.task, because: 'split', decision, title: `The rest of ${s.task}: ${items.map((i) => i.text).join('; ') || 'nothing left'}`.slice(0, 200), items,
+        follow_up: `File this issue for what the split moved out of ${s.task}; ${s.task} closes with what's proven.`,
+      },
+    });
+  }
+  /** A switch you decided stays off (#325): the decision is saved with its follow-up, a drafted issue to turn it on. */
+  private async followUp(ask: string, off: { name: string; deployed: string; task: string; issue: number; session: string; agent: string }): Promise<void> {
+    const decision = await this.decisionOf(ask);
+    const ts = this.now();
+    await this.append(this.connection('core', { session: off.session, agent: off.agent }), {
+      v: 1, id: ulid(ts), kind: 'issue.drafted', ts, subject: ask,
+      data: {
+        task_ref: off.task, issue: `#${off.issue}`, because: 'switch', decision, title: `Turn ${off.name} on where it's deployed`,
+        items: [{ id: off.name, text: `${off.name} is on where it's deployed`, needs: `${off.name} switched on in ${off.deployed}, and #${off.issue}'s checks run again with it on` }],
+        follow_up: `Turn ${off.name} on in ${off.deployed} and check #${off.issue}'s change with it on: you decided it stays off for now${decision ? ` (${decision})` : ''}.`,
+      },
+    });
+  }
+  /**
+   * What keeps a pull request whose requirements all passed at Part of (#325; design: Done means switched on): a
+   * release check that hasn't passed on the PR's commit merged with main, and a switch the change adds that's off or
+   * unset where it's deployed, until you decide it stays off; you're asked about each such switch once.
+   */
+  private async deliveryHeld(session: string, issue: number, task: string): Promise<string | undefined> {
+    const cwd = this.live.get(session)?.cwd;
+    if (!cwd) return undefined;
+    const spec = releaseSpec(cwd);
+    const instead = `Say Part of #${issue} instead`;
+    if (spec.checks.length) {
+      const head = (await headOf(cwd).catch(() => undefined))?.sha;
+      const merged = head ? await mergedWithMain(cwd, head) : undefined;
+      if (merged && 'conflict' in merged) return `DeepBuild blocked this: the pull request can't say Closes #${issue}: ${merged.conflict}, so its release checks (${spec.checks.join(', ')}) can't pass on its merge with main. ${instead}.`;
+      if (merged) {
+        const rows = (await this.record.raw(`SELECT check_id, outcome FROM runs WHERE commit_sha = ? AND ended IS NOT NULL ORDER BY started`, [merged.commit])) as { check_id: string; outcome: string | null }[];
+        const last = new Map(rows.map((r) => [r.check_id, r.outcome]));
+        const open = spec.checks.filter((c) => last.get(c) !== 'passed');
+        if (open.length) {
+          const said = open.map((c) => `${c} ${last.has(c) ? `${last.get(c) ?? 'ended'} there` : 'is still to run there'}`).join('; ');
+          return `DeepBuild blocked this: the pull request can't say Closes #${issue} until the repo's release check${open.length === 1 ? '' : 's'} pass${open.length === 1 ? 'es' : ''} on its commit merged with main (${merged.commit.slice(0, 12)}): ${said}. ${instead}; the PR's claim runs ${open.length === 1 ? 'it' : 'them'} there in the slow lane.`;
+        }
+      }
+    }
+    if (spec.switches) {
+      const [row] = (await this.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [task])) as { base_commit: string | null }[];
+      const base = row?.base_commit;
+      if (base) {
+        const off = (await switchesOff(cwd, base, spec.switches)).filter((w) => !this.offDecided.has(`${cwd}\0${w.name}`));
+        if (off.length) {
+          for (const w of off) await this.askSwitch(session, cwd, task, issue, w, spec.switches.deployed).catch(() => undefined);
+          const named = off.map((w) => `${w.name} (${w.state === 'off' ? 'off' : 'unset'} in ${spec.switches!.deployed})`).join(' and ');
+          return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the change ships behind ${named}, until you decide ${off.length === 1 ? 'it stays' : 'they stay'} off; you're asked in your inbox. ${instead}.`;
+        }
+      }
+    }
+    return undefined;
+  }
+  /** Asks you once whether a switch the change adds stays off where it's deployed (#325). */
+  private async askSwitch(session: string, cwd: string, task: string, issue: number, w: { name: string; state: 'off' | 'unset' }, deployed: string): Promise<void> {
+    const key = `${cwd}\0${w.name}`;
+    if ([...this.switchAsks.values()].some((a) => a.key === key)) return;
+    const agent = this.live.get(session)?.agent ?? 'claude-code';
+    const question = `The change for #${issue} ships behind ${w.name}, which is ${w.state === 'off' ? 'off' : 'unset'} where it's deployed (${deployed}). Does it stay off for now? Then the pull request may say Closes, with a follow-up to turn ${w.name} on.`;
+    const ask = await this.asks.raise(this.connection('core', { session, agent }), 'switch.off', {
+      kind: 'exception', question,
+      options: [{ id: 'stay-off', label: `${w.name} stays off: close it with a follow-up to turn it on`, decision: 'none' }, { id: 'not-yet', label: "Keep the pull request at Part of until it's on", decision: 'none' }],
+      recommended: 'stay-off', deadline: this.now() + 2 * DAY, fallback: 'you', default: 'not-yet', provisional: false, owner: 'you',
+      key: sha256Hex(canonicalize({ kind: 'switch.off', cwd, name: w.name })), pinned_to: await this.pinOf(cwd, question),
+    });
+    this.switchAsks.set(ask, { key, name: w.name, deployed, task, issue, session, agent });
+  }
+  /**
+   * A stop that would be sent back, against its task's count toward a stalled claim (#325; design: Stalled claims): sent
+   * back as round n of 3, or not, once the open items came back unchanged on two stops in a row or three send-backs
+   * passed without new evidence, when the claim becomes one decision for you. While a question holds the send-back
+   * the stop isn't sent back and counts toward neither. What the stop is sent back with, or nothing.
+   */
+  private async stallGate(meta: HookMeta, claim: string, sendBack: string | undefined): Promise<string | undefined> {
+    const [row] = (await this.record.raw(`SELECT subject_ref FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null }[];
+    const task = row?.subject_ref;
+    if (!task) return sendBack;
+    const standing = this.gate.standing(claim);
+    if (!sendBack) {
+      // A green claim starts the count again.
+      if (standing.length && standing.every((c) => c.result === 'PASS')) this.stalls.delete(task);
+      return undefined;
+    }
+    const held = await this.questionHolds(meta.session);
+    // The planted wrong program counts the stops a question holds, though it still doesn't send them back.
+    if (held && this.options.plant !== 'counts-waiting-stops') return undefined;
+    const items = [...standing.filter((c) => c.result !== 'PASS').map((c) => `${c.check}: ${c.result}`), ...stillOpen(this.lastMessage.get(meta.session) ?? '')];
+    const runs = ((await this.record.raw(`SELECT id FROM runs WHERE claim_id = ?`, [claim.slice(6)])) as { id: string }[]).map((r) => r.id);
+    let count = this.stalls.get(task);
+    if (!count) this.stalls.set(task, count = freshCount());
+    // The planted wrong program counts any new run as new evidence, whatever its result.
+    const fate = judgeStop(count, { items, passing: standing.filter((c) => c.result === 'PASS').map((c) => c.check), runs }, this.options.plant === 'new-run-is-evidence');
+    if (fate.sendBack) {
+      if (held) return undefined;
+      const [verdict] = (await this.record.raw(`SELECT handle FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [claim.slice(6)])) as { handle: string | null }[];
+      const ts = this.now();
+      if (verdict?.handle) await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'claim.sent_back', ts, subject: claim, data: { claim, verdict: verdict.handle, round: fate.round, to: `session:${letters(meta.session)}` } });
+      return sendBack;
+    }
+    if (fate.stalled) await this.stalled(meta, claim, task, fate.stalled);
+    return undefined;
+  }
+  /**
+   * Whether a question holds a session's send-back (#325; design: A question holds the send-back): a step only you can
+   * take, an exception, or a taste call or choice that isn't provisional, open, or answered and not yet delivered.
+   */
+  private async questionHolds(session: string): Promise<boolean> {
+    return ((await this.record.raw(`SELECT 1 FROM asks WHERE session_id = ? AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')
+      AND (kind IN ('unblock', 'exception') OR (kind IN ('taste', 'choice') AND provisional = 0)) LIMIT 1`, [session])) as unknown[]).length > 0;
+  }
+  /** A claim that stalled (#325): recorded, and one decision for you instead of another send-back: split the issue, fund the live runs, or accept what's proven. */
+  private async stalled(meta: HookMeta, claim: string, task: string, rule: StallRule): Promise<void> {
+    const core = this.connection('core', { session: meta.session, agent: meta.agent });
+    const ts = this.now();
+    await this.append(core, { v: 1, id: ulid(ts), kind: 'claim.stalled', ts, subject: claim, data: { claim, rule } });
+    const left = await this.tasks.leftOf(task) ?? [];
+    const named = left.length ? left.map((r) => `${r.id} ("${r.text}")`).join(', ') : 'its open items';
+    const question = `The claim on ${task} stalled: ${rule} and no new passing evidence, with ${named} still open, so DeepBuild stopped sending the agent back. Split the issue (what's proven closes now, and the rest moves to a new issue with what each item needs), fund the live runs it needs, or accept what's proven?`;
+    const ask = await this.asks.raise(core, 'claim.stalled', {
+      kind: 'exception', question,
+      options: [{ id: 'split', label: "Split the issue: what's proven closes now", decision: 'none' }, { id: 'fund', label: 'Fund the live runs it needs', decision: 'none' }, { id: 'accept', label: "Accept what's proven", decision: 'none' }],
+      recommended: 'split', deadline: this.now() + 2 * DAY, fallback: 'you', default: 'split', provisional: false, owner: 'you',
+      key: sha256Hex(canonicalize({ kind: 'claim.stalled', task, claim })), pinned_to: await this.pinOf(meta.cwd, question),
+    });
+    this.stallAsks.set(ask, { task, session: meta.session, agent: meta.agent });
+    await this.appendReading(meta.session, meta.agent, `${claim} stalled (${rule}), so it isn't sent back again: it reaches you as one decision, ${ask}.`).catch(() => undefined);
+  }
+  /** The requirements a split moved to a new issue, by ID, from the record. */
+  private async movedOut(task: string): Promise<Set<string>> {
+    const rows = (await this.record.raw(`SELECT data FROM events WHERE kind = 'issue.drafted' AND json_extract(data, '$.task_ref') = ? AND json_extract(data, '$.because') = 'split'`, [task])) as { data: string }[];
+    return new Set(rows.flatMap((r) => (JSON.parse(r.data) as { items: { id: string }[] }).items.map((i) => i.id)));
+  }
+  /**
+   * A pull request's claim runs the repo's release checks on the PR's commit merged with main (#325): each as a spec
+   * check pinned to that commit, in the slow lane, once per head; one that can't merge fails, naming the conflict.
+   */
+  private async releaseChecks(cwd: string, head: string): Promise<ClaimCheck[]> {
+    const names = releaseSpec(cwd).checks;
+    if (!names.length || !/^[0-9a-f]{40}$/.test(head) || /^0+$/.test(head)) return [];
+    const merged = await mergedWithMain(cwd, head);
+    if (!merged) return [];
+    const checks = this.checksOf(cwd);
+    return names.flatMap((name) => {
+      const check = checks.get(name);
+      if (!check) return [];
+      const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+      const conflict = 'conflict' in merged ? merged.conflict : undefined;
+      const command = conflict ? `printf '%s\\n' '${conflict.replaceAll("'", "'\\''")}' >&2; exit 1` : check.run;
+      return [{ check: name, approved: null, command, covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, commit: 'commit' in merged ? merged.commit : head, ...(deadline ? { deadline_ms: deadline } : {}) }];
+    });
   }
   /** The session is on `display` once its switch ran, if that is a screen it leases. */
   private async switched(session: string, display: string): Promise<void> {
@@ -2865,6 +3124,12 @@ export class Core {
     const held = until;
     until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
+    // A send-back counts toward a stalled claim, and a question that holds the send-back holds it (#325).
+    if (lane && judged?.claim) {
+      const back = await this.stallGate(meta, judged.claim, lane.sendBack).catch(() => lane.sendBack);
+      if (back) lane.sendBack = back;
+      else delete lane.sendBack;
+    }
     let proceeded = false;
     try {
       if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
@@ -3977,7 +4242,7 @@ export class Core {
       // A forge that didn't answer leaves the state unknown, never a guess.
       const asks = [{ ask: state.task, pr: url ? { state: pulled?.state ?? 'unknown', url } : null }];
       const second = [
-        state.checks.length ? `checks: ${state.checks.map((c) => `${c.check} ${c.outcome}${c.stand_in ? ', proven on a stand-in' : ''}`).join(', ')}` : '',
+        state.checks.length ? `checks: ${state.checks.map((c) => `${c.check} ${c.outcome}${c.spend_usd !== undefined ? ` $${c.spend_usd.toFixed(2)}` : ''}${c.stand_in ? ', proven on a stand-in' : ''}`).join(', ')}` : '',
         url ? `PR ${pulled?.state ?? 'unknown'} ${url}` : '',
         files.length ? `wrote ${files.join(', ')}` : '',
         next_issue ? `next issue #${next_issue.number} ${next_issue.url}` : '',
@@ -4939,9 +5204,10 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
     const at = this.now();
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
+    this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
     const lane = (async () => {
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
       const findings = r.definition === 'pending' ? [] : validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
@@ -4968,7 +5234,11 @@ export class Core {
       // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
       if (!r.joins) {
         const spec = this.specChecks(r.cwd);
-        if (spec.length && await this.projectTrusted(r.cwd)) checks.push(...spec);
+        if (spec.length && await this.projectTrusted(r.cwd)) {
+          checks.push(...spec);
+          // A claim on a pull request also runs the repo's release checks, on the PR's commit merged with main (#325).
+          if (await this.prOf(r.session)) checks.push(...await this.releaseChecks(r.cwd, r.commit));
+        }
         else if (spec.length) {
           this.watchOnlyClaims.add(r.claim);
           if (!this.toldUntrusted.has(r.session)) {
@@ -5075,7 +5345,20 @@ export class Core {
     }
     // A stand-in's port (#874) is the one host it may reach, and its origin the one variable it gets; a command's stand-in is found by name.
     const grant: Grant = r.hosts?.length ? { ...RUN_AS_YOU, hosts: r.hosts } : RUN_AS_YOU;
-    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) });
+    // A paid check reserves its price against the issue's budget before it starts, and is charged its cost reading
+    // once it ends (#325): one that doesn't fit, or whose price nobody knows, never starts, so its check is BLOCKED.
+    const paid = this.paidChecks.get(r.claim)?.get(r.check);
+    const id = paid ? `run:${ulid(this.now())}` : undefined;
+    if (paid && id) {
+      const inputs = sha256Hex(new TextEncoder().encode(`${r.check}\n${r.approved ?? r.command}\n${r.commit}`));
+      const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
+      if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
+    }
+    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id);
+    if (paid) {
+      const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
+      void (this.runs.get(String(run))?.done ?? Promise.resolve()).catch(() => undefined).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
     return String(run);
   }
   /**
@@ -5207,7 +5490,7 @@ export class Core {
   }
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
-  private async runStart(params: Obj, deadline?: number): Promise<Obj> {
+  private async runStart(params: Obj, deadline?: number, id?: string): Promise<Obj> {
     const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
@@ -5228,7 +5511,7 @@ export class Core {
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const run = await this.launch({
-      run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
+      run: id ?? `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
