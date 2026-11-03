@@ -92,7 +92,7 @@ the go-ahead and again just before deleting). All seven were removed with rm -rf
 Before: swap 37,308 of 37,888 MiB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
 Eight Claude Code processes were resident. The rest of the load came from long-lived processes that
 this session did not start, so it did not stop them (rules: stop only processes you started, by PID).
-They were listed for the owner to close by hand. Reading at about 01:36Z (command lines cut to the
+They were listed for the owner to close by hand. Reading at about 01:38:46Z, after the removals (from the elapsed times; command lines cut to the
 part that names them; the before/after files cut them at 160-200 columns):
   $ ps -o pid,ppid,etime,pcpu,command -p ...
     PID  PPID     ELAPSED  %CPU COMMAND
