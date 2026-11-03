@@ -1,0 +1,65 @@
+# #1112 on the Mac: what each policy found and what was done (2026-11-03 UTC)
+# Facts per worktree are in mac-before.txt; lists with `git status --porcelain` in
+# mac-before-worktrees.txt and mac-after-worktrees.txt; their difference in mac-worktree-diff.txt.
+
+## Worktrees (policy: prune merged branches down to open PRs; never one on an open branch,
+## with uncommitted or untracked edits, or with a live process whose cwd is inside it)
+
+Removed with `git worktree remove` (no --force), after the owner's go-ahead in chat:
+  agent-acc593499bc1d6118   detached at bddb84dd, in origin/main, porcelain empty
+  agent-a367b84c3ec0c1b93   impl/39-runner, in origin/main, no PR; porcelain was only `?? target`,
+                            a symlink into issue-22's target/, unlinked first (target itself kept)
+  agent-a65e859048883de67   impl/39-loops, same as above
+  agent-ad05b8765cc5b9e8a   impl/39-adapter, same as above
+  issue-327-implementation  PR 809 merged at this tip, porcelain empty; ignored files were generated
+                            only (panels' gpui-kit.d.ts and jsconfig.json, packages' dist/)
+Branches were kept, so every removed tip is still reachable.
+
+`git worktree prune -v` dropped admin entries whose folders were already gone (metadata only):
+  base21 (gitdir pointed nowhere; its folder in another session's scratchpad is left as it was),
+  issue-44-implementation-3bb689, issue-137-implementation-1d9a30, issue-488-implementation-de6827,
+  issue-111-implementation-5e4986, issue-358-implementation-8c5ca4, issue-331-implementation-4a2ef3,
+  issue-777-47bdc6, issue-376-implementation-22897e
+
+Kept, listed for the owner:
+  feat-761-scrub-field-names       PR 778 merged at tip, clean, but 13 live processes run in it
+  issue-30-ac12-counting           PR 720 merged at tip, untracked .claude/, 7 live processes
+  issue-22-implementation-14b8cf   PR 877 merged, but 368 uncommitted lines and a 7.7 GB target/
+  issue-63-read-by-reference       in origin/main, two modified files
+  issue-303-implementation-814647  in origin/main, clean, but an ignored packages/tasks/ that is not generated
+  agent-* with untracked tests/acceptance/<n>/ (blind drafts): a02a6b7e, a201604a, a5248a97, a5a1aa40,
+    a6c5fa28, a82eaf08, a884ad18, a91442a6, a926336e, a941a951, aa4208f6, abcd69cb, aca6492c, adadec93, af731015
+  agent-* clean but with commits not in origin/main and no PR: a0a70551, a2dd046b, a7f6dff7 (blind/39-acceptance),
+    a95c2444, aab08fb2, ac7f89f1, add91173
+  issue-45-implementation-e83eea   detached, not in main, target/ 10.7 GB (large target listed, not touched)
+  issue-824-acceptance             detached, not in main, active today
+  db31main, db39A, db45ac          other sessions' detached checkouts under /private/tmp with live processes
+  remote-control-52cfec, summary-document-review-346b4a   live sessions, untracked files
+  issue-842-implementation-2194f1  this session's worktree (branch claude/issue-1112-...), target/ 13.2 GB
+
+## target/ in worktrees idle more than three days
+No worktree had been idle more than three days (largest idle reading 2.5 days, from the
+mtime of each worktree's index, HEAD and logs/HEAD), so no target/ was deleted.
+Large targets, listed for the owner and never deleted by an agent:
+  issue-842-implementation-2194f1 13.2 GB, issue-45-implementation-e83eea 10.7 GB,
+  issue-22-implementation-14b8cf 7.7 GB (also the target the three impl/39 symlinks pointed at)
+
+## Orphaned proof-run copies under $TMPDIR
+Seven deep-proof-run-* folders (about 2.4 GB, 50 to 215 hours old). For each, `lsof +D` found no
+process holding a file or cwd inside it and no running command line named it, read twice (before
+the go-ahead and again just before deleting). All seven were removed with rm -rf.
+Free disk on /System/Volumes/Data went from 34 GiB to 39 GiB after the removals above.
+
+## Resident sessions and swap
+Before: swap 37.3 of 37.9 GB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
+Eight Claude Code processes were resident. The rest of the load came from long-lived processes that
+this session did not start, so it did not stop them (rules: stop only processes you started, by PID).
+They were listed for the owner to close by hand:
+  - a `hub run` from the deleted issue-44 worktree (4 days old, parent 1) with its child
+    `log stream --predicate sender == "Sandbox"`, plus a second hub and log stream from /private/tmp/db39A;
+    the two log streams keep diagnosticd at about 120% CPU
+  - a deep-hook `claude-code waiter` from the deleted issue-376 worktree (4 days old)
+  - a floor/run.sh worker from a deleted worktree's scratchpad (11 days old)
+  - eight codex app-server-broker processes (7 to 13 days old)
+  - ChatGPT with Codex Computer Use, openclaw-gateway
+The idle readings after that are in mac-idle.txt.

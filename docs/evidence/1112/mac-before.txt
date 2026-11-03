@@ -1,0 +1,109 @@
+# #1112 Mac reading BEFORE cleanup (MacBook Air M3, 8 cores, 16 GB)
+
+# 2026-11-03T01:30:02Z MacBook-Air-97
+$ sysctl vm.swapusage
+vm.swapusage: total = 37888.00M  used = 37307.75M  free = 580.25M  (encrypted)
+$ sysctl vm.loadavg
+vm.loadavg: { 108.51 81.29 74.64 }
+$ df -h /System/Volumes/Data
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   460Gi   364Gi    34Gi    92%    6.0M  357M    2%   /System/Volumes/Data
+$ build/test processes (cargo, rustc, vitest, proof, stryker)
+$ resident claude processes
+ 5920 04-22:01:10    992 ~/private/deepbuild-core/.claude/worktrees/issue-376-implementation-22897e/target/debug/deep-hook claude-code waiter
+ 7476       27:17    352 /bin/bash -c -l shopt -u extglob 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null
+ 8004       27:10   1264 bash /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-remote-control-52cfec/d9af0d12-6f25-46bd-9138-21b
+ 8501    20:53:35  30080 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+11727 13-03:16:29    432 ~/.hermes/node/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-broker.mjs serv
+16840    18:26:31  29840 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+17029 04-20:42:02  21152 ~/.nvm/versions/node/v24.22.0/bin/node ~/private/deepbuild-core/.claude/worktrees/issue-44-implementation-3
+23319 12-03:40:09    480 ~/.nvm/versions/node/v24.22.0/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-
+23399 01-05:37:19  46192 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+38896 13-07:02:38    432 ~/.hermes/node/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-broker.mjs serv
+39979       02:38 217824 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+41806 13-06:59:47    432 ~/.hermes/node/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-broker.mjs serv
+42420       01:14 187152 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+44495       00:19  33952 ~/.hermes/node/bin/node ~/private/deepbuild-core/.claude/worktrees/issue-842-implementation-2194f1/node_mod
+44496       00:19 144896 ~/.hermes/node/bin/node ~/private/deepbuild-core/.claude/worktrees/issue-842-implementation-2194f1/node_mod
+44515       00:19  34480 ~/.hermes/node/bin/node ~/private/deepbuild-core/.claude/worktrees/issue-842-implementation-2194f1/node_mod
+45242       00:00   1760 /bin/bash -c source ~/.claude/shell-snapshots/snapshot-bash-1793669272611-s9onk2.sh 2>/dev/null || true && shopt -u extgl
+45243       00:00   1760 bash /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-842-implementation-2194f1/3801439a-c2e8-4e9
+48502    06:30:00 118832 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+49323    06:29:44  30240 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+56373 01-05:31:08  91520 ~/Library/Application Support/Claude/claude-code/2.1.309/5af865b9901c/claude.app/Contents/MacOS/claude --output-format st
+56407 07-15:51:20   1520 ~/.nvm/versions/node/v24.22.0/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-
+64508 06-20:03:56   1520 ~/.nvm/versions/node/v24.22.0/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-
+67390 13-06:39:44    432 ~/.hermes/node/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-broker.mjs serv
+76534 12-16:19:22    464 ~/.nvm/versions/node/v24.22.0/bin/node ~/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/app-server-
+77635 11-03:10:11   1328 /bin/bash /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-nervous-shirley-dd2cd9/c2886675-85b6-434d-a6
+44971       00:10    832 bash /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-remote-control-52cfec/c39c9007-67b0-4e4f-8ff6-407
+$ top CPU
+  PID  %CPU    RSS COMM
+40073 126.3  12320 /usr/libexec/diagnosticd
+44972  77.4 291744 npm ci
+40503  74.9   3984 /usr/bin/log
+71898  45.1   9600 /usr/libexec/replayd
+  308  36.4 760400 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+17036  30.9   3792 /usr/bin/log
+58001  25.3  80272 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+58701  20.0  14048 /private/tmp/dh39-app/h/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService
+69807   8.8 132528 /Applications/Claude.app/Contents/MacOS/Claude
+45270   8.5  14320 /usr/libexec/coreduetd
+45203   7.3  96528 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/153.0.8010.53/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)
+68762   4.5 101424 openclaw-gateway
+ 1349   4.1  25984 /Applications/Utilities/Adobe Sync/CoreSync/Core Sync.app/Contents/MacOS/Core Sync
+39549   3.6  78336 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/153.0.8010.53/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)
+
+$ deep-proof-run-* copies under $TMPDIR, with PIDs holding them (lsof +D) or naming them (ps)
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-j4rQxm size_kb=755100 mtime_age_h=215 lsof_pids=[] argv_pids=[]
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-iuchsJ size_kb=755404 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-7uxEmf size_kb=212 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-g4XJXA size_kb=913704 mtime_age_h=54 lsof_pids=[] argv_pids=[]
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-SHuE7H size_kb=52 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-Q7bu9q size_kb=4 mtime_age_h=50 lsof_pids=[] argv_pids=[]
+/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T//deep-proof-run-oJAZ7o size_kb=176 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+
+$ worktree facts (scratchpad hygiene.mjs, read-only; PRs from gh pr list --state all)
+worktree | head | branch | PRs | HEAD in origin/main | porcelain lines | non-generated ignored | target GB | idle days | live PIDs (cwd inside)
+~/private/deepbuild-core | d122341c | main | - | yes | 1 | 1 | 0.6 | 2.5 | 432
+base21 | 5a6d09a4 | detached | - | yes | 0 | 0 | 0.1 | - | 0
+db31main | df9b3fa2 | detached | - | yes | 0 | 0 | 0 | 0 | 3
+db39A | fd952b1c | detached | - | yes | 0 | 0 | 0.3 | 0 | 2
+db45ac | 0f9f00dd | detached | - | no | 0 | 0 | 0 | 0 | 1
+agent-a02a6b7eebc3e6833 | b7bccf99 | worktree-agent-a02a6b7eebc3e6833 | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a0a70551f01d24191 | aa042769 | worktree-agent-a0a70551f01d24191 | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-a201604aefc294e95 | 244a3455 | worktree-agent-a201604aefc294e95 | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a2dd046b13e6e3150 | c2206048 | worktree-agent-a2dd046b13e6e3150 | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-a367b84c3ec0c1b93 | 93e175dc | impl/39-runner | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a5248a97a84b21509 | 244a3455 | detached | - | yes | 1 | 0 | 0.2 | 1.8 | 0
+agent-a5a1aa406a193e4c9 | 244a3455 | detached | - | yes | 1 | 0 | 0 | 2.4 | 0
+agent-a65e859048883de67 | 7b532e45 | impl/39-loops | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a6c5fa28d628f747f | 4ee8c992 | worktree-agent-a6c5fa28d628f747f | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a7f6dff7ce1dea9dd | c3fd04d3 | blind/39-acceptance | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-a82eaf0872afb600f | 5a6d09a4 | worktree-agent-a82eaf0872afb600f | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a884ad187f5aefb17 | 244a3455 | detached | - | yes | 1 | 0 | 0.2 | 2.5 | 0
+agent-a91442a61f32f2794 | 244a3455 | detached | - | yes | 1 | 0 | 0 | 0 | 0
+agent-a926336e4a4cfd08b | 7fc4f14a | worktree-agent-a926336e4a4cfd08b | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a941a951b42e216ed | a8e54801 | worktree-agent-a941a951b42e216ed | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-a95c2444d3b206add | 0f293209 | worktree-agent-a95c2444d3b206add | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-aa4208f621b1414c1 | 5a6d09a4 | worktree-agent-aa4208f621b1414c1 | - | yes | 2 | 0 | 0 | 2.5 | 0
+agent-aab08fb2963544ab1 | f680afa0 | worktree-agent-aab08fb2963544ab1 | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-abcd69cbde53260c4 | 4ee8c992 | worktree-agent-abcd69cbde53260c4 | - | yes | 16 | 0 | 0 | 2.5 | 0
+agent-ac7f89f1ec15f1051 | 123079f6 | worktree-agent-ac7f89f1ec15f1051 | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-aca6492c5ff87332d | 5a6d09a4 | worktree-agent-aca6492c5ff87332d | - | yes | 6 | 0 | 0 | 2.5 | 0
+agent-acc593499bc1d6118 | bddb84dd | detached | - | yes | 0 | 0 | 0.7 | 2.2 | 0
+agent-ad05b8765cc5b9e8a | 3ce30e02 | impl/39-adapter | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-adadec93bec43e163 | 5a6d09a4 | worktree-agent-adadec93bec43e163 | - | yes | 1 | 0 | 0 | 2.5 | 0
+agent-add91173a105165a3 | 12406227 | worktree-agent-add91173a105165a3 | - | no | 0 | 0 | 0 | 2.5 | 0
+agent-af731015823bb6230 | 7b39aa0d | worktree-agent-af731015823bb6230 | - | yes | 1 | 0 | 0 | 2.5 | 0
+feat-761-scrub-field-names | 2d427030 | feat/761-scrub-field-names | 778:MERGED:at-tip | yes | 0 | 0 | 0 | 2.5 | 13
+issue-22-implementation-14b8cf | 77bb32c2 | claude/issue-39-implementation-34e225 | 877:MERGED | yes | 368 | 0 | 7.7 | 1.8 | 0
+issue-30-ac12-counting | 1b89e431 | claude/issue-30-ac12-counting | 720:MERGED:at-tip | yes | 1 | 0 | 0 | 2.5 | 7
+issue-303-implementation-814647 | a7da5b0b | detached | - | yes | 0 | 1 | 0.6 | 0.7 | 0
+issue-327-implementation | 373fb43d | claude/issue-327-implementation | 809:MERGED:at-tip | yes | 0 | 24 | 0 | 2.5 | 0
+issue-45-implementation-e83eea | 3d537d81 | detached | - | no | 0 | 0 | 10.7 | 0.7 | 0
+issue-63-read-by-reference | a8e54801 | fix/wiki-unslice | - | yes | 2 | 0 | 0 | 2.5 | 0
+issue-824-acceptance | 7aaf5d17 | detached | - | no | 0 | 0 | 0.6 | 0 | 0
+issue-842-implementation-2194f1 | df9b3fa2 | claude/issue-1112-implementation-c2a41d | - | yes | 0 | 1 | 13.2 | 0 | 6
+remote-control-52cfec | c9225aa3 | claude/remote-control-52cfec | - | yes | 1 | 0 | 0 | 0 | 21
+summary-document-review-346b4a | c9225aa3 | claude/summary-document-review-346b4a | - | yes | 1 | 0 | 0.1 | 0 | 5
