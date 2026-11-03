@@ -339,6 +339,45 @@ pub struct Entry {
     pub raise: u32,
 }
 
+/// Rewritten bytes whose one memory holds `pages` pages, its minimum and its maximum: the memory a
+/// role's budget gives, such as a validator's asset plus 4 MiB (Logic: data layouts; #415). Only the
+/// memory section changes, so the offset map still holds once the returned shift, the bytes the
+/// sections after it moved by, is taken off an offset past it.
+pub fn sized(bytes: &[u8], pages: u64) -> Result<(Vec<u8>, i64), String> {
+    for payload in Parser::new(0).parse_all(bytes) {
+        let Payload::MemorySection(m) = payload.map_err(err)? else { continue };
+        let range = m.range();
+        let range = range.start as usize..range.end as usize;
+        let start = range.start - header_len(bytes, range.start);
+        let mut memories = wasm_encoder::MemorySection::new();
+        memories.memory(wasm_encoder::MemoryType {
+            minimum: pages,
+            maximum: Some(pages),
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        let mut section = vec![5u8];
+        wasm_encoder::Encode::encode(&memories, &mut section);
+        let mut out = bytes[..start].to_vec();
+        out.extend(&section);
+        out.extend(&bytes[range.end..]);
+        let shift = section.len() as i64 - (range.end - start) as i64;
+        return Ok((out, shift));
+    }
+    Err("the program has no memory to size".into())
+}
+
+/// The bytes of a section's id and size, given where its contents start.
+fn header_len(bytes: &[u8], contents: usize) -> usize {
+    // The size is a LEB128 ending at `contents`; the id is the byte before it.
+    let mut at = contents - 1;
+    while at > 0 && bytes[at - 1] & 0x80 != 0 {
+        at -= 1;
+    }
+    contents - at + 1
+}
+
 /// The offset map, in the rewritten program's order.
 pub fn offsets(bytes: &[u8]) -> Vec<Entry> {
     let mut out = Vec::new();
