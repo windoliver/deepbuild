@@ -4085,12 +4085,47 @@ export class Core {
     // `deep inbox answer` names an option, and its prompt named the plan the card shows: an approval binds that one (#69).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.plan_hash === undefined) input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
     await answered();
+    // "I did it" to a task proved by a spec check runs that check again at once (#323): a claim never passes on it alone.
+    const data = JSON.parse(row.data) as Obj;
+    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && this.checksOf(this.sessions.get(row.session)?.cwd ?? '').has(data.proves)) {
+      void this.didIt(handle, row.session, data).catch((error: unknown) => process.stderr.write(`deep hub: ${handle}'s check did not run again: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [handle])) as { data: string }[];
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
     await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
+  }
+  /**
+   * Your "I did it" to a task (#323; design: Tasks only you can do): its check runs again at once, as your claim on the
+   * session's task, on a snapshot of the session's folder. One that still fails returns the task to you, raised again
+   * with what's missing; one that passes leaves it closed.
+   */
+  private async didIt(handle: string, session: string, data: Obj): Promise<void> {
+    const cwd = this.sessions.get(session)!.cwd;
+    const name = String(data.proves);
+    const check = this.checksOf(cwd).get(name)!;
+    const live = this.liveOf({ session, agent: this.sessions.get(session)!.agent, cwd } as HookMeta);
+    const task_ref = await this.turnTaskOf(session, live);
+    // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
+    const commit = (await this.checkouts.snapshot(cwd)).commit;
+    const ts = this.now();
+    const id = ulid(ts);
+    const checkout = await this.checkouts.checkout({ worktree: cwd, commit, dependencies: ['node_modules', '.venv'], runs: [`claim:${id}`] });
+    const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [session, task_ref])) as { n: number }[];
+    await this.append(this.connection('core', { session, agent: live.agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
+    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+    const { run } = await this.runStart({ check: name, claim: `claim:${id}`, commit, argv: ['/bin/sh', '-c', check.run], command: check.run, cwd: checkout.dir }, deadline);
+    const outcome = await this.runEnded(String(run)).finally(() => this.checkouts.ended(checkout, `claim:${id}`).catch(() => undefined));
+    if (outcome === 'passed') return;
+    const [done] = (await this.record.raw(`SELECT json_extract(data, '$.findings') AS findings FROM events WHERE kind = 'run.finished' AND subject = ? LIMIT 1`, [String(run)])) as { findings: string | null }[];
+    const findings = (JSON.parse(done?.findings ?? '[]') as string[]).slice(0, 5);
+    const reasons = [`${name} still fails after your "I did it"${findings.length ? `: ${findings.join('; ')}` : ''}`];
+    const fields = ['kind', 'question', 'options', 'recommended', 'default', 'steps', 'where', 'why', 'unblocks', 'proves', 'fallback', 'provisional', 'owner', 'pinned_to'];
+    const again = { ...Object.fromEntries(fields.filter((f) => f in data).map((f) => [f, data[f]])), key: sha256Hex(canonicalize({ again: handle, key: data.key ?? null } as JsonValue)) };
+    await this.asks.raise(this.connection('core', { session, agent: live.agent }), 'deep_ask.unblock', again);
+    await this.asks.stillFails(name, reasons);
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
   private async undo(params: Obj, context: CallContext): Promise<Obj> {
