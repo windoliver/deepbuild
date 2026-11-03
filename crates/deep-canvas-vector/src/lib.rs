@@ -176,6 +176,72 @@ pub fn check(
     (issues, imported)
 }
 
+/// The numbers a formula's `alt` shows: each run of digits, with a point between two digits.
+fn alt_numbers(alt: &str) -> Vec<&str> {
+    let b = alt.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if !b[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < b.len()
+            && (b[i].is_ascii_digit()
+                || (b[i] == b'.' && b.get(i + 1).is_some_and(u8::is_ascii_digit)))
+        {
+            i += 1;
+        }
+        out.push(&alt[start..i]);
+    }
+    out
+}
+
+/// Every number a vector's `alt` shows, scanned as displayed text (Honest numbers: formulas),
+/// with what it traces to, and its issues: an integer is notation, listed and never counted; a
+/// number with a fractional part, or one `numbers` maps to a source path, traces to a data
+/// constant with a source, or is refused `number_unsourced`, naming the item and the number.
+pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
+    let (mut shown, mut issues) = (Vec::new(), Vec::new());
+    let Some(Value::Object(items)) = doc.get("items") else {
+        return (shown, issues);
+    };
+    let whole = Value::Object(doc.clone());
+    for (id, item) in items {
+        let p = item.get("params");
+        let alt = p.and_then(|p| p.get("alt")).and_then(Value::as_str);
+        let (Some("vector@1"), Some(alt)) = (item.get("kind").and_then(Value::as_str), alt) else {
+            continue;
+        };
+        let mapped = p.and_then(|p| p.get("numbers"));
+        for n in alt_numbers(alt) {
+            let path = mapped.and_then(|m| m.get(n)).and_then(Value::as_str);
+            let source = path
+                .and_then(|path| deep_canvas::template::value(&whole, path))
+                .and_then(|v| v.source);
+            match (path, source) {
+                (Some(path), Some(source)) => shown.push(
+                    json!({"item": id, "text": n, "source": {"path": path, "from": source}}),
+                ),
+                (None, _) if !n.contains('.') => {
+                    shown.push(json!({"item": id, "text": n, "source": {"notation": "alt"}}))
+                }
+                (path, _) => issues.push(Issue::error(
+                    "number_unsourced",
+                    id,
+                    format!("items/{id}/params/alt"),
+                    json!({"number": n, "path": path}),
+                    &format!(
+                        "the formula shows {n} with no source; map it in `numbers` to a data constant with a source"
+                    ),
+                )),
+            }
+        }
+    }
+    (shown, issues)
+}
+
 /// `items`, as evaluated at a time, with each imported vector item replaced by the items it
 /// draws as.
 pub fn lower_items(
