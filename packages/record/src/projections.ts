@@ -202,9 +202,9 @@ export class Projector {
 
   apply(e: Projected): void {
     const d: Obj = isObj(e.data) ? e.data : {};
-    // The core's reading of a session's state (#992) is no sign of the session: it moves neither when it was last seen
-    // nor its turn.
-    if (e.session && e.kind !== 'session.state') {
+    // The core's reading of a session's state, and its finding the agent's process gone (#992), are no sign of the
+    // session: they move neither when it was last seen nor its turn.
+    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone') {
       // The newest stamp seen: a late or spooled event never moves a session back.
       this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,

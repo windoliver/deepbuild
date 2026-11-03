@@ -122,8 +122,11 @@ describe('recovery exempts a session whose end is the last durable event', () =>
   });
 });
 
-describe('recovery reads no session.state as the session going on after its end (#992)', () => {
-  it('a session.state the core appended after the session\'s end keeps its claim open after a cut', async () => {
+describe('recovery reads no session.state or session.gone as the session going on after its end (#992)', () => {
+  it.each([
+    ['session.state', { state: 'finished', cause: 'finished' }],
+    ['session.gone', { pid: 4242, start: 'Mon Nov  3 04:00:00 2026' }],
+  ] as const)('a %s the core appended after the session\'s end keeps its claim open after a cut', async (kind, data) => {
     const storage = testStorage();
     let r = await openRecord({ path: 'record.db', now: () => T0, storage });
     const A = ulidAt(T0 - 1000);
@@ -137,7 +140,7 @@ describe('recovery reads no session.state as the session going on after its end 
     }
     const end = await r.append({ ...hook(A), writer: 'app' }, { ...event('session.attention', T0 + 2000, undefined, { state: 'finished' }), subject: `session:${A}` });
     expect(end.log_pos).toBe(1023);
-    const state = await r.append(core(A), { ...event('session.state', T0 + 2001, undefined, { state: 'finished', cause: 'finished' }), subject: `session:${A}` });
+    const state = await r.append(core(A), { ...event(kind, T0 + 2001, undefined, data), subject: `session:${A}` });
     expect(state.log_pos).toBe(1024);
     const B = ulidAt(T0 + 3000);
     await r.append(hook(B), event('session.start', T0 + 3000, undefined));
@@ -859,6 +862,19 @@ describe('waiting on you ends with the session, and the core\'s reading of a ses
       if (when === 'rebuilt') await r.rebuild();
       const row = (await r.table('sessions')).rows.find((x) => x.id === S);
       expect([when, row?.status, Number(row?.last_seen)]).toEqual([when, 'finished', T0 + 20]);
+    }
+  });
+  it('a session.gone the core records a minute after a stop moves no last_seen, so the stop reads its own age', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0, undefined));
+    await r.append(hook(S), event('session.end', T0 + 20, seqAt(T0 + 20)));
+    await r.append(core(S), { ...event('session.gone', T0 + 60_000, undefined, { pid: 4242, start: 'Mon Nov  3 04:00:00 2026' }), subject: `session:${S}` });
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      const row = (await r.table('sessions')).rows.find((x) => x.id === S);
+      expect([when, Number(row?.last_seen)]).toEqual([when, T0 + 20]);
     }
   });
 });
