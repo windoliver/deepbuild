@@ -210,6 +210,37 @@
                 "maximum": 9007199254740991,
                 "description": "How long its check may take, in milliseconds, past which its run times out."
               },
+              "runs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "How many clean runs its check needs; one when absent."
+              },
+              "held_out": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[0-9A-Za-z_.-][0-9A-Za-z_./@+-]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$",
+                        "description": "A SHA-256, in lower-case hex.",
+                        "maxLength": 8192
+                      }
+                    }
+                  },
+                  "required": [
+                    "files"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Its check's held-out variants: each the files written over the claim's checkout for a run of its own, kept by digest and never sent to the agent."
+              },
               "surface": {
                 "type": [
                   "object",

@@ -2904,6 +2904,10 @@ export interface DefinitionLockedV4 {
       };
       expected_ms?: number;
       deadline_ms?: number;
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
       surface: {
         kind: string;
         routes?: Array<string>;
@@ -4573,6 +4577,15 @@ export interface RunFinished {
     points_to: string | null;
     findings: Array<string>;
     environment: string;
+    key?: {
+      id: string;
+      stem: string;
+      paths: Array<string>;
+      claim: string;
+      session: string;
+      base: boolean;
+      withheld: boolean;
+    };
   };
   evidence?: Array<string>;
 }
