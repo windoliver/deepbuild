@@ -4100,6 +4100,46 @@ export interface PlanProposed {
   evidence?: Array<string>;
 }
 
+/** plan.proposed@2 */
+export interface PlanProposedV2 {
+  v: 2;
+  id: string;
+  kind: "plan.proposed";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    steps: Array<{
+      does: string;
+      changes: Array<string>;
+      undo: string;
+      public: boolean;
+      cost: number;
+      targets?: Array<{
+        kind: "address" | "host" | "remote" | "repo" | "channel" | "payee";
+        ref: string;
+      }>;
+    }>;
+    diff: string;
+    hash: string;
+    targets: Array<{
+      step: number;
+      kind: "address" | "host" | "remote" | "repo" | "channel" | "payee";
+      ref: string;
+      origin: "you" | "decision" | "repo" | "read" | "unknown";
+      first: string | null;
+      warning: string | null;
+      rule: string | null;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** pr.merged@1 */
 export interface PrMerged {
   v: 1;

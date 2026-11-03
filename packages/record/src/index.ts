@@ -11,7 +11,7 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
@@ -130,6 +130,8 @@ export interface RecordStore {
    * holds and whether it is outside content; a decision's answer; an evidence file's text. Undefined for nothing.
    */
   resolve(handle: string): Promise<Resolved | undefined>;
+  /** A session's archived transcript, through its newest transcript.archived link; undefined for a session none links (#1098). */
+  transcript(session: string): Promise<Message[] | undefined>;
   /**
    * Keeps a file in the evidence store as the core, recorded as evidence.stored under the connection's project, so
    * a learned change can cite it by its `ev:` handle and reach the repo the file is from (#355).
@@ -282,6 +284,7 @@ class SqliteRecord implements RecordStore {
   private next = 1;
   private blockEnd = 1;
   private readonly transcripts: Transcripts = new Map();
+  private readonly placing: Placing = new Map();
   /** The rollback running now, which the next one waits for. */
   private rolling: Promise<unknown> = Promise.resolve();
   /** Set when a projection an older version made had other columns: the open replays the log before any read. */
@@ -491,7 +494,12 @@ class SqliteRecord implements RecordStore {
       const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input));
       this.byId.set(key, run);
       try {
-        return await run;
+        const appended = await run;
+        // An archived copy is read as it lands, so an ask placing its plan's targets finds it parsed (#1098).
+        if (input.kind === 'transcript.archived' && typeof (input.data as { evidence?: unknown } | undefined)?.evidence === 'string') {
+          await placingTranscript(this.options.evidence, this.placing, (input.data as { evidence: string }).evidence);
+        }
+        return appended;
       } finally {
         if (this.byId.get(key) === run) this.byId.delete(key);
       }
@@ -753,6 +761,12 @@ class SqliteRecord implements RecordStore {
   async resolve(handle: string): Promise<Resolved | undefined> {
     await this.settle();
     return resolveHandle(this.db, this.options.evidence, this.transcripts, handle);
+  }
+
+  async transcript(session: string): Promise<Message[] | undefined> {
+    await this.settle();
+    const [row] = this.db.prepare('SELECT transcript FROM sessions WHERE id = ?').all(session) as { transcript: string | null }[];
+    return row?.transcript ? placingTranscript(this.options.evidence, this.placing, row.transcript) : undefined;
   }
 
   async keep(connection: Connection, file: { bytes: Uint8Array; kind: string; source: string }): Promise<string> {
