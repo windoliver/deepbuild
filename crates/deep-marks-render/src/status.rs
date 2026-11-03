@@ -5,7 +5,6 @@
 
 use deep_canvas_marks::look;
 use deep_canvas_marks::scene::{self, Align, Mark, Rgb, Slot, StatusMark};
-use deep_text::Role;
 use deep_text_gpui::Label;
 use serde_json::{json, Value};
 
@@ -44,7 +43,9 @@ pub enum Prim {
 /// A text mark's label, or `None` for a font role the shaper lacks.
 pub fn label_of(spec: &scene::TextSpec) -> Option<Label> {
     Some(Label {
-        role: Role::parse(&spec.font)?,
+        family: spec.family?,
+        fallback: spec.fallback.clone(),
+        lang: spec.lang.clone(),
         size: spec.size as f32,
         weight: spec.weight,
         width: spec.width.map(|w| w as f32),

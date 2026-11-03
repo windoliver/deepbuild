@@ -20,6 +20,19 @@
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/recipe" }
     },
+    "aliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "target": { "type": "string" },
+          "conversion": { "type": "string" },
+          "renamed_from": { "type": "string" }
+        },
+        "required": ["target", "conversion"],
+        "additionalProperties": false
+      }
+    },
     "entries": {
       "type": "object",
       "additionalProperties": {
@@ -29,6 +42,46 @@
           "properties": { "name": { "type": "string" } },
           "required": ["name"]
         }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "url": { "type": "string" },
+          "sha256": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "license": {},
+          "upstream": { "type": "object" }
+        },
+        "required": ["path", "sha256", "size"]
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "program": { "type": "string" },
+          "params": {},
+          "out": { "type": "object" }
+        },
+        "required": ["program", "out"]
+      }
+    },
+    "layouts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "validator": { "type": "string" },
+          "max_bytes": { "type": "integer", "minimum": 0 },
+          "twins": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "doc": { "type": "string", "maxLength": 2000 }
+        },
+        "required": ["validator", "max_bytes", "twins", "doc"]
       }
     }
   },

@@ -1048,6 +1048,35 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads a provider and a user in the hub, then the user reads the provider's reading through its edge 1,000 times from inside its own code. The issue's 1 ms a reading adds across an edge stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-look-switch",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "look-switch"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "switch_ms": 100
+      },
+      "initialReason": "Issue #417 first measurement: the merge base has no look switch. A release deep-gpu plays the fixture film (tests/acceptance/417/fixtures/film.json) in the app's headless window in the light theme and switches between every ordered pair of shipped looks, timing each switch from its request to the first frame drawn in the new look, presented and read back from the window, whose pixel (4, 4) it records as the ground, five runs after a warm-up one. tests/acceptance/417/budgets.test.ts holds each run's slowest switch to switch_ms by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-look-frames",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "look-frames"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 2,
+        "frame_cpu_p95_ms": 4
+      },
+      "initialReason": "Issue #417 first measurement: the merge base has no shipped looks. A release deep-gpu plays each shipped look's fixture film (tests/acceptance/417/fixtures/looks/<id>.json) in the app's headless window, 300 timed frames after 30 warm ones, each frame's GPU time (Vello GPU's passes by device timestamps plus GPUI's frame past the window's own) and CPU time (its marks, their encode and GPUI's latch and paint), five runs after a warm-up one. tests/acceptance/417/budgets.test.ts holds the worst look's p95s to the figure class's limits by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     }
   ]
 }

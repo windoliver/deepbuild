@@ -269,7 +269,9 @@ struct Run {
 impl Text {
     fn run(&mut self, text: &str, (size, weight): (f32, u16)) -> Run {
         let spec = Spec {
-            role: Role::Body,
+            family: Role::Body.family(),
+            fallback: &[],
+            lang: None,
             size,
             weight,
             ..Spec::label(text)

@@ -1,13 +1,18 @@
 //! `deep-motion <eval|insert|run>`: JSON lines in, one JSON line out per input line, in order,
 //! exit 0; a line that can't be read, lacks a required field or names an unknown `planted` value
-//! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's.
+//! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's, and
+//! `eval`'s `look`, `track`, `cameras` and `hash` the #417 one's.
 
 use std::io::{self, BufRead, Write};
 
+use deep_canvas::canon::revision_hash;
+use deep_canvas::document::DocShape;
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas_motion::clock::{run, Mode};
-use deep_canvas_motion::doc::Refused;
+use deep_canvas_motion::curve::Ease;
+use deep_canvas_motion::doc::{feel_of, Feel, Refused};
 use deep_canvas_motion::eval::{frame, position, Validity};
+use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
 use deep_canvas_motion::program::Program;
 use serde_json::{json, Map, Value};
@@ -24,6 +29,44 @@ fn flicks(value: Option<&Value>) -> Option<i64> {
     value.and_then(Value::as_i64)
 }
 
+/// The request's input track, or `None` for an entry that isn't `{t, seq, control, value}`.
+fn track_of(value: Option<&Value>) -> Option<Vec<Entry>> {
+    let Some(value) = value else {
+        return Some(Vec::new());
+    };
+    value
+        .as_array()?
+        .iter()
+        .map(|e| {
+            Some(Entry {
+                t: flicks(e.get("t"))?,
+                seq: e.get("seq").and_then(Value::as_i64)?,
+                control: e.get("control").and_then(Value::as_str)?.to_string(),
+                value: e.get("value")?.clone(),
+            })
+        })
+        .collect()
+}
+
+/// The look's time feel: a look@1, or a shipped look's ID; at its defaults with no look.
+fn look_feel(look: Option<&Value>, frame_rate: (u32, u32)) -> Result<Feel, Value> {
+    let def = match look {
+        None => return Ok(Feel::default()),
+        Some(Value::String(id)) => deep_canvas_marks::look::shipped(id).ok_or_else(|| {
+            refusal(Refused {
+                code: "ref_unresolved",
+                path: "look".into(),
+            })
+        })?,
+        Some(def @ Value::Object(_)) => def.clone(),
+        Some(_) => return Err(bad_input()),
+    };
+    let Value::Object(def) = def else {
+        return Err(bad_input());
+    };
+    feel_of(&def, frame_rate).map_err(refusal)
+}
+
 fn eval_line(input: &Map<String, Value>) -> Value {
     let (Some(Value::Object(doc)), Some(Value::Array(times))) =
         (input.get("doc"), input.get("times"))
@@ -37,9 +80,37 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     else {
         return bad_input();
     };
+    // The planted twin (#417 AC10) reads time.state's ease as linear.
+    let linear = match input.get("planted") {
+        None => false,
+        Some(Value::String(p)) if p == "state_ease_linear" => true,
+        Some(_) => return bad_input(),
+    };
+    let Some(track) = track_of(input.get("track")) else {
+        return bad_input();
+    };
     let program = match Program::compile(doc) {
         Ok(p) => p,
         Err(r) => return refusal(r),
+    };
+    let mut feel = match look_feel(input.get("look"), program.motion.frame_rate) {
+        Ok(feel) => feel,
+        Err(answer) => return answer,
+    };
+    if linear {
+        feel.ease = Ease::Linear;
+    }
+    let Some(program) = program.with_inputs(feel, &track) else {
+        return bad_input();
+    };
+    // The document's own revision hash: the look, the track and the times never enter it.
+    let value = Value::Object(doc.clone());
+    let hash = match revision_hash(
+        &value,
+        &DocShape::new(&value, &deep_canvas::kinds::registry()),
+    ) {
+        Ok(hash) => hash,
+        Err(e) => return json!({"ok": false, "code": "out_of_range", "path": e.path}),
     };
     let motion = &program.motion;
     let mut frames = Vec::with_capacity(times.len());
@@ -89,6 +160,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             "items": f.items,
             "channels": channels,
             "placements": placements,
+            "cameras": f.cameras.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect::<Map<String, Value>>(),
             "valid_until": f.valid_until,
         }));
         previous = Some(t);
@@ -108,7 +180,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .iter()
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
-    json!({"ok": true, "frames": frames, "markers": markers, "cuts": cuts})
+    json!({"ok": true, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash})
 }
 
 fn insert_line(input: &Map<String, Value>) -> Value {

@@ -19,7 +19,6 @@ use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
 use deep_canvas_marks::scene::{Blend, Drawn, Scope};
-use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
     bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
@@ -194,8 +193,11 @@ pub(crate) struct Painter<'a, C> {
     scopes: Scopes,
     pub(crate) zoom: f64,
     spans_apart: bool,
-    /// Each text@1 item drawn: what it shows and its glyphs.
+    /// Each text@1 item drawn, and each row of a text mark set (`<set>#<row key>`, #397): what
+    /// it shows and its glyphs.
     texts: Map<String, Value>,
+    /// The text mark sets whose rows `texts` reports.
+    text_sets: Vec<String>,
 }
 
 /// The planted run: each span the runs cut the text into shaped on its own, the pieces set side
@@ -233,13 +235,13 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
     out
 }
 
-/// A glyph of a text's run as `texts` reports it, in document units (#381); the app's frame
-/// reports its runs the same way (#140).
-pub(crate) fn glyph_row(g: &deep_text::Glyph, role: Option<&str>) -> Value {
+/// A glyph of a text's run as `texts` reports it, in document units (#381), with (#417) the
+/// language its run was shaped in; the app's frame reports its runs the same way (#140).
+pub(crate) fn glyph_row(g: &deep_text::Glyph, role: Option<&str>, lang: Option<&str>) -> Value {
     let font = deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
     json!({
         "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
-        "grapheme": g.grapheme, "role": role,
+        "grapheme": g.grapheme, "role": role, "lang": lang,
     })
 }
 
@@ -254,6 +256,7 @@ impl<C: Glyphs> Painter<'_, C> {
             zoom: 1.0,
             spans_apart: false,
             texts: Map::new(),
+            text_sets: Vec::new(),
         }
     }
 
@@ -273,7 +276,7 @@ impl<C: Glyphs> Painter<'_, C> {
 
     fn text(&mut self, label: &deep_text_gpui::Label, origin: [f64; 2], color: Rgb) {
         let shaped = deep_text_gpui::shape(label);
-        self.glyphs(&shaped, origin, (None, color), &[]);
+        self.glyphs(&shaped, origin, (None, color), (&[], None));
     }
 
     /// A shaped run's glyphs at `origin`, each in its run's role or the text's.
@@ -282,7 +285,7 @@ impl<C: Glyphs> Painter<'_, C> {
         shaped: &deep_text::Shaped,
         origin: [f64; 2],
         (role, color): (Option<&str>, Rgb),
-        runs: &[scene::TextRun],
+        (runs, lang): (&[scene::TextRun], Option<&str>),
     ) -> Vec<Value> {
         let mut out = Vec::with_capacity(shaped.glyphs.len());
         for g in &shaped.glyphs {
@@ -294,7 +297,7 @@ impl<C: Glyphs> Painter<'_, C> {
                 y: g.y + origin[1] as f32,
             };
             self.ctx.glyph(&mut self.resources, &g.font, g.size, glyph);
-            out.push(glyph_row(g, role));
+            out.push(glyph_row(g, role, lang));
         }
         out
     }
@@ -370,9 +373,17 @@ impl<C: Glyphs> Painter<'_, C> {
                 } else {
                     deep_text_gpui::shape(&label)
                 };
-                let glyphs = self.glyphs(&shaped, *origin, (role.as_deref(), *color), runs);
-                // A text@1 item's own text; a mark set's or an axis's labels are `<id>#…`.
-                if !item.contains('#') {
+                let glyphs = self.glyphs(
+                    &shaped,
+                    *origin,
+                    (role.as_deref(), *color),
+                    (runs, spec.lang.as_deref()),
+                );
+                // A text@1 item's own text, and a text mark set's rows; an axis's labels aren't.
+                let row_of_set = item
+                    .split_once('#')
+                    .is_some_and(|(set, _)| self.text_sets.iter().any(|s| s == set));
+                if !item.contains('#') || row_of_set {
                     self.texts
                         .insert(item.clone(), json!({"shown": spec.text, "glyphs": glyphs}));
                 }
@@ -447,7 +458,8 @@ impl<C: Glyphs> Painter<'_, C> {
     }
 }
 
-/// The document's evaluated items at `t`, each vector item drawn as marks2d's items (#398).
+/// The document's evaluated items at `t`, placed by their relations (#221), each vector item
+/// drawn as marks2d's items (#398).
 fn items_at(
     doc: &Map<String, Value>,
     t: i64,
@@ -455,9 +467,7 @@ fn items_at(
     write: deep_canvas_vector::Write,
 ) -> Result<Map<String, Value>, Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-    let mut state = program.state();
-    program.evaluate(t, eval::Validity::Full, &mut state);
-    let items = eval::items(doc, &program, &state);
+    let items = crate::place::evaluated(doc, &program, t, vectors)?;
     Ok(deep_canvas_vector::lower_items(&items, vectors, write))
 }
 
@@ -476,7 +486,8 @@ fn draw(req: &Request) -> Result<Value, Value> {
         ..req.record.clone()
     };
     let zoom = req.view.zoom;
-    let frame = scene::frame_planted(&req.doc, &items, palette, &record, zoom, req.planted)
+    let ty = crate::type_of(&req.look, req.view.theme);
+    let frame = scene::frame_planted(&req.doc, &items, (palette, ty), &record, zoom, req.planted)
         .map_err(|r| refused(r.code, &r.path))?;
     let marks = scene::status_marks(&req.doc, &items, &record, req.look.status.as_ref(), palette)
         .map_err(|r| refused(r.code, &r.path))?;
@@ -513,6 +524,15 @@ fn draw(req: &Request) -> Result<Value, Value> {
         zoom,
         spans_apart: req.spans_apart,
         texts: Map::new(),
+        text_sets: req
+            .doc
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(_, i)| i["kind"] == "marks@1" && i["params"]["mark"] == "text")
+            .map(|(id, _)| id.clone())
+            .collect(),
     };
     p.ctx.set_paint(solid(frame.ground));
     p.ctx
@@ -739,10 +759,14 @@ fn any_roles(value: &Value, palette: &mut scene::Palette) {
     }
 }
 
-/// An item's outline as subpaths of verbs and points in u, its offset applied.
-pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) -> Value {
+/// An item's outline at `t` as subpaths of verbs and points in u, its offset applied, with its
+/// box and box points (#221).
+pub fn geometry(doc: &Map<String, Value>, item: &str, t: i64, vectors: &crate::Vectors) -> Value {
     let run = || -> Result<Value, Value> {
-        let items = items_at(doc, 0, vectors, deep_canvas_vector::Write::Honest)?;
+        let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
+        let placed = crate::place::evaluated(doc, &program, t, vectors)?;
+        let items =
+            deep_canvas_vector::lower_items(&placed, vectors, deep_canvas_vector::Write::Honest);
         let mut palette = scene::Palette::new();
         palette.insert("ground".into(), [255, 255, 255]);
         any_roles(&Value::Object(doc.clone()), &mut palette);
@@ -766,8 +790,17 @@ pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) 
             subpaths.extend(subpaths_of(&verbs, by));
         }
         let mut answer = json!({"ok": true, "subpaths": subpaths});
+        // Its evaluated box at t, geometry only, and the nine box points on it (#221).
+        if let Some(b) = crate::place::box_of(doc, &placed, vectors, item) {
+            let points: Map<String, Value> = deep_canvas_marks::relations::POINTS
+                .iter()
+                .map(|(name, p)| (name.to_string(), json!(p.of(b))))
+                .collect();
+            answer["box"] = json!(b);
+            answer["points"] = Value::Object(points);
+        }
         // A vector's parts, each with its read-only id, source and box (#398).
-        if let (Some(found), Some(v)) = (vectors.get(item), doc_item(doc, item)) {
+        if let (Some(found), Some(v)) = (vectors.get(item), placed.get(item)) {
             answer["parts"] =
                 deep_canvas_vector::parts_json(v, found, |verbs| subpaths_of(verbs, [0.0, 0.0]));
         }
@@ -776,10 +809,6 @@ pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) 
     match run() {
         Ok(v) | Err(v) => v,
     }
-}
-
-fn doc_item<'a>(doc: &'a Map<String, Value>, id: &str) -> Option<&'a Value> {
-    doc.get("items")?.get(id)
 }
 
 /// Verbs moved by `by` as #373's sub-paths: one per move, its verb names, its points and whether

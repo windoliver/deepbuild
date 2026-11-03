@@ -1,0 +1,929 @@
+# The #238 suite at the base, 960045da, run on 2026-11-02 on this Mac (Mac15,7, macOS arm64).
+# The checkout already held another session's uncommitted implementation, so the run is on a clean
+# 'git archive 960045da' export with this folder copied in (the export's node_modules a link to the checkout's):
+#   NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 vitest run --root tests/acceptance/238 --no-file-parallelism
+# 26 of 26 fail. 25 fail for a missing surface (no deep-sandbox bin target; no test-* features; deep-show's
+# run refusing the new calls and kit part with bad_input; no --planted digest_covers_pins; no wasmtime in
+# Cargo.lock). planted.test.ts's Linux test is BLOCKED: no linux/amd64 rust:1.99.1-slim-bookworm image here.
+
+
+ RUN  v5.0.5 /private/tmp/claude-502/-Users-tafeng-dev-claude-worktrees-doneright-github-issue-238-27e1de/dced5deb-175e-4bff-98e7-3bb0c484aa4d/scratchpad/base238/tests/acceptance/238
+
+ ❯ kit.test.ts (4 tests | 4 failed) 39361ms
+   ❯ #238.6e920ef3 sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome (4)
+     × #238.6e920ef3 the implementation is wasmtime 49.0.2 in the app on both native hosts, pinned =49.0.2 in Cargo.lock 8ms
+     × #238.6e920ef3 each refusal fixture is refused at check on macOS arm64 and on Linux x86_64, naming its import, its instruction and function, its segment or its limit, the same on both; the subset's own programs and limits pass 13991ms
+     × #238.6e920ef3 NaNs reach memory canonical, an endless loop traps fuel and an endless recursion stack at one function and offset, the 1 MiB fill traps fuel at its tenth fill before it runs, and the subset's programs pass: the same on macOS arm64, Linux x86_64 and headless Chrome 8ms
+     × #238.6e920ef3 the kit passes with one result per fixture on macOS arm64 (deep-sandbox and the app's deep-show kit), on Linux x86_64 and, for every fixture that runs, in headless Chrome 8ms
+ ❯ seal.test.ts (4 tests | 4 failed) 6057ms
+   ❯ #238.432c0da5 a build with the sandbox module and without the logic module seals, runs a provider and a validator at check and refuses a logic item (4)
+     × #238.432c0da5 the build without the logic module seals with sandbox@1 (bit, canonical, wasmtime =49.0.2) and runs the test provider once at check, writing its one-quad mesh, never in a frame 5332ms
+     × #238.432c0da5 the test layout's validator, run at pack check, refuses its malformed twin at its first bad byte; a layout whose validator accepts its twin is refused, naming the twin 72ms
+     × #238.432c0da5 the build without the logic module refuses a document with a logic item with module_missing, naming the logic module 6ms
+     × #238.432c0da5 a planted sandbox module that declares logic among its dependencies is refused at the build's seal, naming logic 230ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 316289ms
+   ❯ #238.fb1edf47 budgets against the merge base: a 1 MB rewrite under 200 ms once at check, and no work for documents that name no program (3)
+     × #238.fb1edf47 rewriting a 1 MB program takes under 200 ms on the reference Mac (five fresh processes after a warm-up) 6441ms
+     × #238.fb1edf47 the rewrite and the run happen once at check: two documents naming one provider, presented twice, with frames between, rewrite and run it once 677ms
+     × #238.fb1edf47 with the sandbox module in the build, a document that names no program evaluates the merge base's nodes at check and per frame, and the sandbox module does nothing 296961ms
+ ❯ implementation.test.ts (2 tests | 2 failed) 51604ms
+   ❯ #238.46afd887 a test sandbox implementation pinning another wasmtime patch seals in the shipped one's place with sandbox@1's digest unchanged (2)
+     × #238.46afd887 sandbox.alt, pinning another wasmtime 49.0 patch, passes sandbox@1's kit bit for bit and seals in sandbox's place with sandbox@1's digest unchanged 1490ms
+     × #238.46afd887 a planted interface digest that also covers the implementation's pins refuses sandbox.alt at the seal, naming sandbox@1, while the shipped build still seals 18ms
+ ❯ traps.test.ts (3 tests | 3 failed) 26336ms
+   ❯ #238.a3fecb68 each trap kind traps with that kind at one function and offset on macOS arm64, Linux x86_64 and headless Chrome (3)
+     × #238.a3fecb68 unreachable, divide, overflow, conversion, bounds, call and grow each trap with their kind at their instruction in function 1, the same on all three hosts 4232ms
+     × #238.a3fecb68 a planted mapper that reports every engine trap as unreachable fails the kit, naming the fixture and both kinds 1ms
+     × #238.a3fecb68 a planted rewrite that lets memory.grow return −1 runs on and fails the kit, naming the grow fixture 0ms
+ ❯ registry.test.ts (3 tests | 3 failed) 1641ms
+   ❯ #238.8cc7e4f7 a pack's program entry in a test registry is admitted through sandbox@1's check and rewrite without the logic module, an importing one refused, and without the sandbox module the pack is module_missing (3)
+     × #238.8cc7e4f7 in the build without the logic module, progpack.ok enters test.prog@1 rewritten by sandbox@1 (its rewritten hash is deep-sandbox's), its kit passing 1152ms
+     × #238.8cc7e4f7 in the build without the logic module, a pack whose program entry imports a function is refused, naming the import 30ms
+     × #238.8cc7e4f7 in a build without the sandbox module, the pack with a program entry is refused with module_missing, naming the sandbox module 150ms
+ ❯ planted.test.ts (3 tests | 3 failed) 27157ms
+   ❯ #238.a10d9b07 the planted rewriter, implementation and runner each fail sandbox@1's kit, naming what the criterion names (3)
+     × #238.a10d9b07 a rewriter that skips the fuel charge on one loop's back edge rewrites to another hash and fails the kit, naming the function 13775ms
+     × #238.a10d9b07 an implementation metering with wasmtime's own fuel traps fuel.fill at another offset and fails the kit, naming the fixture and both offsets 1ms
+     × #238.a10d9b07 on Linux x86_64 a runner that skips the NaN rewrite writes 0xFFF8000000000000 for 0 ÷ 0 and fails the kit, naming the fixture 625ms
+ ❯ stack.test.ts (2 tests | 2 failed) 24070ms
+   ❯ #238.91f1b87c the stack ladder traps stack at one depth in the app and in headless Chrome at 64 KiB and 256 KiB (2)
+     × #238.91f1b87c the smallest and a large frame trap with kind stack at the per-call rule's depth, the same in the app and in headless Chrome, at 64 KiB and at 256 KiB 15910ms
+     × #238.91f1b87c a planted rewriter that charges no per-call overhead goes past the smallest frame's depth at the cap and fails the kit's stack ladder 1ms
+ ❯ proposals.test.ts (2 tests | 2 failed) 25031ms
+   ❯ #238.eaad3176 each proposal past WebAssembly 2.0 is refused at check by name, and a check on the parser's defaults fails (2)
+     × #238.eaad3176 tail call, exception handling, a second memory, a 64-bit memory, a GC type and an extended constant are each refused at check, naming the proposal, the instruction and its function 11902ms
+     × #238.eaad3176 a planted check built on the parser's default features admits the tail call and fails the kit, naming the tail-call fixture 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 26 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #238.fb1edf47 budgets against the merge base: a 1 MB rewrite under 200 ms once at check, and no work for documents that name no program > #238.fb1edf47 rewriting a 1 MB program takes under 200 ms on the reference Mac (five fresh processes after a warm-up)
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ budgets.test.ts:47:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/26]⎯
+
+ FAIL  budgets.test.ts > #238.fb1edf47 budgets against the merge base: a 1 MB rewrite under 200 ms once at check, and no work for documents that name no program > #238.fb1edf47 the rewrite and the run happen once at check: two documents naming one provider, presented twice, with frames between, rewrite and run it once
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-mesh-item,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-mesh-item,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-mesh-item, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ budgets.test.ts:60:61
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/26]⎯
+
+ FAIL  budgets.test.ts > #238.fb1edf47 budgets against the merge base: a 1 MB rewrite under 200 ms once at check, and no work for documents that name no program > #238.fb1edf47 with the sandbox module in the build, a document that names no program evaluates the merge base's nodes at check and per frame, and the sandbox module does nothing
+AssertionError: deep-show run took the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:493:74
+    491|   const s = start(binPath, args, [sc]);
+    492|   const [out] = replies(s, [sc], `${SHOW_NAME} ${args.join(' ')}`);
+    493|   expect(out!['ok'], `${SHOW_NAME} run took the scenario: ${show(out)}…
+       |                                                                          ^
+    494|   const rs = arr(out!['replies'], 'run: replies').map((r, i) => obj(r,…
+    495|   expect(rs.length, 'run: one reply per call').toBe(arr(sc['calls'], '…
+ ❯ budgets.test.ts:73:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/26]⎯
+
+ FAIL  implementation.test.ts > #238.46afd887 a test sandbox implementation pinning another wasmtime patch seals in the shipped one's place with sandbox@1's digest unchanged > #238.46afd887 sandbox.alt, pinning another wasmtime 49.0 patch, passes sandbox@1's kit bit for bit and seals in sandbox's place with sandbox@1's digest unchanged
+AssertionError: deep-show run took the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:493:74
+    491|   const s = start(binPath, args, [sc]);
+    492|   const [out] = replies(s, [sc], `${SHOW_NAME} ${args.join(' ')}`);
+    493|   expect(out!['ok'], `${SHOW_NAME} run took the scenario: ${show(out)}…
+       |                                                                          ^
+    494|   const rs = arr(out!['replies'], 'run: replies').map((r, i) => obj(r,…
+    495|   expect(rs.length, 'run: one reply per call').toBe(arr(sc['calls'], '…
+ ❯ implementation.test.ts:31:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/26]⎯
+
+ FAIL  implementation.test.ts > #238.46afd887 a test sandbox implementation pinning another wasmtime patch seals in the shipped one's place with sandbox@1's digest unchanged > #238.46afd887 a planted interface digest that also covers the implementation's pins refuses sandbox.alt at the seal, naming sandbox@1, while the shipped build still seals
+AssertionError: the shipped build seals under the planted digest (it is the reference): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ implementation.test.ts:56:145
+     54|
+     55|   it(`${ID} a planted interface digest that also covers the implementa…
+     56|     expect(started(startup(deepShow(SHIPPED), 'digest_covers_pins')), …
+       |                                                                                                                                                 ^
+     57|     const line = refusalLine(startup(deepShow(ALT), 'digest_covers_pin…
+     58|     expect([line['reason'], line['interface']], `the seal refuses sand…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/26]⎯
+
+ FAIL  kit.test.ts > #238.6e920ef3 sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome > #238.6e920ef3 the implementation is wasmtime 49.0.2 in the app on both native hosts, pinned =49.0.2 in Cargo.lock
+AssertionError: Cargo.lock holds wasmtime once, at 49.0.2: expected [] to deeply equal [ '49.0.2' ]
+
+- Expected
++ Received
+
+- [
+-   "49.0.2",
+- ]
++ []
+
+ ❯ kit.test.ts:84:67
+     82|     const lock = readFileSync(join(REPO, 'Cargo.lock'), 'utf8');
+     83|     const versions = [...lock.matchAll(/\[\[package\]\]\nname = "wasmt…
+     84|     expect(versions, 'Cargo.lock holds wasmtime once, at 49.0.2').toEq…
+       |                                                                   ^
+     85|     for (const [host, reply, arch, os] of [['macOS arm64', onMac([abou…
+     86|       expect(reply['interface'], `${host}: about names sandbox@1`).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/26]⎯
+
+ FAIL  kit.test.ts > #238.6e920ef3 sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome > #238.6e920ef3 each refusal fixture is refused at check on macOS arm64 and on Linux x86_64, naming its import, its instruction and function, its segment or its limit, the same on both; the subset's own programs and limits pass
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ checks kit.test.ts:31:48
+ ❯ kit.test.ts:95:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/26]⎯
+
+ FAIL  kit.test.ts > #238.6e920ef3 sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome > #238.6e920ef3 NaNs reach memory canonical, an endless loop traps fuel and an endless recursion stack at one function and offset, the 1 MiB fill traps fuel at its tenth fill before it runs, and the subset's programs pass: the same on macOS arm64, Linux x86_64 and headless Chrome
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ nativeRuns programs.ts:84:32
+ ❯ kit.test.ts:104:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/26]⎯
+
+ FAIL  kit.test.ts > #238.6e920ef3 sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome > #238.6e920ef3 the kit passes with one result per fixture on macOS arm64 (deep-sandbox and the app's deep-show kit), on Linux x86_64 and, for every fixture that runs, in headless Chrome
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ kit.test.ts:116:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/26]⎯
+
+ FAIL  planted.test.ts > #238.a10d9b07 the planted rewriter, implementation and runner each fail sandbox@1's kit, naming what the criterion names > #238.a10d9b07 a rewriter that skips the fuel charge on one loop's back edge rewrites to another hash and fails the kit, naming the function
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ planted.test.ts:18:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/26]⎯
+
+ FAIL  planted.test.ts > #238.a10d9b07 the planted rewriter, implementation and runner each fail sandbox@1's kit, naming what the criterion names > #238.a10d9b07 an implementation metering with wasmtime's own fuel traps fuel.fill at another offset and fails the kit, naming the fixture and both offsets
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ planted.test.ts:33:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/26]⎯
+
+ FAIL  planted.test.ts > #238.a10d9b07 the planted rewriter, implementation and runner each fail sandbox@1's kit, naming what the criterion names > #238.a10d9b07 on Linux x86_64 a runner that skips the NaN rewrite writes 0xFFF8000000000000 for 0 ÷ 0 and fails the kit, naming the fixture
+Error: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+ ❯ blocked helpers.ts:34:56
+     32|
+     33| /** A host or tool this machine lacks: the test fails with this messag…
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35|
+     36| export const DIGEST = /^[0-9a-f]{64}$/;
+ ❯ linuxSandbox helpers.ts:250:5
+ ❯ onLinux helpers.ts:266:3
+ ❯ nativeRuns programs.ts:84:56
+ ❯ planted.test.ts:48:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/26]⎯
+
+ FAIL  proposals.test.ts > #238.eaad3176 each proposal past WebAssembly 2.0 is refused at check by name, and a check on the parser's defaults fails > #238.eaad3176 tail call, exception handling, a second memory, a 64-bit memory, a GC type and an extended constant are each refused at check, naming the proposal, the instruction and its function
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ proposals.test.ts:19:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/26]⎯
+
+ FAIL  proposals.test.ts > #238.eaad3176 each proposal past WebAssembly 2.0 is refused at check by name, and a check on the parser's defaults fails > #238.eaad3176 a planted check built on the parser's default features admits the tail call and fails the kit, naming the tail-call fixture
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ proposals.test.ts:34:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/26]⎯
+
+ FAIL  registry.test.ts > #238.8cc7e4f7 a pack's program entry in a test registry is admitted through sandbox@1's check and rewrite without the logic module, an importing one refused, and without the sandbox module the pack is module_missing > #238.8cc7e4f7 in the build without the logic module, progpack.ok enters test.prog@1 rewritten by sandbox@1 (its rewritten hash is deep-sandbox's), its kit passing
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-mesh-item,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-mesh-item,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-mesh-item, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ registry.test.ts:25:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/26]⎯
+
+ FAIL  registry.test.ts > #238.8cc7e4f7 a pack's program entry in a test registry is admitted through sandbox@1's check and rewrite without the logic module, an importing one refused, and without the sandbox module the pack is module_missing > #238.8cc7e4f7 in the build without the logic module, a pack whose program entry imports a function is refused, naming the import
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-mesh-item,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-mesh-item,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-mesh-item, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ registry.test.ts:43:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/26]⎯
+
+ FAIL  registry.test.ts > #238.8cc7e4f7 a pack's program entry in a test registry is admitted through sandbox@1's check and rewrite without the logic module, an importing one refused, and without the sandbox module the pack is module_missing > #238.8cc7e4f7 in a build without the sandbox module, the pack with a program entry is refused with module_missing, naming the sandbox module
+AssertionError: deep-show builds with --features full,test-leave-out-sandbox,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-sandbox,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-leave-out-sandbox, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ registry.test.ts:53:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/26]⎯
+
+ FAIL  seal.test.ts > #238.432c0da5 a build with the sandbox module and without the logic module seals, runs a provider and a validator at check and refuses a logic item > #238.432c0da5 the build without the logic module seals with sandbox@1 (bit, canonical, wasmtime =49.0.2) and runs the test provider once at check, writing its one-quad mesh, never in a frame
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-mesh-item,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-mesh-item,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-mesh-item, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ seal.test.ts:28:85
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/26]⎯
+
+ FAIL  seal.test.ts > #238.432c0da5 a build with the sandbox module and without the logic module seals, runs a provider and a validator at check and refuses a logic item > #238.432c0da5 the test layout's validator, run at pack check, refuses its malformed twin at its first bad byte; a layout whose validator accepts its twin is refused, naming the twin
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-mesh-item,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-mesh-item,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-mesh-item, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ seal.test.ts:62:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/26]⎯
+
+ FAIL  seal.test.ts > #238.432c0da5 a build with the sandbox module and without the logic module seals, runs a provider and a validator at check and refuses a logic item > #238.432c0da5 the build without the logic module refuses a document with a logic item with module_missing, naming the logic module
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-mesh-item,test-prog-registry: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-mesh-item,test-prog-registry failed:
++ error: none of the selected packages contains these features: test-mesh-item, test-prog-registry
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ seal.test.ts:78:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/26]⎯
+
+ FAIL  seal.test.ts > #238.432c0da5 a build with the sandbox module and without the logic module seals, runs a provider and a validator at check and refuses a logic item > #238.432c0da5 a planted sandbox module that declares logic among its dependencies is refused at the build's seal, naming logic
+AssertionError: deep-show builds with --features full,test-leave-out-logic,test-sandbox-needs-logic: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic,test-sandbox-needs-logic failed:
++ error: none of the selected packages contains this feature: test-sandbox-needs-logic
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ deepShow helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ seal.test.ts:85:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/26]⎯
+
+ FAIL  stack.test.ts > #238.91f1b87c the stack ladder traps stack at one depth in the app and in headless Chrome at 64 KiB and 256 KiB > #238.91f1b87c the smallest and a large frame trap with kind stack at the per-call rule's depth, the same in the app and in headless Chrome, at 64 KiB and at 256 KiB
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ nativeRuns programs.ts:84:32
+ ❯ stack.test.ts:31:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/26]⎯
+
+ FAIL  stack.test.ts > #238.91f1b87c the stack ladder traps stack at one depth in the app and in headless Chrome at 64 KiB and 256 KiB > #238.91f1b87c a planted rewriter that charges no per-call overhead goes past the smallest frame's depth at the cap and fails the kit's stack ladder
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ nativeRuns programs.ts:84:32
+ ❯ stack.test.ts:39:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/26]⎯
+
+ FAIL  traps.test.ts > #238.a3fecb68 each trap kind traps with that kind at one function and offset on macOS arm64, Linux x86_64 and headless Chrome > #238.a3fecb68 unreachable, divide, overflow, conversion, bounds, call and grow each trap with their kind at their instruction in function 1, the same on all three hosts
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ nativeRuns programs.ts:84:32
+ ❯ traps.test.ts:31:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/26]⎯
+
+ FAIL  traps.test.ts > #238.a3fecb68 each trap kind traps with that kind at one function and offset on macOS arm64, Linux x86_64 and headless Chrome > #238.a3fecb68 a planted mapper that reports every engine trap as unreachable fails the kit, naming the fixture and both kinds
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ nativeRuns programs.ts:84:32
+ ❯ traps.test.ts:44:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/26]⎯
+
+ FAIL  traps.test.ts > #238.a3fecb68 each trap kind traps with that kind at one function and offset on macOS arm64, Linux x86_64 and headless Chrome > #238.a3fecb68 a planted rewrite that lets memory.grow return −1 runs on and fails the kit, naming the grow fixture
+AssertionError: deep-sandbox builds on this host (cargo build --locked --bin deep-sandbox): expected 'cargo build --locked --bin deep-sandb…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-sandbox failed:
++ error: no bin target named `deep-sandbox` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ macSandbox helpers.ts:213:113
+    211| export function macSandbox(): string {
+    212|   nativeSandbox ??= (() => { const b = join(bins(), exe(SANDBOX_BIN));…
+    213|   expect(nativeSandbox.error, `${SANDBOX_BIN} builds on this host (car…
+       |                                                                                                                 ^
+    214|   return nativeSandbox.bin;
+    215| }
+ ❯ onMac helpers.ts:221:24
+ ❯ nativeRuns programs.ts:84:32
+ ❯ traps.test.ts:55:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/26]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  26 failed (26)
+   Start at  16:44:13
+   Duration  519.60s (tests 100%)
+
+exit=1

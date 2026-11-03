@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "profile": "board",
+  "seed": 221,
+  "title": "Placed items over a moving ball",
+  "description": "Issue #221 AC7: items placed by every relation kind against a ball that keyed channels move, drawn by a test agent through deep_show.",
+  "size": [800, 450],
+  "transport": {"span": "4s"},
+  "items": {
+    "back": {"id": "back", "kind": "rect@1", "name": "Backdrop", "order": "a0", "params": {"box": [0, 0, 800, 450], "paint": {"fill": {"role": "ground"}}}},
+    "ball": {"id": "ball", "kind": "circle@1", "name": "Ball", "order": "a1", "params": {"center": [100, 225], "r": 30, "paint": {"fill": {"role": "accent"}}}},
+    "tag": {"id": "tag", "kind": "text@1", "name": "Ball tag", "order": "a2", "at": {"place": {"beside": "ball", "side": "e"}},
+      "params": {"text": "ball", "font": "body", "size": 18, "paint": {"fill": {"role": "ink"}}}},
+    "note": {"id": "note", "kind": "text@1", "name": "Speed note", "order": "a3", "at": {"place": {"beside": "tag", "side": "s", "gap": 6, "align": "start"}},
+      "params": {"text": "speed", "font": "body", "size": 13, "paint": {"fill": {"role": "ink"}}}},
+    "head": {"id": "head", "kind": "text@1", "name": "Heading", "order": "a4", "at": {"pos": [24, 0, 0], "place": {"edge": "n"}},
+      "params": {"text": "Falling ball", "font": "body", "size": 24, "paint": {"fill": {"role": "ink"}}}},
+    "rail": {"id": "rail", "kind": "rect@1", "name": "Rail", "order": "a5", "at": {"align": [{"to": "ball", "side": "cy"}]},
+      "params": {"box": [700, 0, 40, 10], "paint": {"fill": {"role": "ink"}}}},
+    "chip": {"id": "chip", "kind": "rect@1", "name": "Chip", "order": "a6", "at": {"place": {"onto": "tag", "point": "ne"}},
+      "params": {"box": [0, 0, 8, 8], "paint": {"fill": {"role": "accent"}}}},
+    "grow": {"id": "grow", "kind": "rect@1", "name": "Growing card", "order": "a7", "at": {"pivot": "sw"},
+      "params": {"box": [650, 350, 40, 20], "paint": {"fill": {"role": "accent"}}}}
+  },
+  "channels": {
+    "ball-x": {"target": "items/ball/at/pos/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "4s", "value": 500, "interp": "linear"}}},
+    "ball-y": {"target": "items/ball/at/pos/1", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "2s", "value": -100, "interp": "linear"}, "k2": {"t": "4s", "value": 80, "interp": "linear"}}},
+    "note-x": {"target": "items/note/at/pos/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "4s", "value": 20, "interp": "linear"}}},
+    "grow-s": {"target": "items/grow/at/scale/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 1, "interp": "linear"}, "k1": {"t": "4s", "value": 2, "interp": "linear"}}}
+  }
+}

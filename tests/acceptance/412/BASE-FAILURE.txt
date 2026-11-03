@@ -1,0 +1,1055 @@
+Base commit: 960045da ("Merge pull request #1027 from windoliver/claude/issue-875-on-main")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/412 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked), node_modules from npm ci and the
+workspaces built (npm run build --workspaces, for deep mcp and @deepbuild/contracts).
+All 46 tests fail, each at a named assertion, none fails to load (the suite typechecks with
+node node_modules/typescript/bin/tsc -p tests/acceptance/412/tsconfig.json):
+- 13 tests use a test feature this suite chooses (test-preview, test-cue, test-cue-span, test-ring-a, test-ring-b,
+  test-sheet-wordy), none of which exists at the base: cargo refuses the build and each fails at "the binary builds".
+- 20 tests: deep_kinds is no call at the base (core, full, core,test-sim-b and core,test-mark all build): the scenario
+  answers bad_input, so each fails at "deep-show run refused the scenario".
+- 4 tests: their planted name (kinds_names_reference, listing_without_pack_entries, form_refused_by_grammar,
+  validator_without_close) is no planted name at the base: bad_input, exit 2.
+- 6 tests in tools.test.ts: deep mcp lists twelve tools and no deep_kinds ("deep mcp lists deep_kinds").
+- AC11, two tests: the base flags circel@1 (an unknown_kind notice) and centre (an unknown_field error) with no close
+  names, so the close-name check fails, naming each.
+- AC10, deep_query: asked for all 5,000 rows it answers 755,230 bytes with no cursor; AC10, readings: the bounds-mode
+  render-back of 5,000 items answers 1,345,239 bytes with no cursor; AC10, deep_kinds: bad_input. No timing ran and no
+  merge-base build was reached.
+Date: 2026-11-03T00:45:20Z  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (Mac15,7)
+Exit code: 1
+Paths below have the checkout's absolute path replaced by <worktree>.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/412
+
+ ❯ names.test.ts (7 tests | 7 failed) 36312ms
+   ❯ AC1 deep_kinds answers a tool-word pack's word with the mapped kind and its conversion, or no_match, and never invents a mapping (2)
+     × AC1 each word the pack maps answers its target kind, its stated conversion and the pack 1800ms
+     × AC1 a word no alias maps answers no_match with no target, even where it spells a kind that exists 108ms
+   ❯ AC11 unknown_kind and unknown_field name up to three close names (3)
+     × AC11 an item of kind circel@1 is flagged unknown_kind naming circle@1 among at most three close names 257ms
+     × AC11 a field centre on circle@1 is refused with unknown_field naming center among at most three close names 247ms
+     × AC11 a planted validator that names no close name fails the fixture, naming circel@1 and centre 69ms
+   ❯ AC17 an unknown_field a rename record names is refused with its replacement first, with renamed_in (2)
+     × AC17 ring@2 {thick: 3} is refused with unknown_field whose first name is stroke_width, renamed_in ring@2 70ms
+     × AC17 a planted validator that ranks names by spelling alone never offers stroke_width first, and fails, naming thick 34ms
+ ❯ listing.test.ts (12 tests | 12 failed) 230108ms
+   ❯ AC7 deep_kinds names each canvas interface with its digest and the implementation the build chose, as deep://schedule does (2)
+     × AC7 in the build that chose B, deep_kinds names test.sim@1 with its digest and test.sim.b, beside the canvas modules and the module-set digest 2982ms
+     × AC7 a planted listing that names each interface's reference implementation names A and fails, naming test.sim@1 34ms
+   ❯ AC8 deep_kinds for test.mark@1 lists the registry and its entries in the one shape, each with its kit result (3)
+     × AC8 test.mark@1 with since, digest and fill, dot (first-party) and testpack.ring (a pack) in the one shape, each with its kit result, and the include fixture passes 2572ms
+     × AC8 a planted listing that leaves out pack entries fails the include fixture, naming testpack.ring 23ms
+     × AC8 an entry whose kit failed on this core is listed unavailable, never available 24ms
+   ❯ AC9 deep_kinds lists the check.kind@1 slot beside test.mark@1, marked as a slot, with its fills and their kit results (3)
+     × AC9 check.kind@1 beside test.mark@1, marked as a slot, with hub-slots.json's interface and planted fills, and its installed fills command and journey with their kit results 27ms
+     × AC9 a listing that leaves hub slots out fails, naming check.kind@1 29ms
+     × AC9 a listing that lists journey as an entry of a registry fails, naming check.kind@1 34ms
+   ❯ AC12 deep_kinds lists the forms each literal field's grammar accepts, printed by its printer, each parsing back to the field's unit (2)
+     × AC12 every field with a unit lists its grammar's forms, and each parses to the field's unit and prints back as listed 1404ms
+     × AC12 a listing that offers a form the grammar refuses fails, naming the field and the form 26ms
+   ❯ AC13 deep_kinds lists each entry's stability, with the issue tracking a preview entry, and a preview kind's example names it in requires.preview (2)
+     × AC13 every entry has its stability; test.preview.blob@1 is preview, tracked by #412, and its example names it in requires.preview 6ms
+     × AC13 a listing that leaves the stability out fails, naming test.preview.blob@1 9ms
+ ❯ gallery.test.ts (7 tests | 7 failed) 83092ms
+   ❯ AC4 every deep_kinds example validates against its schema, and the include fixture passes (2)
+     × AC4 every example, read by its hash, holds items of its kind whose params validate against the schema it was generated from 2563ms
+     × AC4 the include fixture's words and queries give the names that must appear and none that mustn't, no_match cases included 2802ms
+   ❯ AC5 the guides and gallery: search, read in pages, and never serve an example whose bytes don't match its hash (3)
+     × AC5 searching the installed gallery for turntable returns the product reveal example first, with its hash 39ms
+     × AC5 a guide longer than one page reads as pages with truncated and the next offset, and reading from that offset returns the rest 136ms
+     × AC5 an example whose stored bytes don't match its hash is never served, and the reply names it 91ms
+   ❯ AC18 verified means played: an example is verified only when its last run on this digest played its declared steps (2)
+     × AC18 a run that played 0 of 600 declared steps leaves the example unverified, naming 0 of 600; one with no run on this digest is not run 67ms
+     × AC18 a planted listing that takes a run's exit status as verified lists Six hundred steps verified and fails, naming it 40ms
+ ❯ tools.test.ts (7 tests | 7 failed) 56457ms
+   ❯ AC2 every new tool says what its result does not prove, its errors share one shape, and its schemas pass the strict validators (3)
+     × AC2 every tool the merge base didn't list, deep_kinds among them, says what its result does not prove 110ms
+     × AC2 every published input schema is in the strict subset, and the check refuses each pattern a strict validator refuses 6ms
+     × AC2 every deep_kinds refusal is error@2, at the path of the value it refused 2476ms
+   ❯ AC3 no tool runs an agent's code outside the sandbox, drives a live editor or your app, or can answer, decide or overrule (2)
+     × AC3 checked against the tool list: deep_kinds beside the others, and none of them runs code, drives a live editor or app, answers, decides or overrules 4ms
+     × AC3 the same check fails a tool list that adds deep_render, a deep_kinds that takes code, a live editor driver or an answering tool, naming each 5ms
+   ❯ AC6 the generated skill states the canvas working order and names deep_open_item for a missing kind or field (2)
+     × AC6 the skill is the one scripts/skill.mjs generates, states the working order, names deep_open_item for a missing kind or field, and names no tool parameter or unlisted kind 86ms
+     × AC6 the check fails a skill that names a deep_kinds parameter or a kind deep_kinds doesn't list, naming each 4ms
+ ❯ sheet.test.ts (3 tests | 3 failed) 50065ms
+   ❯ AC15 the one-page sheet: at most 32 KB, every available entry, the same bytes for one digest (3)
+     × AC15 on the full build the sheet is at most 32,768 bytes, names every available entry of the listing, and two sealed processes give byte-identical sheets 3550ms
+     × AC15 the sheet names testpack.ring, and a planted sheet that drops pack entries fails the include fixture, naming testpack.ring 1428ms
+     × AC15 a planted entry whose one-liner pushes the sheet past 32,768 bytes fails the build, naming the entry and the overrun in bytes 2ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 12003ms
+   ❯ AC10 budgets on the reference Mac against the merge base, and no reply past 64 KB without a cursor (3)
+     × AC10 deep_kinds answers in under 100 ms at p95, and none of its replies passes 64 KB without a cursor 1430ms
+     × AC10 deep_query of 200 rows answers in under 50 ms, compared with the merge base, and asked for all 5,000 rows it stays under 64 KB or carries a cursor 1561ms
+     × AC10 deep_show's readings add under 20 ms to a render-back, compared with the merge base, and on 5,000 items they stay under 64 KB or carry a cursor 1369ms
+ ❯ moves.test.ts (3 tests | 3 failed) 209ms
+   ❯ AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion (3)
+     × AC14 pop_in lists a scale from 0 to 1 over its 0.5 s span with its spring's decay, frequency and peak, each equal to its expansion's within 1e-9 7ms
+     × AC14 changing the default span to 0.8 s changes the listing with no other edit, and the listing still equals the expansion 1ms
+     × AC14 a planted entry whose listing is stored text that differs from its expansion fails, naming pop_in and span 1ms
+ ❯ dump.test.ts (4 tests | 4 failed) 160ms
+   ❯ AC16 a canonical dump named by its digest, and a diff that reads renames and retirements only from their records (4)
+     × AC16 two dumps of one digest are byte-identical, canonical, valid against their schema, and hold each field as an ordered array element with its type, unit, range and list 6ms
+     × AC16 the diff between A and B lists exactly thick renamed to stroke_width, dash retired and segments' default 32 → 64 1ms
+     × AC16 a planted dump that writes fields as an object keyed by name fails the schema, naming the path 1ms
+     × AC16 a planted diff that infers renames by spelling reports thick removed and stroke_width added, and fails, naming thick 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 46 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC10 budgets on the reference Mac against the merge base, and no reply past 64 KB without a cursor > AC10 deep_kinds answers in under 100 ms at p95, and none of its replies passes 64 KB without a cursor
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ budgets.test.ts:61:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/46]⎯
+
+ FAIL  budgets.test.ts > AC10 budgets on the reference Mac against the merge base, and no reply past 64 KB without a cursor > AC10 deep_query of 200 rows answers in under 50 ms, compared with the merge base, and asked for all 5,000 rows it stays under 64 KB or carries a cursor
+AssertionError: deep_query's reply:
+  deep_query of all 5,000 rows: 755230 bytes, past 64 KB, with no cursor: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_query of all 5,000 rows: 755230 bytes, past 64 KB, with no cursor",
++ ]
+
+ ❯ none helpers.ts:98:60
+     96| /** No failures; the message lists them. */
+     97| export function none(failures: readonly string[], what: string): void {
+     98|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     99| }
+    100| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ budgets.test.ts:77:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/46]⎯
+
+ FAIL  budgets.test.ts > AC10 budgets on the reference Mac against the merge base, and no reply past 64 KB without a cursor > AC10 deep_show's readings add under 20 ms to a render-back, compared with the merge base, and on 5,000 items they stay under 64 KB or carry a cursor
+AssertionError: the render-back's reply:
+  a render-back with the bounds readings of 5,000 items: 1345239 bytes, past 64 KB, with no cursor: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "a render-back with the bounds readings of 5,000 items: 1345239 bytes, past 64 KB, with no cursor",
++ ]
+
+ ❯ none helpers.ts:98:60
+     96| /** No failures; the message lists them. */
+     97| export function none(failures: readonly string[], what: string): void {
+     98|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     99| }
+    100| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ budgets.test.ts:97:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/46]⎯
+
+ FAIL  dump.test.ts > AC16 a canonical dump named by its digest, and a diff that reads renames and retirements only from their records > AC16 two dumps of one digest are byte-identical, canonical, valid against their schema, and hold each field as an ordered array element with its type, unit, range and list
+AssertionError: the binary builds: deep-show with features core,test-ring-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-ring-a failed:
++ error: none of the selected packages contains this feature: test-ring-a
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-fill-a, test-sim-a
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ dump dump.test.ts:34:35
+ ❯ dump.test.ts:59:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/46]⎯
+
+ FAIL  dump.test.ts > AC16 a canonical dump named by its digest, and a diff that reads renames and retirements only from their records > AC16 the diff between A and B lists exactly thick renamed to stroke_width, dash retired and segments' default 32 → 64
+AssertionError: the binary builds: deep-show with features core,test-ring-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-ring-a failed:
++ error: none of the selected packages contains this feature: test-ring-a
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-fill-a, test-sim-a
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ dump dump.test.ts:34:35
+ ❯ dump.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/46]⎯
+
+ FAIL  dump.test.ts > AC16 a canonical dump named by its digest, and a diff that reads renames and retirements only from their records > AC16 a planted dump that writes fields as an object keyed by name fails the schema, naming the path
+AssertionError: the binary builds: deep-show with features core,test-ring-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-ring-a failed:
++ error: none of the selected packages contains this feature: test-ring-a
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-fill-a, test-sim-a
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ dump dump.test.ts:34:35
+ ❯ dump.test.ts:86:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/46]⎯
+
+ FAIL  dump.test.ts > AC16 a canonical dump named by its digest, and a diff that reads renames and retirements only from their records > AC16 a planted diff that infers renames by spelling reports thick removed and stroke_width added, and fails, naming thick
+AssertionError: the binary builds: deep-show with features core,test-ring-a: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-ring-a failed:
++ error: none of the selected packages contains this feature: test-ring-a
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-fill-a, test-sim-a
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ dump dump.test.ts:34:35
+ ❯ dump.test.ts:95:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/46]⎯
+
+ FAIL  gallery.test.ts > AC4 every deep_kinds example validates against its schema, and the include fixture passes > AC4 every example, read by its hash, holds items of its kind whose params validate against the schema it was generated from
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ gallery.test.ts:43:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/46]⎯
+
+ FAIL  gallery.test.ts > AC4 every deep_kinds example validates against its schema, and the include fixture passes > AC4 the include fixture's words and queries give the names that must appear and none that mustn't, no_match cases included
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ gallery.test.ts:77:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/46]⎯
+
+ FAIL  gallery.test.ts > AC5 the guides and gallery: search, read in pages, and never serve an example whose bytes don't match its hash > AC5 searching the installed gallery for turntable returns the product reveal example first, with its hash
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ gallery.test.ts:87:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/46]⎯
+
+ FAIL  gallery.test.ts > AC5 the guides and gallery: search, read in pages, and never serve an example whose bytes don't match its hash > AC5 a guide longer than one page reads as pages with truncated and the next offset, and reading from that offset returns the rest
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ gallery.test.ts:105:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/46]⎯
+
+ FAIL  gallery.test.ts > AC5 the guides and gallery: search, read in pages, and never serve an example whose bytes don't match its hash > AC5 an example whose stored bytes don't match its hash is never served, and the reply names it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ gallery.test.ts:124:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/46]⎯
+
+ FAIL  gallery.test.ts > AC18 verified means played: an example is verified only when its last run on this digest played its declared steps > AC18 a run that played 0 of 600 declared steps leaves the example unverified, naming 0 of 600; one with no run on this digest is not run
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ digestOf gallery.test.ts:137:73
+ ❯ gallery.test.ts:147:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/46]⎯
+
+ FAIL  gallery.test.ts > AC18 verified means played: an example is verified only when its last run on this digest played its declared steps > AC18 a planted listing that takes a run's exit status as verified lists Six hundred steps verified and fails, naming it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ digestOf gallery.test.ts:137:73
+ ❯ gallery.test.ts:161:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/46]⎯
+
+ FAIL  listing.test.ts > AC7 deep_kinds names each canvas interface with its digest and the implementation the build chose, as deep://schedule does > AC7 in the build that chose B, deep_kinds names test.sim@1 with its digest and test.sim.b, beside the canvas modules and the module-set digest
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:58:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/46]⎯
+
+ FAIL  listing.test.ts > AC7 deep_kinds names each canvas interface with its digest and the implementation the build chose, as deep://schedule does > AC7 a planted listing that names each interface's reference implementation names A and fails, naming test.sim@1
+AssertionError: deep-show run --planted kinds_names_reference starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:260:172
+    258|   const s = start(bin, args, [sc]);
+    259|   expect(s.timedOut, `${SHOW_NAME} ${args.join(' ')} finished within i…
+    260|   expect(s.status, `${SHOW_NAME} ${args.join(' ')} starts and exits 0 …
+       |                                                                                                                                                                            ^
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:69:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/46]⎯
+
+ FAIL  listing.test.ts > AC8 deep_kinds for test.mark@1 lists the registry and its entries in the one shape, each with its kit result > AC8 test.mark@1 with since, digest and fill, dot (first-party) and testpack.ring (a pack) in the one shape, each with its kit result, and the include fixture passes
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:84:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/46]⎯
+
+ FAIL  listing.test.ts > AC8 deep_kinds for test.mark@1 lists the registry and its entries in the one shape, each with its kit result > AC8 a planted listing that leaves out pack entries fails the include fixture, naming testpack.ring
+AssertionError: deep-show run --planted listing_without_pack_entries starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:260:172
+    258|   const s = start(bin, args, [sc]);
+    259|   expect(s.timedOut, `${SHOW_NAME} ${args.join(' ')} finished within i…
+    260|   expect(s.status, `${SHOW_NAME} ${args.join(' ')} starts and exits 0 …
+       |                                                                                                                                                                            ^
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+ ❯ listing.test.ts:99:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/46]⎯
+
+ FAIL  listing.test.ts > AC8 deep_kinds for test.mark@1 lists the registry and its entries in the one shape, each with its kit result > AC8 an entry whose kit failed on this core is listed unavailable, never available
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:104:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/46]⎯
+
+ FAIL  listing.test.ts > AC9 deep_kinds lists the check.kind@1 slot beside test.mark@1, marked as a slot, with its fills and their kit results > AC9 check.kind@1 beside test.mark@1, marked as a slot, with hub-slots.json's interface and planted fills, and its installed fills command and journey with their kit results
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:114:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/46]⎯
+
+ FAIL  listing.test.ts > AC9 deep_kinds lists the check.kind@1 slot beside test.mark@1, marked as a slot, with its fills and their kit results > AC9 a listing that leaves hub slots out fails, naming check.kind@1
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:124:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/46]⎯
+
+ FAIL  listing.test.ts > AC9 deep_kinds lists the check.kind@1 slot beside test.mark@1, marked as a slot, with its fills and their kit results > AC9 a listing that lists journey as an entry of a registry fails, naming check.kind@1
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:129:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/46]⎯
+
+ FAIL  listing.test.ts > AC12 deep_kinds lists the forms each literal field's grammar accepts, printed by its printer, each parsing back to the field's unit > AC12 every field with a unit lists its grammar's forms, and each parses to the field's unit and prints back as listed
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:136:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/46]⎯
+
+ FAIL  listing.test.ts > AC12 deep_kinds lists the forms each literal field's grammar accepts, printed by its printer, each parsing back to the field's unit > AC12 a listing that offers a form the grammar refuses fails, naming the field and the form
+AssertionError: deep-show run --planted form_refused_by_grammar starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:260:172
+    258|   const s = start(bin, args, [sc]);
+    259|   expect(s.timedOut, `${SHOW_NAME} ${args.join(' ')} finished within i…
+    260|   expect(s.status, `${SHOW_NAME} ${args.join(' ')} starts and exits 0 …
+       |                                                                                                                                                                            ^
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+ ❯ listAll helpers.ts:361:21
+ ❯ listing.test.ts:142:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/46]⎯
+
+ FAIL  listing.test.ts > AC13 deep_kinds lists each entry's stability, with the issue tracking a preview entry, and a preview kind's example names it in requires.preview > AC13 every entry has its stability; test.preview.blob@1 is preview, tracked by #412, and its example names it in requires.preview
+AssertionError: the binary builds: deep-show with features core,test-preview: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-preview failed:
++ error: none of the selected packages contains this feature: test-preview
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ listing.test.ts:153:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/46]⎯
+
+ FAIL  listing.test.ts > AC13 deep_kinds lists each entry's stability, with the issue tracking a preview entry, and a preview kind's example names it in requires.preview > AC13 a listing that leaves the stability out fails, naming test.preview.blob@1
+AssertionError: the binary builds: deep-show with features core,test-preview: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-preview failed:
++ error: none of the selected packages contains this feature: test-preview
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ listing.test.ts:167:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/46]⎯
+
+ FAIL  moves.test.ts > AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion > AC14 pop_in lists a scale from 0 to 1 over its 0.5 s span with its spring's decay, frequency and peak, each equal to its expansion's within 1e-9
+AssertionError: the binary builds: deep-show with features core,test-cue: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-cue failed:
++ error: none of the selected packages contains this feature: test-cue
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-a, test-b, test-cycle, test-kit, test-nudge
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ moves.test.ts:56:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/46]⎯
+
+ FAIL  moves.test.ts > AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion > AC14 changing the default span to 0.8 s changes the listing with no other edit, and the listing still equals the expansion
+AssertionError: the binary builds: deep-show with features core,test-cue: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-cue failed:
++ error: none of the selected packages contains this feature: test-cue
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-a, test-b, test-cycle, test-kit, test-nudge
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ moves.test.ts:64:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/46]⎯
+
+ FAIL  moves.test.ts > AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion > AC14 a planted entry whose listing is stored text that differs from its expansion fails, naming pop_in and span
+AssertionError: the binary builds: deep-show with features core,test-cue-span: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-cue-span failed:
++ error: none of the selected packages contains this feature: test-cue-span
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ moves.test.ts:74:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/46]⎯
+
+ FAIL  names.test.ts > AC1 deep_kinds answers a tool-word pack's word with the mapped kind and its conversion, or no_match, and never invents a mapping > AC1 each word the pack maps answers its target kind, its stated conversion and the pack
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ names.test.ts:37:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/46]⎯
+
+ FAIL  names.test.ts > AC1 deep_kinds answers a tool-word pack's word with the mapped kind and its conversion, or no_match, and never invents a mapping > AC1 a word no alias maps answers no_match with no target, even where it spells a kind that exists
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ names.test.ts:49:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/46]⎯
+
+ FAIL  names.test.ts > AC11 unknown_kind and unknown_field name up to three close names > AC11 an item of kind circel@1 is flagged unknown_kind naming circle@1 among at most three close names
+AssertionError: circel@1:
+  circel@1: unknown_kind names no close name: {"code":"unknown_kind","severity":"notice","ids":["c1"],"path":"items/c1/kind","actual":"circel@1","what":"kind `circel@1` is not registered in this build; the item is skipped"}
+  circel@1: unknown_kind doesn't name circle@1 among its close names (none): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "circel@1: unknown_kind names no close name: {\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"c1\"],\"path\":\"items/c1/kind\",\"actual\":\"circel@1\",\"what\":\"kind `circel@1` is not registered in this build; the item is skipped\"}",
++   "circel@1: unknown_kind doesn't name circle@1 among its close names (none)",
++ ]
+
+ ❯ none helpers.ts:98:60
+     96| /** No failures; the message lists them. */
+     97| export function none(failures: readonly string[], what: string): void {
+     98|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     99| }
+    100| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ names.test.ts:66:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/46]⎯
+
+ FAIL  names.test.ts > AC11 unknown_kind and unknown_field name up to three close names > AC11 a field centre on circle@1 is refused with unknown_field naming center among at most three close names
+AssertionError: centre:
+  centre: unknown_field names no close name: {"check":"document.validate","code":"unknown_field","severity":"error","ids":["c2"],"path":"items/c2/params/centre","actual":[100,100],"what":"circle@1.0 does not define `centre`","fix":"Remove the field, or require the kind's minor that defines it."}
+  centre: unknown_field doesn't name center among its close names (none): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "centre: unknown_field names no close name: {\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"c2\"],\"path\":\"items/c2/params/centre\",\"actual\":[100,100],\"what\":\"circle@1.0 does not define `centre`\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}",
++   "centre: unknown_field doesn't name center among its close names (none)",
++ ]
+
+ ❯ none helpers.ts:98:60
+     96| /** No failures; the message lists them. */
+     97| export function none(failures: readonly string[], what: string): void {
+     98|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     99| }
+    100| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ names.test.ts:72:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/46]⎯
+
+ FAIL  names.test.ts > AC11 unknown_kind and unknown_field name up to three close names > AC11 a planted validator that names no close name fails the fixture, naming circel@1 and centre
+AssertionError: deep-show run --planted validator_without_close starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:260:172
+    258|   const s = start(bin, args, [sc]);
+    259|   expect(s.timedOut, `${SHOW_NAME} ${args.join(' ')} finished within i…
+    260|   expect(s.status, `${SHOW_NAME} ${args.join(' ')} starts and exits 0 …
+       |                                                                                                                                                                            ^
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+ ❯ names.test.ts:76:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/46]⎯
+
+ FAIL  names.test.ts > AC17 an unknown_field a rename record names is refused with its replacement first, with renamed_in > AC17 ring@2 {thick: 3} is refused with unknown_field whose first name is stroke_width, renamed_in ring@2
+AssertionError: the binary builds: deep-show with features core,test-ring-b: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-ring-b failed:
++ error: none of the selected packages contains this feature: test-ring-b
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-fill-b, test-sim-b
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ names.test.ts:87:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/46]⎯
+
+ FAIL  names.test.ts > AC17 an unknown_field a rename record names is refused with its replacement first, with renamed_in > AC17 a planted validator that ranks names by spelling alone never offers stroke_width first, and fails, naming thick
+AssertionError: the binary builds: deep-show with features core,test-ring-b: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-ring-b failed:
++ error: none of the selected packages contains this feature: test-ring-b
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-fill-b, test-sim-b
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ names.test.ts:93:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/46]⎯
+
+ FAIL  sheet.test.ts > AC15 the one-page sheet: at most 32 KB, every available entry, the same bytes for one digest > AC15 on the full build the sheet is at most 32,768 bytes, names every available entry of the listing, and two sealed processes give byte-identical sheets
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ sheet.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/46]⎯
+
+ FAIL  sheet.test.ts > AC15 the one-page sheet: at most 32 KB, every available entry, the same bytes for one digest > AC15 the sheet names testpack.ring, and a planted sheet that drops pack entries fails the include fixture, naming testpack.ring
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ listAll helpers.ts:361:21
+ ❯ sheet.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/46]⎯
+
+ FAIL  sheet.test.ts > AC15 the one-page sheet: at most 32 KB, every available entry, the same bytes for one digest > AC15 a planted entry whose one-liner pushes the sheet past 32,768 bytes fails the build, naming the entry and the overrun in bytes
+AssertionError: the binary builds: deep-show with features core,test-sheet-wordy: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-sheet-wordy failed:
++ error: none of the selected packages contains this feature: test-sheet-wordy
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ sheet.test.ts:51:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/46]⎯
+
+ FAIL  tools.test.ts > AC2 every new tool says what its result does not prove, its errors share one shape, and its schemas pass the strict validators > AC2 every tool the merge base didn't list, deep_kinds among them, says what its result does not prove
+AssertionError: deep mcp lists deep_kinds: expected [ 'deep_ask', 'deep_wait', …(10) ] to include 'deep_kinds'
+ ❯ withKinds tools.test.ts:43:61
+     41| function withKinds(): Tool[] {
+     42|   const t = listed();
+     43|   expect(t.map((x) => x.name), 'deep mcp lists deep_kinds').toContain(…
+       |                                                             ^
+     44|   return t;
+     45| }
+ ❯ tools.test.ts:49:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/46]⎯
+
+ FAIL  tools.test.ts > AC2 every new tool says what its result does not prove, its errors share one shape, and its schemas pass the strict validators > AC2 every published input schema is in the strict subset, and the check refuses each pattern a strict validator refuses
+AssertionError: deep mcp lists deep_kinds: expected [ 'deep_ask', 'deep_wait', …(10) ] to include 'deep_kinds'
+ ❯ withKinds tools.test.ts:43:61
+     41| function withKinds(): Tool[] {
+     42|   const t = listed();
+     43|   expect(t.map((x) => x.name), 'deep mcp lists deep_kinds').toContain(…
+       |                                                             ^
+     44|   return t;
+     45| }
+ ❯ tools.test.ts:67:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/46]⎯
+
+ FAIL  tools.test.ts > AC2 every new tool says what its result does not prove, its errors share one shape, and its schemas pass the strict validators > AC2 every deep_kinds refusal is error@2, at the path of the value it refused
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:263:76
+    261|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    262|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    263|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                            ^
+    264|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    265|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ tools.test.ts:74:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/46]⎯
+
+ FAIL  tools.test.ts > AC3 no tool runs an agent's code outside the sandbox, drives a live editor or your app, or can answer, decide or overrule > AC3 checked against the tool list: deep_kinds beside the others, and none of them runs code, drives a live editor or app, answers, decides or overrules
+AssertionError: deep mcp lists deep_kinds: expected [ 'deep_ask', 'deep_wait', …(10) ] to include 'deep_kinds'
+ ❯ withKinds tools.test.ts:43:61
+     41| function withKinds(): Tool[] {
+     42|   const t = listed();
+     43|   expect(t.map((x) => x.name), 'deep mcp lists deep_kinds').toContain(…
+       |                                                             ^
+     44|   return t;
+     45| }
+ ❯ tools.test.ts:91:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/46]⎯
+
+ FAIL  tools.test.ts > AC3 no tool runs an agent's code outside the sandbox, drives a live editor or your app, or can answer, decide or overrule > AC3 the same check fails a tool list that adds deep_render, a deep_kinds that takes code, a live editor driver or an answering tool, naming each
+AssertionError: deep mcp lists deep_kinds: expected [ 'deep_ask', 'deep_wait', …(10) ] to include 'deep_kinds'
+ ❯ withKinds tools.test.ts:43:61
+     41| function withKinds(): Tool[] {
+     42|   const t = listed();
+     43|   expect(t.map((x) => x.name), 'deep mcp lists deep_kinds').toContain(…
+       |                                                             ^
+     44|   return t;
+     45| }
+ ❯ tools.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/46]⎯
+
+ FAIL  tools.test.ts > AC6 the generated skill states the canvas working order and names deep_open_item for a missing kind or field > AC6 the skill is the one scripts/skill.mjs generates, states the working order, names deep_open_item for a missing kind or field, and names no tool parameter or unlisted kind
+AssertionError: deep mcp lists deep_kinds: expected [ 'deep_ask', 'deep_wait', …(10) ] to include 'deep_kinds'
+ ❯ withKinds tools.test.ts:43:61
+     41| function withKinds(): Tool[] {
+     42|   const t = listed();
+     43|   expect(t.map((x) => x.name), 'deep mcp lists deep_kinds').toContain(…
+       |                                                             ^
+     44|   return t;
+     45| }
+ ❯ tools.test.ts:125:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/46]⎯
+
+ FAIL  tools.test.ts > AC6 the generated skill states the canvas working order and names deep_open_item for a missing kind or field > AC6 the check fails a skill that names a deep_kinds parameter or a kind deep_kinds doesn't list, naming each
+AssertionError: deep mcp lists deep_kinds: expected [ 'deep_ask', 'deep_wait', …(10) ] to include 'deep_kinds'
+ ❯ withKinds tools.test.ts:43:61
+     41| function withKinds(): Tool[] {
+     42|   const t = listed();
+     43|   expect(t.map((x) => x.name), 'deep mcp lists deep_kinds').toContain(…
+       |                                                             ^
+     44|   return t;
+     45| }
+ ❯ tools.test.ts:132:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/46]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  46 failed (46)
+   Start at  16:45:20
+   Duration  471.97s (tests 100%)
+

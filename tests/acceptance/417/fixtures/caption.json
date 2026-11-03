@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "id": "fallback-caption-417",
+  "profile": "figure",
+  "title": "A caption in four scripts",
+  "description": "One caption in Latin, Han, Arabic and an emoji, set in the body font with the look's fallback list, its Han in Simplified Chinese forms.",
+  "size": [480, 80],
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "caption": {
+      "id": "caption", "kind": "text@1", "layer": "main", "name": "Caption", "order": "a0",
+      "params": { "text": "Area 面积 مساحة 🙂", "font": "body", "size": 24, "lang": "zh-Hans", "box": { "w": 440, "h": 40 } },
+      "at": { "pos": [20, 20, 0] }
+    }
+  }
+}

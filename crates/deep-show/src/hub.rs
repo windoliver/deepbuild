@@ -259,6 +259,8 @@ pub enum Planted {
     EncodesInDecodeWorker,
     /// #498: the probe rounds each presentation time to the nearest flick.
     ProbeRoundsToFlicks,
+    /// #397: the table probe keeps each text cell NFC instead of its raw bytes.
+    ProbeStoresNormalized,
     /// #498: untagged streams are assumed BT.601 at every height.
     AssumesBt601,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -292,6 +294,8 @@ pub struct Startup {
     pub ignores_unknown_occlusion: bool,
     /// #200: a planted wrong `deep://registries` listing.
     pub listing: Option<crate::registries::Listing>,
+    /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
+    pub kinds: Option<crate::kinds::Planted>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -458,8 +462,8 @@ pub struct PatchCall {
 pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
-    /// #411: a deep_show or deep show call in a diagnostic mode.
-    Mode(Box<Show>, String),
+    /// #411: a deep_show or deep show call in a diagnostic mode; #412: from its readings' cursor.
+    Mode(Box<Show>, String, usize),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
@@ -501,6 +505,12 @@ pub enum Call {
     },
     /// #200: `deep://registries/<core version>`.
     Registries,
+    /// #412: deep_kinds, its fields as the call gave them.
+    Kinds(Value),
+    /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
+    Sandbox,
+    /// #238: the providers a document's current revision ran at check, with their output.
+    Provided(String),
     /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
     Lookup {
         doc: String,
@@ -783,6 +793,14 @@ pub struct Scenario {
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
+    /// #412: the entries plug-ins fill, each `{plugin, registry, entry, kit}` with the kit result
+    /// the hub recorded for it on this core.
+    pub plugin_entries: Vec<Value>,
+    /// #412: a folder of guides and examples (`gallery.json` and its files) used in place of the
+    /// installed ones.
+    pub gallery: Option<PathBuf>,
+    /// #412: the corpus runner's recorded runs, `{example, module_set, played, exit}`, last last.
+    pub corpus_runs: Vec<Value>,
     /// Every session's pool in place of its budget class's (#857).
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
@@ -875,6 +893,8 @@ pub struct Hub<'a> {
     pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
+    /// The sandbox module's check-time work (#238).
+    pub sandbox: crate::sandbox::Host,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -1010,6 +1030,7 @@ impl<'a> Hub<'a> {
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
+            sandbox: crate::sandbox::Host::default(),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
@@ -1120,12 +1141,15 @@ impl<'a> Hub<'a> {
         dir: &std::path::Path,
         session: Option<&str>,
     ) -> Value {
+        let sealed = &self.startup.sealed;
+        let sandbox = &mut self.sandbox;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            &self.startup.sealed,
+            sealed,
             id,
             dir,
+            &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
         // with origin agent, and in a registry that binds author they bind only its own claims.
@@ -1349,9 +1373,9 @@ impl<'a> Hub<'a> {
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
-            Call::Mode(show, mode) => {
+            Call::Mode(show, mode, cursor) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
-                self.mode_show(show, mode)
+                self.mode_show(show, mode, *cursor)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
@@ -1364,6 +1388,17 @@ impl<'a> Hub<'a> {
                 self.install_pack(id, dir, session.as_deref())
             }
             Call::Registries => self.registries_reply(),
+            Call::Kinds(c) => self.kinds_reply(c),
+            Call::Sandbox => json!({
+                "module": "sandbox",
+                "version": self.startup.sealed.modules.iter().find(|m| m.name == "sandbox").map(|m| m.version.to_string()),
+                "checks": self.sandbox.checks, "links": self.sandbox.links,
+                "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
+            }),
+            Call::Provided(doc) => json!({
+                "doc": doc,
+                "provided": self.sandbox.provided.get(doc).cloned().unwrap_or_default(),
+            }),
             Call::Lookup {
                 doc,
                 registry,
@@ -1752,6 +1787,8 @@ impl<'a> Hub<'a> {
                     }
                 }
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
+                // #238: the providers the document names run at its check, once per content key.
+                issues.extend(self.sandbox.provide(&show.doc, &doc));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
                     _ => Scope::Every,
@@ -1796,13 +1833,25 @@ impl<'a> Hub<'a> {
         let visible = self.doc_visible(&show.doc);
         // The form that draws: the document with each recipe instance's derived items in its
         // place (#306), less the items skipped as `unknown_kind` (#403).
-        let drawn_form = stamped.as_ref().map(|doc| {
+        let mut drawn_form = stamped.as_ref().map(|doc| {
             let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
             crate::verdict::without(
                 &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
                 &skipped,
             )
         });
+        // Mark set columns that read a column source, resolved and narrowed by the core's
+        // column view at the frame's step (#397).
+        if let Some(form) = drawn_form.as_mut() {
+            let entries = self
+                .startup
+                .sealed
+                .registry(deep_canvas::columns::REGISTRY)
+                .map_or(&[][..], |r| r.entries.as_slice());
+            // A step is a 60 fps frame: 11,760,000 flicks.
+            let step = show.t.max(0) as u64 / 11_760_000;
+            issues.extend(deep_canvas::columns::view(form, entries, step));
+        }
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
