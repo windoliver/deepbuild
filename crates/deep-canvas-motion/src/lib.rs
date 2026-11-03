@@ -12,7 +12,6 @@ pub mod clock;
 pub mod constraint;
 pub mod curve;
 pub mod doc;
-pub mod ease;
 pub mod eval;
 pub mod follow;
 pub mod input;
