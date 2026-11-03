@@ -5,6 +5,8 @@
 // session it gates, and a permission request a saved decision answers), measured where paseo calls them; the merge
 // base has no plugin, so all of it is added. It counts only on a reference Mac in a fit state with the load under the
 // core count; anywhere else it prints the readings and reads INCONCLUSIVE, never PASS or FAIL.
+// First: what you gave the suite by hand, before ../29's helpers delete it (README, Disputes D1).
+import { given } from './env.ts';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,7 +35,7 @@ describe(`${AC[11]} Budgets: under 10 ms at p95 added per gated event, against t
 
   it(`${AC[11]} \`node benchmarks/paseo-plugin.mjs\` runs and exits 0`, () => {
     needPlugin();
-    execFileSync(NODE, [join(REPO, 'benchmarks/paseo-plugin.mjs')], { cwd: REPO, env: process.env, stdio: 'pipe', timeout: 600_000 });
+    execFileSync(NODE, [join(REPO, 'benchmarks/paseo-plugin.mjs')], { cwd: REPO, env: { ...process.env, ...given }, stdio: 'pipe', timeout: 600_000 });
   }, 620_000);
 
   it(`${AC[11]} each gated event, ${ROUNDS} turn ends and ${ROUNDS} decided permission requests of a Copilot session, is held under ${LIMIT_MS} ms at p95`, async (ctx: TestContext) => {

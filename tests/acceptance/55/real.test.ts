@@ -2,6 +2,8 @@
 // the agent's own session ID; an ask in paseo's phone app), AC5 (every agent paseo creates lists DeepBuild's MCP tools)
 // and AC7 (removing the plugin leaves paseo's configuration as it was). The agent is fixtures/fake-provider, a stand-in
 // for the model and the agent's CLI; paseo, the hub, `deep setup` and the plugin are real.
+// First: what you gave the suite by hand, before ../29's helpers delete it (README, Disputes D1).
+import './env.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';

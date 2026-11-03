@@ -4,6 +4,8 @@
 // default), AC9 (kind `other` is never answered from a saved decision) and AC10 (in a Claude session deep-hook watches,
 // one prompt is one ask and one delivery, both deep-hook's). Paseo is fixtures/paseo-host.mjs around the real plugin;
 // the hub, the resolver, `deep inbox answer`, deep-hook and `deep setup` are real (README, The worlds).
+// First: what you gave the suite by hand, before ../29's helpers delete it (README, Disputes D1).
+import './env.ts';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Claude, makeRepo, payload, replied, setup, newSession, startHub, typedPrompt, firedShown } from '../27/helpers.ts';
