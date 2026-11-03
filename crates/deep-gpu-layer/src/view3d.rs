@@ -502,6 +502,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let (composed, resident) = levels.compose(&args.doc);
             let mut scene = evaluate(&composed, t, &args.look, &mut labels)
                 .map_err(|r| refused(r.code, r.path))?;
+            // A particles@1 count past its class's limit is refused, never clamped (#420).
+            let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
+            if let Some(path) = effects::count_refusal(&scene, class) {
+                return Err(refused("out_of_range", path));
+            }
             // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
             scene.plant_edges(
                 app.planted == Some(Planted::EdgesUnwelded),

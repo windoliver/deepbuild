@@ -411,6 +411,8 @@ pub struct Scene {
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
     pub others: Vec<Other>,
+    /// Each curve item's samples in world metres, closed ones back to their start (#420).
+    pub curves: BTreeMap<String, Vec<Vec3>>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
 }
@@ -1244,6 +1246,7 @@ pub(crate) fn evaluate_compiled(
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
     let mut others = Vec::new();
+    let mut curves = BTreeMap::new();
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
@@ -1325,7 +1328,19 @@ pub(crate) fn evaluate_compiled(
                         mesh: Some(Arc::new(mesh)),
                     });
                 }
-                "curve@1" => {}
+                // A curve draws nothing; what follows it (particles along it, #420) reads it
+                // sampled, in world metres.
+                "curve@1" => {
+                    if let Ok(c) = crate::curve::sample(params) {
+                        let m = world(&items, id);
+                        let mut points: Vec<Vec3> =
+                            c.points.iter().map(|p| apply(&m, *p)).collect();
+                        if c.closed {
+                            points.push(points[0]);
+                        }
+                        curves.insert(id.clone(), points);
+                    }
+                }
                 "mark.line@1" => {
                     let mut l = line(&items, id, params, look)?;
                     let under = strokes(map, id, item, &mut l, look, seconds)?;
@@ -1471,6 +1486,7 @@ pub(crate) fn evaluate_compiled(
         overlays,
         sun,
         others,
+        curves,
         pages: labels.pages(),
     })
 }
