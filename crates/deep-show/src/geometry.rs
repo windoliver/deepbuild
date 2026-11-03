@@ -22,6 +22,8 @@ pub struct Geometry {
     pub t: EvalTime,
     pub built: bool,
     pub estimate_only: bool,
+    /// Fractions of arc length a `curve@1` row answers at (#441).
+    pub at: Vec<f64>,
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
@@ -43,7 +45,16 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
         None => false,
         Some(v) => v.as_bool()?,
     };
+    let at = match c.get("at") {
+        None => Vec::new(),
+        Some(v) => v
+            .as_array()?
+            .iter()
+            .map(|u| u.as_f64().filter(|u| (0.0..=1.0).contains(u)))
+            .collect::<Option<_>>()?,
+    };
     Some(Geometry {
+        at,
         doc: c.get("doc")?.as_str()?.to_string(),
         items,
         t: crate::time::eval_time(c.get("t"))?,
@@ -61,6 +72,29 @@ fn has_geometry(kind: &str) -> bool {
 }
 
 const ASSET: &str = "mesh.asset@1";
+
+/// A `curve@1` row (#441): its length and closure, and at each u of `at` its point, frame and
+/// d²P/du².
+fn curve_row(id: &str, key: &str, item: &Value, at: &[f64], planted: Option<&str>) -> Value {
+    let params = item.get("params").cloned().unwrap_or(json!({}));
+    let mut c = match deep_canvas_scene3d::curve::Curve::new(&params) {
+        Ok(c) => c,
+        Err(path) => return json!({"code": "out_of_range", "path": format!("items/{id}/{path}")}),
+    };
+    c.seam_twist = planted
+        .and_then(Plants::named)
+        .is_some_and(|p| p.sweep.seam_twist);
+    let rows: Vec<Value> = at
+        .iter()
+        .map(|u| {
+            let f = c.frame(*u);
+            json!({"u": u, "point": f.point, "tangent": f.tangent, "normal": f.normal,
+                   "binormal": f.binormal(), "accel": c.accel(*u)})
+        })
+        .collect();
+    json!({"id": id, "kind": "curve@1", "key": key,
+           "outputs": {"length": c.length, "closure": c.closure.to_degrees()}, "at": rows})
+}
 
 /// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256; or the refusal.
 fn asset_mesh(evidence: &std::path::Path, id: &str, item: &Value) -> Result<Mesh, Value> {
@@ -163,6 +197,17 @@ impl Hub<'_> {
             }) else {
                 return json!({"code": "ref_unresolved", "path": format!("items/{id}")});
             };
+            if let Some(item) = items
+                .get(id)
+                .filter(|i| i.get("kind").and_then(Value::as_str) == Some("curve@1"))
+            {
+                let row = curve_row(id, &node.key, item, &g.at, planted.as_deref());
+                if row.get("code").is_some() {
+                    return row;
+                }
+                out.push(row);
+                continue;
+            }
             let Some(b) = node.values.first().and_then(Val::as_typed::<Built>) else {
                 let issue = scratch
                     .report
@@ -215,8 +260,16 @@ impl Hub<'_> {
             let mut row = json!({"id": id, "kind": b.kind, "declared": {"vertices": declared}, "key": node.key,
                                  "stack": b.rows.iter().map(stack::Row::to_json).collect::<Vec<_>>()});
             if let Some(m) = mesh {
-                if let (Value::Object(r), Value::Object(mj)) = (&mut row, m.to_json()) {
+                if let (Value::Object(r), Value::Object(mut mj)) = (&mut row, m.to_json()) {
+                    // A sweep's or a tube's rings stand on the row itself (#441).
+                    let rings = mj
+                        .get_mut("outputs")
+                        .and_then(Value::as_object_mut)
+                        .and_then(|o| o.remove("rings"));
                     r.extend(mj);
+                    if let Some(rings) = rings {
+                        r.insert("rings".into(), rings);
+                    }
                 }
             }
             out.push(row);
