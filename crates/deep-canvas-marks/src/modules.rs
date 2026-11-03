@@ -54,7 +54,10 @@ fn manifest(name: &str, deps: &[&str]) -> Manifest {
         feature: name.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -884,6 +887,32 @@ pub fn data() -> Module {
 }
 
 fn register_data(r: &mut Registrar) {
+    // #397: the data module's columns as the first entries of the core's column view (Array and
+    // table: column view): data, const and table columns, each pure in t, so a seek equals a
+    // clean evaluation and no rows change between steps.
+    let rows = json!([1.5, 2.5]);
+    let fixture = json!({"frames": [rows, rows], "changed": [[], []],
+                         "seeks": [{"from": 1, "to": 0, "rows": rows}]});
+    for (name, form, types) in [
+        (
+            "data.data@1",
+            "{dtype, len, data}",
+            json!(["f64", "f32", "i64", "i32", "u32", "u16", "u8", "bool", "role", "str"]),
+        ),
+        ("data.const@1", "{const}", json!(["f64", "bool", "str"])),
+        (
+            "data.table@1",
+            "{from, column}",
+            json!(["i64", "f64", "str"]),
+        ),
+    ] {
+        r.entry(
+            deep_canvas::columns::REGISTRY,
+            name,
+            json!({"form": form, "types": types, "fixture": fixture}),
+            "R2",
+        );
+    }
     r.array("data.scale", "scale", "item", "geometry", "items");
     r.operator("scale", "items", &["core.fields"], &["data.scale"])
         .applies(is_scale)

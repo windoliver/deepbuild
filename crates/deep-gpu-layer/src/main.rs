@@ -17,6 +17,7 @@ mod compile;
 mod conformance;
 mod effects;
 mod fixtures;
+mod flat;
 mod frames;
 mod golden;
 mod guard;

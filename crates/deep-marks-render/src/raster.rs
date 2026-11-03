@@ -193,8 +193,11 @@ pub(crate) struct Painter<'a, C> {
     scopes: Scopes,
     pub(crate) zoom: f64,
     spans_apart: bool,
-    /// Each text@1 item drawn: what it shows and its glyphs.
+    /// Each text@1 item drawn, and each row of a text mark set (`<set>#<row key>`, #397): what
+    /// it shows and its glyphs.
     texts: Map<String, Value>,
+    /// The text mark sets whose rows `texts` reports.
+    text_sets: Vec<String>,
 }
 
 /// The planted run: each span the runs cut the text into shaped on its own, the pieces set side
@@ -253,6 +256,7 @@ impl<C: Glyphs> Painter<'_, C> {
             zoom: 1.0,
             spans_apart: false,
             texts: Map::new(),
+            text_sets: Vec::new(),
         }
     }
 
@@ -370,8 +374,11 @@ impl<C: Glyphs> Painter<'_, C> {
                     deep_text_gpui::shape(&label)
                 };
                 let glyphs = self.glyphs(&shaped, *origin, (role.as_deref(), *color), runs);
-                // A text@1 item's own text; a mark set's or an axis's labels are `<id>#…`.
-                if !item.contains('#') {
+                // A text@1 item's own text, and a text mark set's rows; an axis's labels aren't.
+                let row_of_set = item
+                    .split_once('#')
+                    .is_some_and(|(set, _)| self.text_sets.iter().any(|s| s == set));
+                if !item.contains('#') || row_of_set {
                     self.texts
                         .insert(item.clone(), json!({"shown": spec.text, "glyphs": glyphs}));
                 }
@@ -511,6 +518,15 @@ fn draw(req: &Request) -> Result<Value, Value> {
         zoom,
         spans_apart: req.spans_apart,
         texts: Map::new(),
+        text_sets: req
+            .doc
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(_, i)| i["kind"] == "marks@1" && i["params"]["mark"] == "text")
+            .map(|(id, _)| id.clone())
+            .collect(),
     };
     p.ctx.set_paint(solid(frame.ground));
     p.ctx
