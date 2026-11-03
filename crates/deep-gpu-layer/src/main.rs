@@ -38,6 +38,7 @@ mod status;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod timing;
+mod tone;
 mod validation;
 mod view3d;
 mod window;
@@ -149,6 +150,8 @@ pub enum Planted {
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
+    /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
+    DirtOverlay,
 }
 
 impl Planted {
@@ -223,6 +226,7 @@ impl Planted {
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
+            "dirt_overlay" => Planted::DirtOverlay,
             _ => return None,
         })
     }
@@ -420,6 +424,7 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),

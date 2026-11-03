@@ -162,13 +162,17 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const payload = request.payload;
   const moments = MOMENTS[name];
   const event = moments?.[request.event] ?? request.event;
-  // Who is calling: a payload that carries Cursor's own fields is Cursor's, whatever command ran it.
-  const agent = request.agent === 'claude-code' && typeof payload.cursor_version === 'string' ? 'cursor' : request.agent;
+  // Who is calling: a payload that carries another tool's own fields is that tool's, whatever command or variable
+  // named it; a name its fields contradict is recorded as a reading (#993), and a tool that isn't Claude Code is kept.
+  const said = name === 'claude' ? payloadCaller(payload) : undefined;
+  const named = request.agent === 'claude' ? 'claude-code' : request.agent;
+  const agent = said && said !== 'claude-code' ? said : request.agent;
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
     id: request.id, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
+  if (said && said !== named) meta.caller = `deep-hook named this hook's caller ${named}, but its payload's own fields say ${said} (${said === 'cursor' ? 'cursor_version' : `transcript_path ${str(payload.transcript_path)}`}); it is recorded under ${agent}.`;
   if (str(payload.tool_use_id)) meta.toolUse = str(payload.tool_use_id);
   if (request.late === true) meta.late = { matched: request.matched };
   if (request.notes) meta.notes = request.notes;
@@ -376,5 +380,17 @@ export function loopFact(name: string, tool: string, event: string, payload: Jso
   }
   const stop = isObj(facts.stops) ? facts.stops[tool] : undefined;
   if (isObj(stop)) return { stopped: String(at(payload, String(stop.id)) ?? '') };
+  return undefined;
+}
+
+/**
+ * The tool a Claude-shaped payload's own fields name (#993): Cursor's carries cursor_version, Grok's transcript sits
+ * under ~/.grok, Claude Code's under its projects folder. Undefined when they name none.
+ */
+function payloadCaller(payload: Record<string, unknown>): string | undefined {
+  if (typeof payload.cursor_version === 'string') return 'cursor';
+  const transcript = str(payload.transcript_path);
+  if (/[\\/]\.grok[\\/]/.test(transcript)) return 'grok';
+  if (/[\\/]\.claude[\\/]projects[\\/]/.test(transcript)) return 'claude-code';
   return undefined;
 }

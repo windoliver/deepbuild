@@ -4,15 +4,20 @@
 //! one and moves to the `log_pos` the refetch reflects, and redoes its reads when the hub's start ID is new,
 //! since frames it got before a power cut may be gone. A consumer cut off with `fell_behind` resumes from its
 //! last `log_pos`.
+//!
+//! Issue #1141: it keeps what the app shows, the record folded as events arrive ([`Table`]), not the events: a view
+//! that needs the record's history reads it from the hub when it opens ([`history`]).
 
+use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
 use crate::hub::{HubClient, HubError};
-use crate::states::closes;
+use crate::states::{closes, handle, Table};
 
 /// The kinds that close an ask, and the outcome the inbox shows for each, as the asks core names them.
 const CLOSING: [(&str, &str); 7] = [
@@ -26,6 +31,8 @@ const CLOSING: [(&str, &str); 7] = [
 ];
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
+/// The newest events a view keeps.
+const TAIL: usize = 256;
 
 /// The record as of one start ID and one `log_pos`.
 #[derive(Clone, Debug, Default)]
@@ -36,11 +43,53 @@ pub struct View {
     pub log_pos: u64,
     /// The inbox read's rows, with a row for each ask created since and each close applied.
     pub inbox: Vec<Value>,
-    /// Each event applied since the reads, in `log_pos` order, each once.
-    pub events: Vec<Value>,
+    /// The events applied since the reads, folded: what the views and the notifier read, through [`View::table`].
+    table: Table,
+    /// The planted walker's every event.
+    #[cfg(feature = "plant-walks-events")]
+    all: Vec<Value>,
+    /// The newest events applied since the reads, at most [`TAIL`], in `log_pos` order, each once.
+    pub events: VecDeque<Value>,
+    /// The events the notifier reads, applied since it last took them: each that opens an ask or sends a notice.
+    pub unseen: Vec<Value>,
 }
 
 impl View {
+    /// The record folded, as every view and the notifier read it.
+    #[cfg(not(feature = "plant-walks-events"))]
+    pub fn table(&self) -> Cow<'_, Table> {
+        Cow::Borrowed(&self.table)
+    }
+
+    /// The planted walker reads the record by walking every event it applied.
+    #[cfg(feature = "plant-walks-events")]
+    pub fn table(&self) -> Cow<'_, Table> {
+        let mut table = Table::default();
+        for event in &self.all {
+            table.apply(event);
+        }
+        Cow::Owned(table)
+    }
+
+    /// The open asks' handles, oldest first; of one session when `session` names one.
+    pub fn open_asks(&self, session: Option<&str>) -> Vec<String> {
+        self.table()
+            .open_asks(session)
+            .into_iter()
+            .map(handle)
+            .collect()
+    }
+
+    /// When the open ask `ask`, a handle, defaults.
+    pub fn deadline(&self, ask: &str) -> Option<u64> {
+        let table = self.table();
+        let created = table
+            .open_asks(None)
+            .into_iter()
+            .find(|open| handle(open) == ask)?;
+        table.deadline(created)
+    }
+
     /// Applies one event the view doesn't have yet.
     pub fn apply(&mut self, event: Value) {
         self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
@@ -75,7 +124,16 @@ impl View {
                 row["outcome"] = json!("unanswered");
             }
         }
-        self.events.push(event);
+        self.table.apply(&event);
+        #[cfg(feature = "plant-walks-events")]
+        self.all.push(event.clone());
+        if crate::notify::reads(&event) {
+            self.unseen.push(event.clone());
+        }
+        if self.events.len() == TAIL {
+            self.events.pop_front();
+        }
+        self.events.push_back(event);
     }
 }
 
@@ -155,7 +213,7 @@ impl RecordReader {
                 start,
                 log_pos: inbox["log_pos"].as_u64().unwrap_or(0),
                 inbox: inbox["asks"].as_array().cloned().unwrap_or_default(),
-                events: Vec::new(),
+                ..View::default()
             };
         }
         client.call("stream.subscribe", json!({ "after": self.view.log_pos }))?;
@@ -214,12 +272,37 @@ impl RecordReader {
             }
         }
     }
+
+    /// The record's events up to the view's `log_pos`, oldest first, read from the hub a page at a time.
+    fn history(&mut self) -> Result<Vec<Value>, HubError> {
+        if self.client.is_none() {
+            self.connect()?;
+        }
+        let client = self.client.as_mut().expect("connected");
+        let (mut events, mut after) = (Vec::new(), 0);
+        loop {
+            let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
+            let read = page["events"].as_array().cloned().unwrap_or_default();
+            let full = read.len() == PAGE;
+            for event in read {
+                after = event["log_pos"].as_u64().unwrap_or(after);
+                if after > self.view.log_pos {
+                    return Ok(events);
+                }
+                events.push(event);
+            }
+            if !full {
+                return Ok(events);
+            }
+        }
+    }
 }
 
-/// Where the one reader reads: the hub's socket in the app, or a record the replica feeds event by event.
+/// Where the one reader reads: the hub's socket in the app, or a record the replica feeds event by event, which it
+/// holds whole.
 enum Source {
     Hub(Box<RecordReader>),
-    Local(View),
+    Local(Box<View>, Vec<Value>),
 }
 
 thread_local! {
@@ -234,18 +317,20 @@ pub fn install(reader: RecordReader) {
 /// Makes a record held in memory the one reader's, its events applied in order: the replica's record.
 pub fn install_local(events: impl IntoIterator<Item = Value>) {
     let mut view = View::default();
-    for event in events {
-        view.apply(event);
+    let record: Vec<Value> = events.into_iter().collect();
+    for event in &record {
+        view.apply(event.clone());
     }
-    READER.with(|cell| *cell.borrow_mut() = Some(Source::Local(view)));
+    READER.with(|cell| *cell.borrow_mut() = Some(Source::Local(Box::new(view), record)));
 }
 
 /// Delivers one event to a record held in memory, as the hub's stream would.
 pub fn feed(event: Value) {
     READER.with(|cell| {
-        if let Some(Source::Local(view)) = cell.borrow_mut().as_mut() {
+        if let Some(Source::Local(view, record)) = cell.borrow_mut().as_mut() {
             if event["log_pos"].as_u64().unwrap_or(0) > view.log_pos {
-                view.apply(event);
+                view.apply(event.clone());
+                record.push(event);
             }
         }
     });
@@ -264,8 +349,27 @@ pub fn with_view<R>(read: impl FnOnce(&View) -> R) -> Option<R> {
     READER.with(|cell| {
         cell.borrow().as_ref().map(|source| match source {
             Source::Hub(reader) => read(&reader.view),
-            Source::Local(view) => read(view),
+            Source::Local(view, _) => read(view),
         })
+    })
+}
+
+/// Takes the events the notifier reads that the one reader applied since they were last taken.
+pub fn take_unseen() -> Vec<Value> {
+    READER.with(|cell| match cell.borrow_mut().as_mut() {
+        Some(Source::Hub(reader)) => std::mem::take(&mut reader.view.unseen),
+        Some(Source::Local(view, _)) => std::mem::take(&mut view.unseen),
+        None => Vec::new(),
+    })
+}
+
+/// The record's events up to the one reader's `log_pos`, oldest first, for a view that needs its history: read from
+/// the hub when the view asks, or the record held in memory. Empty when the hub can't be read.
+pub fn history() -> Vec<Value> {
+    READER.with(|cell| match cell.borrow_mut().as_mut() {
+        Some(Source::Hub(reader)) => reader.history().unwrap_or_default(),
+        Some(Source::Local(_, record)) => record.clone(),
+        None => Vec::new(),
     })
 }
 
