@@ -16,7 +16,7 @@ import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, t
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
-import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type ViewShown } from '@deepbuild/extension-host';
+import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ViewShown } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
@@ -37,18 +37,19 @@ import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
+import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { GateRunner, type ClaimCheck } from './gate-runner.js';
+import { GateRunner, type ClaimCheck, type DefinitionState } from './gate-runner.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
+import { closesIssue, Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
@@ -325,6 +326,14 @@ export class Core {
   private readonly lastMessage = new Map<string, string>();
   /** What each claim's stop waits on: its fast lane, and what the hold reports of it. */
   private readonly lanes = new Map<string, Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; findings: string[] }>>();
+  /** The project trust decision the core holds (#348), which the done gate reads for a repo's spec checks (#322). */
+  private trust!: ProjectTrust;
+  /** Each claim's requirements by handle, with the ID and text a send-back names (#322). */
+  private readonly claimRequirements = new Map<string, Map<string, { id: string; text: string }>>();
+  /** Claims in an untrusted repo whose spec names checks (#322): watch-only, so none of them passes. */
+  private readonly watchOnlyClaims = new Set<string>();
+  /** Sessions told once that their repo's spec checks are watch-only until the project is trusted. */
+  private readonly toldUntrusted = new Set<string>();
   /** Staging for destructive commands (#347): a delete whose reach can't be worked out, staged copy-on-write or asked about. */
   private readonly staging: Staging;
   private readonly devices: Devices;
@@ -502,7 +511,11 @@ export class Core {
     });
     this.tasks = new AskTasks({
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
+      github: options.github, forge: options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
+      reading: (session, agent, text) => this.appendReading(session, agent, text),
+      // The window reading of the account the session's agent runs on, in the hub's own home (#322).
+      atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
       pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runClaim(r),
       invalid: (claim, commit, reason) => this.invalid(claim, commit, reason),
     });
@@ -677,7 +690,7 @@ export class Core {
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
-    const trust = await openTrust({ record: this.record, now: this.now });
+    const trust = this.trust = await openTrust({ record: this.record, now: this.now });
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
@@ -1114,7 +1127,7 @@ export class Core {
     // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record; the
     // agent's final message is what the claim cites, for the validity gate (#29).
     if (claimed) this.lastMessage.set(meta.session, meta.fields?.last_assistant_message ?? '');
-    if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
+    if (claimed) live.claiming = settled.then(async () => this.tasks.claim(meta.session, meta.agent, meta.cwd, { early: !(live.claim && live.claimTurn === live.turn && !live.workedSinceClaim), task: await this.turnTaskOf(meta.session, live) })).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
     if (session && call) {
@@ -2401,6 +2414,12 @@ export class Core {
   /** A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321). */
   async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
     await this.ready;
+    // A pull request says Closes only when every requirement of the issue's task passed (#322; design: At the claim).
+    if (call.pr && call.command && meta.session && !FOREIGN.has(meta.agent)) {
+      const deny = await this.closesGate(meta.session, call.command).catch(() => undefined);
+      if (deny) return { deny };
+      if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined && !call.screen && !call.resend) return {};
+    }
     // Computer use stays on what the session leases (#332), so your own screen and browser are never touched.
     if (call.screen && meta.call) {
       const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
@@ -2430,6 +2449,20 @@ export class Core {
     return about ? this.holds.decide(meta, about) : {};
   }
 
+  /**
+   * Why a `gh pr create` whose body says `Closes #n` is refused (#322): a requirement of the issue's open task that no
+   * verdict has passed keeps the PR at "Part of", and the refusal lists what's left; undefined when it may run.
+   */
+  private async closesGate(session: string, command: string): Promise<string | undefined> {
+    const issue = closesIssue(command);
+    if (issue === undefined) return undefined;
+    const open = await this.tasks.unproven(session, issue);
+    if (!open) return undefined;
+    if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
+    if (!open.left.length) return undefined;
+    const left = open.left.map((q) => `${q.id} (${q.text})`).join('; ');
+    return `DeepBuild blocked this: the pull request can't say Closes #${issue} while a requirement of ${open.task_ref} is unproven. Say Part of #${issue} instead, and list what's left: ${left}.`;
+  }
   /** The session is on `display` once its switch ran, if that is a screen it leases. */
   private async switched(session: string, display: string): Promise<void> {
     const leased = (await this.leases.leases()).some((v) => v.lease.holder === `mcp:${session}` && v.lease.resource.kind === 'screen' && v.lease.resource.key === display);
@@ -2790,9 +2823,16 @@ export class Core {
     if (!ran) return undefined;
     // A send-back is a FAIL's (or a BLOCKED's cause): an INVALID names a check or a definition the agent can't change,
     // so it is recorded for a person, never sent back.
-    const failed = this.gate.standing(claim).filter((c) => c.lane === 'fast' && (c.result === 'FAIL' || c.result === 'BLOCKED'));
+    // A definition still to lock, or held by a cause outside the code, is never a send-back (#322).
+    const failed = this.gate.standing(claim).filter((c) => c.lane === 'fast' && (c.result === 'FAIL' || (c.result === 'BLOCKED' && c.holds)));
+    // The message names the missing proof precisely (#322): each requirement left unproven, by its ID and text, with
+    // the check that fails it, or the spec's check by name; never just "tests failed".
+    const named = this.claimRequirements.get(claim);
     const sendBack = ran.findings.length ? `DeepBuild sent this claim back before any check ran:\n${ran.findings.map((f) => `- ${f}`).join('\n')}`
-      : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => `${c.check} ${c.result}`).join(', ')}.` : undefined;
+      : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => {
+        const reqs = c.covers.map((req) => named?.get(req)).filter((q): q is { id: string; text: string } => q !== undefined);
+        return reqs.length ? `${reqs.map((q) => `${q.id} ("${q.text}")`).join(' and ')} ${reqs.length === 1 ? 'is' : 'are'} unproven: its check ${c.check} ${c.result}` : `the repo's spec check ${c.check} ${c.result}`;
+      }).join('; ')}.` : undefined;
     return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, ...(sendBack ? { sendBack } : {}) };
   }
   /**
@@ -3052,9 +3092,7 @@ export class Core {
     const commit = live.head ?? (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
     const ts = this.now();
     const id = ulid(ts);
-    // The task the prompt that opened the turn named, kept at the prompt; after a restart, the newest a person named.
-    const [prompt] = live.turnTask ? [] : (await this.record.raw(`SELECT json_extract(data, '$.tasks[0]') AS task FROM events WHERE session_id = ? AND kind = 'user.ask' AND json_extract(data, '$.from') = 'person' AND json_extract(data, '$.tasks[0]') IS NOT NULL ORDER BY log_pos DESC LIMIT 1`, [meta.session])) as { task: string | null }[];
-    const task_ref = live.turnTask ?? prompt?.task ?? `session:${letters(meta.session)}#0`;
+    const task_ref = await this.turnTaskOf(meta.session, live);
     const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [meta.session, task_ref])) as { n: number }[];
     await this.append(this.connection('core', { session: meta.session, agent: live.agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
     this.claimed(meta.session, `claim:${id}`);
@@ -3062,6 +3100,11 @@ export class Core {
     // recorded again after them, or an unclean restart would read the idle session as active and its claim as lost.
     if (live.state === 'finished' || live.state === 'failed') await this.attention(meta.session, live.agent, live.state);
     return live;
+  }
+  /** The turn's task: the one the prompt that opened the turn named, kept at the prompt; after a restart, the newest a person named; else the session's own. */
+  private async turnTaskOf(session: string, live: Live): Promise<string> {
+    const [prompt] = live.turnTask ? [] : (await this.record.raw(`SELECT json_extract(data, '$.tasks[0]') AS task FROM events WHERE session_id = ? AND kind = 'user.ask' AND json_extract(data, '$.from') = 'person' AND json_extract(data, '$.tasks[0]') IS NOT NULL ORDER BY log_pos DESC LIMIT 1`, [session])) as { task: string | null }[];
+    return live.turnTask ?? prompt?.task ?? `session:${letters(session)}#0`;
   }
   /**
    * A session whose turn this hub's restart interrupted, with work the stop rule would read as a claim, is judged
@@ -3113,7 +3156,7 @@ export class Core {
     if (read.loop) data.loop = read.loop;
     live.looping = read.loop?.state === 'looping' || live.looping;
     // A session's newest windows are what the runner admits the account's Codex jobs by.
-    if (read.limits && read.account) await this.runner.report({ agent: 'codex', account: read.account, rate_limits: read.limits } as unknown as WindowReport).catch(() => undefined);
+    if (read.limits && read.account) await this.runner.report({ agent: 'codex', account: read.account, rate_limits: read.limits } as unknown as WindowReport).then(() => this.tasks.windowChanged()).catch(() => undefined);
     const readings = read.version && !loopsCovered(read.version) && coveredBy('codex', read.version) ? [uncoveredLoops(read.version)] : read.readings;
     const before = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE session_id = '${sql(meta.session)}' AND kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Codex %: %' ORDER BY log_pos`)) as { reading: string }[];
     const standing = standingReadings(before.map((b) => b.reading));
@@ -3637,7 +3680,7 @@ export class Core {
           .catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
         return { reported: true };
       }
-      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => ({ reported: true }));
+      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); return { reported: true }; });
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
   }
@@ -4739,12 +4782,16 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms'>[] }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
     const at = this.now();
+    this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     const lane = (async () => {
-      const findings = validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
+      // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
+      const findings = r.definition === 'pending' ? [] : validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.now(), findings };
+      // The planted wrong program runs no check before the definition locks, the repo's spec included.
+      if (r.definition !== 'locked' && this.options.plant === 'lock-before-any-check') return { fast: [], slow: [], snapshot: r.commit, readyAt: this.now(), findings };
       // Every claim check runs through the command check kind (#30): hermetic, in the platform sandbox, with no network
       // and no credentials, whatever the head's trust, which is what an untrusted head gets (#29) and more.
       // Each check as the gate judges it: the command its run is (the approved file, run by the shell in the claim's
@@ -4754,17 +4801,62 @@ export class Core {
       const depth = (d: string): typeof DEPTHS[number] => (DEPTHS as readonly string[]).includes(d) ? d as typeof DEPTHS[number] : 'unit';
       const oracle = (o: string): 'code' | 'model' | 'person' => (o === 'model' || o === 'person' ? o : 'code');
       const requirements = r.requirements.map((q) => ({ req: q.req, depth: depth(q.depth), oracle: oracle(q.oracle), on_base: q.on_base }));
-      const checks = r.checks.map((c) => {
+      const checks: ClaimCheck[] = r.checks.map((c) => {
         const covered = r.requirements.filter((q) => q.check === c.check);
         const deepest = covered.map((q) => DEPTHS.indexOf(depth(q.depth))).reduce((a, b) => Math.max(a, b), 0);
-        return { ...c, command: `sh '${c.check.replaceAll("'", "'\\''")}'`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]! };
+        return { ...c, command: c.command ?? `sh '${c.check.replaceAll("'", "'\\''")}'`, covers: covered.map((q) => q.req), depth: DEPTHS[deepest]!, source: 'definition' as const };
       });
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at });
+      // The repo's spec checks run beside the definition's (#322): in a project the core's trust decision marks
+      // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
+      // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
+      if (!r.joins) {
+        const spec = this.specChecks(r.cwd);
+        if (spec.length && await this.projectTrusted(r.cwd)) checks.push(...spec);
+        else if (spec.length) {
+          this.watchOnlyClaims.add(r.claim);
+          if (!this.toldUntrusted.has(r.session)) {
+            this.toldUntrusted.add(r.session);
+            await this.appendReading(r.session, this.live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${spec.map((c) => c.check).join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+          }
+        }
+      }
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, ...(r.joins ? { joins: true } : {}) });
       await this.judged(r.claim);
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
     lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
+  }
+  /**
+   * The repo's spec checks (#322): each check the spec's `done` claim names (or, with no claims block, every check),
+   * as a command run in the claim's checkout, the repo's own, covering the claim as a whole.
+   */
+  private specChecks(cwd: string): ClaimCheck[] {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return []; }
+    const checks = this.checksOf(cwd);
+    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys()];
+    return done.flatMap((name) => {
+      const check = checks.get(name);
+      if (!check) return [];
+      const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+      return [{ check: name, approved: null, command: check.run, covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
+    });
+  }
+  /**
+   * Whether a project is trusted (#322; design: spec-draft's row): by the one decision the core holds (#348), or, so
+   * a repo trusted in an agent needs no second answer, by Claude Code's workspace trust or Codex's trusted projects.
+   */
+  private async projectTrusted(cwd: string): Promise<boolean> {
+    if (await this.trust.trusted(cwd).catch(() => false)) return true;
+    let real = cwd;
+    try { real = realpathSync(cwd); } catch { /* as given */ }
+    try {
+      const user = JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf8')) as Obj;
+      const projects = isObj(user.projects) ? user.projects : {};
+      for (const key of [cwd, real]) { const p = projects[key]; if (isObj(p) && p.hasTrustDialogAccepted === true) return true; }
+    } catch { /* no Claude Code settings */ }
+    return codexTrusted([cwd, real]);
   }
   /** What this session read and ran, from its own tool calls in the record: what a claim's cites must name. */
   private async sessionLog(session: string): Promise<SessionLog> {
@@ -4793,8 +4885,10 @@ export class Core {
    * pending results land. The line in the chat and the receipt read it from the record.
    */
   private async judged(claim: string): Promise<void> {
-    const v = this.gate.verdictOf(claim);
+    let v = this.gate.verdictOf(claim);
     if (!v || v.outcome === 'pending') return;
+    // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
+    if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
     try {
@@ -4811,12 +4905,16 @@ export class Core {
    * through host@1, whatever the head's trust; an untrusted head gets no hosts and no credentials, which no drafted
    * check has anyway.
    */
-  private async runApproved(r: { claim: string; check: string; approved: string; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[] }): Promise<string> {
-    const script = join(r.cwd, r.check);
-    if (this.options.plant !== 'runs-disk-bytes') {
-      mkdirSync(dirname(script), { recursive: true });
-      writeFileSync(`${script}.tmp`, await this.store.read(r.approved), { mode: 0o500 });
-      renameSync(`${script}.tmp`, script);
+  private async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[] }): Promise<string> {
+    // A spec check is a command alone: nothing of it is written. A drafted check and each expected output it
+    // references are written from their approved bytes (#322).
+    if (r.approved !== null && this.options.plant !== 'runs-disk-bytes') {
+      for (const { path, sha256 } of [{ path: r.check, sha256: r.approved }, ...(r.references ?? [])]) {
+        const file = join(r.cwd, path);
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(`${file}.tmp`, await this.store.read(sha256), { mode: path === r.check ? 0o500 : 0o400 });
+        renameSync(`${file}.tmp`, file);
+      }
     }
     // A stand-in's port (#874) is the one host it may reach, and its origin the one variable it gets; a command's stand-in is found by name.
     const grant: Grant = r.hosts?.length ? { ...RUN_AS_YOU, hosts: r.hosts } : RUN_AS_YOU;
