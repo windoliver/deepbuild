@@ -68,7 +68,13 @@ fn kind_of(item: &Value) -> &str {
 
 fn is_builder(_: &Value, _: &str, item: &Value) -> bool {
     let k = kind_of(item);
-    builders::KINDS.contains(&k) || k == "curve@1"
+    (builders::KINDS.contains(&k) || k == "curve@1") && !stack::reads_time_by_kind(item)
+}
+
+/// A builder whose stack holds a modifier that reads time by its nature (sway, bob, wave,
+/// spin): its node reads `t`, so it alone rebuilds while playing.
+fn is_live_builder(_: &Value, _: &str, item: &Value) -> bool {
+    builders::KINDS.contains(&kind_of(item)) && stack::reads_time_by_kind(item)
 }
 
 fn is_mark(_: &Value, _: &str, item: &Value) -> bool {
@@ -140,6 +146,16 @@ pub fn operators(
         .applies(applies)
         .keyed(keyed)
         .run(run_scene3d);
+        r.array("scene3d.built_live", "built", "item", "geometry", "items");
+        r.operator(
+            "build_live",
+            "items",
+            &["self", "refs", "motion.fields", "t"],
+            &["scene3d.built_live"],
+        )
+        .applies(is_live_builder)
+        .keyed(keyed)
+        .run(run_scene3d_live);
         r.operator(
             "mark",
             "items",
@@ -172,7 +188,8 @@ pub fn operators(
 
 /// One of scene3d's items with params of a class other than geometry.
 fn scene3d_shades(d: &Value, i: &str, item: &Value) -> bool {
-    (is_builder(d, i, item) || is_mark(d, i, item)) && has_shading(d, i, item)
+    (is_builder(d, i, item) || is_live_builder(d, i, item) || is_mark(d, i, item))
+        && has_shading(d, i, item)
 }
 
 /// scene3d's builders and curve: their applies and keys.
@@ -193,8 +210,14 @@ fn fault(id: &str, path: String) -> OpError {
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
-/// A builder's mesh and stack, or a curve's samples.
-pub fn built(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Result<Built, String> {
+/// A builder's mesh and stack at `t` seconds, or a curve's samples.
+pub fn built(
+    doc: &Value,
+    id: &str,
+    item: &Value,
+    planted: Option<&str>,
+    t: f64,
+) -> Result<Built, String> {
     let kind = kind_of(item).to_string();
     let params = item.get("params").cloned().unwrap_or(json!({}));
     let spec = spec_of(&kind).ok_or("kind")?;
@@ -212,9 +235,11 @@ pub fn built(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Resu
         doc,
         plants: planted.and_then(Plants::named).unwrap_or_default(),
     };
-    let declared = stack::estimate(builders::estimate(&kind, &params, &ctx)?, item)?;
+    let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
-    let (last, rows) = stack::apply(mesh.clone(), item, doc, id)?;
+    let (last, rows) = stack::apply(mesh.clone(), item, doc, id, t)?;
+    let full = || -> Result<usize, String> { Ok(last.positions.len()) };
+    let declared = stack::estimate(counts, item, &full)?;
     Ok(Built {
         kind,
         built: Some(mesh),
@@ -230,8 +255,17 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or_default().to_string();
     let item = item_at(v)?;
     let doc = v.document()?;
-    let out = built(doc, &id, &item, v.planted()).map_err(|p| fault(&id, p))?;
+    let out = built(doc, &id, &item, v.planted(), 0.0).map_err(|p| fault(&id, p))?;
     v.write("scene3d.built", Val::typed(out))
+}
+
+fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
+    let id = v.id().unwrap_or_default().to_string();
+    let t = v.t()? as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    let item = item_at(v)?;
+    let doc = v.document()?;
+    let out = built(doc, &id, &item, v.planted(), t).map_err(|p| fault(&id, p))?;
+    v.write("scene3d.built_live", Val::typed(out))
 }
 
 fn run_building(v: &mut View<'_>) -> Result<(), OpError> {

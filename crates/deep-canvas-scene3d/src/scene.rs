@@ -775,13 +775,198 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
     })
 }
 
+/// A line's stroke modifiers at `seconds`, in its declared order (Modifier: `dash`, `outline`,
+/// `boil`, and `build` on a stroke): each edits the line's segments while its `while` holds
+/// (`drawing` while a build on the line is mid-progress, `moving` while a channel moves the
+/// line's `at`); an outline is a wider line drawn under it, which this returns.
+fn strokes(
+    map: &Map<String, Value>,
+    id: &str,
+    item: &Value,
+    line: &mut Line,
+    look: &Look3,
+    seconds: f64,
+) -> Result<Vec<Line>, Refused> {
+    let list = item.get("modifiers").and_then(Value::as_array);
+    let Some(list) = list.filter(|l| !l.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let on = |m: &Value| crate::stack::enabled(m);
+    let num = |m: &Value, f: &str, d: f64| -> Option<f64> {
+        match m.pointer(&format!("/params/{f}")) {
+            None => Some(d),
+            Some(v) => v.as_f64().filter(|x| x.is_finite()),
+        }
+    };
+    let drawing = list.iter().any(|m| {
+        on(m)
+            && m.get("kind").and_then(Value::as_str) == Some("mod.build@1")
+            && num(m, "to", 1.0)
+                .is_some_and(|to| to < 1.0 && to > num(m, "from", 0.0).unwrap_or(0.0))
+    });
+    let at = format!("items/{id}/at");
+    let moving = ["channels", "drivers"].iter().any(|section| {
+        map.get(*section)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .any(|(_, c)| {
+                c.get("target")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with(&at))
+            })
+    });
+    let mut under = Vec::new();
+    for (k, m) in list.iter().enumerate() {
+        let path = |f: &str| format!("items/{id}/modifiers/{k}/{f}");
+        let kind = m.get("kind").and_then(Value::as_str).unwrap_or("");
+        if !crate::stack::STROKE.contains(&kind) {
+            return refused("out_of_range", path("kind"));
+        }
+        if !on(m) {
+            continue;
+        }
+        let holds = match m.get("while").and_then(Value::as_str).unwrap_or("always") {
+            "always" => true,
+            "drawing" => drawing,
+            "moving" => moving,
+            _ => return refused("out_of_range", path("while")),
+        };
+        if !holds {
+            continue;
+        }
+        let bad = |f: &str| Refused {
+            code: "out_of_range",
+            path: path(&format!("params/{f}")),
+        };
+        match kind {
+            "mod.build@1" => {
+                let (from, to) = (
+                    num(m, "from", 0.0).ok_or_else(|| bad("from"))?,
+                    num(m, "to", 1.0).ok_or_else(|| bad("to"))?,
+                );
+                if !(0.0..=1.0).contains(&from) || !(0.0..=1.0).contains(&to) {
+                    return Err(bad("to"));
+                }
+                let total = stroke_length(&line.segments);
+                line.segments = cut(&line.segments, from.min(to) * total, from.max(to) * total);
+            }
+            "mod.dash@1" => {
+                let (dash, gap) = (
+                    num(m, "dash", 0.1).ok_or_else(|| bad("dash"))?,
+                    num(m, "gap", 0.05).ok_or_else(|| bad("gap"))?,
+                );
+                if dash <= 0.0 || gap < 0.0 {
+                    return Err(bad("dash"));
+                }
+                let total = stroke_length(&line.segments);
+                let mut out = Vec::new();
+                let mut s = 0.0;
+                while s < total && out.len() < 100_000 {
+                    out.extend(cut(&line.segments, s, (s + dash).min(total)));
+                    s += dash + gap;
+                }
+                line.segments = out;
+            }
+            "mod.boil@1" => {
+                let (amount, hz) = (
+                    num(m, "amount", 0.01).ok_or_else(|| bad("amount"))?,
+                    num(m, "hz", 8.0).ok_or_else(|| bad("hz"))?,
+                );
+                if hz <= 0.0 {
+                    return Err(bad("hz"));
+                }
+                // Stepped at hz: one draw per step, the same for every frame in it.
+                let step = (seconds * hz).floor() as i64 as u64;
+                let seed = crate::stack::seed_of(id, m);
+                let jitter = |p: Vec3, j: u64| -> Vec3 {
+                    let n = |axis: u64| {
+                        crate::stack::unit_noise(seed ^ step.wrapping_mul(0x9e37), 3 * j + axis)
+                    };
+                    [
+                        p[0] + amount * n(0),
+                        p[1] + amount * n(1),
+                        p[2] + amount * n(2),
+                    ]
+                };
+                for (j, seg) in line.segments.iter_mut().enumerate() {
+                    seg.a = jitter(seg.a, 2 * j as u64);
+                    seg.b = jitter(seg.b, 2 * j as u64 + 1);
+                }
+            }
+            "mod.outline@1" => {
+                let width = num(m, "width", 2.0)
+                    .filter(|w| *w > 0.0)
+                    .ok_or_else(|| bad("width"))?;
+                let role = m
+                    .pointer("/params/role")
+                    .and_then(Value::as_str)
+                    .unwrap_or("ground");
+                let Some(color) = look.role(role) else {
+                    return refused("ref_unresolved", path("params/role"));
+                };
+                let mut wide = line.clone();
+                for seg in &mut wide.segments {
+                    seg.wa += 2.0 * width;
+                    seg.wb += 2.0 * width;
+                }
+                wide.color = color;
+                under.push(wide);
+            }
+            _ => {}
+        }
+    }
+    Ok(under)
+}
+
+/// A stroke's length: its segments' in turn.
+fn stroke_length(segments: &[Segment]) -> f64 {
+    segments.iter().map(|s| dist(s.a, s.b)).sum()
+}
+
+fn dist(a: Vec3, b: Vec3) -> f64 {
+    sqrt(
+        (b[0] - a[0]) * (b[0] - a[0])
+            + (b[1] - a[1]) * (b[1] - a[1])
+            + (b[2] - a[2]) * (b[2] - a[2]),
+    )
+}
+
+/// The part of a stroke from `s0` to `s1` metres along it.
+fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
+    let lerp = |a: Vec3, b: Vec3, f: f64| {
+        [
+            a[0] + (b[0] - a[0]) * f,
+            a[1] + (b[1] - a[1]) * f,
+            a[2] + (b[2] - a[2]) * f,
+        ]
+    };
+    let mut out = Vec::new();
+    let mut at = 0.0;
+    for seg in segments {
+        let len = dist(seg.a, seg.b);
+        let (from, to) = ((s0 - at).max(0.0), (s1 - at).min(len));
+        if to > from && len > 0.0 {
+            let (fa, fb) = (from / len, to / len);
+            out.push(Segment {
+                a: lerp(seg.a, seg.b, fa),
+                b: lerp(seg.a, seg.b, fb),
+                wa: seg.wa + (seg.wb - seg.wa) * fa,
+                wb: seg.wa + (seg.wb - seg.wa) * fb,
+            });
+        }
+        at += len;
+    }
+    out
+}
+
 /// A builder's or building kind's mesh after its stack, or why it can't be built.
-fn mesh_of(doc: &Value, id: &str, item: &Value) -> Result<crate::geom::Mesh, Refused> {
+fn mesh_of(doc: &Value, id: &str, item: &Value, t: f64) -> Result<crate::geom::Mesh, Refused> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
-        crate::build::built(doc, id, item, None).map(|b| b.mesh.unwrap_or_default())
+        crate::build::built(doc, id, item, None, t).map(|b| b.mesh.unwrap_or_default())
     };
     built.map_err(|path| Refused {
         code: "out_of_range",
@@ -796,6 +981,7 @@ fn edge_line(
     id: &str,
     params: &Value,
     look: &Look3,
+    seconds: f64,
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let edges = &params["edges"];
@@ -816,7 +1002,7 @@ fn edge_line(
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
-    let mut mesh = mesh_of(doc, target, item)?;
+    let mut mesh = mesh_of(doc, target, item, seconds)?;
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
             .parts
@@ -1000,6 +1186,7 @@ pub(crate) fn evaluate_compiled(
 ) -> Result<Scene, Refused> {
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     let empty = Map::new();
     let doc_items = map
         .get("items")
@@ -1103,13 +1290,13 @@ pub(crate) fn evaluate_compiled(
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let l = edge_line(doc, &items, id, params, look)?;
+                    let l = edge_line(doc, &items, id, params, look, seconds)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
                 k if crate::builders::KINDS.contains(&k) || crate::building::KINDS.contains(&k) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let mesh = mesh_of(doc, id, item)?;
+                    let mesh = mesh_of(doc, id, item, seconds)?;
                     if mesh.triangles() == 0 {
                         continue;
                     }
@@ -1140,8 +1327,10 @@ pub(crate) fn evaluate_compiled(
                 }
                 "curve@1" => {}
                 "mark.line@1" => {
-                    let l = line(&items, id, params, look)?;
+                    let mut l = line(&items, id, params, look)?;
+                    let under = strokes(map, id, item, &mut l, look, seconds)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    layer.lines.extend(under);
                     layer.lines.push(l);
                 }
                 "mark.point@1" => {
@@ -1477,6 +1666,82 @@ pub fn has_3d(doc: &Value) -> bool {
                 .values()
                 .any(|i| i.get("kind").and_then(Value::as_str).is_some_and(is_3d))
         })
+}
+
+#[cfg(test)]
+mod stroke_tests {
+    use super::*;
+
+    fn doc(modifiers: Value) -> Value {
+        serde_json::json!({
+            "format": 1, "size": [320, 240], "camera": "cam",
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "perspective", "position": [0, 0, 5], "target": [0, 0, 0], "fov": 40}},
+                "l": {"id": "l", "kind": "mark.line@1", "order": "a1",
+                      "params": {"points": [[0, 0, 0], [2, 0, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}},
+                      "modifiers": modifiers}
+            }
+        })
+    }
+
+    fn lines(modifiers: Value, t: i64) -> Vec<Line> {
+        let look = crate::look::Look3::from_roles(
+            [
+                ("ink".to_string(), [0, 0, 0]),
+                ("ground".to_string(), [255, 255, 255]),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let mut labels = Labels::new();
+        let scene = evaluate(&doc(modifiers), t, &look, &mut labels).unwrap();
+        scene.layers.into_iter().flat_map(|l| l.lines).collect()
+    }
+
+    #[test]
+    fn dash_cuts_a_two_metre_stroke_into_its_dashes() {
+        let ls = lines(
+            serde_json::json!([{"kind": "mod.dash@1", "params": {"dash": 0.3, "gap": 0.2}}]),
+            0,
+        );
+        assert_eq!(ls.len(), 1);
+        // 0–0.3, 0.5–0.8, 1.0–1.3, 1.5–1.8.
+        assert_eq!(ls[0].segments.len(), 4);
+        assert!((stroke_length(&ls[0].segments) - 1.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn outline_draws_a_wider_line_under_it() {
+        let ls = lines(
+            serde_json::json!([{"kind": "mod.outline@1", "params": {"width": 1}}]),
+            0,
+        );
+        assert_eq!(ls.len(), 2);
+        assert_eq!(ls[0].segments[0].wa, 4.0);
+        assert_eq!(ls[1].segments[0].wa, 2.0);
+    }
+
+    #[test]
+    fn boil_steps_at_its_rate_and_while_drawing_waits_for_a_build() {
+        let fl = deep_canvas::camera::FLICKS_PER_SECOND;
+        let boil = serde_json::json!([{"kind": "mod.boil@1", "params": {"amount": 0.05, "hz": 2}}]);
+        let at = |t: i64| lines(boil.clone(), t)[0].segments[0].a;
+        assert_eq!(at(fl / 10), at(fl / 5), "one step holds for half a second");
+        assert_ne!(at(fl / 10), at(fl), "the next step draws again");
+        let waiting = serde_json::json!([
+            {"kind": "mod.build@1", "params": {"to": 1}},
+            {"kind": "mod.boil@1", "while": "drawing", "params": {"amount": 0.05, "hz": 2}}
+        ]);
+        assert_eq!(lines(waiting, fl / 10)[0].segments[0].a, [0.0, 0.0, 0.0]);
+        let mid = serde_json::json!([
+            {"kind": "mod.build@1", "params": {"to": 0.5}},
+            {"kind": "mod.boil@1", "while": "drawing", "params": {"amount": 0.05, "hz": 2}}
+        ]);
+        let ls = lines(mid, fl / 10);
+        assert_ne!(ls[0].segments[0].a, [0.0, 0.0, 0.0]);
+        assert!(stroke_length(&ls[0].segments) < 1.2);
+    }
 }
 
 #[cfg(test)]
