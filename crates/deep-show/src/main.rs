@@ -28,6 +28,7 @@ mod placement;
 mod planted;
 mod query;
 mod registries;
+mod sandbox;
 mod ring;
 mod scene3d;
 mod seams;
@@ -524,6 +525,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "registries" => return Some(Call::Registries),
+        "sandbox" => return Some(Call::Sandbox),
+        "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "resolve" if c.get("registry").is_some() => {
             return Some(Call::Lookup {
                 doc: doc()?,
@@ -1532,6 +1535,11 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-text",
     feature = "test-check-kind",
     feature = "test-leave-out-logic",
+    feature = "test-leave-out-sandbox",
+    feature = "test-mesh-item",
+    feature = "test-prog-registry",
+    feature = "test-sandbox-needs-logic",
+    feature = "test-sandbox-alt",
     feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
@@ -1571,6 +1579,24 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // Issue #398: SVG import and formulas, drawn as marks2d's items.
         out.push(deep_canvas_vector::module::module());
     }
+    // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
+    // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
+    // that requires logic.
+    if set >= BuildSet::Full {
+        out.push(if cfg!(feature = "test-sandbox-alt") {
+            deep_canvas_sandbox::module::implementation("sandbox.alt", "=49.0.1")
+        } else if cfg!(feature = "test-sandbox-needs-logic") {
+            sandbox_needs_logic()
+        } else {
+            deep_canvas_sandbox::module::module()
+        });
+    }
+    #[cfg(feature = "test-leave-out-sandbox")]
+    out.retain(|m| m.manifest.name != "sandbox");
+    #[cfg(feature = "test-mesh-item")]
+    out.push(deep_canvas_test_modules::sandbox::mesh());
+    #[cfg(feature = "test-prog-registry")]
+    out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
     out.extend(test_registries::modules());
@@ -1652,6 +1678,20 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out
 }
 
+/// #238: a sandbox module whose manifest declares logic among its required dependencies, which
+/// the seal refuses in a build without the logic module, naming both.
+pub fn sandbox_needs_logic() -> Module {
+    let mut m = deep_canvas_sandbox::module::module();
+    m.manifest.depends_on.insert(
+        "logic".into(),
+        deep_canvas::registry::Dependency {
+            range: deep_canvas::registry::Range::parse("^1").expect("a range"),
+            optional: false,
+        },
+    );
+    m
+}
+
 /// The seams' backends this build ships, each `seam.<seam>`, an implementation of its seam's
 /// interface the seal holds beside the build set's canvas modules (#185), and under
 /// `test-gpu-second-backend` a second GPU backend beside the first, which the seal refuses.
@@ -1690,11 +1730,21 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
     let mut out: Vec<_> = modules(BuildSet::Full)
         .into_iter()
         .filter(|m| !m.manifest.name.starts_with("test."))
-        .map(|m| deep_canvas::registry::Interface {
-            name: m.manifest.implements.clone(),
-            reference: m,
-            kit: kit.clone(),
-            behavior: None,
+        .map(|m| {
+            // #238: sandbox@1's reference is the shipped implementation, whichever a test build
+            // holds, and its kit holds sandbox@1's own part.
+            let interface = m.manifest.implements.clone();
+            let sandbox = interface == deep_canvas_sandbox::module::INTERFACE;
+            let mut parts = kit.clone();
+            if sandbox {
+                parts.push(kit::SANDBOX_PART.to_string());
+            }
+            deep_canvas::registry::Interface {
+                name: interface,
+                reference: if sandbox { deep_canvas_sandbox::module::module() } else { m },
+                kit: parts,
+                behavior: None,
+            }
         })
         .collect();
     for m in seam_backends()
@@ -2199,6 +2249,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         }
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
+        "digest_covers_pins" => Ok(StartPlanted::Seal(Fault::DigestCoversPins)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
         "starts_without_look" => Ok(StartPlanted::StartsWithoutLook),
         "shapes_on_ui_thread" => Ok(StartPlanted::ShapesOnUiThread),

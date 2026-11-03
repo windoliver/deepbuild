@@ -59,7 +59,15 @@ impl Hub<'_> {
                     .filter(|e| e.registry == r.def.name)
                     .cloned()
                     .collect();
-                r.to_json(&more)
+                let mut row = r.to_json(&more);
+                // #238: a program entry names its program and the bytes sandbox@1 rewrote it to.
+                for e in row["entries"].as_array_mut().into_iter().flatten() {
+                    let name = e["name"].as_str().unwrap_or_default().to_string();
+                    if let Some(p) = self.sandbox.programs.get(&(r.def.name.clone(), name)) {
+                        e["program"] = p.clone();
+                    }
+                }
+                row
             })
             .collect();
         if self.startup.listing != Some(Listing::WithoutSlots) {
