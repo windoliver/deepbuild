@@ -19,7 +19,6 @@ use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
 use deep_canvas_marks::scene::{Blend, Drawn, Scope};
-use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
     bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
@@ -452,7 +451,8 @@ impl<C: Glyphs> Painter<'_, C> {
     }
 }
 
-/// The document's evaluated items at `t`, each vector item drawn as marks2d's items (#398).
+/// The document's evaluated items at `t`, placed by their relations (#221), each vector item
+/// drawn as marks2d's items (#398).
 fn items_at(
     doc: &Map<String, Value>,
     t: i64,
@@ -460,9 +460,7 @@ fn items_at(
     write: deep_canvas_vector::Write,
 ) -> Result<Map<String, Value>, Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-    let mut state = program.state();
-    program.evaluate(t, eval::Validity::Full, &mut state);
-    let items = eval::items(doc, &program, &state);
+    let items = crate::place::evaluated(doc, &program, t, vectors)?;
     Ok(deep_canvas_vector::lower_items(&items, vectors, write))
 }
 
@@ -745,10 +743,14 @@ fn any_roles(value: &Value, palette: &mut scene::Palette) {
     }
 }
 
-/// An item's outline as subpaths of verbs and points in u, its offset applied.
-pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) -> Value {
+/// An item's outline at `t` as subpaths of verbs and points in u, its offset applied, with its
+/// box and box points (#221).
+pub fn geometry(doc: &Map<String, Value>, item: &str, t: i64, vectors: &crate::Vectors) -> Value {
     let run = || -> Result<Value, Value> {
-        let items = items_at(doc, 0, vectors, deep_canvas_vector::Write::Honest)?;
+        let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
+        let placed = crate::place::evaluated(doc, &program, t, vectors)?;
+        let items =
+            deep_canvas_vector::lower_items(&placed, vectors, deep_canvas_vector::Write::Honest);
         let mut palette = scene::Palette::new();
         palette.insert("ground".into(), [255, 255, 255]);
         any_roles(&Value::Object(doc.clone()), &mut palette);
@@ -772,8 +774,17 @@ pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) 
             subpaths.extend(subpaths_of(&verbs, by));
         }
         let mut answer = json!({"ok": true, "subpaths": subpaths});
+        // Its evaluated box at t, geometry only, and the nine box points on it (#221).
+        if let Some(b) = crate::place::box_of(doc, &placed, vectors, item) {
+            let points: Map<String, Value> = deep_canvas_marks::relations::POINTS
+                .iter()
+                .map(|(name, p)| (name.to_string(), json!(p.of(b))))
+                .collect();
+            answer["box"] = json!(b);
+            answer["points"] = Value::Object(points);
+        }
         // A vector's parts, each with its read-only id, source and box (#398).
-        if let (Some(found), Some(v)) = (vectors.get(item), doc_item(doc, item)) {
+        if let (Some(found), Some(v)) = (vectors.get(item), placed.get(item)) {
             answer["parts"] =
                 deep_canvas_vector::parts_json(v, found, |verbs| subpaths_of(verbs, [0.0, 0.0]));
         }
@@ -782,10 +793,6 @@ pub fn geometry(doc: &Map<String, Value>, item: &str, vectors: &crate::Vectors) 
     match run() {
         Ok(v) | Err(v) => v,
     }
-}
-
-fn doc_item<'a>(doc: &'a Map<String, Value>, id: &str) -> Option<&'a Value> {
-    doc.get("items")?.get(id)
 }
 
 /// Verbs moved by `by` as #373's sub-paths: one per move, its verb names, its points and whether

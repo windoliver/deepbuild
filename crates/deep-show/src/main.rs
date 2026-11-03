@@ -1795,7 +1795,10 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             }
         })
         .collect();
-    for m in seam_backends().into_iter().filter(|m| m.manifest.name.matches('.').count() == 1) {
+    for m in seam_backends()
+        .into_iter()
+        .filter(|m| m.manifest.name.matches('.').count() == 1)
+    {
         let seam = m.manifest.name.trim_start_matches("seam.").to_string();
         out.push(deep_canvas_seams::interface(&seam, m));
     }
@@ -1874,7 +1877,13 @@ pub fn shipped_manifests() -> Vec<deep_canvas::registry::Manifest> {
 fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, SealError> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let held = modules(build_set());
+    let mut held = modules(build_set());
+    // #221: marks2d with a planted relation solve, whose entries the constraint kit refuses.
+    if let Some(StartPlanted::Relations(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "marks2d") {
+            *m = deep_canvas_marks::modules::marks2d_planted(p);
+        }
+    }
     // Every build set holds text and look, since a status mark needs text's shaper and look's
     // status map; the planted seal lets a build without look start (#388).
     for name in deep_canvas::registry::CORE_MODULES {
@@ -1977,6 +1986,8 @@ enum StartPlanted {
     KitAdmitsAll(&'static str),
     /// #200: a wrong `deep://registries` listing.
     Listing(registries::Listing),
+    /// #221: marks2d's relations solved by a planted program.
+    Relations(deep_canvas_marks::relations::Planted),
     /// #412: a wrong deep_kinds listing, sheet, dump, diff or gallery.
     Kinds(kinds::Planted),
 }
@@ -2099,7 +2110,9 @@ mod tests {
         ];
         for (set, snapshot) in snapshots {
             let published = assemble(set, modules(set))
-                .seal().expect("the shipped set seals").schedule();
+                .seal()
+                .expect("the shipped set seals")
+                .schedule();
             let committed: Value = serde_json::from_str(snapshot).expect("the snapshot is JSON");
             assert_eq!(
                 published,
@@ -2331,6 +2344,12 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "card_ignores_unknown_occlusion" => Ok(StartPlanted::IgnoresUnknownOcclusion),
         "hashes_every_entry" => Ok(StartPlanted::Seal(Fault::HashesEveryEntry)),
         "takes_foreign_entry" => Ok(StartPlanted::Seal(Fault::TakesForeignEntry)),
+        "relation_iterates_to_convergence" => Ok(StartPlanted::Relations(
+            deep_canvas_marks::relations::Planted::Iterates,
+        )),
+        "relation_reads_previous_place" => Ok(StartPlanted::Relations(
+            deep_canvas_marks::relations::Planted::PreviousPlace,
+        )),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
