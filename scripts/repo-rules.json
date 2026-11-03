@@ -708,6 +708,22 @@
         }
       }
     },
+    "crates/deep-motion/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #489: the flick count the deep-motion binary's time fields are in."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #489: the motion module the deep-motion proof binary compiles and evaluates documents with; the binary moved out of the deep-canvas* crate because `eval`'s `timing` reads the clock."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #391: the deep-motion CLI's JSON lines; float_roundtrip, so a key value reads back to its exact f64. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-canvas-marks/Cargo.toml": {
       "dependencies": {
         "deep-canvas": {
