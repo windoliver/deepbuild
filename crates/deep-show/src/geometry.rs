@@ -6,6 +6,7 @@
 use deep_canvas::schedule::{Hasher, Val};
 use deep_canvas_scene3d::build::{spec_of, Built};
 use deep_canvas_scene3d::builders::{self, Ctx, Plants};
+use deep_canvas_scene3d::geom::Mesh;
 use deep_canvas_scene3d::stack;
 use serde_json::{json, Map, Value};
 
@@ -54,7 +55,25 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
 const BUILD_OPS: [&str; 3] = ["scene3d.build", "scene3d.build_live", "building.build"];
 
 fn has_geometry(kind: &str) -> bool {
-    builders::KINDS.contains(&kind) || deep_canvas_scene3d::building::KINDS.contains(&kind)
+    builders::KINDS.contains(&kind)
+        || deep_canvas_scene3d::building::KINDS.contains(&kind)
+        || kind == ASSET
+}
+
+const ASSET: &str = "mesh.asset@1";
+
+/// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256; or the refusal.
+fn asset_mesh(evidence: &std::path::Path, id: &str, item: &Value) -> Result<Mesh, Value> {
+    let at = format!("items/{id}/params/sha256");
+    let sha = item
+        .pointer("/params/sha256")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let bytes = crate::evidence::read(evidence, sha)
+        .ok_or_else(|| json!({"code": "asset_missing", "path": at}))?;
+    let node = item.pointer("/params/node").cloned().unwrap_or(json!(0));
+    deep_canvas_scene3d::gltf::mesh(&bytes, &node)
+        .map_err(|why| json!({"code": "out_of_range", "path": format!("items/{id}/{}", why.split(':').next().unwrap_or(""))}))
 }
 
 impl Hub<'_> {
@@ -85,6 +104,7 @@ impl Hub<'_> {
         };
         if g.estimate_only {
             let ctx = Ctx {
+                id: "",
                 doc: &doc,
                 plants: planted
                     .as_deref()
@@ -98,6 +118,16 @@ impl Hub<'_> {
                 };
                 let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
                 let params = item.get("params").cloned().unwrap_or(json!({}));
+                if kind == ASSET {
+                    let m = match asset_mesh(&self.scenario.evidence, id, item) {
+                        Ok(m) => m,
+                        Err(refused) => return refused,
+                    };
+                    let mut h = Hasher::new("deep-show.estimate");
+                    h.bytes(&deep_canvas::schedule::canonical(item));
+                    out.push(json!({"id": id, "kind": kind, "declared": {"vertices": m.positions.len()}, "key": h.finish().hex()}));
+                    continue;
+                }
                 let counted = builders::counts(kind, &params, &ctx).and_then(|c| {
                     // A stack that reads its mesh's topology is counted on a build of it.
                     let full = || -> Result<usize, String> {
@@ -141,7 +171,21 @@ impl Hub<'_> {
                     .find(|i| i.path.starts_with(&format!("items/{id}")));
                 return json!({"code": issue.map_or("input_failed", |i| i.code), "path": issue.map_or(format!("items/{id}"), |i| i.path.clone())});
             };
-            let mesh = if g.built {
+            let asset = if b.kind == ASSET {
+                match asset_mesh(
+                    &self.scenario.evidence,
+                    id,
+                    items.get(id).unwrap_or(&Value::Null),
+                ) {
+                    Ok(m) => Some(m),
+                    Err(refused) => return refused,
+                }
+            } else {
+                None
+            };
+            let mesh = if asset.is_some() {
+                asset.as_ref()
+            } else if g.built {
                 b.built.as_ref()
             } else {
                 b.mesh.as_ref()
@@ -155,6 +199,7 @@ impl Hub<'_> {
                     .cloned()
                     .unwrap_or(json!({}));
                 let ctx = Ctx {
+                    id: id.as_str(),
                     doc: &doc,
                     plants: planted
                         .as_deref()
@@ -162,6 +207,8 @@ impl Hub<'_> {
                         .unwrap_or_default(),
                 };
                 builders::estimate(&b.kind, &params, &ctx).unwrap_or(b.declared)
+            } else if let Some(m) = &asset {
+                m.positions.len() as u64
             } else {
                 b.declared
             };

@@ -1005,6 +1005,7 @@ mod tests {
     fn box_mesh() -> Mesh {
         let doc = json!({"items": {}});
         let ctx = Ctx {
+            id: "it",
             doc: &doc,
             plants: Default::default(),
         };
@@ -1014,6 +1015,7 @@ mod tests {
     fn plate() -> Mesh {
         let doc = json!({"items": {}});
         let ctx = Ctx {
+            id: "it",
             doc: &doc,
             plants: Default::default(),
         };
@@ -1242,6 +1244,7 @@ mod tests {
     fn a_deform_on_a_part_moves_only_that_part() {
         let doc = json!({"items": {}});
         let ctx = Ctx {
+            id: "it",
             doc: &doc,
             plants: Default::default(),
         };

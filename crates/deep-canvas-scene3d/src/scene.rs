@@ -76,6 +76,9 @@ pub struct Solid {
     pub stroke: Option<Stroke>,
     /// A builder's mesh in the item's own space, which `model` places (#420).
     pub mesh: Option<Arc<crate::geom::Mesh>>,
+    /// Object: `cast_shadow` and `receive_shadow`, both true unless the item says not.
+    pub cast_shadow: bool,
+    pub receive_shadow: bool,
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -1166,8 +1169,33 @@ pub(crate) fn corners8(model: &Affine3) -> [Vec3; 8] {
     out
 }
 
-/// Evaluates `doc` at `t` (flicks) on a frame of its `size`.
+/// Reads a stored asset's bytes by its sha256.
+pub type Assets<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
+
+/// Evaluates `doc` at `t` (flicks) on a frame of its `size`; a `mesh.asset@1` draws only where
+/// [`evaluate_with`] has a store to read it from.
 pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, None)
+}
+
+/// [`evaluate`] with the asset store `assets` that `mesh.asset@1` items read their glTF from.
+pub fn evaluate_with(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Assets<'_>,
+) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, Some(assets))
+}
+
+fn evaluate_any(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Option<Assets<'_>>,
+) -> Result<Scene, Refused> {
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
     };
@@ -1175,7 +1203,59 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         code: r.code,
         path: r.path,
     })?;
-    evaluate_compiled(map, &program, t, look, labels)
+    evaluate_compiled(map, &program, t, look, labels, assets)
+}
+
+/// An item's Object shadow flag: true unless it says false.
+fn shadows(item: &Value, name: &str) -> bool {
+    item.get(name).and_then(Value::as_bool).unwrap_or(true)
+}
+
+/// A `mesh.asset@1`'s mesh, read from the store, with the name every item of that asset and
+/// node shares.
+fn asset_mesh(
+    read: Assets<'_>,
+    id: &str,
+    params: &Value,
+) -> Result<(crate::geom::Mesh, Option<String>), Refused> {
+    let path = format!("items/{id}/params");
+    let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
+        return refused("out_of_range", format!("{path}/sha256"));
+    };
+    let Some(bytes) = read(sha) else {
+        return refused("asset_missing", format!("{path}/sha256"));
+    };
+    let node = params.get("node").cloned().unwrap_or(Value::from(0));
+    let mesh = crate::gltf::mesh(&bytes, &node).map_err(|_| Refused {
+        code: "out_of_range",
+        path: format!("{path}/sha256"),
+    })?;
+    Ok((mesh, Some(format!("{sha}#{node}"))))
+}
+
+/// A figure lights one item at most (Object: `tone`, "one lit per figure"), and every tone is
+/// of the closed list.
+fn tones(map: &Map<String, Value>) -> Result<(), Refused> {
+    let mut lit = false;
+    for (id, item) in map
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let Some(tone) = item.get("tone") else {
+            continue;
+        };
+        match tone.as_str() {
+            Some("lit") if lit && map.get("profile").and_then(Value::as_str) == Some("figure") => {
+                return refused("out_of_range", format!("items/{id}/tone"));
+            }
+            Some("lit") => lit = true,
+            Some("faint" | "lo" | "mid" | "hi") => {}
+            _ => return refused("out_of_range", format!("items/{id}/tone")),
+        }
+    }
+    Ok(())
 }
 
 /// [`evaluate`] of a document whose motion program is compiled already.
@@ -1185,7 +1265,9 @@ pub(crate) fn evaluate_compiled(
     t: i64,
     look: &Look3,
     labels: &mut Labels,
+    assets: Option<Assets<'_>>,
 ) -> Result<Scene, Refused> {
+    tones(map)?;
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
@@ -1289,6 +1371,8 @@ pub(crate) fn evaluate_compiled(
                         color: paint(look, params, &path)?,
                         stroke: stroke(look, params, shape, &path)?,
                         mesh: None,
+                        cast_shadow: shadows(item, "cast_shadow"),
+                        receive_shadow: shadows(item, "receive_shadow"),
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -1297,9 +1381,16 @@ pub(crate) fn evaluate_compiled(
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
-                k if crate::builders::KINDS.contains(&k) || crate::building::KINDS.contains(&k) => {
+                "mesh.asset@1" if assets.is_none() => {}
+                k if crate::builders::KINDS.contains(&k)
+                    || crate::building::KINDS.contains(&k)
+                    || k == "mesh.asset@1" =>
+                {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let mesh = mesh_of(doc, id, item, seconds)?;
+                    let (mesh, shared) = match (k, assets) {
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        _ => (mesh_of(doc, id, item, seconds)?, None),
+                    };
                     if mesh.triangles() == 0 {
                         continue;
                     }
@@ -1313,8 +1404,12 @@ pub(crate) fn evaluate_compiled(
                         ];
                         bounds.push(apply(&model, p));
                     }
+                    // Equal meshes, and items naming one asset and node, share one mesh.
                     let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
-                    h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh));
+                    match &shared {
+                        Some(name) => h.text(name),
+                        None => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
+                    };
                     let key = h.finish().0;
                     let hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
@@ -1326,6 +1421,8 @@ pub(crate) fn evaluate_compiled(
                         color: paint_or_muted(look, params, &path)?,
                         stroke: None,
                         mesh: Some(Arc::new(mesh)),
+                        cast_shadow: shadows(item, "cast_shadow"),
+                        receive_shadow: shadows(item, "receive_shadow"),
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it

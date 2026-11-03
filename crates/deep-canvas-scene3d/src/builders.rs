@@ -5,7 +5,8 @@
 //! three vertices and normal (Builder: shading).
 
 use deep_canvas::ops::{atan2, cos, rad, sin, sqrt, tan};
-use serde_json::Value;
+use deep_canvas::schedule::{HashVersion, Hasher};
+use serde_json::{json, Value};
 
 use crate::curve::{self, Sampled};
 use crate::geom::{add, area2, cross, dot, length, scale, sub, triangulate, unit, Mesh, V2, V3};
@@ -168,16 +169,18 @@ pub fn path(doc: &Value, v: Option<&Value>) -> Option<Sampled> {
     }
 }
 
-/// What a builder builds with: the document (for the curves it names) and the plants.
+/// What a builder builds with: the document (for the curves it names), the item's stable ID
+/// (its seeds come from it) and the plants.
 pub struct Ctx<'a> {
     pub doc: &'a Value,
+    pub id: &'a str,
     pub plants: Plants,
 }
 
 /// Builds `kind` from `params`, smooth or flat as `shade` says.
 pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
     let mut m = match kind {
-        "slab@1" => slab(params)?,
+        "slab@1" => slab(params, ctx)?,
         "lathe@1" => lathe(params, ctx.plants)?,
         "extrude@1" => extrude(params)?,
         "tube@1" => tube_item(params, ctx)?,
@@ -191,6 +194,7 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
     if shade_flat(params)? && !ctx.plants.flat_as_smooth {
         m = m.flat();
     }
+    annotate(&mut m, kind, params, ctx)?;
     Ok(m)
 }
 
@@ -202,19 +206,14 @@ pub fn estimate(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<u64, Fault>
 /// The vertices `kind` declares and the triangles it builds, counted from `params` alone.
 pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), Fault> {
     let (vertices, triangles) = match kind {
-        "slab@1" => {
-            let o = slab_plan(params)?.0;
-            let n = o.len() as u64;
-            (6 * n, 2 * triangulate(&o, &[]).len() as u64 + 2 * n)
-        }
+        "slab@1" => match slab_shape(params, ctx)? {
+            SlabShape::Levels(levels, _) => layered_count(&levels),
+            SlabShape::Along(section, path) => sweep_count(&section, &path),
+        },
         "lathe@1" => lathe_count(params, ctx.plants)?,
-        "extrude@1" => {
-            let (o, h) = (outline(params, "outline")?, holes(params, "holes")?);
-            let n = (o.len() + h.iter().map(Vec::len).sum::<usize>()) as u64;
-            (6 * n, 2 * triangulate(&o, &h).len() as u64 + 2 * n)
-        }
+        "extrude@1" => layered_count(&extrude_shape(params)?.0),
         "tube@1" => {
-            let p = path(ctx.doc, params.get("path")).ok_or_else(|| bad("path"))?;
+            let p = tube_path(params, ctx)?;
             tube_count(params, &p)?
         }
         "ball@1" => ball_count(params)?,
@@ -246,15 +245,13 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
     Ok((declared, triangles))
 }
 
-/// A prism: the plan polygon `outer` (made counter-clockwise) with `holes` (made clockwise),
-/// each plan point lifted to its two caps by `lift(point, cap)`; one face per cap and per side
-/// quad. Each closed part is turned outward after.
-pub fn prism(outer: &[V2], holes: &[Vec<V2>], lift: impl Fn(V2, usize) -> V3) -> Mesh {
+/// The rings made one way round: the outline counter-clockwise, each hole clockwise.
+fn oriented(outer: &[V2], holes: &[Vec<V2>]) -> (Vec<V2>, Vec<Vec<V2>>) {
     let mut o = outer.to_vec();
     if area2(&o) < 0.0 {
         o.reverse();
     }
-    let hs: Vec<Vec<V2>> = holes
+    let hs = holes
         .iter()
         .map(|h| {
             let mut h = h.clone();
@@ -264,16 +261,39 @@ pub fn prism(outer: &[V2], holes: &[Vec<V2>], lift: impl Fn(V2, usize) -> V3) ->
             h
         })
         .collect();
-    let tris = triangulate(&o, &hs);
-    let all: Vec<V2> = o.iter().chain(hs.iter().flatten()).copied().collect();
+    (o, hs)
+}
+
+/// One level of a prism: its outline and holes.
+pub type Level = (Vec<V2>, Vec<Vec<V2>>);
+
+/// A prism: the plan polygon `outer` (made counter-clockwise) with `holes` (made clockwise),
+/// each plan point lifted to its two caps by `lift(point, cap)`; one face per cap and per side
+/// quad. Each closed part is turned outward after.
+pub fn prism(outer: &[V2], holes: &[Vec<V2>], lift: impl Fn(V2, usize) -> V3) -> Mesh {
+    let (o, hs) = oriented(outer, holes);
+    layered(&[(o.clone(), hs.clone()), (o, hs)], lift)
+}
+
+/// A prism through `levels`, each the same rings (outline, then holes, made one way round),
+/// lifted to its place by `lift(point, level)`: a cap at the first and the last level and a band
+/// of side quads between each two, so a level whose rings are inset bevels the edge.
+pub fn layered(levels: &[Level], lift: impl Fn(V2, usize) -> V3) -> Mesh {
+    let last = levels.len() - 1;
+    let rings = |l: usize| -> Vec<&Vec<V2>> {
+        std::iter::once(&levels[l].0)
+            .chain(levels[l].1.iter())
+            .collect()
+    };
     let mut m = Mesh::default();
-    for cap in 0..2 {
+    for (cap, l) in [(0, 0), (1, last)] {
+        let (o, hs) = &levels[l];
+        let tris = triangulate(o, hs);
         let base = m.positions.len() as u32;
-        let pts: Vec<V3> = all.iter().map(|p| lift(*p, cap)).collect();
-        let n = crate::geom::newell(&o.iter().map(|p| lift(*p, cap)).collect::<Vec<_>>());
+        let n = crate::geom::newell(&o.iter().map(|p| lift(*p, l)).collect::<Vec<_>>());
         let n = if cap == 0 { n } else { scale(n, -1.0) };
-        for p in &pts {
-            m.vertex(*p, n);
+        for p in o.iter().chain(hs.iter().flatten()) {
+            m.vertex(lift(*p, l), n);
         }
         let face = m.next_face();
         for [a, b, c] in &tris {
@@ -284,21 +304,89 @@ pub fn prism(outer: &[V2], holes: &[Vec<V2>], lift: impl Fn(V2, usize) -> V3) ->
             }
         }
     }
-    for ring in std::iter::once(&o).chain(hs.iter()) {
-        for k in 0..ring.len() {
-            let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
-            let corners = [lift(a, 0), lift(a, 1), lift(b, 1), lift(b, 0)];
-            let n = crate::geom::newell(&corners);
-            let base = m.positions.len() as u32;
-            for c in corners {
-                m.vertex(c, n);
+    for l in 0..last {
+        for (lo, hi) in rings(l).into_iter().zip(rings(l + 1)) {
+            for k in 0..lo.len() {
+                let j = (k + 1) % lo.len();
+                let corners = [
+                    lift(lo[k], l),
+                    lift(hi[k], l + 1),
+                    lift(hi[j], l + 1),
+                    lift(lo[j], l),
+                ];
+                let n = crate::geom::newell(&corners);
+                let base = m.positions.len() as u32;
+                for c in corners {
+                    m.vertex(c, n);
+                }
+                let face = m.next_face();
+                m.quad(base, base + 1, base + 2, base + 3, face);
             }
-            let face = m.next_face();
-            m.quad(base, base + 1, base + 2, base + 3, face);
         }
     }
-    m.close("solid", 0, holes.len() as u32);
+    m.close("solid", 0, levels[0].1.len() as u32);
     m
+}
+
+/// What [`layered`] makes of `levels`: its vertices and triangles.
+fn layered_count(levels: &[Level]) -> (u64, u64) {
+    let n = (levels[0].0.len() + levels[0].1.iter().map(Vec::len).sum::<usize>()) as u64;
+    let bands = levels.len() as u64 - 1;
+    let tris: u64 = [&levels[0], &levels[levels.len() - 1]]
+        .iter()
+        .map(|l| triangulate(&l.0, &l.1).len() as u64)
+        .sum();
+    (2 * n + 4 * n * bands, tris + 2 * n * bands)
+}
+
+/// Each corner of a ring moved `d` toward the solid along its mitre (the ring counter-clockwise
+/// for an outline, clockwise for a hole, so the solid lies on its left).
+fn inset(ring: &[V2], d: f64) -> Vec<V2> {
+    let n = ring.len();
+    let left = |u: V2, v: V2| -> V2 {
+        let (dx, dy) = (v[0] - u[0], v[1] - u[1]);
+        let l = sqrt(dx * dx + dy * dy).max(1e-15);
+        [-dy / l, dx / l]
+    };
+    (0..n)
+        .map(|k| {
+            let (a, p, b) = (ring[(k + n - 1) % n], ring[k], ring[(k + 1) % n]);
+            let (n1, n2) = (left(a, p), left(p, b));
+            let m = [n1[0] + n2[0], n1[1] + n2[1]];
+            let ml = sqrt(m[0] * m[0] + m[1] * m[1]).max(1e-15);
+            let m = [m[0] / ml, m[1] / ml];
+            let reach = d / (m[0] * n1[0] + m[1] * n1[1]).max(1e-6);
+            [p[0] + m[0] * reach, p[1] + m[1] * reach]
+        })
+        .collect()
+}
+
+/// Levels for a plan from `y0` to `y1`, its far edge bevelled by `bevel` (none when 0).
+fn bevelled(
+    o: Vec<V2>,
+    h: Vec<Vec<V2>>,
+    y0: f64,
+    y1: f64,
+    bevel: f64,
+) -> Result<(Vec<Level>, Vec<f64>), Fault> {
+    if bevel < 0.0 || bevel >= y1 - y0 {
+        return Err(bad("bevel"));
+    }
+    let (o, h) = oriented(&o, &h);
+    if bevel == 0.0 {
+        return Ok((vec![(o.clone(), h.clone()), (o, h)], vec![y0, y1]));
+    }
+    let top: Level = (
+        inset(&o, bevel),
+        h.iter().map(|r| inset(r, bevel)).collect(),
+    );
+    if area2(&top.0) <= 0.0 {
+        return Err(bad("bevel"));
+    }
+    Ok((
+        vec![(o.clone(), h.clone()), (o, h), top],
+        vec![y0, y1 - bevel, y1],
+    ))
 }
 
 /// A polygon with each corner turned through a quarter-circle-ish arc of `radius`, `steps`
@@ -371,24 +459,194 @@ fn slab_plan(p: &Value) -> Result<(Vec<V2>, f64, f64), Fault> {
     Ok((rounded(&o, radius, 4), y0, y1))
 }
 
-fn slab(p: &Value) -> Result<Mesh, Fault> {
+/// A slab's shape: plan levels with their heights, or a section swept along a path.
+enum SlabShape {
+    Levels(Vec<Level>, Vec<f64>),
+    Along(Vec<V2>, Vec<V3>),
+}
+
+/// A slab's `groove {depth, width}`: a channel along x down the middle of its top.
+fn groove_of(p: &Value) -> Result<Option<(f64, f64)>, Fault> {
+    let Some(g) = p.get("groove") else {
+        return Ok(None);
+    };
+    let (d, w) = (num(g, "depth", 0.0)?, num(g, "width", 0.0)?);
+    if d <= 0.0 || w <= 0.0 {
+        return Err(bad("groove"));
+    }
+    Ok(Some((d, w)))
+}
+
+fn slab_size(p: &Value, what: &str) -> Result<V3, Fault> {
+    p.get("size")
+        .and_then(|s| curve::points(&Value::Array(vec![s.clone()])))
+        .and_then(|v| v.first().copied())
+        .filter(|s| s.iter().all(|x| *x > 0.0))
+        .ok_or_else(|| bad(what))
+}
+
+/// The part of `path` from `from` to `to` of its length.
+fn stretch(path: &Sampled, from: f64, to: f64) -> Vec<V3> {
+    let length = path.length();
+    let mut pts = vec![path.at(from * length).0];
+    let mut line = path.points.clone();
+    if path.closed {
+        line.push(path.points[0]);
+    }
+    let mut run = 0.0;
+    for w in line.windows(2) {
+        run += crate::geom::length(sub(w[1], w[0]));
+        if run > from * length + 1e-9 && run < to * length - 1e-9 {
+            pts.push(w[1]);
+        }
+    }
+    pts.push(path.at(to * length).0);
+    pts
+}
+
+fn slab_shape(p: &Value, ctx: &Ctx<'_>) -> Result<SlabShape, Fault> {
+    let bevel = num(p, "bevel", 0.0)?;
+    if let Some(along) = p.get("along") {
+        // Along a path: the size's z across it and y up, from `from` to `to` of its length.
+        let s = slab_size(p, "along")?;
+        let path = path(ctx.doc, along.get("path")).ok_or_else(|| bad("along"))?;
+        let (from, to) = (num(along, "from", 0.0)?, num(along, "to", 1.0)?);
+        if !(0.0..1.0).contains(&from) || to <= from || to > 1.0 {
+            return Err(bad("along"));
+        }
+        let (hz, h) = (s[2] / 2.0, s[1]);
+        let section = vec![[-hz, 0.0], [hz, 0.0], [hz, h], [-hz, h]];
+        return Ok(SlabShape::Along(section, stretch(&path, from, to)));
+    }
+    if let Some((depth, width)) = groove_of(p)? {
+        let s = slab_size(p, "groove")?;
+        let (hz, h) = (s[2] / 2.0, s[1]);
+        if depth >= h || width >= 2.0 * hz || bevel != 0.0 || num(p, "radius", 0.0)? != 0.0 {
+            return Err(bad("groove"));
+        }
+        // The section across x, swept along x: its levels are the slab's two ends.
+        let w = width / 2.0;
+        let section = vec![
+            [-hz, 0.0],
+            [hz, 0.0],
+            [hz, h],
+            [w, h],
+            [w, h - depth],
+            [-w, h - depth],
+            [-w, h],
+            [-hz, h],
+        ];
+        let (o, hs) = oriented(&section, &[]);
+        let levels = vec![(o.clone(), hs.clone()), (o, hs)];
+        return Ok(SlabShape::Levels(levels, vec![-s[0] / 2.0, s[0] / 2.0]));
+    }
     let (o, y0, y1) = slab_plan(p)?;
-    Ok(prism(&o, &[], |q, cap| {
-        [q[0], if cap == 0 { y0 } else { y1 }, q[1]]
-    }))
+    let (levels, heights) = bevelled(o, Vec::new(), y0, y1, bevel)?;
+    Ok(SlabShape::Levels(levels, heights))
+}
+
+fn slab(p: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
+    let grooved = groove_of(p)?.is_some() && p.get("along").is_none();
+    Ok(match slab_shape(p, ctx)? {
+        SlabShape::Levels(levels, x) if grooved => layered(&levels, |q, l| [x[l], q[1], q[0]]),
+        SlabShape::Levels(levels, y) => layered(&levels, |q, l| [q[0], y[l], q[1]]),
+        SlabShape::Along(section, path) => sweep(&section, &path),
+    })
+}
+
+/// A point of a section (x across, y up) at a path point's frame.
+fn place(c: V3, (t, n): (V3, V3), q: V2) -> V3 {
+    add(c, add(scale(cross(t, n), q[0]), scale(n, q[1])))
+}
+
+/// A closed section (x across, y up) swept along an open path, with flat ends.
+fn sweep(section: &[V2], path: &[V3]) -> Mesh {
+    let (section, _) = oriented(section, &[]);
+    let fr = frames(path, false, false);
+    let mid = section.iter().map(|q| q[1]).sum::<f64>() / section.len() as f64;
+    let mut m = Mesh::default();
+    let mut rings = Vec::with_capacity(path.len());
+    for (c, f) in path.iter().zip(&fr) {
+        rings.push(m.positions.len() as u32);
+        for q in &section {
+            let out = unit(sub(place(*c, *f, *q), place(*c, *f, [0.0, mid])));
+            m.vertex(place(*c, *f, *q), out);
+        }
+    }
+    let s = section.len() as u32;
+    for i in 0..path.len() - 1 {
+        let (a, b) = (rings[i], rings[i + 1]);
+        for k in 0..s {
+            let j = (k + 1) % s;
+            // Outward: right of the section's edge, across the path.
+            let (q0, q1) = (section[k as usize], section[j as usize]);
+            let (t, n) = fr[i];
+            let out = add(
+                scale(cross(t, n), q1[1] - q0[1]),
+                scale(n, -(q1[0] - q0[0])),
+            );
+            let face = m.next_face();
+            tri_facing(&mut m, a + k, a + j, b + j, out, face);
+            tri_facing(&mut m, a + k, b + j, b + k, out, face);
+        }
+    }
+    for (end, sign) in [(0usize, -1.0), (path.len() - 1, 1.0)] {
+        let mut pts: Vec<V3> = section
+            .iter()
+            .map(|q| place(path[end], fr[end], *q))
+            .collect();
+        if dot(crate::geom::newell(&pts), scale(fr[end].0, sign)) < 0.0 {
+            pts.reverse();
+        }
+        m.polygon(&pts, &[]);
+    }
+    m.close("solid", 0, 0);
+    m
+}
+
+fn sweep_count(section: &[V2], path: &[V3]) -> (u64, u64) {
+    let (s, n) = (section.len() as u64, path.len() as u64);
+    let caps = 2 * triangulate(section, &[]).len() as u64;
+    (n * s + 2 * s, 2 * s * (n - 1) + caps)
+}
+
+/// An extrusion's levels from `from` to `to` along `up`, its far edge bevelled, their places
+/// along `up`, `up`, and the twist it turns through by the far end.
+type Extrusion = (Vec<Level>, Vec<f64>, V3, f64);
+
+fn extrude_shape(p: &Value) -> Result<Extrusion, Fault> {
+    let (o, h) = (outline(p, "outline")?, holes(p, "holes")?);
+    let (from, to, up) = match p.get("depth") {
+        Some(d @ Value::Object(_)) => {
+            let up = match d.get("up") {
+                None => [0.0, 0.0, 1.0],
+                Some(u) => curve::points(&Value::Array(vec![u.clone()]))
+                    .and_then(|v| v.first().copied())
+                    .filter(|u| crate::geom::length(*u) > 1e-9)
+                    .map(unit)
+                    .ok_or_else(|| bad("depth"))?,
+            };
+            (num(d, "from", 0.0)?, num(d, "to", 0.1)?, up)
+        }
+        _ => (0.0, positive(p, "depth", 0.1)?, [0.0, 0.0, 1.0]),
+    };
+    if to <= from {
+        return Err(bad("depth"));
+    }
+    let (levels, heights) = bevelled(o, h, from, to, num(p, "bevel", 0.0)?)?;
+    Ok((levels, heights, up, rad(num(p, "twist", 0.0)?)))
 }
 
 fn extrude(p: &Value) -> Result<Mesh, Fault> {
-    let (o, h) = (outline(p, "outline")?, holes(p, "holes")?);
-    let depth = positive(p, "depth", 0.1)?;
-    let twist = rad(num(p, "twist", 0.0)?);
-    Ok(prism(&o, &h, |q, cap| {
-        if cap == 0 {
-            [q[0], q[1], 0.0]
-        } else {
-            let (c, s) = (cos(twist), sin(twist));
-            [q[0] * c - q[1] * s, q[0] * s + q[1] * c, depth]
-        }
+    let (levels, z, up, twist) = extrude_shape(p)?;
+    let (z0, z1) = (z[0], z[z.len() - 1]);
+    Ok(layered(&levels, |q, l| {
+        let a = twist * (z[l] - z0) / (z1 - z0);
+        let (c, s) = (cos(a), sin(a));
+        add(
+            [q[0] * c - q[1] * s, q[0] * s + q[1] * c, 0.0],
+            scale(up, z[l]),
+        )
     }))
 }
 
@@ -421,6 +679,14 @@ struct LatheSpec {
     caps: String,
     closed: bool,
     axis: String,
+    /// `ribs {count, depth, span}`: grooves `depth` deep for `span` of each of `count` turns.
+    ribs: Option<(f64, f64, f64)>,
+    /// `thread {pitch, depth}`: a helix `depth` proud, `pitch` a turn.
+    thread: Option<(f64, f64)>,
+    /// `rim`: the plan each ring follows instead of a circle, counter-clockwise in (x, z).
+    rim: Option<Vec<V2>>,
+    /// `bands [{y0, y1, material}]`: named parts between two heights.
+    bands: Vec<(f64, f64, Value)>,
 }
 
 fn lathe_spec(p: &Value) -> Result<LatheSpec, Fault> {
@@ -436,14 +702,69 @@ fn lathe_spec(p: &Value) -> Result<LatheSpec, Fault> {
         return Err(bad("outline"));
     }
     let axis = text(p, "axis", "y", &["x", "y", "z"])?.to_string();
+    let full = (sweep - 360.0).abs() < 1e-9;
+    let ribs = match p.get("ribs") {
+        None => None,
+        Some(r) => {
+            let (c, d, s) = (
+                num(r, "count", 0.0)?,
+                num(r, "depth", 0.0)?,
+                num(r, "span", 0.5)?,
+            );
+            if c < 1.0 || c.fract() != 0.0 || d <= 0.0 || !(0.0..1.0).contains(&s) {
+                return Err(bad("ribs"));
+            }
+            Some((c, d, s))
+        }
+    };
+    let thread = match p.get("thread") {
+        None => None,
+        Some(t) => {
+            let (pitch, d) = (num(t, "pitch", 0.0)?, num(t, "depth", 0.0)?);
+            if pitch <= 0.0 || d <= 0.0 {
+                return Err(bad("thread"));
+            }
+            Some((pitch, d))
+        }
+    };
+    let rim = match p.get("rim") {
+        None => None,
+        Some(_) if !full => return Err(bad("rim")),
+        Some(_) => {
+            let mut r = self::outline(p, "rim")?;
+            if area2(&r) < 0.0 {
+                r.reverse();
+            }
+            Some(r)
+        }
+    };
+    let bands = match p.get("bands") {
+        None => Vec::new(),
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|b| {
+                Ok((
+                    num(b, "y0", 0.0)?,
+                    num(b, "y1", 0.0)?,
+                    b.get("material").cloned().unwrap_or(Value::Null),
+                ))
+            })
+            .collect::<Result<_, Fault>>()
+            .map_err(|_| bad("bands"))?,
+        Some(_) => return Err(bad("bands")),
+    };
     Ok(LatheSpec {
         outline,
-        n,
-        full: (sweep - 360.0).abs() < 1e-9,
+        n: rim.as_ref().map_or(n, Vec::len),
+        full,
         sweep,
         caps,
         closed,
         axis,
+        ribs,
+        thread,
+        rim,
+        bands,
     })
 }
 
@@ -529,9 +850,32 @@ fn lathe_count(p: &Value, plants: Plants) -> Result<(u64, u64), Fault> {
 fn lathe(p: &Value, plants: Plants) -> Result<Mesh, Fault> {
     let s = lathe_spec(p)?;
     let sweep = rad(s.sweep);
+    // A ring's point: on the circle or the rim, its radius grooved by ribs and raised by a
+    // thread, both of which close where the ring does.
     let ring = |r: f64, y: f64, k: usize| -> V3 {
-        let a = sweep * k as f64 / s.n as f64;
-        [r * cos(a), y, r * sin(a)]
+        let f = k as f64 / s.n as f64;
+        let mut r = r;
+        if r > EPS {
+            if let Some((count, depth, span)) = s.ribs {
+                if (count * f).fract() < span {
+                    r = (r - depth).max(0.0);
+                }
+            }
+            if let Some((pitch, depth)) = s.thread {
+                let turn = 2.0 * core::f64::consts::PI * (y / pitch + f);
+                r += depth * 0.5 * (1.0 + sin(turn));
+            }
+        }
+        match &s.rim {
+            Some(rim) => {
+                let q = rim[k % rim.len()];
+                [r * q[0], y, r * q[1]]
+            }
+            None => {
+                let a = sweep * f;
+                [r * cos(a), y, r * sin(a)]
+            }
+        }
     };
     let turn = |v: V3, k: usize| -> V3 {
         let a = sweep * k as f64 / s.n as f64;
@@ -634,6 +978,26 @@ fn lathe(p: &Value, plants: Plants) -> Result<Mesh, Fault> {
     if s.is_closed() {
         m.close("solid", 0, s.genus(plants));
     }
+    for (i, (y0, y1, material)) in s.bands.iter().enumerate() {
+        let name = format!("band.{i}");
+        let tris: Vec<u32> = (0..m.triangles() as u32)
+            .filter(|&t| {
+                let k = 3 * t as usize;
+                let y = (0..3)
+                    .map(|j| m.positions[m.indices[k + j] as usize][1])
+                    .sum::<f64>()
+                    / 3.0;
+                (*y0..=*y1).contains(&y)
+            })
+            .collect();
+        m.parts.insert(name.clone(), tris);
+        m.outputs
+            .entry("bands".into())
+            .or_insert_with(|| json!([]))
+            .as_array_mut()
+            .expect("a list")
+            .push(json!({"part": name, "material": material}));
+    }
     let axis = s.axis.clone();
     Ok(match axis.as_str() {
         "x" => m.mapped(|p| [p[1], -p[0], p[2]], |_, n| [n[1], -n[0], n[2]]),
@@ -725,9 +1089,64 @@ fn tube_count(p: &Value, path: &Sampled) -> Result<(u64, u64), Fault> {
     Ok((v, t))
 }
 
-fn tube_item(p: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
+/// A tube's path, each corner rounded through `bend` when it has one.
+fn tube_path(p: &Value, ctx: &Ctx<'_>) -> Result<Sampled, Fault> {
     let path = path(ctx.doc, p.get("path")).ok_or_else(|| bad("path"))?;
-    tube(p, &path)
+    let bend = num(p, "bend", 0.0)?;
+    if bend < 0.0 {
+        return Err(bad("bend"));
+    }
+    if bend == 0.0 {
+        return Ok(path);
+    }
+    let pts = &path.points;
+    let n = pts.len();
+    let mut out = Vec::new();
+    for k in 0..n {
+        let corner = path.closed || (k > 0 && k + 1 < n);
+        if !corner {
+            out.push(pts[k]);
+            continue;
+        }
+        let (a, c, b) = (pts[(k + n - 1) % n], pts[k], pts[(k + 1) % n]);
+        let (da, db) = (sub(a, c), sub(b, c));
+        let t = bend
+            .min(0.5 * crate::geom::length(da))
+            .min(0.5 * crate::geom::length(db));
+        let (s0, s1) = (add(c, scale(unit(da), t)), add(c, scale(unit(db), t)));
+        // The corner as a quadratic Bézier from one tangent point to the other.
+        for j in 0..=BEND_STEPS {
+            let u = j as f64 / BEND_STEPS as f64;
+            let q = add(
+                add(
+                    scale(s0, (1.0 - u) * (1.0 - u)),
+                    scale(c, 2.0 * u * (1.0 - u)),
+                ),
+                scale(s1, u * u),
+            );
+            out.push(q);
+        }
+    }
+    Ok(Sampled {
+        points: out,
+        closed: path.closed,
+    })
+}
+
+/// Segments in a bent tube's corner.
+const BEND_STEPS: usize = 4;
+
+fn tube_item(p: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
+    let path = tube_path(p, ctx)?;
+    let mut m = tube(p, &path)?;
+    if !path.closed {
+        let (first, last) = (path.points[0], path.points[path.points.len() - 1]);
+        let fr = frames(&path.points, false, false);
+        for (name, at, (t, n)) in [("start", first, fr[0]), ("end", last, fr[fr.len() - 1])] {
+            m.anchors.insert(name.into(), [at, cross(t, n), n, t]);
+        }
+    }
+    Ok(m)
 }
 
 fn tube(p: &Value, path: &Sampled) -> Result<Mesh, Fault> {
@@ -1037,6 +1456,13 @@ fn plate(p: &Value) -> Result<Mesh, Fault> {
         }
         m.polygon(&pts, &[]);
     }
+    if let Some(field) = p.get("height") {
+        for k in 0..m.positions.len() {
+            let q = m.positions[k];
+            m.positions[k][1] += height_at(field, q[0], q[2]).ok_or_else(|| bad("height"))?;
+        }
+        smooth_normals(&mut m, up);
+    }
     m.part("top", 0);
     if flag(p, "two_sided", false)? {
         let back = m.turned().mapped(|q| q, |_, n| scale(n, -1.0));
@@ -1093,6 +1519,200 @@ fn display(p: &Value) -> Result<Mesh, Fault> {
     Ok(m)
 }
 
+/// A plate's `height` field at (x, z), metres: a number, `{wave: {amplitude, wavelength,
+/// direction}}` or `{noise: {amplitude, scale, seed}}` (value noise on a lattice `scale` apart).
+fn height_at(field: &Value, x: f64, z: f64) -> Option<f64> {
+    if let Some(h) = field.as_f64() {
+        return Some(h);
+    }
+    if let Some(w) = field.get("wave") {
+        let a = w.get("amplitude")?.as_f64()?;
+        let l = w.get("wavelength")?.as_f64().filter(|l| *l > 0.0)?;
+        let d = rad(w.get("direction").and_then(Value::as_f64).unwrap_or(0.0));
+        return Some(a * sin(2.0 * core::f64::consts::PI * (x * cos(d) + z * sin(d)) / l));
+    }
+    let n = field.get("noise")?;
+    let a = n.get("amplitude")?.as_f64()?;
+    let s = n.get("scale")?.as_f64().filter(|s| *s > 0.0)?;
+    let seed = n.get("seed").and_then(Value::as_u64).unwrap_or(0);
+    let (u, v) = (x / s, z / s);
+    let (i, j) = (u.floor(), v.floor());
+    let (fu, fv) = (u - i, v - j);
+    let corner = |di: f64, dj: f64| -> f64 {
+        let h = mix64(
+            seed ^ mix64((i + di) as i64 as u64) ^ mix64(((j + dj) as i64 as u64).rotate_left(17)),
+        );
+        (h >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+    };
+    let (sx, sz) = (fu * fu * (3.0 - 2.0 * fu), fv * fv * (3.0 - 2.0 * fv));
+    let top = corner(0.0, 0.0) * (1.0 - sx) + corner(1.0, 0.0) * sx;
+    let bottom = corner(0.0, 1.0) * (1.0 - sx) + corner(1.0, 1.0) * sx;
+    Some(a * (top * (1.0 - sz) + bottom * sz))
+}
+
+/// SplitMix64's finaliser.
+fn mix64(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
+/// Each vertex's normal from the faces about it, facing `up`'s side.
+fn smooth_normals(m: &mut Mesh, up: V3) {
+    let mut acc = vec![[0.0; 3]; m.positions.len()];
+    for t in 0..m.triangles() {
+        let [a, b, c] = [0, 1, 2].map(|j| m.indices[3 * t + j] as usize);
+        let n = cross(
+            sub(m.positions[b], m.positions[a]),
+            sub(m.positions[c], m.positions[a]),
+        );
+        for v in [a, b, c] {
+            acc[v] = add(acc[v], n);
+        }
+    }
+    m.normals = acc
+        .into_iter()
+        .map(|n| {
+            if dot(n, up) < 0.0 {
+                unit(scale(n, -1.0))
+            } else {
+                unit(n)
+            }
+        })
+        .collect();
+}
+
+/// What every builder returns beside its mesh (Builder: `build(…) → {…, anchors, values,
+/// true_shape, bounds}`): anchors at its bounds' centre, bottom and top, its area and the volume
+/// of its closed parts, its true shape, a texture coordinate per vertex, the `height` attribute a
+/// material input reads, and with `scatter {count, part?}` that many points laid out on its
+/// faces by area, seeded from the item's stable ID.
+fn annotate(m: &mut Mesh, kind: &str, p: &Value, ctx: &Ctx<'_>) -> Result<(), Fault> {
+    if m.positions.is_empty() {
+        return Ok(());
+    }
+    let [lo, hi] = m.bounds();
+    let c = scale(add(lo, hi), 0.5);
+    let axes = |o: V3| [o, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    m.anchors.entry("centre".into()).or_insert(axes(c));
+    m.anchors
+        .entry("bottom".into())
+        .or_insert(axes([c[0], lo[1], c[2]]));
+    m.anchors
+        .entry("top".into())
+        .or_insert(axes([c[0], hi[1], c[2]]));
+    let all: Vec<u32> = (0..m.triangles() as u32).collect();
+    m.values.insert("area".into(), surface(m, &all).1);
+    if !m.closed.is_empty() {
+        let v: f64 = m.closed.values().map(|(t, _)| m.volume(t)).sum();
+        m.values.insert("volume".into(), v);
+    }
+    m.true_shape = true_shape(kind, p, lo, hi)?;
+    // Box projection: each vertex's two coordinates across its normal's main axis, in metres.
+    m.uv0 = m
+        .positions
+        .iter()
+        .zip(&m.normals)
+        .map(|(q, n)| {
+            let (ax, ay, az) = (n[0].abs(), n[1].abs(), n[2].abs());
+            if ay >= ax && ay >= az {
+                [q[0], q[2]]
+            } else if ax >= az {
+                [q[2], q[1]]
+            } else {
+                [q[0], q[1]]
+            }
+        })
+        .collect();
+    let span = (hi[1] - lo[1]).max(1e-12);
+    let height = m.positions.iter().map(|q| (q[1] - lo[1]) / span).collect();
+    m.attributes.insert("height".into(), height);
+    if let Some(sc) = p.get("scatter") {
+        let n = sc
+            .get("count")
+            .and_then(Value::as_u64)
+            .filter(|n| (1..=10_000).contains(n))
+            .ok_or_else(|| bad("scatter"))?;
+        let tris = match sc.get("part").and_then(Value::as_str) {
+            None => all,
+            Some(name) => m
+                .parts
+                .get(name)
+                .or_else(|| m.closed.get(name).map(|c| &c.0))
+                .cloned()
+                .ok_or_else(|| bad("scatter"))?,
+        };
+        let pts = scatter(m, &tris, n as usize, ctx.id);
+        m.outputs.insert("points".into(), json!(pts));
+    }
+    Ok(())
+}
+
+/// The triangles' running areas and their total.
+fn surface(m: &Mesh, tris: &[u32]) -> (Vec<f64>, f64) {
+    let mut run = Vec::with_capacity(tris.len());
+    let mut total = 0.0;
+    for &t in tris {
+        let k = 3 * t as usize;
+        let [a, b, c] = [0, 1, 2].map(|j| m.positions[m.indices[k + j] as usize]);
+        total += crate::geom::length(cross(sub(b, a), sub(c, a))) / 2.0;
+        run.push(total);
+    }
+    (run, total)
+}
+
+/// `n` points on `tris`, each triangle drawn by its area, from a stream seeded by `id` through
+/// hash@1, so the same item lays out the same points everywhere.
+pub fn scatter(m: &Mesh, tris: &[u32], n: usize, id: &str) -> Vec<V3> {
+    let (run, total) = surface(m, tris);
+    if total <= 0.0 {
+        return Vec::new();
+    }
+    let mut h = Hasher::of(HashVersion::V1, "scene3d.scatter");
+    h.text(id);
+    let key = h.finish().0;
+    let mut state = u64::from_le_bytes([
+        key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+    ]);
+    let mut next = || {
+        state = mix64(state);
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    (0..n)
+        .map(|_| {
+            let r = next() * total;
+            let i = run.partition_point(|x| *x < r).min(tris.len() - 1);
+            let k = 3 * tris[i] as usize;
+            let [a, b, c] = [0, 1, 2].map(|j| m.positions[m.indices[k + j] as usize]);
+            let (u, v) = (sqrt(next()), next());
+            add(
+                add(scale(a, 1.0 - u), scale(b, u * (1.0 - v))),
+                scale(c, u * v),
+            )
+        })
+        .collect()
+}
+
+/// The analytic pieces that stand for a builder's mesh: a box, a sphere, a solid of revolution,
+/// a prism, capsules along a path, or its bounds where nothing simpler is exact.
+fn true_shape(kind: &str, p: &Value, lo: V3, hi: V3) -> Result<Vec<Value>, Fault> {
+    let bounds = json!({"box": {"min": lo, "max": hi}});
+    Ok(vec![match kind {
+        "ball@1" => json!({"sphere": {"centre": [0, 0, 0], "radius": num(p, "radius", 0.5)?}}),
+        "lathe@1" => {
+            json!({"revolved": {"outline": p.get("outline"), "axis": p.get("axis").cloned().unwrap_or(json!("y"))}})
+        }
+        "extrude@1" if p.get("bevel").is_none() => {
+            json!({"prism": {"outline": p.get("outline"), "holes": p.get("holes").cloned().unwrap_or(json!([])), "depth": p.get("depth")}})
+        }
+        "tube@1" | "coil@1" => {
+            json!({"capsules": {"path": p.get("path"), "radius": p.get("radius").or_else(|| p.get("wire"))}})
+        }
+        _ => bounds,
+    }])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1102,6 +1722,7 @@ mod tests {
         let doc = json!({"items": {}});
         let ctx = Ctx {
             doc: &doc,
+            id: "",
             plants: Plants::default(),
         };
         (
@@ -1157,6 +1778,189 @@ mod tests {
             let (m, n) = both(kind, p.clone());
             assert_eq!(m.positions.len() as u64, n, "{kind} {p}");
         }
+    }
+
+    /// Welded on a 1e-6 m grid: each closed part's open edges and V − E + F.
+    fn closed_parts(m: &Mesh) -> Vec<(String, usize, i64, u32)> {
+        let key = |p: V3| p.map(|x| (x / 1e-6).round() as i64);
+        let mut ids = std::collections::BTreeMap::new();
+        let at: Vec<usize> = m
+            .positions
+            .iter()
+            .map(|p| {
+                let n = ids.len();
+                *ids.entry(key(*p)).or_insert(n)
+            })
+            .collect();
+        m.closed
+            .iter()
+            .map(|(name, (tris, genus))| {
+                let mut edges = std::collections::BTreeMap::new();
+                let mut verts = std::collections::BTreeSet::new();
+                let mut faces = 0i64;
+                for &t in tris {
+                    let v = [0, 1, 2].map(|j| at[m.indices[3 * t as usize + j] as usize]);
+                    if v[0] == v[1] || v[1] == v[2] || v[0] == v[2] {
+                        continue;
+                    }
+                    faces += 1;
+                    for j in 0..3 {
+                        let (a, b) = (v[j], v[(j + 1) % 3]);
+                        verts.insert(a);
+                        *edges.entry((a.min(b), a.max(b))).or_insert(0) += 1;
+                    }
+                }
+                let open = edges.values().filter(|n| **n != 2).count();
+                let chi = verts.len() as i64 - edges.len() as i64 + faces;
+                (name.clone(), open, chi, *genus)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_issues_builder_params_change_the_mesh_keep_their_count_and_stay_watertight() {
+        let doc = json!({"items": {"rail": {"kind": "curve@1", "params": {"points": [[0, 0, 0], [2, 0, 0], [2, 0, 2]]}}}});
+        let ctx = Ctx {
+            doc: &doc,
+            id: "it",
+            plants: Plants::default(),
+        };
+        for (kind, plain, p) in [
+            (
+                "slab@1",
+                json!({"size": [2, 0.2, 1]}),
+                json!({"size": [2, 0.2, 1], "bevel": 0.05}),
+            ),
+            (
+                "slab@1",
+                json!({"size": [2, 0.2, 1]}),
+                json!({"size": [2, 0.2, 1], "groove": {"depth": 0.05, "width": 0.2}}),
+            ),
+            (
+                "slab@1",
+                json!({"size": [2, 0.2, 1]}),
+                json!({"size": [2, 0.2, 1], "along": {"path": "rail", "from": 0.25, "to": 0.9}}),
+            ),
+            (
+                "lathe@1",
+                json!({"outline": [[0.5, 0], [0.5, 1]], "segments": 16}),
+                json!({"outline": [[0.5, 0], [0.5, 1]], "segments": 16, "ribs": {"count": 8, "depth": 0.05, "span": 0.5}}),
+            ),
+            (
+                "lathe@1",
+                json!({"outline": [[0.5, 0], [0.5, 1]], "segments": 16}),
+                json!({"outline": [[0.5, 0], [0.5, 1]], "segments": 16, "thread": {"pitch": 0.2, "depth": 0.02}}),
+            ),
+            (
+                "lathe@1",
+                json!({"outline": [[0.5, 0], [0.5, 1]], "segments": 16}),
+                json!({"outline": [[0.5, 0], [0.5, 1]], "rim": [[1, 0], [0, 1], [-1, 0], [0, -1]]}),
+            ),
+            (
+                "extrude@1",
+                json!({"outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "depth": 0.5}),
+                json!({"outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "depth": {"from": 0.1, "to": 0.6, "up": [0, 1, 1]}, "bevel": 0.05}),
+            ),
+            (
+                "tube@1",
+                json!({"path": "rail", "radius": 0.1}),
+                json!({"path": "rail", "radius": 0.1, "bend": 0.4}),
+            ),
+        ] {
+            let (a, b) = (
+                build(kind, &plain, &ctx).unwrap(),
+                build(kind, &p, &ctx).unwrap(),
+            );
+            assert_ne!(
+                a.positions, b.positions,
+                "{kind} {p}: the param moves the mesh"
+            );
+            assert_eq!(
+                b.positions.len() as u64,
+                estimate(kind, &p, &ctx).unwrap(),
+                "{kind} {p}: declared = built"
+            );
+            let parts = closed_parts(&b);
+            assert!(!parts.is_empty(), "{kind} {p}: a closed part");
+            for (name, open, chi, genus) in parts {
+                assert_eq!(
+                    (open, chi),
+                    (0, 2 - 2 * i64::from(genus)),
+                    "{kind} {p} part {name}"
+                );
+            }
+        }
+        let field = json!({"grid": [4, 3], "size": [2, 1.5], "height": {"noise": {"amplitude": 0.2, "scale": 0.5, "seed": 3}}});
+        let flat = build("plate@1", &json!({"grid": [4, 3], "size": [2, 1.5]}), &ctx).unwrap();
+        let hilly = build("plate@1", &field, &ctx).unwrap();
+        assert_ne!(
+            flat.positions, hilly.positions,
+            "a height field lifts the plate"
+        );
+        assert_eq!(
+            hilly.positions.len() as u64,
+            estimate("plate@1", &field, &ctx).unwrap()
+        );
+        let bands = build("lathe@1", &json!({"outline": [[0.5, 0], [0.5, 1]], "bands": [{"y0": 0, "y1": 0.5, "material": "wood"}]}), &ctx).unwrap();
+        assert!(
+            !bands.parts["band.0"].is_empty(),
+            "a band names the triangles between its heights"
+        );
+    }
+
+    #[test]
+    fn builders_return_anchors_values_attributes_and_points_on_their_faces_seeded_by_id() {
+        let doc = json!({"items": {}});
+        let p = json!({"size": [2, 1, 1], "scatter": {"count": 50}});
+        let at = |id: &'static str| {
+            build(
+                "slab@1",
+                &p,
+                &Ctx {
+                    doc: &doc,
+                    id,
+                    plants: Plants::default(),
+                },
+            )
+            .unwrap()
+        };
+        let (a, again, other) = (at("a"), at("a"), at("b"));
+        assert_eq!(a.anchors["top"][0], [0.0, 1.0, 0.0]);
+        assert_eq!(a.anchors["bottom"][0], [0.0, 0.0, 0.0]);
+        assert!((a.values["area"] - 10.0).abs() < 1e-9 && (a.values["volume"] - 2.0).abs() < 1e-9);
+        assert_eq!(a.uv0.len(), a.positions.len());
+        assert_eq!(a.attributes["height"].len(), a.positions.len());
+        let pts = |m: &Mesh| m.outputs["points"].as_array().unwrap().clone();
+        assert_eq!(pts(&a).len(), 50);
+        assert_eq!(pts(&a), pts(&again), "one ID lays out one set of points");
+        assert_ne!(pts(&a), pts(&other), "another ID another");
+        for q in pts(&a) {
+            let q: Vec<f64> = q
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_f64().unwrap())
+                .collect();
+            let on = (q[0].abs() - 1.0).abs() < 1e-9
+                || q[1].abs() < 1e-9
+                || (q[1] - 1.0).abs() < 1e-9
+                || (q[2].abs() - 0.5).abs() < 1e-9;
+            assert!(on, "{q:?} lies on a face");
+        }
+        let tube = build(
+            "tube@1",
+            &json!({"path": [[0, 0, 0], [0, 2, 0]], "radius": 0.1}),
+            &Ctx {
+                doc: &doc,
+                id: "t",
+                plants: Plants::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (tube.anchors["start"][0], tube.anchors["end"][0]),
+            ([0.0, 0.0, 0.0], [0.0, 2.0, 0.0])
+        );
     }
 
     #[test]
