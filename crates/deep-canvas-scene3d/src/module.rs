@@ -56,7 +56,10 @@ fn manifest() -> Manifest {
         feature: "scene3d".into(),
         license: "Apache-2.0".into(),
         implements: "scene3d@1".into(),
-        implementation: deep_canvas::registry::Implementation::reference("scene3d", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            "scene3d",
+            deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -240,15 +243,24 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         Entry {
             family: "light",
             name: "sun",
+            // Minor 1 (#421): a color temperature and a flicker channel.
             versions: vec![Version {
                 major: 1,
-                minor: 0,
+                minor: 1,
                 params: vec![
                     param("illuminance", ParamType::Json, json!(10_000)),
                     param("shadow", ParamType::Json, json!(false)),
                     param("angle", ParamType::Json, json!(0.53)),
                     json_param("color"),
                     param("priority", ParamType::Json, json!(0)),
+                    Param {
+                        minor: 1,
+                        ..json_param("temperature")
+                    },
+                    Param {
+                        minor: 1,
+                        ..json_param("flicker")
+                    },
                 ],
             }],
             migrations: Vec::new(),
@@ -266,6 +278,17 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
         }
+        // The local and area lights and the material (#421).
+        for (kind, family, name) in [
+            ("light.point@1", "light", "point"),
+            ("light.spot@1", "light", "spot"),
+            ("light.area@1", "light", "area"),
+            ("material@1", "", "material"),
+        ] {
+            if spec.kind == kind {
+                r.kind(crate::spec::entry(&spec, family, name), &[], "");
+            }
+        }
     }
     crate::build::register_scene3d(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
@@ -274,13 +297,18 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .applies(crate::modifiers::has_modifiers)
         .run(crate::modifiers::stack);
     r.array("scene3d.lights", "lights", "document", "shading", "items");
-    r.operator("lights", "items", &["refs", "t", "look"], &["scene3d.lights"])
-        .document()
-        .applies(has_light)
-        .run(match tie {
-            Tie::Id => lit_by_id,
-            Tie::Order => lit_by_order,
-        });
+    r.operator(
+        "lights",
+        "items",
+        &["refs", "t", "look"],
+        &["scene3d.lights"],
+    )
+    .document()
+    .applies(has_light)
+    .run(match tie {
+        Tie::Id => lit_by_id,
+        Tie::Order => lit_by_order,
+    });
     r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal

@@ -554,15 +554,36 @@ mod tests {
                     .at(t, [128, 96], &Offsets::default(), &mut labels)
                     .unwrap()
                     .clone();
-                assert_eq!(got, evaluate(&d, t, &look(), &mut labels).unwrap(), "keyed {keyed}, frame {n}");
+                assert_eq!(
+                    got,
+                    evaluate(&d, t, &look(), &mut labels).unwrap(),
+                    "keyed {keyed}, frame {n}"
+                );
                 let lamp = &got.lights[0];
                 let s = n as f64 / 3600.0;
-                assert!((lamp.pos[0] - (-3.0 + 6.0 * s)).abs() < 1e-6, "keyed {keyed}, frame {n}: {:?}", lamp.pos);
+                assert!(
+                    (lamp.pos[0] - (-3.0 + 6.0 * s)).abs() < 1e-6,
+                    "keyed {keyed}, frame {n}: {:?}",
+                    lamp.pos
+                );
                 if keyed {
                     let want = (1.0 - s) * 800.0 / (4.0 * std::f64::consts::PI);
-                    assert!((lamp.intensity - want).abs() < 1e-6, "frame {n}: {}", lamp.intensity);
-                    let rough = got.layers.iter().flat_map(|l| &l.solids).find(|s| s.id == "c").and_then(|s| s.material).map(|m| m.roughness);
-                    assert!(rough.is_some_and(|r| (r - (0.1 + 0.8 * s)).abs() < 1e-6), "frame {n}: {rough:?}");
+                    assert!(
+                        (lamp.intensity - want).abs() < 1e-6,
+                        "frame {n}: {}",
+                        lamp.intensity
+                    );
+                    let rough = got
+                        .layers
+                        .iter()
+                        .flat_map(|l| &l.solids)
+                        .find(|s| s.id == "c")
+                        .and_then(|s| s.material)
+                        .map(|m| m.roughness);
+                    assert!(
+                        rough.is_some_and(|r| (r - (0.1 + 0.8 * s)).abs() < 1e-6),
+                        "frame {n}: {rough:?}"
+                    );
                 }
             }
         }

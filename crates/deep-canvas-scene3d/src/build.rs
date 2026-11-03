@@ -80,7 +80,7 @@ fn is_live_builder(_: &Value, _: &str, item: &Value) -> bool {
 
 fn is_mark(_: &Value, _: &str, item: &Value) -> bool {
     let k = kind_of(item);
-    (k.starts_with("mark.") || k == "light.sun@1") && spec_of(k).is_some()
+    (k.starts_with("mark.") || k.starts_with("light.") || k == "material@1") && spec_of(k).is_some()
 }
 
 /// An item with params of a class other than geometry.

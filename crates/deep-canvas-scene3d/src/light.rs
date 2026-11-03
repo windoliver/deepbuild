@@ -220,7 +220,10 @@ pub fn material<'a>(
     let ink = match p.get("ink") {
         None | Some(Value::Null) => None,
         Some(ink) => {
-            let Some(color) = ink.get("role").and_then(Value::as_str).and_then(|r| look.role(r))
+            let Some(color) = ink
+                .get("role")
+                .and_then(Value::as_str)
+                .and_then(|r| look.role(r))
             else {
                 return Err(bad("ref_unresolved", "ink/role"));
             };
@@ -281,9 +284,9 @@ fn role_of(v: Option<&Value>) -> Option<&str> {
 
 /// A pattern seed's 32-bit hash: FNV-1a over its JSON text, so any value seeds it.
 fn seed(v: &Value) -> u32 {
-    v.to_string()
-        .bytes()
-        .fold(0x811c_9dc5_u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))
+    v.to_string().bytes().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    })
 }
 
 /// A blackbody's color at `kelvin`, in linear sRGB at unit luminance, so a temperature never
@@ -337,12 +340,7 @@ pub fn light(
     let at = |k: &str, d: f64| num(params.get(k)).unwrap_or(d);
     let area = (kind == LightKind::Area).then(|| {
         let size = params.get("size").and_then(Value::as_array);
-        let side = |i: usize| {
-            size.and_then(|s| num(s.get(i)))
-                .unwrap_or(0.5)
-                .max(1e-4)
-                / 2.0
-        };
+        let side = |i: usize| size.and_then(|s| num(s.get(i))).unwrap_or(0.5).max(1e-4) / 2.0;
         let scale = |v: Vec3, k: f64| v.map(|c| c * k);
         Area {
             right: scale(axes[0], side(0)),
@@ -376,7 +374,10 @@ pub fn light(
         radius: at("radius", 0.05).max(0.0),
         cone: [outer, half("inner", 0.0).max(outer)],
         area,
-        shadow: params.get("shadow").and_then(Value::as_bool).unwrap_or(false),
+        shadow: params
+            .get("shadow")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         priority: at("priority", 0.0),
     })
 }
@@ -547,22 +548,48 @@ mod tests {
         for l in [&warm, &day, &cool] {
             assert!((lum(l.color) - 1.0).abs() < 1e-9, "{:?}", l.color);
         }
-        assert!(warm.color[0] > warm.color[1] && warm.color[1] > warm.color[2], "{:?}", warm.color);
-        assert!(day.color.iter().all(|c| (c - 1.0).abs() < 0.08), "{:?}", day.color);
+        assert!(
+            warm.color[0] > warm.color[1] && warm.color[1] > warm.color[2],
+            "{:?}",
+            warm.color
+        );
+        assert!(
+            day.color.iter().all(|c| (c - 1.0).abs() < 0.08),
+            "{:?}",
+            day.color
+        );
         assert!(cool.color[2] > cool.color[0], "{:?}", cool.color);
         // A color given wins over the temperature.
-        let given = of("light.point@1", serde_json::json!({"temperature": 2700, "color": [0, 1, 0]}));
+        let given = of(
+            "light.point@1",
+            serde_json::json!({"temperature": 2700, "color": [0, 1, 0]}),
+        );
         assert_eq!(given.color, [0.0, 1.0, 0.0]);
     }
 
     #[test]
     fn an_area_light_keeps_its_size_and_shape_and_a_flicker_scales_its_power() {
-        let a = of("light.area@1", serde_json::json!({"power": 800, "size": [2, 1], "shape": "disk"}));
+        let a = of(
+            "light.area@1",
+            serde_json::json!({"power": 800, "size": [2, 1], "shape": "disk"}),
+        );
         let area = a.area.expect("an area");
-        assert_eq!((area.right, area.up, area.disk), ([1.0, 0.0, 0.0], [0.0, 0.5, 0.0], true));
+        assert_eq!(
+            (area.right, area.up, area.disk),
+            ([1.0, 0.0, 0.0], [0.0, 0.5, 0.0], true)
+        );
         assert!((a.intensity - 800.0 / (4.0 * PI)).abs() < 1e-12);
         let p = serde_json::json!({"power": 800});
-        let dim = light("x", "light.point@1", &p, [0.0; 3], [0.0, -1.0, 0.0], AXES, 0.25).expect("a light");
+        let dim = light(
+            "x",
+            "light.point@1",
+            &p,
+            [0.0; 3],
+            [0.0, -1.0, 0.0],
+            AXES,
+            0.25,
+        )
+        .expect("a light");
         assert!((dim.intensity - 0.25 * 800.0 / (4.0 * PI)).abs() < 1e-12);
     }
 
@@ -570,12 +597,37 @@ mod tests {
     fn the_shadow_budget_keeps_one_sun_and_two_spots_by_the_policys_order() {
         let cam = camera();
         let spot = |id: &str, power: f64| {
-            light(id, "light.spot@1", &serde_json::json!({"power": power, "shadow": true}), [0.0, 1.0, 0.0], [0.0, -1.0, 0.0], AXES, 1.0).expect("a spot")
+            light(
+                id,
+                "light.spot@1",
+                &serde_json::json!({"power": power, "shadow": true}),
+                [0.0, 1.0, 0.0],
+                [0.0, -1.0, 0.0],
+                AXES,
+                1.0,
+            )
+            .expect("a spot")
         };
         let sun = |id: &str| {
-            light(id, "light.sun@1", &serde_json::json!({"illuminance": 100, "shadow": true}), [0.0; 3], [0.0, -1.0, 0.0], AXES, 1.0).expect("a sun")
+            light(
+                id,
+                "light.sun@1",
+                &serde_json::json!({"illuminance": 100, "shadow": true}),
+                [0.0; 3],
+                [0.0, -1.0, 0.0],
+                AXES,
+                1.0,
+            )
+            .expect("a sun")
         };
-        let lights = vec![spot("s-dim", 100.0), sun("sun-b"), spot("s-mid", 400.0), sun("sun-a"), spot("s-hot", 1600.0), point("p", [0.0, 1.0, 0.0], 800.0)];
+        let lights = vec![
+            spot("s-dim", 100.0),
+            sun("sun-b"),
+            spot("s-mid", 400.0),
+            sun("sun-a"),
+            spot("s-hot", 1600.0),
+            point("p", [0.0, 1.0, 0.0], 800.0),
+        ];
         let p = policy(&lights, &cam);
         let (kept, dropped) = shadowed(&lights, &p);
         let ids: Vec<&str> = kept.iter().map(|&i| lights[i].id.as_str()).collect();
@@ -589,10 +641,15 @@ mod tests {
         let items = serde_json::json!({"m": {"kind": "material@1", "params": {"from": "steel", "roughness": 0.6}},
             "bad": {"kind": "material@1", "params": {"from": "nothing"}}});
         let named = |k: &str| items.get(k);
-        let m = material(&serde_json::json!({"material": "m"}), named, &look, "it").unwrap().unwrap();
+        let m = material(&serde_json::json!({"material": "m"}), named, &look, "it")
+            .unwrap()
+            .unwrap();
         assert_eq!((m.metallic, m.roughness, m.coat), (1.0, 0.6, 0.5));
         let r = material(&serde_json::json!({"material": "bad"}), named, &look, "it").unwrap_err();
-        assert_eq!((r.code, r.path.as_str()), ("ref_unresolved", "items/bad/params/from"));
+        assert_eq!(
+            (r.code, r.path.as_str()),
+            ("ref_unresolved", "items/bad/params/from")
+        );
     }
 
     fn camera() -> Camera {
@@ -609,7 +666,16 @@ mod tests {
     #[test]
     fn a_spot_counts_its_lumens_over_the_whole_sphere() {
         let p = &serde_json::json!({"power": 800, "inner": 20, "outer": 30});
-        let s = light("s", "light.spot@1", p, [0.0; 3], [0.0, -1.0, 0.0], AXES, 1.0).expect("a spot");
+        let s = light(
+            "s",
+            "light.spot@1",
+            p,
+            [0.0; 3],
+            [0.0, -1.0, 0.0],
+            AXES,
+            1.0,
+        )
+        .expect("a spot");
         assert!((s.intensity - 800.0 / (4.0 * PI)).abs() < 1e-12);
         assert!((s.range - (800.0 / (4.0 * PI * 0.05_f64)).sqrt()).abs() < 1e-9);
     }

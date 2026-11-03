@@ -1397,10 +1397,15 @@ fn axes(m: &Affine3) -> [Vec3; 2] {
     ]
 }
 
-/// A light's flicker: the value at t of the document channel its `flicker` names, 1 with none.
+/// A light's flicker: a gain, or the value at t of the document channel its `flicker` names; 1
+/// with none.
 fn flicker(program: &Program, state: &State, params: &Value, path: &str) -> Result<f64, Refused> {
     match params.get("flicker") {
         None | Some(Value::Null) => Ok(1.0),
+        Some(Value::Number(_)) => num(params.get("flicker")).ok_or(Refused {
+            code: "out_of_range",
+            path: format!("{path}/flicker"),
+        }),
         Some(v) => v
             .as_str()
             .and_then(|c| program.channel_value(state, c))
@@ -1575,11 +1580,20 @@ pub(crate) fn evaluate_compiled(
                         id: id.clone(),
                         shape,
                         model,
-                        color: match surface.color {
-                            Some(c) => c,
-                            None => paint(look, params, &path)?,
+                        color: match (surface.color, &material) {
+                            (Some(c), _) => c,
+                            // A material's default base color (#421), unless paint gives one.
+                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                [m.base[0], m.base[1], m.base[2]].map(encode8)
+                            }
+                            (None, _) => paint(look, params, &path)?,
                         },
-                        stroke: inked(stroke(look, params, shape, &path)?, &material, shape, &path)?,
+                        stroke: inked(
+                            stroke(look, params, shape, &path)?,
+                            &material,
+                            shape,
+                            &path,
+                        )?,
                         mesh: None,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
@@ -1637,9 +1651,13 @@ pub(crate) fn evaluate_compiled(
                         id: id.clone(),
                         shape: Shape::Built(hash),
                         model,
-                        color: match surface.color {
-                            Some(c) => c,
-                            None => paint_or_muted(look, params, &path)?,
+                        color: match (surface.color, &material) {
+                            (Some(c), _) => c,
+                            // A material's default base color (#421), unless paint gives one.
+                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                [m.base[0], m.base[1], m.base[2]].map(encode8)
+                            }
+                            (None, _) => paint_or_muted(look, params, &path)?,
                         },
                         stroke: inked(None, &material, Shape::Built(hash), &path)?,
                         mesh: Some(Arc::new(mesh)),
@@ -1741,7 +1759,15 @@ pub(crate) fn evaluate_compiled(
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
-                    lights.extend(light::light(id, kind, params, origin(&m), dir, axes(&m), flicker));
+                    lights.extend(light::light(
+                        id,
+                        kind,
+                        params,
+                        origin(&m),
+                        dir,
+                        axes(&m),
+                        flicker,
+                    ));
                     sun = Some(Sun {
                         id: id.clone(),
                         toward: normalize(turn(&m, [0.0, 0.0, 1.0])),
@@ -1768,7 +1794,15 @@ pub(crate) fn evaluate_compiled(
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
-                    lights.extend(light::light(id, kind, params, origin(&m), dir, axes(&m), flicker));
+                    lights.extend(light::light(
+                        id,
+                        kind,
+                        params,
+                        origin(&m),
+                        dir,
+                        axes(&m),
+                        flicker,
+                    ));
                 }
                 // A material draws nothing itself; the objects naming it read it (#418).
                 "camera@1" | "sky@1" | "material@1" => {}
