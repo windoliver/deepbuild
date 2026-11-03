@@ -126,3 +126,52 @@ Why: the tests had no tags, so the proof lanes could not link them to the issue'
 ## Not run
 
 No test suite ran: names alone changed. The diff was reviewed to confirm it.
+
+# Blind redraft: traced drafted checks for AC15 and AC18 (#31, fixture only)
+
+The drafted check's bytes alone changed, in two tests, plus one fixture file the second test writes beside its check. No
+assertion, expected value, test name, tag, twin, `asserts` line or other line a test reads changed; `asserts` still names
+`${CHECK_FILE}:3` in both, and line 3 of each check is still the one line that does the work.
+
+What changed:
+
+- `lifetime.test.ts`, AC15 `#31.a271090e`, the hub test: the check was `touch .dh31-running` then `exec sleep 300`. It is now
+  one Node line after the `#!` and a comment, `node -e "require('fs').writeFileSync('.dh31-running', ''); setTimeout(() => {},
+  300e3)"`. It still writes the marker the test looks for in the folder it runs in, and still stays running for 300 s, so the
+  hub is killed under it as before.
+- `hub-env.test.ts`, AC18 `#31.3c1a9f39`: `CHECK_BODY`'s line 3 was `grep -q 'Date.now()' src/auth.ts`. It is now
+  `node --test .deepbuild/checks/expired-token.test.mjs`, and `worldWithOther` writes that file (`TEST_FILE`, `TEST_BODY`)
+  beside the check and commits both in the same commit, before the hub starts, so the base is still the HEAD that holds them.
+  The file holds one `node:test` test whose `assert.ok` reads `src/auth.ts` and holds only once it contains `Date.now()`:
+  the test fails on the repo's base and passes on the snapshot with the turn's edit. `on_base: fails` is as it was.
+
+Why: the design's "Traced programs" bullet (How runs become one of five verdicts, after Check health): a command check's run
+counts only when every program it starts is one the run's tracers see into, Node and Python among them; a `sh file` check, as
+the hub's drafted checks are, is read line by line, and a line that starts another program (`grep`, `touch`, `sleep` are its
+examples) makes the run uncounted before a process starts, never a pass and never a failure. Each old check started such a
+program, so neither test could be decided by its run. No line uses an input redirection, a here-document or a substitution,
+which the bullet also names.
+
+The send-back: the first redraft, the one the design allows a dropped check, had AC15's line as `exec node -e ...` and AC18's as
+a `node -e` that only exited 0 or 1. On a real run AC15's was uncounted before a process started, naming `untraced program
+exec`: the run reads as builtins that start nothing only the plain ones (`cd`, `true`, `false`, `echo`, `exit`, `export`,
+`test`, `[`, `:`), and `exec` as a program; so the marker was never written and the test was BLOCKED at "the drafted check
+never started in a checkout". The `exec` is gone. AC18's was traced and ran on the snapshot, but finished `ran_nothing`,
+`tests_run: 0`, INVALID with ".deepbuild/checks/expired-token.sh: ran nothing" and "has no run on the merge base": Check
+health says a run of zero tests counts as INVALID, never as a pass, and that counts come from the report file the runner asks
+the tool to write, never from its output; a base run follows only a pass on the snapshot. So line 3 now runs a test tool that
+reports its counts, Node's own, on a test file of the check's own.
+
+What that means for Failing on an assertion: `asserts` still names `${CHECK_FILE}:3`, the shell line that runs the tool, while
+the test's own frame on the base is the `assert.ok` line of `expired-token.test.mjs`, a file of the check's own under
+`.deepbuild/checks/`. The criterion's assertions (`judge`) read only that the claim ran on one snapshot of the claim's repo and
+that a run named the claim repo's merge base; they never read the verdict, so whether the hub reads the base failure as at the
+named assertion (the shell line that ran the tool) or elsewhere (the `.mjs` frame `asserts` doesn't name) changes no
+assertion of this test. The line number stays `:3` as the brief asked; a reading that needs the `.mjs` line named instead is
+the implementer's to raise, since this job can't see which the hub applies.
+
+What the job saw: issue #31, `docs/technical-design.md`, `AGENTS.md`, this folder, `tests/acceptance/29/h-d.ts` for the check
+definitions the two tests share, and the two runs' failing output as handed back. Nothing under `packages/`, `crates/`,
+`scripts/` or another acceptance folder.
+
+Not run: the tests themselves. Nothing was type-checked or run, and no git command ran.
