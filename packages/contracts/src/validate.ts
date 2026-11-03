@@ -230,12 +230,13 @@ function seqTransform(root: Schema): Transform | undefined {
 }
 
 export function registry(entries: readonly SchemaEntry[]): Registry {
-  const schemas = new Map(entries.map((entry) => [entry.name, entry.schema]));
+  // By name, a later entry in place of an earlier one; each schema is read only when its name is first validated.
+  const schemas = new Map(entries.map((entry) => [entry.name, entry]));
   const compiled = new Map<string, { check: Check; seq: Transform | undefined }>();
   const get = (name: string) => {
     let found = compiled.get(name);
     if (!found) {
-      const schema = schemas.get(name);
+      const schema = schemas.get(name)?.schema;
       if (!schema) throw new ContractError(issue('unknown_schema', '', name));
       found = { check: compile(schema), seq: seqTransform(schema) };
       compiled.set(name, found);

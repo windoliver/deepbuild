@@ -305,6 +305,12 @@ fn check(
     let (found, vectors) =
         deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), skips_clip_path);
     issues.extend(found);
+    // #406: a quote's raw bytes against its source's, and a formula's numbers.
+    issues.extend(deep_canvas_marks::check::quotes(doc, |sha| {
+        asset::bytes(store, sha)
+    }));
+    let (formula_numbers, formula_issues) = deep_canvas_vector::numbers(doc);
+    issues.extend(formula_issues);
     // Relations (#221): a cycle through relations or parents, or a target the document lacks.
     if !issues.iter().any(|i| i.severity == "error") {
         let items = doc.get("items").and_then(Value::as_object);
@@ -359,11 +365,13 @@ fn check(
         }
     }
     let ok = !issues.iter().any(|i| i.severity == "error");
+    let numbers = [deep_canvas_marks::check::numbers(doc).0, formula_numbers].concat();
     let answer = json!({
         "ok": ok,
         "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
-        // #397: every number a mark set or an axis shows, with what it traces to.
-        "numbers": deep_canvas_marks::check::numbers(doc).0,
+        // #397: every number a mark set or an axis shows, with what it traces to; #406: a
+        // template's story numbers, a quote's quotation and a formula's numbers.
+        "numbers": numbers,
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
     });
     (answer, vectors)
