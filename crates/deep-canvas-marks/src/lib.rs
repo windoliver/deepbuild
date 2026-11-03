@@ -21,4 +21,5 @@ pub mod modules;
 pub mod outline;
 pub mod paint;
 pub mod path;
+pub mod relations;
 pub mod scene;

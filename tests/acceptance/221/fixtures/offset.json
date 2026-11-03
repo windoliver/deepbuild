@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "rel-221-offset",
+  "profile": "figure",
+  "title": "A placed tag nudged by a keyed at.pos",
+  "description": "Issue #221 AC6: a tag beside a moving circle (side e, the default gap 16, align center), its at.pos keyed, so it lands at the relation's place plus that offset.",
+  "size": [1920, 1080],
+  "transport": {"span": "4s"},
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "ball": {"id": "ball", "kind": "circle@1", "layer": "main", "name": "Ball", "order": "a1",
+      "params": {"center": [200, 540], "r": 50, "paint": {"fill": {"role": "accent"}}}},
+    "tag": {"id": "tag", "kind": "rect@1", "layer": "main", "name": "Tag", "order": "a2",
+      "at": {"place": {"beside": "ball", "side": "e"}},
+      "params": {"box": [0, 0, 100, 40], "paint": {"fill": {"role": "ink"}}}}
+  },
+  "channels": {
+    "ball-x": {"target": "items/ball/at/pos/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "4s", "value": 900, "interp": "linear"}}},
+    "ball-y": {"target": "items/ball/at/pos/1", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "2s", "value": -300, "interp": "linear"}, "k2": {"t": "4s", "value": 200, "interp": "linear"}}},
+    "tag-x": {"target": "items/tag/at/pos/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "4s", "value": 40, "interp": "linear"}}},
+    "tag-y": {"target": "items/tag/at/pos/1", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "2s", "value": -30, "interp": "linear"}, "k2": {"t": "4s", "value": 20, "interp": "linear"}}}
+  }
+}

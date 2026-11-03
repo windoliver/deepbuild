@@ -195,6 +195,27 @@ pub fn lower_items(
     out
 }
 
+/// An imported vector item's geometry box where it draws now, its parts' outlines joined, or
+/// one part's (#221: what a relation places it by or against).
+pub fn bounds(item: &Value, found: &Imported, part: Option<&str>) -> Option<[f64; 4]> {
+    match part {
+        Some(part) => lower::parts(&found.svg, item)
+            .into_iter()
+            .find(|(id, _, _)| id == part)
+            .map(|(_, b, _)| b),
+        None => {
+            let place = lower::placement(&found.svg, item);
+            let verbs: Vec<_> = found
+                .svg
+                .paths
+                .iter()
+                .flat_map(|p| p.verbs.iter().map(|v| place.verb(*v)))
+                .collect();
+            deep_canvas_marks::relations::tight(&verbs)
+        }
+    }
+}
+
 /// The read-only per-part fields of an imported vector item, as `geometry` answers them: each
 /// part's id, its source (null: an SVG doesn't say), its box and its outline's sub-paths, in
 /// document u.
