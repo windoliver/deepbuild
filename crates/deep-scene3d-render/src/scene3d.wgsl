@@ -318,7 +318,12 @@ struct TextOut {
     @location(1) @interpolate(flat) color: u32,
     @location(2) @interpolate(flat) pick: u32,
     @location(3) @interpolate(flat) page: u32,
+    @location(4) @interpolate(flat) later: u32,
 };
+
+// A glyph whose color the label pass draws after the upscale (#1174): here it writes only the
+// label's depth and pick.
+const LATER: u32 = 256u;
 
 @vertex
 fn text_vs(
@@ -337,7 +342,8 @@ fn text_vs(
     out.uv = mix(uv.xy, uv.zw, k);
     out.color = color;
     out.pick = pick;
-    out.page = flags >> 3u;
+    out.page = (flags >> 3u) & 31u;
+    out.later = flags & LATER;
     let c = frame.clip * vec4<f32>(p.xyz, 1.0);
     if c.w <= 0.0 {
         out.pos = OFF;
@@ -371,5 +377,6 @@ fn text_fs(in: TextOut) -> Targets {
     if a <= 0.002 {
         discard;
     }
-    return Targets(vec4<f32>(paint(in.color) * a, a), select(0u, in.pick, a >= 0.5));
+    let shown = select(a, 0.0, in.later != 0u);
+    return Targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
 }
