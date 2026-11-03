@@ -259,6 +259,8 @@ pub enum Planted {
     EncodesInDecodeWorker,
     /// #498: the probe rounds each presentation time to the nearest flick.
     ProbeRoundsToFlicks,
+    /// #397: the table probe keeps each text cell NFC instead of its raw bytes.
+    ProbeStoresNormalized,
     /// #498: untagged streams are assumed BT.601 at every height.
     AssumesBt601,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -1837,13 +1839,25 @@ impl<'a> Hub<'a> {
         let visible = self.doc_visible(&show.doc);
         // The form that draws: the document with each recipe instance's derived items in its
         // place (#306), less the items skipped as `unknown_kind` (#403).
-        let drawn_form = stamped.as_ref().map(|doc| {
+        let mut drawn_form = stamped.as_ref().map(|doc| {
             let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
             crate::verdict::without(
                 &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
                 &skipped,
             )
         });
+        // Mark set columns that read a column source, resolved and narrowed by the core's
+        // column view at the frame's step (#397).
+        if let Some(form) = drawn_form.as_mut() {
+            let entries = self
+                .startup
+                .sealed
+                .registry(deep_canvas::columns::REGISTRY)
+                .map_or(&[][..], |r| r.entries.as_slice());
+            // A step is a 60 fps frame: 11,760,000 flicks.
+            let step = show.t.max(0) as u64 / 11_760_000;
+            issues.extend(deep_canvas::columns::view(form, entries, step));
+        }
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))

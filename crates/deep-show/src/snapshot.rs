@@ -581,7 +581,9 @@ impl Renderer {
                 };
                 let shaped = self.shaper.shape(&Spec {
                     text: &spec.text,
-                    role,
+                    family: role.family(),
+                    fallback: &[],
+                    lang: None,
                     size: spec.size as f32,
                     weight: spec.weight,
                     line_height: None,

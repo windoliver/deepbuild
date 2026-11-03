@@ -8,8 +8,9 @@ use serde_json::{Map, Value};
 
 use deep_canvas::schedule::core_ops::Datum;
 
-use crate::doc::{self, Motion, Refused, Target};
+use crate::doc::{self, Feel, Motion, Refused, Target};
 use crate::eval::{Local, Validity};
+use crate::input::{Entry, Inputs};
 
 /// Slots each item's transform takes: pos, rot and scale, three each.
 pub const TRANSFORM: usize = 9;
@@ -65,6 +66,7 @@ pub struct Traced {
 /// One write the evaluation made, as [`Program::run`] reports it to a tracer.
 enum Event {
     Channel(usize),
+    Follow(usize),
     /// A placement's write, with the slots it wrote.
     Placement(usize, std::ops::Range<usize>),
     Driver(usize),
@@ -93,6 +95,11 @@ pub struct Program {
     /// Each channel's run in [`State::values`], and the runs' total length.
     pub(crate) values: Vec<usize>,
     pub(crate) values_len: usize,
+    /// Each follow channel's slot, in follow order; its value sits after the channels' runs in
+    /// [`State::values`].
+    pub(crate) follows: Vec<usize>,
+    /// What the input track moves (#417): with no track, each control's default.
+    pub(crate) inputs: Inputs,
     pub(crate) placements: Vec<Vec<Write>>,
     pub(crate) parents: Vec<(usize, usize)>,
     /// Each driver's target slot and compiled expression, in driver order.
@@ -112,6 +119,8 @@ pub struct State {
     pub values: Vec<f64>,
     pub iterations: Vec<u32>,
     pub locals: Vec<Option<Local>>,
+    /// Each camera's target, in [`Motion::cameras`] order.
+    pub cameras: Vec<[f64; 3]>,
     pub valid_until: Option<i64>,
 }
 
@@ -175,6 +184,8 @@ impl Program {
             channels: Vec::new(),
             values: Vec::new(),
             values_len: 0,
+            follows: Vec::new(),
+            inputs: Inputs::new(&motion, Feel::default(), &[]).unwrap_or_default(),
             placements: Vec::new(),
             parents: Vec::new(),
             drivers: Vec::new(),
@@ -192,6 +203,11 @@ impl Program {
             values += width;
         }
         program.values_len = values;
+        for follow in &motion.follows {
+            let slot = program.slot(items_json, &follow.target.owner, &follow.target, 1);
+            program.mark_written(slot);
+            program.follows.push(slot);
+        }
         for placement in &motion.placements {
             let mut writes = Vec::new();
             if let Some(clip) = motion.clip(&placement.clip) {
@@ -256,6 +272,13 @@ impl Program {
             .filter_map(|(child, parent)| Some((index(child)?, index(parent)?)))
             .collect();
         Ok(program)
+    }
+
+    /// The program under a look's time feel and an input track (#417), or `None` for a track
+    /// entry naming a control it doesn't read or a value outside the control's options.
+    pub fn with_inputs(mut self, feel: Feel, track: &[Entry]) -> Option<Program> {
+        self.inputs = Inputs::new(&self.motion, feel, track)?;
+        Some(self)
     }
 
     /// Marks the field at `slot` as a bool or an enum channel's, so it is written as one.
@@ -335,9 +358,10 @@ impl Program {
             doc_t: 0,
             pass: 0,
             slots: self.base.clone(),
-            values: vec![0.0; self.values_len],
+            values: vec![0.0; self.values_len + self.follows.len()],
             iterations: vec![0; self.channels.len()],
             locals: vec![None; self.motion.placements.len()],
+            cameras: vec![[0.0; 3]; self.motion.cameras.len()],
             valid_until: None,
         }
     }
@@ -376,6 +400,16 @@ impl Program {
             state.iterations[c] = channel.curve.sample_into(doc_t, run);
             state.slots[slot..slot + width].copy_from_slice(run);
             note(&Event::Channel(c), &[], &state.slots);
+        }
+        // Follows on the clock's t: the input track is the session's, not the timeline's.
+        for (f, &slot) in self.follows.iter().enumerate() {
+            let value = self.inputs.follows[f].at(t)[0];
+            state.values[self.values_len + f] = value;
+            state.slots[slot] = value;
+            note(&Event::Follow(f), &[], &state.slots);
+        }
+        for (c, moves) in self.inputs.cameras.iter().enumerate() {
+            state.cameras[c] = moves.at(t);
         }
         let mut scratch = [0.0; 3];
         for (p, placement) in motion.placements.iter().enumerate() {
@@ -417,7 +451,11 @@ impl Program {
                 }
             }
         }
-        state.valid_until = crate::eval::valid_until(motion, t, doc_t, validity);
+        let timeline = crate::eval::valid_until(motion, t, doc_t, validity);
+        state.valid_until = match (timeline, self.inputs.next_change(t)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
     }
 
     /// The item `id`'s own transform (pos, rot and scale, three each) and every field a channel
@@ -451,6 +489,7 @@ impl Program {
     pub fn writes(&self, slots: std::ops::Range<usize>) -> bool {
         let hits = |at: usize, width: usize| at < slots.end && slots.start < at + width;
         self.channels.iter().any(|&(at, width)| hits(at, width))
+            || self.follows.iter().any(|&at| hits(at, 1))
             || self
                 .placements
                 .iter()
@@ -517,6 +556,13 @@ impl Program {
                         reads,
                     }
                 }
+                Event::Follow(f) if self.follows[*f] == slot => Traced {
+                    entry: format!("channels/{}", self.motion.follows[*f].id),
+                    operator: "channels",
+                    value: slots[slot],
+                    limit: false,
+                    reads: Vec::new(),
+                },
                 Event::Placement(p, written) if written.contains(&slot) => Traced {
                     entry: format!("placements/{}", self.motion.placements[*p].id),
                     operator: "channels",
