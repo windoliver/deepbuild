@@ -175,6 +175,12 @@ pub const ADJUST_FIELDS: &[&str] = &[
 /// The `at` members that are vectors of three.
 pub const AT_VECTORS: &[&str] = &["pos", "rot", "scale", "pivot"];
 
+/// The `at` members that place an item by relation (Item and kind: relations).
+pub const AT_RELATIONS: &[&str] = &["place", "align"];
+
+/// The nine box points every 2D item has, read-only (closed: determinism).
+pub const BOX_POINTS: &[&str] = &["n", "ne", "e", "se", "s", "sw", "w", "nw", "c"];
+
 /// The most characters a description has.
 pub const MAX_DESCRIPTION: usize = 400;
 
