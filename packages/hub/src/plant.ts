@@ -90,6 +90,8 @@ export type Plant =
   // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
   | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
+  // #997's: loop facts read as the merge base did, with no monitor's watch.
+  | 'monitor-unread'
   // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
   // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
   // only looks for a number, and a gate that runs no check before the definition locks.
@@ -139,7 +141,7 @@ const PLANTS: readonly string[] = [
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
-  'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
+  'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',

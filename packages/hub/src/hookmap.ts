@@ -350,7 +350,7 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
 }
 
-/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands. */
+/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */
 export function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);
@@ -371,6 +371,15 @@ export function loopFact(name: string, tool: string, event: string, payload: Jso
   if (typeof background === 'string' && at(payload, background) === true) return { background: 'subagent', call, what };
   const command = isObj(facts.commands) ? facts.commands[tool] : undefined;
   if (typeof command === 'string' && at(payload, command) === true) return { background: 'command', call, what };
+  // A watch whose events wake the session (#997): looping until a stop call names it, or it ends.
+  const monitor = isObj(facts.monitors) ? facts.monitors[tool] : undefined;
+  if (isObj(monitor)) {
+    const id = at(payload, String(monitor.id));
+    const timeout = at(payload, String(monitor.timeoutMs));
+    if (typeof id === 'string' && id) return { monitor: id, what, command: str(at(payload, String(monitor.command))), timeout: typeof timeout === 'number' && timeout > 0 ? timeout : null };
+  }
+  const stop = isObj(facts.stops) ? facts.stops[tool] : undefined;
+  if (isObj(stop)) return { stopped: String(at(payload, String(stop.id)) ?? '') };
   return undefined;
 }
 
