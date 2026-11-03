@@ -293,21 +293,72 @@ pub fn title(events: &[Value], session: &str) -> String {
         .iter()
         .find(|event| event["kind"] == "task.created" && event["data"]["thread"] == session)
         .and_then(|event| event["data"]["title"].as_str())
-        .map_or_else(
-            || format!("Session {}", &session[..session.len().min(8)]),
-            str::to_owned,
-        )
+        .map_or_else(|| untitled(session), str::to_owned)
 }
 
 /// A session's state, from the record's events.
 pub fn state(events: &[Value], session: &str) -> State {
-    if !open_asks(events, Some(session)).is_empty() {
-        return State::NeedsYou;
-    }
     let mine: Vec<&Value> = events
         .iter()
         .filter(|event| event["session"] == session)
         .collect();
+    state_of(&mine, &readings(events))
+}
+
+/// Every session in the record, in the order each first appears, with its task's title and its state: what
+/// [`sessions`], [`title`] and [`state`] give each, read in one pass over the events, not three per session.
+pub fn every_session(events: &[Value]) -> Vec<(String, String, State)> {
+    let mut order: Vec<&str> = Vec::new();
+    let mut by: BTreeMap<&str, Vec<&Value>> = BTreeMap::new();
+    let mut titles: BTreeMap<&str, Option<&str>> = BTreeMap::new();
+    for event in events {
+        if let Some(session) = event["session"].as_str() {
+            by.entry(session)
+                .or_insert_with(|| {
+                    order.push(session);
+                    Vec::new()
+                })
+                .push(event);
+        }
+        // The first task.created that names a thread titles it, as `title` reads it, whichever session's event it is.
+        if event["kind"] == "task.created" {
+            if let Some(thread) = event["data"]["thread"].as_str() {
+                titles
+                    .entry(thread)
+                    .or_insert(event["data"]["title"].as_str());
+            }
+        }
+    }
+    let readings = readings(events);
+    order
+        .into_iter()
+        .map(|session| {
+            let title = titles
+                .get(session)
+                .copied()
+                .flatten()
+                .map_or_else(|| untitled(session), str::to_owned);
+            (session.to_owned(), title, state_of(&by[session], &readings))
+        })
+        .collect()
+}
+
+/// A session's title when no task names it.
+fn untitled(session: &str) -> String {
+    format!("Session {}", &session[..session.len().min(8)])
+}
+
+/// A session's state from its own events, in log order, and every ask's reading.
+fn state_of(mine: &[&Value], readings: &BTreeMap<&str, Reading<'_>>) -> State {
+    // An ask the session raised, still open, leaves it needing you.
+    if mine.iter().any(|event| {
+        event["kind"] == "ask.created"
+            && readings
+                .get(handle(event).as_str())
+                .is_none_or(Reading::open)
+    }) {
+        return State::NeedsYou;
+    }
     let pos = |event: &Value| event["log_pos"].as_u64().unwrap_or(0);
     let newest = |kinds: &[&str]| {
         mine.iter()
@@ -334,7 +385,7 @@ pub fn state(events: &[Value], session: &str) -> State {
         };
         let Some(verdict) = of("verdict.made", "claim", &handle) else {
             return State::SaysDone {
-                expected_ms: expected(&mine, &handle),
+                expected_ms: expected(mine, &handle),
             };
         };
         if of(
@@ -421,15 +472,9 @@ pub fn count(events: &[Value]) -> usize {
 
 /// The menu bar's menu under the count: a line per session, its task and its status mark.
 pub fn menu(events: &[Value], now: u64) -> Vec<String> {
-    sessions(events)
-        .iter()
-        .map(|session| {
-            format!(
-                "{} · {}",
-                title(events, session),
-                mark(&state(events, session), now)
-            )
-        })
+    every_session(events)
+        .into_iter()
+        .map(|(_, title, state)| format!("{title} · {}", mark(&state, now)))
         .collect()
 }
 
@@ -489,6 +534,18 @@ mod tests {
     }
 
     #[test]
+    fn a_session_whose_asks_all_closed_no_longer_needs_you() {
+        let events = vec![
+            ask("a1"),
+            json!({"kind": "tool.before", "session": "s1", "writer": "hook", "log_pos": 2, "data": {}}),
+            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a1", "data": {}}),
+        ];
+        assert_eq!(state(&events, "s1"), State::Working);
+        assert_eq!(state(&events[..2], "s1"), State::NeedsYou);
+        assert_eq!(every_session(&events)[0].2, State::Working);
+    }
+
+    #[test]
     fn no_agent_closes_an_ask() {
         let events = vec![
             ask("a1"),
@@ -528,8 +585,19 @@ mod tests {
             "deadline.moved",
             "tool.before",
             "agent.stop",
+            "session.attention",
+            "claim.made",
+            "verdict.made",
+            "verdict.stale",
+            "claim.sent_back",
+            "task.created",
+            "run.started",
+            "run.finished",
         ];
         let writers = ["core", "hook", "mcp:agent", "app"];
+        let outcomes = ["PASS", "FAIL", "BLOCKED", "INVALID", "INCONCLUSIVE"];
+        let attention = ["unknown", "waiting", "finished"];
+        let finished = ["passed", "failed"];
         (0..next(60) + 1)
             .map(|i| {
                 let kind = kinds[next(kinds.len() as u64) as usize];
@@ -537,19 +605,52 @@ mod tests {
                 let other = format!("ask:a{}", next(6));
                 let writer = writers[next(writers.len() as u64) as usize];
                 let session = format!("s{}", next(3));
+                let claim = format!("claim:c{}", next(3));
+                let pos = i + 1;
                 match kind {
-                    "ask.created" => json!({"kind": kind, "id": about[4..], "session": session, "writer": "core",
+                    "ask.created" => json!({"kind": kind, "id": about[4..], "session": session, "writer": "core", "log_pos": pos,
                                             "data": {"deadline": next(9)}}),
-                    "decision.applied" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about,
+                    "decision.applied" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about, "log_pos": pos,
                                                  "data": {"ask": other}}),
-                    "default.undone" | "deadline.moved" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer,
+                    "default.undone" | "deadline.moved" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "log_pos": pos,
                                                            "subject": about, "data": {"deadline": next(9)}}),
                     "tool.before" | "agent.stop" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "session": session,
-                                                    "subject": format!("session:{session}"), "data": {}}),
-                    _ => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about, "data": {}}),
+                                                    "log_pos": pos, "ts": next(1000), "subject": format!("session:{session}"), "data": {}}),
+                    "session.attention" => json!({"kind": kind, "id": format!("e{i}"), "writer": "hook", "session": session, "log_pos": pos,
+                                                  "ts": next(1000), "data": {"state": attention[next(3) as usize]}}),
+                    "claim.made" => json!({"kind": kind, "id": claim[6..], "writer": "mcp:agent", "session": session, "log_pos": pos, "data": {}}),
+                    "verdict.made" => json!({"kind": kind, "id": format!("v{}", next(3)), "writer": "core", "session": session, "log_pos": pos,
+                                             "data": {"claim": claim, "verdict": format!("verdict:v{}", next(3)), "outcome": outcomes[next(5) as usize]}}),
+                    "verdict.stale" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos,
+                                              "data": {"verdict": format!("verdict:v{}", next(3))}}),
+                    "claim.sent_back" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos,
+                                                "data": {"claim": claim, "round": next(4)}}),
+                    "task.created" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "log_pos": pos,
+                                             "data": {"thread": format!("s{}", next(3)), "title": format!("task {}", next(3))}}),
+                    "run.started" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos, "ts": next(1000),
+                                            "data": {"claim": claim, "check": format!("k{}", next(2)), "run": format!("r{}", next(4))}}),
+                    "run.finished" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos, "ts": next(2000),
+                                             "data": {"run": format!("r{}", next(4)), "outcome": finished[next(2) as usize]}}),
+                    _ => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about, "log_pos": pos, "data": {}}),
                 }
             })
             .collect()
+    }
+
+    #[test]
+    fn every_session_read_in_one_pass_is_each_sessions_own_title_and_state() {
+        // The reference: each session's title and state read alone over every event.
+        for seed in 0..2_000 {
+            let events = drawn(seed);
+            let want: Vec<(String, String, State)> = sessions(&events)
+                .into_iter()
+                .map(|session| {
+                    let (title, state) = (title(&events, &session), state(&events, &session));
+                    (session, title, state)
+                })
+                .collect();
+            assert_eq!(every_session(&events), want, "seed {seed}: {events:#?}");
+        }
     }
 
     #[test]

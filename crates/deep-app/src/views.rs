@@ -274,21 +274,21 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         })
         .collect();
     let events = &view.events;
-    let sessions = states::sessions(events);
     // A session's page and its line draw the first session, or the one named "" when the record has none.
-    let shown: Vec<String> = match kind {
-        Kind::Sidebar => sessions,
-        Kind::Session | Kind::Line => vec![sessions.into_iter().next().unwrap_or_default()],
+    let one = |session: String| {
+        let title = states::title(events, &session);
+        let state = states::state(events, &session);
+        vec![(session, title, state)]
+    };
+    let sessions: Vec<(String, String, states::State)> = match kind {
+        Kind::Sidebar => states::every_session(events),
+        Kind::Session | Kind::Line => one(events
+            .iter()
+            .find_map(|event| event["session"].as_str())
+            .unwrap_or_default()
+            .to_owned()),
         Kind::Home | Kind::NeedsYou => Vec::new(),
     };
-    let sessions: Vec<(String, String, states::State)> = shown
-        .into_iter()
-        .map(|session| {
-            let title = states::title(events, &session);
-            let state = states::state(events, &session);
-            (session, title, state)
-        })
-        .collect();
     let deadlines = match (kind, sessions.first()) {
         (Kind::Session, Some((first, ..))) => {
             let mine: Vec<&String> = open
