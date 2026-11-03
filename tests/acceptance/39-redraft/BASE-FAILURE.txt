@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a884ad187f5aefb17
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a884ad187f5aefb17
 
  ❯ tests/acceptance/39-redraft/permission.test.ts (3 tests | 3 failed) 4586ms
    ❯ #39 a permission request a saved deny covers (3)
