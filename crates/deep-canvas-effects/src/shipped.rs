@@ -259,12 +259,12 @@ pub fn down(karis: bool) -> Value {
         });
     }
     let sum = sum.expect("five groups");
-    // Alpha carries the share of the scene's light the chain takes here (#418): the Karis
-    // average's luminance over the plain average's, 1 where nothing is lit, so the mix takes from
-    // the scene exactly what the bloom spreads and the frame keeps its energy; the later
-    // downsamples write 0, so the upsamples carry this level's share alone to the mix.
+    // Alpha carries the share of the scene's light the Karis average holds back (#418): 1 less its
+    // luminance over the plain average's, 0 where nothing is lit, so the mix takes from the scene
+    // exactly what the bloom spreads and the frame keeps its energy; plain downsamples hold back
+    // nothing and write 0, so the upsamples carry the first level's alone to the mix.
     let rgb = g.split(&sum, "rgb");
-    let share = match plain {
+    let held = match plain {
         Some(p) => {
             let p = g.split(&p, "rgb");
             let lp = g.s("luminance@1", json!({"rgb": p}));
@@ -274,12 +274,14 @@ pub fn down(karis: bool) -> Value {
             let floor = g.s("max@1", json!({"a": lp, "b": tiny}));
             let r = g.div(&lk, &floor);
             let one = g.c(json!(1.0));
-            g.select(&one, &r, &lit)
+            let held = g.sub(&one, &r);
+            let none = g.c(json!(0.0));
+            g.select(&none, &held, &lit)
         }
         None => g.c(json!(0.0)),
     };
     let rgb = if karis { prefilter(&mut g, &rgb) } else { rgb };
-    let out = g.s("compose@1", json!({"x": rgb, "y": share}));
+    let out = g.s("compose@1", json!({"x": rgb, "y": held}));
     let (id, about) = if karis {
         ("glow.down_karis@1", "Glow's first downsample: 13 bilinear taps in five boxes, each tap weighted within its box by 1 ÷ (1 + its luminance) (the Karis average), to half size.")
     } else {
@@ -350,7 +352,8 @@ pub fn up() -> Value {
 
 /// The glow mixed into scene color: `scene × (1 − conserve × share) + bloom ÷ levels × tint × (1 +
 /// dirt × d) × intensity`, with `conserve` the intensity with no threshold (energy conserving: the
-/// scene gives up the light the chain spreads, its first downsample's share in the bloom's alpha)
+/// scene gives up the light the chain spreads, `share` being 1 less what its first downsample held
+/// back, carried in the bloom's alpha)
 /// and 0 with one, and `d` the lens dirt image's value at the pixel, stretched over the frame
 /// (#418). The planted overlay adds `dirt × d` to every pixel instead.
 pub fn mix() -> Value {
@@ -369,9 +372,11 @@ pub fn mix() -> Value {
     let lens = g.add(&one, &k);
     let b = g.mul(&b, &lens);
     let b = g.mul(&b, "intensity");
-    // What the chain took from the scene: the share the first downsample passed on, by the
-    // intensity with no threshold (energy conserving), none with one.
-    let share = g.split(&bloom, "a");
+    // What the chain took from the scene: the share the first downsample passed on (1 less what
+    // its Karis average held back), by the intensity with no threshold (energy conserving), none
+    // with one.
+    let held = g.split(&bloom, "a");
+    let share = g.sub(&one, &held);
     let taken = g.mul(&share, "conserve");
     let keep = g.sub(&one, &taken);
     let kept = g.split(&scene, "rgb");
