@@ -1,0 +1,35 @@
+{
+  "module": "building",
+  "phases": {
+    "items": [
+      {
+        "operator": "building.build",
+        "module": "building",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "building.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "building.shade",
+        "module": "building",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "building.shaded"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}
