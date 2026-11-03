@@ -111,8 +111,9 @@ async function install(cli: string, quiet = false): Promise<number> {
     if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
     const user = planned.get(userFile)!;
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools.
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: process.execPath, args: [cli, 'mcp', 'actions'] } } });
+    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
+    // serves it, so a session runs one Node server, not two (#824's memory per session).
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
