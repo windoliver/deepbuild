@@ -4,8 +4,8 @@
 // With the hub down or restarting it keeps its tool list and answers each call within a second that the hub is
 // unreachable, never with a success, and reconnects at the next call. Every error is a tool result holding error@2.
 // The pages of the codes those errors carry read at deep://codes/<code>, with no tool call and no hub.
-// `deep mcp actions` is the second server entry, deep-actions (#363): the same process and hub connection, serving
-// the plug-in actions' two tools in place of the deep_* tools.
+// `deep mcp actions` serves the second server entry, deep-actions (#363): the plug-in actions' two tools in place of
+// the deep_* tools. `deep setup` writes deep-hook's `mcp actions` for it, which answers the same (#824).
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
