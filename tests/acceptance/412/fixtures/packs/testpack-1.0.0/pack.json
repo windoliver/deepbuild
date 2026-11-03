@@ -1,0 +1,17 @@
+{
+  "name": "testpack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #200 acceptance suite: one entry of the test registry test.mark@1, named with the pack's name.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "test.mark": ">=0.0.0"
+    }
+  },
+  "entries": {
+    "test.mark@1": [
+      { "name": "testpack.ring", "size": 12 }
+    ]
+  }
+}
