@@ -41,9 +41,9 @@ Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.s
 
 ### `deep.registerView`
 
-In R1 · preview · `d1:229b6e15fbbc0e66f687dc4b56b394c2e4aa7c35fe0e00e27a42fa32e8df417a`
+In R1 · preview · `d1:f678797e9208a811d87f8c281fcb0a814d57cce7f0073a68471d77d9a85e98f8`
 
-A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel's `init` as `props.page`), and its ⌘K commands, each running one of its actions. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.
+A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel's `init` as `props.page`), its ⌘K commands, each running one of its actions, and `binds`, the readings it shows (`reading:<source>` or `reading:<source>#<series>`), which Read now and while-shown cadences go by. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -56,7 +56,7 @@ A JavaScript panel in the app, in the sidebar, the home screen, a tab or the lin
 
 In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`
 
-A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.
+A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.
 
 | Parameter | Type | Required |
 |---|---|---|

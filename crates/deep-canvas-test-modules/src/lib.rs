@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 
 mod time;
 pub use time::{cache, tick};
+pub mod registries;
 pub mod sim;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {

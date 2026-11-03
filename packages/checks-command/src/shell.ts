@@ -38,8 +38,10 @@ function isolated(args: string[]): boolean {
 }
 /** A command that changes where Python finds its site setup, which the run's tracer is part of. */
 const PYTHON_SETUP = /\b(PYTHONPATH|PYTHONHOME)\b/;
-/** The system's programs that read no file whatever they're asked: pnpm lists processes with `ps`. */
-const READS_NOTHING = new Set(['/bin/ps']);
+/** The system's program that does nothing, exits 0 and prints nothing: what a base's command stand-in runs as (#874). */
+export const DOES_NOTHING = ['/usr/bin/true', '/bin/true'].find((p) => existsSync(p)) ?? '/usr/bin/true';
+/** The system's programs that read no file whatever they're asked: pnpm lists processes with `ps`; `true`, by its real file. */
+const READS_NOTHING = new Set(['/bin/ps', DOES_NOTHING]);
 /**
  * Which programs a command or a child counts as traced: Node and Python only where the run's variables reach them
  * (a process the Python tracer recorded says whether they do; a Python a Node process starts may get an
@@ -53,6 +55,7 @@ const installed = (at: string, writable: string[]): string | null => {
   try { real = realpathSync(at); } catch { return null; }
   return writable.some((w) => real === w || real.startsWith(`${w}/`)) ? null : (real.split('/').pop() ?? real);
 };
+const realOf = (at: string): string => { try { return realpathSync(at); } catch { return at; } };
 /**
  * A program the run's tracers see into: Node, Python with its site setup, or a script one of them runs (its `#!`
  * line, through `env` or not), each as `trust` allows; or one that reads no file.
@@ -61,7 +64,7 @@ function traced(program: string, args: string[], cwd: string, path: string, trus
   const name = program.split('/').pop() ?? program;
   const at = programPath(program, cwd, path);
   if (at === null) return false;
-  if (READS_NOTHING.has(at)) return true;
+  if (READS_NOTHING.has(at) || READS_NOTHING.has(realOf(at))) return true;
   // Node and Python by the name of the file they are, never by the name of a link to it.
   const real = installed(at, trust.writable);
   if (name === 'node' || real === 'node') return trust.node && real === 'node';

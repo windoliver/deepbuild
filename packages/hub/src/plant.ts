@@ -1,6 +1,12 @@
 // The planted wrong programs: a test selects one with DEEP_HUB_PLANT, the hub on its side and setup, the doctor and
 // status on theirs, all through this one module, so a proof lane's twin (tests/acceptance/<issue>/twins) can lay a
 // wrong program over this file alone. Only tests set the variable.
+import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { close as closeInspector } from 'node:inspector';
+import { createServer, type Server } from 'node:net';
+
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
 export type Plant =
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
@@ -46,6 +52,10 @@ export type Plant =
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
   // contradicted claim deleted.
   | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
+  // #824's: what the churn benchmark must catch, an entry kept per ended session, a listener per reloaded extension,
+  // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
+  | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
+  | 'churn-no-full-collection' | 'churn-no-resident-read'
   // #27's: deep_ask raised without its subject, so a repeated question reaches you.
   | 'repeat-reaches-you'
   // #823's: deep_wait reading its ask every 100 ms, and a stopping hub answering waiting calls as a success.
@@ -54,6 +64,8 @@ export type Plant =
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
+  // #875's: a fix check's base run counted as its proof whatever way it failed.
+  | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
@@ -65,7 +77,14 @@ export type Plant =
   // #31's: the gate's git gets the hub's whole environment, GIT_DIR and the rest included.
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
-  | 'fills-every-slot' | 'background-subagents-only';
+  | 'fills-every-slot' | 'background-subagents-only'
+  // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
+  // where the part already starts, and a pass on a stand-in taken as proof.
+  | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves'
+  // #965's: slow checks started at every green stop, every loop check held, a loop's claim or your words mid-turn
+  // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
+  | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
+  | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -96,6 +115,8 @@ const PLANTS: readonly string[] = [
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
+  'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
+  'churn-no-full-collection', 'churn-no-resident-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
@@ -105,6 +126,10 @@ const PLANTS: readonly string[] = [
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'any-nonzero-base-exit',
+  'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
+  'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
+  'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -114,6 +139,40 @@ export function plantOf(value: string | undefined): Plant | undefined {
 
 /** The plant the CLI's side of a command acts as (setup, undo, the doctor, status, the bundle): the hub's variable. */
 export const activePlant = (): string | undefined => process.env.DEEP_HUB_PLANT || undefined;
+
+// ---- #824's planted leaks: each holds what it leaves until the hub stops, so a run's children go with its hub.
+const keptSessions = new Map<string, string>();
+const reloads = new EventEmitter().setMaxListeners(0);
+const leftSockets: Server[] = [];
+const leftTimers: NodeJS.Timeout[] = [];
+const leftChildren: ChildProcess[] = [];
+/** 1 KiB no other value shares: 1 MB over 5,000 cycles is 200 bytes a cycle, so a short ID alone would stay under it. */
+const kibibyte = (): string => randomBytes(512).toString('hex');
+
+/** What a planted hub leaves behind as a session ends. */
+export function plantedSessionEnd(plant: Plant | undefined, session: string): void {
+  if (plant === 'churn-keeps-ended-session') keptSessions.set(session, kibibyte());
+  if (plant === 'churn-leaves-socket') leftSockets.push(createServer().listen(0, '127.0.0.1').unref());
+  if (plant === 'churn-leaves-timer') leftTimers.push(setInterval(() => undefined, 2 ** 30).unref());
+  if (plant === 'churn-leaves-child') leftChildren.push(spawn('/bin/sleep', ['86400'], { stdio: 'ignore' }));
+}
+/** What a planted hub leaves behind as an extension reloads. */
+export function plantedReload(plant: Plant | undefined): void {
+  if (plant !== 'churn-keeps-reload-listener') return;
+  const held = kibibyte();
+  reloads.on('reload', () => held.length);
+}
+/** What a planted hub takes away at its start: the inspector that forces a collection, or its resident memory. */
+export function plantedStart(plant: Plant | undefined): void {
+  if (plant === 'churn-no-full-collection') closeInspector();
+  if (plant === 'churn-no-resident-read') process.memoryUsage = (() => { throw Error('this platform reads no resident memory'); }) as unknown as typeof process.memoryUsage;
+}
+/** The hub stops: nothing a planted run left outlives it. */
+export function plantedStop(): void {
+  for (const server of leftSockets.splice(0)) server.close();
+  for (const timer of leftTimers.splice(0)) clearInterval(timer);
+  for (const child of leftChildren.splice(0)) child.kill();
+}
 
 /** #40's wrong program on the hub's side: an answer of a replaced session handed to the session that replaced it. Only tests set it. */
 export const piAcceptsReplaced = (): boolean => process.env.DEEP_PI_PLANT === 'accepts-replaced';

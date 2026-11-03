@@ -2266,30 +2266,14 @@ export interface CheckHeld {
   log_pos?: number;
   data: {
     session: string;
-    check: string;
     claim: string;
-    replaced: string | null;
-  };
-  evidence?: Array<string>;
-}
-
-/** check.held_start@1 */
-export interface CheckHeldStart {
-  v: 1;
-  id: string;
-  kind: "check.held_start";
-  subject?: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    session: string;
     check: string;
-    claim: string;
-    by: "pause" | "due_later" | "grace_window" | "claim" | "words";
+    snapshot: string;
+    held_at: number;
+    reason: string;
+    started_at: number | null;
+    started_by: string | null;
+    replaced_by: string | null;
   };
   evidence?: Array<string>;
 }
@@ -2543,6 +2527,26 @@ export interface CompositionUsed {
     interface: string;
     provider: string;
   };
+}
+
+/** deadline.moved@1 */
+export interface DeadlineMoved {
+  v: 1;
+  id: string;
+  kind: "deadline.moved";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    span: number;
+    deadline: number;
+    because: "away" | "notice";
+  };
+  evidence?: Array<string>;
 }
 
 /** decision.applied@1 */
@@ -2846,6 +2850,60 @@ export interface DefinitionLockedV3 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@4 */
+export interface DefinitionLockedV4 {
+  v: 4;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -2875,6 +2933,39 @@ export interface DefinitionRevised {
       cap_usd: number;
     } | null;
     dispute_ask: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.stood_in@1 */
+export interface DefinitionStoodIn {
+  v: 1;
+  id: string;
+  kind: "definition.stood_in";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      stand_in: {
+        surface: {
+          kind: string;
+          routes?: Array<string>;
+          format?: string;
+          name?: string;
+          path?: string;
+          exports?: Array<string>;
+        };
+        hash: string;
+      };
+    }>;
   };
   evidence?: Array<string>;
 }

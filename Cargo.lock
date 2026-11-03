@@ -1873,6 +1873,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-vector"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "roxmltree 0.21.1",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-codecs"
 version = "0.0.0"
 dependencies = [
@@ -1970,6 +1980,7 @@ dependencies = [
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-seams",
+ "deep-canvas-vector",
  "deep-gpu",
  "deep-marks-gpui",
  "deep-marks-vello",
@@ -2061,6 +2072,7 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
+ "deep-canvas-vector",
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",

@@ -1,0 +1,231 @@
+#874 acceptance suite on the base commit a5471ebd (PR #864's head for #31), 2026-10-31, Node 24.22.0, macOS.
+Built with `npm run build --workspaces` and `cargo build -p deep-hook`; run with
+`npx vitest run --root tests/acceptance/874 --no-file-parallelism`. 7 failed, 1 passed, as expected.
+
+Why each test fails on the base:
+
+- AC1 the check for GET /health fails on the stand-in's {} ...: the hub doesn't carry R1's declared surface to
+  `baseCheckout`, so no stand-in is built; the drafted check's base run finds no DEEP_SURFACE_URL and no app.mjs in the
+  empty base and fails before any assertion ("Cannot find module .../app.mjs"). The test fails at its assertion that the
+  base run reached the stand-in (200 and {}). R1 has no stand_in either, an assertion this run never reached.
+- AC3 a check that asserts only 200 passes on the stand-in ...: the same missing stand-in; the base run fails elsewhere,
+  which the base's gate runner counts as proof, so the claim is never INVALID. The test fails at its assertion that the
+  base run reached the stand-in and passed there.
+- AC1, AC2, AC3 (wrong program) tests (5): BLOCKED, as designed. The base hub refuses to start with a DEEP_HUB_PLANT it
+  doesn't list (stand-in-surface-dropped, stand-in-unrecorded, stand-in-always, stand-in-pass-proves).
+
+Passes on the base:
+
+- AC2 the check for the new GET /health runs on the real base, and R1 records no stand_in: the base builds no stand-in
+  anywhere, which is what AC2 requires where the app already starts. Its proof on a wrong program is the
+  stand-in-always plant (BLOCKED here). The base run saw the real base's 404 and {"error":"not found"}.
+
+Seen once, not reproduced: in two earlier full runs the first hub test of one file was BLOCKED with "the prompt opened
+no task" after its 60 s wait (no user.ask recorded); run alone, and in the run below, it went through. An earlier run
+under the wrong Node (23.9 from Homebrew) also failed #31's own stand-in (the supervisor's sandbox denied Homebrew's
+libuv), which is an environment problem: use Node 24.22.
+
+Raw output of the run:
+
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/tests/acceptance/874
+
+ ❯ invalid.test.ts (3 tests | 3 failed) 6363ms
+   ❯ AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID (3)
+     × AC3 a check that asserts only 200 passes on the stand-in, and the claim is INVALID naming it 5663ms
+     × AC3 (wrong program) a hub that counts a pass on a stand-in as proof fails this test, naming INVALID 397ms
+     × AC3 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in 302ms
+ ❯ empty.test.ts (3 tests | 3 failed) 5776ms
+   ❯ AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash (3)
+     × AC1 the check for GET /health fails on the stand-in's {} on the base, and R1's stand_in holds the stand-in's hash 5249ms
+     × AC1 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in 299ms
+     × AC1 (wrong program) a hub that builds the stand-in but records no hash fails this test, naming stand_in 225ms
+ ❯ starts.test.ts (2 tests | 1 failed) 7461ms
+   ❯ AC2 #874.f1e74512 through a real hub, in a repo whose app already starts, a check for a new route gets no stand-in (2)
+     × AC2 (wrong program) a hub that builds a stand-in where the app already starts fails this test, naming the stand-in 1157ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 the check for GET /health fails on the stand-in's {} on the base, and R1's stand_in holds the stand-in's hash
+AssertionError: .deepbuild/checks/health.sh on the base must reach the stand-in of its declared surface, a service answering 200 and {} (it saw {"cwd":"/private/tmp/dh874-Yay6cV/h/.deepbuild/checkouts/c-lgrHch","app":null,"via":"app","status":null,"body":null,"error":"Cannot find module '/private/tmp/dh874-Yay6cV/h/.deepbuild/checkouts/c-lgrHch/app.mjs' imported from /private/tmp/dh874-Yay6cV/h/.deepbuild/checkouts/c-lgrHch/[eval1]"}): expected { status: null, body: null, …(1) } to deeply equal { Object (status, body, ...) }
+
+- Expected
++ Received
+
+  {
+-   "body": "{}",
+-   "error": null,
+-   "status": 200,
++   "body": null,
++   "error": "Cannot find module '/private/tmp/dh874-Yay6cV/h/.deepbuild/checkouts/c-lgrHch/app.mjs' imported from /private/tmp/dh874-Yay6cV/h/.deepbuild/checkouts/c-lgrHch/[eval1]",
++   "status": null,
+  }
+
+ ❯ judge empty.test.ts:18:8
+     16|     expect(n.cwd, 'the base run is in a temporary checkout, never your…
+     17|     expect({ status: n.status, body: n.body, error: n.error }, `${CHEC…
+     18|       .toEqual({ status: 200, body: '{}', error: null });
+       |        ^
+     19|   }
+     20|   const standIn = standInOf(c);
+ ❯ empty.test.ts:29:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-surface-dropped names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:209:20
+ ❯ empty.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 (wrong program) a hub that builds the stand-in but records no hash fails this test, naming stand_in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-unrecorded did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-unrecorded names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:209:20
+ ❯ empty.test.ts:38:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 a check that asserts only 200 passes on the stand-in, and the claim is INVALID naming it
+AssertionError: .deepbuild/checks/health.sh on the base must reach the stand-in of its declared surface and pass there (it saw {"cwd":"/private/tmp/dh874-qrQzfo/h/.deepbuild/checkouts/c-Qf1nnt","app":null,"via":"app","status":null,"body":null,"error":"Cannot find module '/private/tmp/dh874-qrQzfo/h/.deepbuild/checkouts/c-Qf1nnt/app.mjs' imported from /private/tmp/dh874-qrQzfo/h/.deepbuild/checkouts/c-Qf1nnt/[eval1]"}): expected { status: null, body: null, …(1) } to deeply equal { Object (status, body, ...) }
+
+- Expected
++ Received
+
+  {
+-   "body": "{}",
+-   "error": null,
+-   "status": 200,
++   "body": null,
++   "error": "Cannot find module '/private/tmp/dh874-qrQzfo/h/.deepbuild/checkouts/c-Qf1nnt/app.mjs' imported from /private/tmp/dh874-qrQzfo/h/.deepbuild/checkouts/c-Qf1nnt/[eval1]",
++   "status": null,
+  }
+
+ ❯ judge invalid.test.ts:15:8
+     13|   for (const n of base) {
+     14|     expect({ status: n.status, body: n.body, error: n.error }, `${CHEC…
+     15|       .toEqual({ status: 200, body: '{}', error: null });
+       |        ^
+     16|   }
+     17|   const verdicts = verdictsOf(c);
+ ❯ invalid.test.ts:24:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 (wrong program) a hub that counts a pass on a stand-in as proof fails this test, naming INVALID
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-pass-proves did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-pass-proves names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:209:20
+ ❯ invalid.test.ts:28:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-surface-dropped names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:209:20
+ ❯ invalid.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  starts.test.ts > AC2 #874.f1e74512 through a real hub, in a repo whose app already starts, a check for a new route gets no stand-in > AC2 (wrong program) a hub that builds a stand-in where the app already starts fails this test, naming the stand-in
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-always did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stand-in-always names no planted program
+    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ claimThroughHub helpers.ts:209:20
+ ❯ starts.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed | 1 passed (8)
+   Start at  07:43:38
+   Duration  20.92s (tests 95%, import 3%, transform 2%)
+

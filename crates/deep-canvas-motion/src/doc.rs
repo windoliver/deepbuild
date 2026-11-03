@@ -36,6 +36,9 @@ pub enum ValueType {
     /// Held only, as 0 or 1 (Channel and key: "enum, bool and string: hold only"); an item's
     /// `adjust.invert` is one (Item and kind: adjust).
     Bool,
+    /// Held only, as the index of its value in [`Motion::labels`]; a vector part's role is one
+    /// (Vector and formula `vector@1`: `items/<id>/parts/<part>/role`).
+    Enum,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -151,6 +154,8 @@ pub struct Motion {
     pub parents: Vec<(String, String)>,
     pub cuts: Vec<Cut>,
     pub frame_rate: (u32, u32),
+    /// Every enum channel's values, each once; an enum key holds its value's index here.
+    pub labels: Vec<String>,
 }
 
 impl Motion {
@@ -355,6 +360,7 @@ fn channel_of(
     in_clip: bool,
     ctx: &TimeContext,
     path: &str,
+    labels: &mut Vec<String>,
 ) -> Result<Channel, Refused> {
     let Some(Value::String(target)) = c.get("target") else {
         return refuse("bad_path", format!("{path}/target"));
@@ -367,6 +373,7 @@ fn channel_of(
             _ => return refuse("bad_space", format!("{path}/space")),
         },
         Some("bool") => ValueType::Bool,
+        Some("enum") => ValueType::Enum,
         _ => return refuse("bad_type", format!("{path}/type")),
     };
     let mut keys = Vec::new();
@@ -382,6 +389,13 @@ fn channel_of(
         let value = match (ty, key.get("value")) {
             (ValueType::F32, v) => vec![number(v, &format!("{kpath}/value"))?],
             (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
+            (ValueType::Enum, Some(Value::String(s))) => {
+                let i = labels.iter().position(|l| l == s).unwrap_or_else(|| {
+                    labels.push(s.clone());
+                    labels.len() - 1
+                });
+                vec![i as f64]
+            }
             (ValueType::Color, Some(Value::Array(parts))) if parts.len() == 3 => parts
                 .iter()
                 .enumerate()
@@ -390,10 +404,10 @@ fn channel_of(
             _ => return refuse("out_of_range", format!("{kpath}/value")),
         };
         let interp = match (ty, key.get("interp")) {
-            (ValueType::Bool, None) => Interp::Hold,
+            (ValueType::Bool | ValueType::Enum, None) => Interp::Hold,
             (_, v) => interp_of(v, &format!("{kpath}/interp"))?,
         };
-        if ty == ValueType::Bool && interp != Interp::Hold {
+        if matches!(ty, ValueType::Bool | ValueType::Enum) && interp != Interp::Hold {
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
         if matches!(interp, Interp::Spring { .. }) && ty != ValueType::F32 {
@@ -491,9 +505,11 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             }
         }
     };
+    let mut labels = Vec::new();
     let mut channels = Vec::new();
     for (id, c) in section(doc, "channels")? {
-        channels.push(channel_of(id, c, false, &ctx, &format!("channels/{id}"))?);
+        let path = format!("channels/{id}");
+        channels.push(channel_of(id, c, false, &ctx, &path, &mut labels)?);
     }
     let mut clips = Vec::new();
     for (id, c) in section(doc, "clips")? {
@@ -506,6 +522,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
                 true,
                 &ctx,
                 &format!("{path}/channels/{cid}"),
+                &mut labels,
             )?);
         }
         let last = list
@@ -562,6 +579,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
         parents,
         cuts,
         frame_rate,
+        labels,
     })
 }
 

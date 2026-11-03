@@ -31,6 +31,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
             operators: Vec::new(),
             interface: Some(i.name.clone()),
             implementations: vec![i.implementation.name.clone()],
+            ..SealError::default()
         });
     }
     let ledger: Value = serde_json::from_str(LEDGER).unwrap_or(Value::Null);
@@ -67,5 +68,6 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         operators: Vec::new(),
         interface,
         implementations,
+        ..SealError::default()
     })
 }
