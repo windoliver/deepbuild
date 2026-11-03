@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "id": "rel-221-beside-text",
+  "profile": "figure",
+  "title": "A label beside a text",
+  "description": "Issue #221 AC2: a label placed beside a text with the default side e, gap 16 and align center; the text is then patched to a string 40% longer.",
+  "size": [1280, 720],
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "head": {"id": "head", "kind": "text@1", "layer": "main", "name": "Heading", "order": "a1", "at": {"pos": [100, 300, 0]},
+      "params": {"text": "Momentum of the cart", "font": "body", "size": 32, "paint": {"fill": {"role": "ink"}}}},
+    "unit": {"id": "unit", "kind": "text@1", "layer": "main", "name": "Unit label", "order": "a2", "at": {"place": {"beside": "head"}},
+      "params": {"text": "kg m/s", "font": "body", "size": 24, "paint": {"fill": {"role": "accent"}}}}
+  }
+}

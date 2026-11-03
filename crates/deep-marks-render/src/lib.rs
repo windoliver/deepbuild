@@ -11,11 +11,13 @@
 //! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
-//! `import_skips_clip_path`; and #417's: `look` lists the shipped looks (`{"list": "shipped"}`)
-//! and answers font roles and each theme's roles in OKLab, `check` and `raster` hold the status
-//! distance only where the document binds status (and take the planted `status_distance_0_03`),
-//! set text in the look's fonts with its fallback list and `lang`, and refuse a grapheme no face
-//! draws with `text.glyph_missing`; a session's step may switch the look.
+//! `import_skips_clip_path`; and #221's: every frame places items by relation, `check` refuses a
+//! `relation_cycle`, and `geometry` takes `t` and answers the item's `box` and its nine `points`;
+//! and #417's: `look` lists the shipped looks (`{"list": "shipped"}`) and answers font roles and
+//! each theme's roles in OKLab, `check` and `raster` hold the status distance only where the
+//! document binds status (and take the planted `status_distance_0_03`), set text in the look's
+//! fonts with its fallback list and `lang`, and refuse a grapheme no face draws with
+//! `text.glyph_missing`; a session's step may switch the look.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -297,6 +299,40 @@ fn check(
     let (found, vectors) =
         deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), skips_clip_path);
     issues.extend(found);
+    // Relations (#221): a cycle through relations or parents, or a target the document lacks.
+    if !issues.iter().any(|i| i.severity == "error") {
+        let items = doc.get("items").and_then(Value::as_object);
+        let frame = deep_canvas_marks::relations::Frame::of(doc);
+        if let Err(r) =
+            deep_canvas_marks::relations::check(items.unwrap_or(&Map::new()), frame.safe)
+        {
+            let ids = match r.chain.as_slice() {
+                [] => vec![r.path.split('/').nth(1).unwrap_or("").to_string()],
+                [chain @ .., _] => chain.to_vec(),
+            };
+            let what = if r.chain.is_empty() {
+                "a relation names an item the document lacks or can't be read".to_string()
+            } else {
+                format!("placed by relation in a cycle: {}", r.chain.join(" → "))
+            };
+            let fix = if r.chain.is_empty() {
+                "Name an item the document holds, as `beside`, `onto` or `to` takes it."
+            } else {
+                "Place one item of the chain by something outside it, so no relation reads back."
+            };
+            issues.push(deep_canvas::document::Issue {
+                ids,
+                fix: fix.into(),
+                ..deep_canvas::document::Issue::error(
+                    r.code,
+                    "",
+                    r.path,
+                    json!({"chain": r.chain}),
+                    &what,
+                )
+            });
+        }
+    }
     let ok = !issues.iter().any(|i| i.severity == "error");
     if let (true, Some(look)) = (ok, look) {
         let mut drawn = doc.clone();
@@ -422,8 +458,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             return Some(Answer::Now(checked));
         }
         let item = input.get("item")?.as_str()?;
+        let t = input.get("t").map_or(Some(0), Value::as_i64)?;
         return Some(Answer::Now(
-            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item, &vectors)),
+            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item, t, &vectors)),
         ));
     }
     let (look, _) = look?;
@@ -695,5 +732,6 @@ pub mod gpu;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
+mod place;
 mod raster;
 mod status;

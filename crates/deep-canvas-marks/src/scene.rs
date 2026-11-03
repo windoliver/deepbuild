@@ -29,6 +29,7 @@ use crate::key::{ContentKey, KeyBuilder};
 use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
+use crate::relations;
 use deep_canvas::schedule::{Key, KeyTree};
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
@@ -964,7 +965,7 @@ pub struct Frame {
 }
 
 /// The object at `v`, or an empty one when `v` is missing or isn't an object.
-pub(crate) fn object_or_empty(v: Option<&Value>) -> &Map<String, Value> {
+pub fn object_or_empty(v: Option<&Value>) -> &Map<String, Value> {
     static EMPTY: OnceLock<Map<String, Value>> = OnceLock::new();
     v.and_then(Value::as_object)
         .unwrap_or_else(|| EMPTY.get_or_init(Map::new))
@@ -1049,8 +1050,9 @@ fn four(v: Option<&Value>) -> Option<[f64; 4]> {
 }
 
 /// Where an item draws: `x ↦ scale·x + pos` from its evaluated `at`, which already rides its
-/// parents as the evaluator composes them. Rotation, shear and the pivot wait for the GPU layer,
-/// as R1's marks' do.
+/// parents as the evaluator composes them; with a box-point pivot it scales about that point of
+/// its own box (#221). Rotation, shear and a numeric pivot wait for the GPU layer, as R1's
+/// marks' do.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Place {
     scale: [f64; 2],
@@ -1064,16 +1066,18 @@ impl Place {
     };
 
     fn of(item: &Value) -> Place {
-        let at = item.get("at");
-        let v = |k: &str, i: usize, default: f64| match at.and_then(|a| a.get(k)) {
-            Some(Value::Array(a)) => num(a.get(i)).unwrap_or(default),
-            Some(n) if k == "scale" => num(Some(n)).unwrap_or(default),
-            _ => default,
-        };
-        Place {
-            scale: [v("scale", 0, 1.0), v("scale", 1, 1.0)],
-            offset: [v("pos", 0, 0.0), v("pos", 1, 0.0)],
-        }
+        let pivots = item
+            .get("at")
+            .and_then(|a| a.get("pivot"))
+            .is_some_and(Value::is_string);
+        let local = pivots
+            .then(|| {
+                let kind = item.get("kind").and_then(Value::as_str)?;
+                relations::own_box(kind, object_or_empty(item.get("params")))
+            })
+            .flatten();
+        let (scale, offset) = relations::place_of(item, local);
+        Place { scale, offset }
     }
 
     fn at(&self, p: [f64; 2]) -> [f64; 2] {
