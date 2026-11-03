@@ -33,7 +33,7 @@ import { Confirmer } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
-import { sessionStates, statusRows } from './status.js';
+import { sessionStates, statusRows, WAITING_QUIET_MS } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -88,11 +88,6 @@ const TURN_GRACE = 100;
 const CURSOR_SAVE = 200;
 /** How long a working session's hooks may go quiet before its transcript's tail is read and, unchanged, it reads unknown. */
 const QUIET_MS = 30_000;
-/**
- * How long a session waiting on you may go with no hook before it reads unknown (#992): a prompt still showing keeps
- * needing you this long, while one you denied with Esc says so in no hook, only in the transcript, read each QUIET_MS.
- */
-const WAITING_QUIET_MS = 300_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
 const CALL_GRACE = 2_000;
 /** A shell command that makes commits of its own: git commit, merge, cherry-pick, am, revert or rebase (#29). */
@@ -1826,6 +1821,8 @@ export class Core {
       if (alive || session.ended) continue;
       session.ended = true;
       this.startChecked.delete(session.id);
+      // The process is gone, so its ID may start another: no session is bound to the start time cached for it.
+      if (![...this.sessions.values()].some((s) => !s.ended && s.pid === session.pid)) this.starts.delete(session.pid);
       const live = this.live.get(session.id);
       if (live) { clearTimeout(live.quiet); this.live.delete(session.id); this.gate.ended(session.id); this.askingSoon(); }
       const ts = this.now();
