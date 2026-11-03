@@ -765,6 +765,90 @@ fn constraint() -> RegistryDef {
     )
 }
 
+// ---- column.source@1 (#397: Array and table: column view)
+
+/// A fixture's frames: each a clean evaluation's rows.
+fn frames(v: &Value) -> Vec<&Value> {
+    v.pointer("/fixture/frames")
+        .and_then(Value::as_array)
+        .map(|f| f.iter().collect())
+        .unwrap_or_default()
+}
+
+fn seek_equals_clean(v: &Value) -> Result<(), String> {
+    let frames = frames(v);
+    for seek in v
+        .pointer("/fixture/seeks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let to = seek["to"].as_u64().unwrap_or(0);
+        if frames.get(to as usize).copied() != Some(&seek["rows"]) {
+            return Err(format!(
+                "frame {to}: after a seek from frame {} the source hands rows that differ from a clean evaluation",
+                seek["from"]
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn clean_rebuild_equality(v: &Value) -> Result<(), String> {
+    let frames = frames(v);
+    let Some(mut rows) = frames.first().and_then(|f| f.as_array()).cloned() else {
+        return Ok(());
+    };
+    for (k, frame) in frames.iter().enumerate().skip(1) {
+        let changed = v
+            .pointer(&format!("/fixture/changed/{k}"))
+            .and_then(Value::as_array);
+        for range in changed.into_iter().flatten() {
+            let (a, b) = (
+                range[0].as_u64().unwrap_or(0) as usize,
+                range[1].as_u64().unwrap_or(0) as usize,
+            );
+            for i in a..b.min(rows.len()) {
+                rows[i] = frame[i].clone();
+            }
+        }
+        if Some(&rows) != frame.as_array() {
+            return Err(format!(
+                "frame {k}: remapping only the changed ranges it reports gives rows that differ from a clean rebuild"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn column_source() -> RegistryDef {
+    let frames = json!([[1, 1], [2, 2], [3, 3]]);
+    let mut def = RegistryDef::new(
+        crate::columns::REGISTRY,
+        obj(
+            json!({"form": {"type": "string"}, "types": {"type": "array"},
+                   "fixture": {"type": "object"}, "sources": {"type": "object"}}),
+            &["form", "types", "fixture"],
+        ),
+        &["module"],
+        SINCE,
+    )
+    .rule("seek_equals_clean", "a source whose rows at t after a seek differ from a clean evaluation", seek_equals_clean)
+    .rule("clean_rebuild_equality", "a source whose changed ranges miss rows that changed", clean_rebuild_equality)
+    .planted(
+        "keeps_previous_rows",
+        json!({"form": "planted.<name>", "types": ["i32"], "fixture": {"frames": frames,
+               "changed": [[], [[0, 2]], [[0, 2]]], "seeks": [{"from": 2, "to": 0, "rows": [3, 3]}]}}),
+    )
+    .planted(
+        "reports_no_changes",
+        json!({"form": "planted.<name>", "types": ["i32"], "fixture": {"frames": frames,
+               "changed": [[], [], []], "seeks": [{"from": 2, "to": 0, "rows": [1, 1]}]}}),
+    );
+    def.resolve = "check";
+    def
+}
+
 // ---- data.layout@1
 
 /// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
@@ -847,6 +931,7 @@ pub fn registries() -> Vec<RegistryDef> {
     vec![
         builder(),
         check_kind_doc(),
+        column_source(),
         constraint(),
         data_layout(),
         device_class(),

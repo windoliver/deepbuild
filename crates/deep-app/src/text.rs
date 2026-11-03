@@ -40,11 +40,16 @@ pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canva
         },
         move |bounds, shaped, window, _| {
             let painted = deep_text_gpui::paint_label(bounds.origin, &label, color, window);
+            use deep_text_gpui::Role as Font;
+            let role = [Font::Body, Font::Mono, Font::Math]
+                .into_iter()
+                .find(|r| r.family() == label.family)
+                .map(Font::name);
             record(
                 &id,
                 json!({
                     "text": label.text,
-                    "role": label.role.name(),
+                    "role": role,
                     "bound": label.bound,
                     "widest": widest,
                     "at": [f32::from(bounds.origin.x), f32::from(bounds.origin.y)],

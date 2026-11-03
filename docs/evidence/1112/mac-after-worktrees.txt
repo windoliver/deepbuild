@@ -1,0 +1,520 @@
+# 2026-11-03T01:38:53Z worktrees of ~/private/deepbuild-core (home shown as ~)
+$ git worktree list
+~/private/deepbuild-core                                                    d122341c [main]
+/private/tmp/db31main                                                                     df9b3fa2 (detached HEAD)
+/private/tmp/db39A                                                                        fd952b1c (detached HEAD)
+/private/tmp/db45ac                                                                       0f9f00dd (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/agent-a02a6b7eebc3e6833          b7bccf99 [worktree-agent-a02a6b7eebc3e6833]
+~/private/deepbuild-core/.claude/worktrees/agent-a0a70551f01d24191          aa042769 [worktree-agent-a0a70551f01d24191]
+~/private/deepbuild-core/.claude/worktrees/agent-a201604aefc294e95          244a3455 [worktree-agent-a201604aefc294e95]
+~/private/deepbuild-core/.claude/worktrees/agent-a2dd046b13e6e3150          c2206048 [worktree-agent-a2dd046b13e6e3150]
+~/private/deepbuild-core/.claude/worktrees/agent-a5248a97a84b21509          244a3455 (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/agent-a5a1aa406a193e4c9          244a3455 (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f          4ee8c992 [worktree-agent-a6c5fa28d628f747f]
+~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd          c3fd04d3 [blind/39-acceptance]
+~/private/deepbuild-core/.claude/worktrees/agent-a82eaf0872afb600f          5a6d09a4 [worktree-agent-a82eaf0872afb600f]
+~/private/deepbuild-core/.claude/worktrees/agent-a884ad187f5aefb17          244a3455 (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/agent-a91442a61f32f2794          244a3455 (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/agent-a926336e4a4cfd08b          7fc4f14a [worktree-agent-a926336e4a4cfd08b]
+~/private/deepbuild-core/.claude/worktrees/agent-a941a951b42e216ed          a8e54801 [worktree-agent-a941a951b42e216ed]
+~/private/deepbuild-core/.claude/worktrees/agent-a95c2444d3b206add          0f293209 [worktree-agent-a95c2444d3b206add]
+~/private/deepbuild-core/.claude/worktrees/agent-aa4208f621b1414c1          5a6d09a4 [worktree-agent-aa4208f621b1414c1]
+~/private/deepbuild-core/.claude/worktrees/agent-aab08fb2963544ab1          f680afa0 [worktree-agent-aab08fb2963544ab1]
+~/private/deepbuild-core/.claude/worktrees/agent-abcd69cbde53260c4          4ee8c992 [worktree-agent-abcd69cbde53260c4]
+~/private/deepbuild-core/.claude/worktrees/agent-ac7f89f1ec15f1051          123079f6 [worktree-agent-ac7f89f1ec15f1051]
+~/private/deepbuild-core/.claude/worktrees/agent-aca6492c5ff87332d          5a6d09a4 [worktree-agent-aca6492c5ff87332d]
+~/private/deepbuild-core/.claude/worktrees/agent-adadec93bec43e163          5a6d09a4 [worktree-agent-adadec93bec43e163]
+~/private/deepbuild-core/.claude/worktrees/agent-add91173a105165a3          12406227 [worktree-agent-add91173a105165a3]
+~/private/deepbuild-core/.claude/worktrees/agent-af731015823bb6230          7b39aa0d [worktree-agent-af731015823bb6230]
+~/private/deepbuild-core/.claude/worktrees/feat-761-scrub-field-names       2d427030 [feat/761-scrub-field-names]
+~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf   77bb32c2 [claude/issue-39-implementation-34e225]
+~/private/deepbuild-core/.claude/worktrees/issue-30-ac12-counting           1b89e431 [claude/issue-30-ac12-counting]
+~/private/deepbuild-core/.claude/worktrees/issue-303-implementation-814647  a7da5b0b (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/issue-45-implementation-e83eea   3d537d81 (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference       a8e54801 [fix/wiki-unslice]
+~/private/deepbuild-core/.claude/worktrees/issue-824-acceptance             5a00ecfa (detached HEAD)
+~/private/deepbuild-core/.claude/worktrees/issue-842-implementation-2194f1  df9b3fa2 [claude/issue-1112-implementation-c2a41d]
+~/private/deepbuild-core/.claude/worktrees/remote-control-52cfec            c9225aa3 [claude/remote-control-52cfec]
+~/private/deepbuild-core/.claude/worktrees/summary-document-review-346b4a   c9225aa3 [claude/summary-document-review-346b4a]
+
+$ git -C ~/private/deepbuild-core status --porcelain
+ M package-lock.json
+
+$ git -C /private/tmp/db31main status --porcelain
+
+$ git -C /private/tmp/db39A status --porcelain
+
+$ git -C /private/tmp/db45ac status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a02a6b7eebc3e6833 status --porcelain
+?? tests/acceptance/761/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a0a70551f01d24191 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a201604aefc294e95 status --porcelain
+?? tests/acceptance/358/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a2dd046b13e6e3150 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a5248a97a84b21509 status --porcelain
+?? tests/acceptance/39-redraft-ac11/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a5a1aa406a193e4c9 status --porcelain
+?? tests/acceptance/358/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a6c5fa28d628f747f status --porcelain
+?? tests/acceptance/332/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a7f6dff7ce1dea9dd status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a82eaf0872afb600f status --porcelain
+?? tests/acceptance/120/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a884ad187f5aefb17 status --porcelain
+?? tests/acceptance/39-redraft/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a91442a61f32f2794 status --porcelain
+?? tests/acceptance/39-redraft-ac26/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a926336e4a4cfd08b status --porcelain
+?? tests/acceptance/305/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a941a951b42e216ed status --porcelain
+?? tests/acceptance/306/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-a95c2444d3b206add status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-aa4208f621b1414c1 status --porcelain
+ M crates/deep-replica/Cargo.toml
+?? tests/acceptance/327/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-aab08fb2963544ab1 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-abcd69cbde53260c4 status --porcelain
+A  tests/acceptance/332/BASE-FAILURE.txt
+A  tests/acceptance/332/README.md
+AM tests/acceptance/332/accounts.test.ts
+A  tests/acceptance/332/agents.ts
+A  tests/acceptance/332/budgets.test.ts
+A  tests/acceptance/332/credentials.test.ts
+A  tests/acceptance/332/fixtures/agent.mjs
+A  tests/acceptance/332/fixtures/journey.mjs
+A  tests/acceptance/332/fixtures/seed.mjs
+A  tests/acceptance/332/fixtures/server.mjs
+A  tests/acceptance/332/gpu.test.ts
+A  tests/acceptance/332/helpers.ts
+A  tests/acceptance/332/ledger.ts
+A  tests/acceptance/332/screens.test.ts
+A  tests/acceptance/332/seed.test.ts
+A  tests/acceptance/332/tsconfig.json
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-ac7f89f1ec15f1051 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-aca6492c5ff87332d status --porcelain
+ M tests/acceptance/331/README.md
+ D tests/acceptance/331/blocked.test.ts
+?? tests/acceptance/331/BASE-FAILURE-AC9.txt
+?? tests/acceptance/331/agents.ts
+?? tests/acceptance/331/child.test.ts
+?? tests/acceptance/331/fixtures/agent.mjs
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-adadec93bec43e163 status --porcelain
+?? tests/acceptance/85/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-add91173a105165a3 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/agent-af731015823bb6230 status --porcelain
+?? tests/acceptance/303/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/feat-761-scrub-field-names status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf status --porcelain
+M  .cargo/config.toml
+M  Cargo.lock
+M  Cargo.toml
+M  adapters/codex.facts.json
+M  benchmarks/budgets.json
+M  benchmarks/canvas.mjs
+A  benchmarks/canvas/still.json
+M  benchmarks/pi-client.mjs
+M  contracts/api-report/extension-api.api.md
+M  crates/deep-app/Cargo.toml
+M  crates/deep-app/src/kinds.rs
+M  crates/deep-app/src/lib.rs
+M  crates/deep-app/src/main.rs
+M  crates/deep-app/src/notify.rs
+A  crates/deep-app/src/panel_check.rs
+A  crates/deep-app/src/panel_keys.rs
+A  crates/deep-app/src/panel_tree.rs
+M  crates/deep-app/src/question.rs
+M  crates/deep-app/src/trusted_input.rs
+M  crates/deep-canvas-graph/src/main.rs
+M  crates/deep-canvas-marks/src/check.rs
+M  crates/deep-canvas-marks/src/data.rs
+M  crates/deep-canvas-marks/src/main.rs
+M  crates/deep-canvas-marks/src/modules.rs
+M  crates/deep-canvas-marks/src/scene.rs
+M  crates/deep-canvas-motion/src/canonical.rs
+M  crates/deep-canvas-motion/src/curve.rs
+M  crates/deep-canvas-motion/src/doc.rs
+M  crates/deep-canvas-motion/src/main.rs
+M  crates/deep-canvas-motion/src/module.rs
+M  crates/deep-canvas-motion/src/program.rs
+M  crates/deep-canvas-motion/tests/scope.rs
+M  crates/deep-canvas-record/src/main.rs
+M  crates/deep-canvas-scene3d/src/lib.rs
+A  crates/deep-canvas-scene3d/src/modifiers.rs
+M  crates/deep-canvas-scene3d/src/module.rs
+M  crates/deep-canvas-sheet/src/main.rs
+M  crates/deep-canvas/src/camera.rs
+M  crates/deep-canvas/src/document/check.rs
+M  crates/deep-canvas/src/document/mod.rs
+M  crates/deep-canvas/src/document/packs.rs
+M  crates/deep-canvas/src/draw.rs
+M  crates/deep-canvas/src/grammar/tests.rs
+M  crates/deep-canvas/src/registry/mod.rs
+M  crates/deep-canvas/src/schedule/mod.rs
+M  crates/deep-canvas/src/schedule/tests.rs
+A  crates/deep-canvas/src/schedule/tree.rs
+M  crates/deep-canvas/src/schedule/view.rs
+M  crates/deep-canvas/src/scope.rs
+M  crates/deep-canvas/src/session.rs
+M  crates/deep-contracts/src/generated.rs
+M  crates/deep-effects-render/src/frame.rs
+M  crates/deep-effects-render/src/glow.rs
+M  crates/deep-effects-render/src/reference.rs
+M  crates/deep-effects-render/src/runner.rs
+M  crates/deep-gpu-layer/Cargo.toml
+M  crates/deep-gpu-layer/src/effects.rs
+M  crates/deep-gpu-layer/src/host.rs
+M  crates/deep-gpu-layer/src/live.rs
+M  crates/deep-gpu-layer/src/main.rs
+M  crates/deep-gpu-layer/src/session3.rs
+M  crates/deep-gpu-layer/src/testgpu.rs
+M  crates/deep-gpu-layer/src/view3d.rs
+M  crates/deep-hook/default-rules.json
+M  crates/deep-hook/src/main.rs
+M  crates/deep-hook/src/matcher.rs
+M  crates/deep-hook/tests/cli.rs
+M  crates/deep-marks-render/Cargo.toml
+M  crates/deep-marks-render/src/macos.rs
+M  crates/deep-marks-render/src/main.rs
+A  crates/deep-marks-render/tests/common/mod.rs
+M  crates/deep-marks-render/tests/marks.rs
+M  crates/deep-marks-render/tests/raster.rs
+M  crates/deep-marks-render/tests/status.rs
+A  crates/deep-panel-host/Cargo.toml
+A  crates/deep-panel-host/src/jit_control.rs
+A  crates/deep-panel-host/src/lib.rs
+A  crates/deep-panel-host/src/main.rs
+M  crates/deep-replica/Cargo.toml
+M  crates/deep-replica/src/drive/mod.rs
+M  crates/deep-replica/src/replica.rs
+M  crates/deep-scene3d-render/src/lib.rs
+M  crates/deep-scene3d-render/src/status.rs
+M  crates/deep-show/Cargo.toml
+M  crates/deep-show/kit-ledger.json
+M  crates/deep-show/schedule/full.json
+M  crates/deep-show/schedule/modules/scene3d.json
+M  crates/deep-show/schedule/r2.json
+M  crates/deep-show/src/capture.rs
+A  crates/deep-show/src/efficiency.rs
+M  crates/deep-show/src/frames.rs
+M  crates/deep-show/src/hub.rs
+M  crates/deep-show/src/kit/compare.rs
+M  crates/deep-show/src/kit/mod.rs
+M  crates/deep-show/src/live.rs
+M  crates/deep-show/src/main.rs
+A  crates/deep-show/src/modes.rs
+M  crates/deep-show/src/placement.rs
+M  crates/deep-show/src/planted.rs
+A  crates/deep-show/src/query.rs
+M  crates/deep-show/src/ring.rs
+M  crates/deep-show/src/serve.rs
+M  crates/deep-show/src/shared.rs
+M  crates/deep-show/src/snapshot.rs
+M  crates/deep-show/src/terminal.rs
+A  crates/deep-show/src/test_machines.rs
+M  crates/deep-show/src/test_threads.rs
+M  crates/deep-show/src/time.rs
+M  crates/deep-show/src/twins.rs
+M  crates/deep-show/src/verdict.rs
+M  crates/deep-show/src/window.rs
+M  docs/canvas-primitives.md
+M  docs/extension-guide.md
+A  docs/spikes/358/keys.json
+A  docs/spikes/358/out/bench.json
+A  docs/spikes/358/out/cases/below.json
+A  docs/spikes/358/out/cases/in-bounds.json
+A  docs/spikes/358/out/cases/late.json
+A  docs/spikes/358/out/cases/left.json
+A  docs/spikes/358/out/cases/nested.json
+A  docs/spikes/358/out/cases/over-card.json
+A  docs/spikes/358/out/cases/right.json
+A  docs/spikes/358/out/jit.json
+A  docs/spikes/358/out/signatures.json
+A  docs/spikes/358/record.json
+M  docs/technical-design.md
+M  package-lock.json
+M  package.json
+M  packages/cli/src/main.ts
+M  packages/contracts/digests.json
+M  packages/contracts/extension-api.json
+M  packages/contracts/rpc-methods.json
+M  packages/contracts/schemas/access@1.json
+M  packages/contracts/schemas/adapter.facts@1.json
+M  packages/contracts/schemas/doctor.item@1.json
+M  packages/contracts/schemas/extension.manifest@1.json
+M  packages/contracts/src/generated/types.ts
+M  packages/extension-host/runtime/deep.mjs
+M  packages/extension-host/src/host.ts
+M  packages/extension-host/test/host.test.ts
+M  packages/extension-host/test/leases.test.ts
+A  packages/extension-host/test/package.ts
+M  packages/extension-host/test/slots.test.ts
+M  packages/hub/native/deep-confirm.swift
+M  packages/hub/package.json
+M  packages/hub/src/backup.ts
+M  packages/hub/src/children.ts
+M  packages/hub/src/client.ts
+M  packages/hub/src/confirm.ts
+M  packages/hub/src/core-worker.ts
+M  packages/hub/src/core.ts
+M  packages/hub/src/doctor.ts
+M  packages/hub/src/guards.ts
+M  packages/hub/src/inbox.ts
+M  packages/hub/src/index.ts
+M  packages/hub/src/install.ts
+M  packages/hub/src/lock.ts
+M  packages/hub/src/paths.ts
+M  packages/hub/src/plant.ts
+UU packages/hub/src/server.ts
+M  packages/hub/src/settle.ts
+M  packages/hub/src/setup.ts
+M  packages/hub/src/trusted.ts
+M  packages/hub/src/wire.ts
+M  packages/hub/test/answer-after-restart.test.ts
+M  packages/hub/test/claim-replay.test.ts
+A  packages/hub/test/confirm-enroll.test.ts
+M  packages/hub/test/hub.ts
+M  packages/hub/test/jobs.test.ts
+M  packages/hub/test/pi-takeover.test.ts
+M  packages/hub/test/promises-hub.test.ts
+M  packages/hub/test/slot.test.ts
+M  packages/hub/test/verdict-stop.test.ts
+M  packages/pi/src/index.ts
+A  packages/pi/test/guards.test.ts
+M  packages/record/src/storage.ts
+A  scripts/app-bundle
+M  scripts/guide.mjs
+M  scripts/lanes.mjs
+M  scripts/perf.mjs
+M  scripts/repo-rules.json
+M  tests/acceptance/27/README.md
+A  tests/acceptance/27/desktop-redraft-2/BASE-RESULTS.txt
+A  tests/acceptance/27/desktop-redraft-2/README.md
+A  tests/acceptance/27/desktop-redraft-2/desktop.test.ts
+A  tests/acceptance/27/desktop-redraft-2/fixtures/claude.mjs
+A  tests/acceptance/27/desktop-redraft-2/standin.ts
+A  tests/acceptance/27/desktop-redraft-2/tsconfig.json
+A  tests/acceptance/27/outcomes-redraft/BASE-RESULTS.txt
+A  tests/acceptance/27/outcomes-redraft/README.md
+A  tests/acceptance/27/outcomes-redraft/fixtures/claude.mjs
+A  tests/acceptance/27/outcomes-redraft/outcomes.test.ts
+A  tests/acceptance/27/outcomes-redraft/standin.ts
+A  tests/acceptance/27/outcomes-redraft/tsconfig.json
+M  tests/acceptance/27/twins.json
+A  tests/acceptance/327/AC3-REDRAFT-BASE.txt
+M  tests/acceptance/327/README.md
+A  tests/acceptance/327/ac3_redraft.rs
+A  tests/acceptance/327/answers-redraft/BASE-RESULTS.txt
+A  tests/acceptance/327/answers-redraft/README.md
+A  tests/acceptance/327/answers-redraft/ac2.test.ts
+A  tests/acceptance/327/answers-redraft/fixtures/claude.mjs
+A  tests/acceptance/327/answers-redraft/helpers.ts
+A  tests/acceptance/327/answers-redraft/tsconfig.json
+M  tests/acceptance/327/answers.test.ts
+M  tests/acceptance/327/card.rs
+A  tests/acceptance/358/BASE-FAILURE.txt
+A  tests/acceptance/358/KEYS-BASE-FAILURE.txt
+A  tests/acceptance/358/KEYS.md
+A  tests/acceptance/358/README.md
+A  tests/acceptance/358/keys-driver.mjs
+A  tests/acceptance/358/keys-panel.mjs
+A  tests/acceptance/358/keys.live.test.mjs
+A  tests/acceptance/358/panels.mjs
+A  tests/acceptance/358/run.mjs
+A  tests/acceptance/358/spike.live.test.mjs
+A  tests/acceptance/358/spike.test.mjs
+A  tests/acceptance/358/validate.mjs
+A  tests/acceptance/358/validator.test.mjs
+A  tests/acceptance/411/AC1-REDRAFT.md
+A  tests/acceptance/411/BASE-FAILURE.txt
+A  tests/acceptance/411/README.md
+A  tests/acceptance/411/cut.test.ts
+A  tests/acceptance/411/fixtures/door-reader/deepbuild.json
+A  tests/acceptance/411/fixtures/door-reader/index.ts.fixture
+A  tests/acceptance/411/fixtures/packs/door-1.0.0/door.leaf@1.json
+A  tests/acceptance/411/fixtures/packs/door-1.0.0/pack.json
+A  tests/acceptance/411/fixtures/parity/agent/query-summary.scene
+A  tests/acceptance/411/handles.test.ts
+A  tests/acceptance/411/helpers.ts
+A  tests/acceptance/411/machines.test.ts
+A  tests/acceptance/411/modes.test.ts
+A  tests/acceptance/411/modifiers.test.ts
+A  tests/acceptance/411/plugin.test.ts
+A  tests/acceptance/411/rows-redraft.test.ts
+A  tests/acceptance/411/summary.test.ts
+A  tests/acceptance/411/tsconfig.json
+A  tests/acceptance/411/why-paths.test.ts
+A  tests/acceptance/411/why-writes.test.ts
+A  tests/acceptance/854/AC1-MOVE.md
+A  tests/acceptance/854/BASE-FAILURE.txt
+A  tests/acceptance/854/README.md
+A  tests/acceptance/854/REPLICA-REDRAFT.md
+A  tests/acceptance/854/budgets.test.ts
+A  tests/acceptance/854/helpers.ts
+A  tests/acceptance/854/idle.test.ts
+A  tests/acceptance/854/patch.test.ts
+A  tests/acceptance/854/release.test.ts
+A  tests/acceptance/854/replica-redraft.test.ts
+A  tests/acceptance/854/replica.test.ts
+A  tests/acceptance/854/scene-read.test.ts
+A  tests/acceptance/854/tsconfig.json
+A  tests/acceptance/880/BASE-FAILURE.txt
+A  tests/acceptance/880/README.md
+A  tests/acceptance/880/code-signature.test.ts
+A  tests/acceptance/880/exit-code.test.ts
+A  tests/acceptance/880/fixtures/helper.mjs
+A  tests/acceptance/880/fixtures/launchd.mjs
+A  tests/acceptance/880/fixtures/launcher.c
+A  tests/acceptance/880/helpers.ts
+A  tests/acceptance/880/plants.test.ts
+A  tests/acceptance/880/redraft/README.md
+A  tests/acceptance/880/redraft/touch-id.test.ts
+A  tests/acceptance/880/replay.test.ts
+A  tests/acceptance/880/scenarios.ts
+A  tests/acceptance/880/touch-id.test.ts
+A  tests/acceptance/880/tsconfig.json
+A  tests/acceptance/883/BASE-FAILURE.txt
+A  tests/acceptance/883/README.md
+A  tests/acceptance/883/fixtures/live.json
+A  tests/acceptance/883/fixtures/two-sessions.events.jsonl
+A  tests/acceptance/883/notifications.rs
+A  tests/acceptance/896/BASE-FAILURE.txt
+A  tests/acceptance/896/README.md
+A  tests/acceptance/896/dirty.test.ts
+A  tests/acceptance/896/helpers.ts
+A  tests/acceptance/896/settled.test.ts
+A  tests/acceptance/896/tsconfig.json
+A  tests/acceptance/906/BASE-FAILURE.txt
+A  tests/acceptance/906/README.md
+A  tests/acceptance/906/fixtures/claude.mjs
+A  tests/acceptance/906/fixtures/stub-bin.sh
+A  tests/acceptance/906/helpers.ts
+A  tests/acceptance/906/prompt.test.ts
+A  tests/acceptance/906/shown.test.ts
+A  tests/acceptance/906/stop.test.ts
+A  tests/acceptance/906/tsconfig.json
+A  tests/acceptance/906/twins.json
+A  tests/acceptance/906/twins/delivered-when-written/packages/hub/src/plant.ts
+A  tests/acceptance/906/twins/sends-shown-again/packages/hub/src/plant.ts
+A  tests/acceptance/909/BASE-FAILURE.txt
+A  tests/acceptance/909/README.md
+A  tests/acceptance/909/jobs.test.ts
+A  tests/acceptance/909/lock.test.ts
+A  tests/acceptance/909/tsconfig.json
+A  tests/panel-host.live.test.mjs
+A  tests/panel-keys.live.test.mjs
+A  tests/proof/883/README.md
+A  tests/proof/883/notification-center.live.test.ts
+A  tests/proof/883/out/notification-center.txt
+A  tests/proof/883/out/restart-on-base.txt
+A  tests/proof/883/restart_on_base.rs
+A  tests/proof/883/tsconfig.json
+A  vendor/quickjs-jit-runtime/Cargo.toml
+A  vendor/quickjs-jit-runtime/LICENSE
+A  vendor/quickjs-jit-runtime/build.rs
+A  vendor/quickjs-jit-runtime/src/abi.rs
+A  vendor/quickjs-jit-runtime/src/bin/jit-coverage-report.rs
+A  vendor/quickjs-jit-runtime/src/bin/jit-quickjs-suite.rs
+A  vendor/quickjs-jit-runtime/src/bin/jit-test262.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/cfg.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/decode.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/mod.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/policy.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/policy_audit.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/stack.rs
+A  vendor/quickjs-jit-runtime/src/bytecode/verify.rs
+A  vendor/quickjs-jit-runtime/src/code_cache/artifact.rs
+A  vendor/quickjs-jit-runtime/src/code_cache/evict.rs
+A  vendor/quickjs-jit-runtime/src/code_cache/mod.rs
+A  vendor/quickjs-jit-runtime/src/compiler/baseline.rs
+A  vendor/quickjs-jit-runtime/src/compiler/call_cleanup.rs
+A  vendor/quickjs-jit-runtime/src/compiler/helpers.rs
+A  vendor/quickjs-jit-runtime/src/compiler/mock.rs
+A  vendor/quickjs-jit-runtime/src/compiler/mod.rs
+A  vendor/quickjs-jit-runtime/src/compiler/native_call.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized/array_cache.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized/call_guards.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized/const_canon.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized/element_address.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized/frame_inline.rs
+A  vendor/quickjs-jit-runtime/src/compiler/optimized/property_cache.rs
+A  vendor/quickjs-jit-runtime/src/compiler/refcount.rs
+A  vendor/quickjs-jit-runtime/src/compiler/tagged_call_link.rs
+A  vendor/quickjs-jit-runtime/src/config.rs
+A  vendor/quickjs-jit-runtime/src/correctness/mod.rs
+A  vendor/quickjs-jit-runtime/src/error.rs
+A  vendor/quickjs-jit-runtime/src/ir/baseline.rs
+A  vendor/quickjs-jit-runtime/src/ir/facts.rs
+A  vendor/quickjs-jit-runtime/src/ir/frame_state.rs
+A  vendor/quickjs-jit-runtime/src/ir/heap.rs
+A  vendor/quickjs-jit-runtime/src/ir/inlining.rs
+A  vendor/quickjs-jit-runtime/src/ir/loops.rs
+A  vendor/quickjs-jit-runtime/src/ir/mod.rs
+A  vendor/quickjs-jit-runtime/src/ir/optimized.rs
+A  vendor/quickjs-jit-runtime/src/ir/property.rs
+A  vendor/quickjs-jit-runtime/src/ir/ranges.rs
+A  vendor/quickjs-jit-runtime/src/ir/scalar.rs
+A  vendor/quickjs-jit-runtime/src/ir/types.rs
+A  vendor/quickjs-jit-runtime/src/lib.rs
+A  vendor/quickjs-jit-runtime/src/metrics.rs
+A  vendor/quickjs-jit-runtime/src/platform/linux.rs
+A  vendor/quickjs-jit-runtime/src/platform/macos.rs
+A  vendor/quickjs-jit-runtime/src/platform/mod.rs
+A  vendor/quickjs-jit-runtime/src/platform/unsupported.rs
+A  vendor/quickjs-jit-runtime/src/platform/windows.rs
+A  vendor/quickjs-jit-runtime/src/runtime/array_feedback.rs
+A  vendor/quickjs-jit-runtime/src/runtime/background.rs
+A  vendor/quickjs-jit-runtime/src/runtime/coordinator.rs
+A  vendor/quickjs-jit-runtime/src/runtime/feedback.rs
+A  vendor/quickjs-jit-runtime/src/runtime/hotness.rs
+A  vendor/quickjs-jit-runtime/src/runtime/install.rs
+A  vendor/quickjs-jit-runtime/src/runtime/invalidate.rs
+A  vendor/quickjs-jit-runtime/src/runtime/mod.rs
+A  vendor/quickjs-jit-runtime/src/runtime/osr.rs
+A  vendor/quickjs-jit-runtime/src/runtime/shape_feedback.rs
+?? .vitest/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-30-ac12-counting status --porcelain
+?? .claude/
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-303-implementation-814647 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-45-implementation-e83eea status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference status --porcelain
+ M packages/wiki/src/index.ts
+ M packages/wiki/test/wiki.test.ts
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-824-acceptance status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/issue-842-implementation-2194f1 status --porcelain
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/remote-control-52cfec status --porcelain
+?? 85-hub-continue-tag.txt
+
+$ git -C ~/private/deepbuild-core/.claude/worktrees/summary-document-review-346b4a status --porcelain
+?? scratchpad/

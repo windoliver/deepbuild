@@ -432,7 +432,9 @@ impl Tree<'_, '_, '_> {
             return refuse("bad_layout", id);
         }
         let shaped = self.shaper.shape(&Spec {
-            role,
+            family: role.family(),
+            fallback: &[],
+            lang: None,
             size,
             weight: weight as u16,
             line_height: params

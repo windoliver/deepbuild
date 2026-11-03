@@ -292,6 +292,30 @@ impl Timer {
         })
     }
 
+    /// A pass's two writes split across two passes: the first writes its beginning, the
+    /// second its end, so the passes between them time as one (#397).
+    pub fn bracket(
+        &self,
+        i: Option<usize>,
+    ) -> (
+        Option<wgpu::RenderPassTimestampWrites<'_>>,
+        Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        let Some(w) = self.writes(i) else {
+            return (None, None);
+        };
+        (
+            Some(wgpu::RenderPassTimestampWrites {
+                end_of_pass_write_index: None,
+                ..w.clone()
+            }),
+            Some(wgpu::RenderPassTimestampWrites {
+                beginning_of_pass_write_index: None,
+                ..w
+            }),
+        )
+    }
+
     pub fn end(&mut self, i: Option<usize>) {
         if let Some(i) = i {
             self.marks[i].cpu[1] = self.since();
@@ -472,6 +496,12 @@ pub struct Drawing {
     pub canonical: bool,
 }
 
+/// What a view draws: a 3D scene's frames, or a 2D document's (#397).
+pub enum Content {
+    Scene(Box<Frames>),
+    Flat(Box<crate::flat::Flat>),
+}
+
 pub struct View {
     pub size: [u32; 2],
     slots: Vec<Box<dyn Handoff>>,
@@ -479,7 +509,7 @@ pub struct View {
     /// The slot the last drawn frame is in.
     pub shown: Option<usize>,
     renderer: Renderer,
-    frames: Frames,
+    frames: Content,
     /// Whether the renderer last prepared a scene of `frames`, so a frame need only write what
     /// moved.
     prepared: bool,
@@ -505,7 +535,7 @@ impl View {
         path: Path,
         size: [u32; 2],
         slots: u32,
-        frames: Frames,
+        frames: Content,
         scale: f64,
         window: u32,
         look: &Look3,
@@ -516,12 +546,15 @@ impl View {
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, Planted3::default());
             let mut frames = frames;
-            let prepared = match frames.at(0, size, &Offsets::default(), labels) {
-                Ok(scene) => {
-                    renderer.prepare(device, scene, look);
-                    true
-                }
-                Err(_) => false,
+            let prepared = match &mut frames {
+                Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
+                    Ok(scene) => {
+                        renderer.prepare(device, scene, look);
+                        true
+                    }
+                    Err(_) => false,
+                },
+                Content::Flat(_) => false,
             };
             (slots, renderer, frames, prepared)
         });
@@ -545,7 +578,7 @@ impl View {
     }
 
     /// Draws `frames` from the next frame on: a revision's document.
-    pub fn set_frames(&mut self, frames: Frames) {
+    pub fn set_frames(&mut self, frames: Content) {
         self.frames = frames;
         self.prepared = false;
     }
@@ -650,10 +683,20 @@ impl View {
             self.after(encoder, slot);
             return Ok(());
         }
-        self.frames.at(t, self.size, &drawing.offsets, labels)?;
-        let scene = self.frames.scene();
+        let frames = match &mut self.frames {
+            Content::Scene(frames) => frames,
+            Content::Flat(flat) => {
+                self.drew = (1.0, "none");
+                flat.draw(device, t, self.size, &slot_view, encoder, timer, session)
+                    .map_err(|(code, path)| Refused { code, path })?;
+                self.after(encoder, slot);
+                return Ok(());
+            }
+        };
+        frames.at(t, self.size, &drawing.offsets, labels)?;
+        let scene = frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
-        match self.frames.moved().filter(|_| self.prepared) {
+        match frames.moved().filter(|_| self.prepared) {
             Some(moved) => self.renderer.prepare_moved(device, scene, look, moved),
             None => self.renderer.prepare(device, scene, look),
         }
