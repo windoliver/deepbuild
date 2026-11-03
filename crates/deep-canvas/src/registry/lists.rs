@@ -541,7 +541,15 @@ pub(super) fn seal(
             .iter()
             .map(|p| def.run_kit(&p.name, &p.value))
             .collect();
-        if let Some((p, _)) = def.planted.iter().zip(&planted).find(|(_, r)| r.pass()) {
+        // Every planted entry the kit admits is named (#221: a registry with two).
+        let admitted: Vec<&PlantedEntry> = def
+            .planted
+            .iter()
+            .zip(&planted)
+            .filter(|(_, r)| r.pass())
+            .map(|(p, _)| p)
+            .collect();
+        if let Some(p) = admitted.first() {
             let rules: Vec<&str> = def.kit.iter().map(|k| k.rule).collect();
             return Err(SealError::new(
                 "kit_admits_planted",
@@ -554,7 +562,10 @@ pub(super) fn seal(
             )
             .at(
                 &def.name,
-                vec![json!({"name": p.name, "value": p.value})],
+                admitted
+                    .iter()
+                    .map(|p| json!({"name": p.name, "value": p.value}))
+                    .collect(),
                 &rules,
             ));
         }

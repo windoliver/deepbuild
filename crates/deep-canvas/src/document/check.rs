@@ -7,8 +7,8 @@ use serde_json::{json, Map, Value};
 
 use super::packs::{self, Expansion, Packs, Resolved};
 use super::{
-    kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_VECTORS,
-    ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
+    kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_RELATIONS,
+    AT_VECTORS, BOX_POINTS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
 use crate::cost::Coefficients;
 use crate::grammar::{
@@ -1473,7 +1473,21 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
     };
     for (name, value) in members {
         let path = format!("items/{key}/at/{name}");
-        if AT_VECTORS.contains(&name.as_str()) {
+        if name == "pivot" && value.is_string() {
+            if !value.as_str().is_some_and(|p| BOX_POINTS.contains(&p)) {
+                issues.push(Issue::error(
+                    "out_of_range",
+                    key,
+                    path,
+                    value.clone(),
+                    "not a box point (n ne e se s sw w nw c)",
+                ));
+            }
+        } else if name == "place" {
+            check_place(key, value, issues);
+        } else if name == "align" {
+            check_align(key, value, issues);
+        } else if AT_VECTORS.contains(&name.as_str()) {
             if !is_vector(value, 3) {
                 issues.push(Issue::error(
                     "out_of_range",
@@ -1500,6 +1514,105 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
                 path,
                 value.clone(),
                 "not a member of at in this slice",
+            ));
+        }
+    }
+}
+
+/// A relation's target: an item ID with an optional `#part`, or a point `[u, u]`; `frame` too
+/// where `frame` is allowed.
+fn relation_target(value: &Value, frame: bool) -> bool {
+    match value {
+        Value::String(s) => (frame && s == "frame") || !s.is_empty(),
+        v => is_vector(v, 2),
+    }
+}
+
+/// `at.place` (Item and kind: relations): exactly one of `beside`, `edge` and `onto`, with the
+/// members its form takes, sides and points from the box points.
+fn check_place(key: &str, value: &Value, issues: &mut Vec<Issue>) {
+    let base = format!("items/{key}/at/place");
+    let mut fault = |path: String, v: &Value, why: &str, code: &'static str| {
+        issues.push(Issue::error(code, key, path, v.clone(), why));
+    };
+    let Some(place) = value.as_object() else {
+        return fault(base, value, "not an object", "out_of_range");
+    };
+    let forms: Vec<&str> = ["beside", "edge", "onto"]
+        .into_iter()
+        .filter(|f| place.contains_key(*f))
+        .collect();
+    let members: &[&str] = match forms.as_slice() {
+        ["beside"] => &["beside", "side", "gap", "align", "own"],
+        ["edge"] => &["edge", "margin"],
+        ["onto"] => &["onto", "point"],
+        _ => {
+            return fault(
+                base,
+                value,
+                "not exactly one of beside, edge and onto",
+                "out_of_range",
+            )
+        }
+    };
+    let side = |v: &Value| {
+        v.as_str()
+            .is_some_and(|s| s != "c" && BOX_POINTS.contains(&s))
+    };
+    for (name, v) in place {
+        let path = format!("{base}/{name}");
+        let ok = match name.as_str() {
+            n if !members.contains(&n) => {
+                fault(path, v, "not a member of this placement", "unknown_field");
+                continue;
+            }
+            "beside" | "onto" => relation_target(v, false),
+            "edge" | "side" => side(v),
+            "point" => v.as_str().is_some_and(|s| BOX_POINTS.contains(&s)),
+            "gap" | "margin" => fits_f32(v),
+            "align" => v
+                .as_str()
+                .is_some_and(|s| ["start", "center", "end", "baseline"].contains(&s)),
+            _ => v.as_str().is_some_and(|s| !s.is_empty()),
+        };
+        if !ok {
+            fault(path, v, "not a value this member takes", "out_of_range");
+        }
+    }
+}
+
+/// `at.align`: at most two `{to, side}`, each moving the item along one axis.
+fn check_align(key: &str, value: &Value, issues: &mut Vec<Issue>) {
+    let base = format!("items/{key}/at/align");
+    let list = match value.as_array() {
+        Some(list) if list.len() <= 2 => list,
+        _ => {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                base,
+                value.clone(),
+                "not a list of at most two",
+            ));
+            return;
+        }
+    };
+    for (i, a) in list.iter().enumerate() {
+        let to = a.get("to").is_some_and(|t| relation_target(t, true));
+        let side = a
+            .get("side")
+            .and_then(Value::as_str)
+            .is_some_and(|s| ["n", "s", "e", "w", "cx", "cy"].contains(&s));
+        let only = a
+            .as_object()
+            .is_some_and(|o| o.keys().all(|k| k == "to" || k == "side"));
+        if !(to && side && only) {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("{base}/{i}"),
+                a.clone(),
+                "not {to, side}",
             ));
         }
     }
@@ -2146,6 +2259,25 @@ pub(crate) fn resolve(
         ["at", name] if AT_VECTORS.contains(name) || *name == "shear" => Ok(()),
         ["at", name, index] if AT_VECTORS.contains(name) && ["0", "1", "2"].contains(index) => {
             Ok(())
+        }
+        // Every relation field is a channel target (Item and kind: relations), on a relation
+        // the item holds.
+        ["at", name, rest @ ..] if AT_RELATIONS.contains(name) && !rest.is_empty() => {
+            let mut cursor = member(target, "at").and_then(|a| member(a, name));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
         }
         ["adjust", name] if ADJUST_FIELDS.contains(name) => Ok(()),
         [field] if ITEM_OWN_FIELDS.contains(field) => Ok(()),
