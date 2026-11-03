@@ -4938,7 +4938,7 @@ export class Core {
           cwd: String(d.cwd), grant: d.grant as Grant, lane: d.lane === 'fast' ? 'fast' : 'slow', expected_ms: typeof needs.expected_ms === 'number' ? needs.expected_ms : null,
           ...(typeof d.deadline_ms === 'number' ? { deadline: d.deadline_ms } : {}), ...(d.environment === true ? { environment: true } : {}),
           ...(typeof d.command === 'string' ? { command: d.command } : {}), ...(Array.isArray(d.stand_ins) ? { stand_ins: d.stand_ins as string[] } : {}),
-          ...(Array.isArray(d.env_withheld) && d.env_withheld.length ? { withheld: d.env_withheld as string[] } : {}),
+          ...(Array.isArray(d.withheld) && d.withheld.length ? { withheld: d.withheld as string[] } : {}),
         };
       }
     });
@@ -5000,16 +5000,23 @@ export class Core {
     const lease = await slot(this.leases, holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.now();
-    // The record keeps no value the evidence store would scrub: each such variable is named as withheld instead.
-    const withheld = Object.entries(run.env).filter(([, v]) => scrubText(v, { env: run.env, held: this.options.held }) !== v).map(([k]) => k);
+    // The record keeps no value the evidence store would scrub, nor text past its read cap: each such variable ($NAME)
+    // or field is named as withheld instead, and a rebuild can't run it again.
+    const fits = (v: string): boolean => v.length <= 8192;
+    const kept = (k: string, v: string): boolean => fits(k) && fits(v) && scrubText(v, { env: run.env, held: this.options.held }) === v;
+    const recorded = Object.fromEntries(Object.entries(run.env).filter(([k, v]) => kept(k, v)));
+    const withheld = [
+      ...Object.keys(run.env).filter((k) => !(k in recorded)).map((k) => `$${k.slice(0, 8191)}`),
+      ...(run.argv.every(fits) ? [] : ['argv']), ...(run.command === undefined || fits(run.command) ? [] : ['command']),
+    ];
     await this.append(this.connection('core'), {
       v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
       data: {
         run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
         // What it runs (#996): a journal that can't be read is rebuilt from it.
-        argv: run.argv, cwd: run.cwd, env: Object.fromEntries(Object.entries(run.env).filter(([k]) => !withheld.includes(k))), env_withheld: withheld,
+        argv: run.argv.map((a) => a.slice(0, 8192)), cwd: run.cwd, env: recorded, withheld,
         grant: run.grant as JsonValue, deadline_ms: run.deadline ?? null, ...(run.environment ? { environment: true } : {}),
-        ...(run.command !== undefined ? { command: run.command } : {}), ...(run.stand_ins ? { stand_ins: run.stand_ins } : {}),
+        ...(run.command !== undefined ? { command: run.command.slice(0, 8192) } : {}), ...(run.stand_ins ? { stand_ins: run.stand_ins } : {}),
       },
     }).catch(async (error: unknown) => {
       // A start the record refused never ran: it leaves neither the journal nor its slot.
@@ -5161,7 +5168,7 @@ export class Core {
       if (run.withheld?.length || (run.cwd && isUnder(run.cwd, realpathSync(join(this.root.dir, 'checkouts'))))) {
         const [claim] = (await this.record.raw(`SELECT commit_sha, verdict_id FROM claims WHERE id = '${sql(run.claim.slice(6))}'`)) as { commit_sha: string | null; verdict_id: string | null }[];
         // A verdict it already has stands.
-        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart${run.withheld?.length ? `, and the record doesn't keep the values of ${run.withheld.join(', ')}` : ''}`, 'INCONCLUSIVE');
+        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart${run.withheld?.length ? `, and the record doesn't keep its ${run.withheld.join(', ')}` : ''}`, 'INCONCLUSIVE');
         continue;
       }
       // Its claim's check runs again.
