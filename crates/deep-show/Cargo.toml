@@ -153,6 +153,8 @@ test-gpu-second-backend = []
 # Issue #200: the test canvas modules of the #200 acceptance README, the build without effects,
 # and the planted layout in which the effects module fills the op table's base steps.
 test-mark = ["dep:deep-canvas-test-modules"]
+# Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
+test-column-source = ["dep:deep-canvas-test-modules"]
 test-mark-dot-9 = ["dep:deep-canvas-test-modules"]
 test-mark-no-planted = ["dep:deep-canvas-test-modules"]
 test-mark-no-since = ["dep:deep-canvas-test-modules"]

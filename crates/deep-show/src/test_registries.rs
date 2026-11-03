@@ -28,6 +28,8 @@ pub fn modules() -> Vec<Module> {
     let mut out: Vec<Module> = Vec::new();
     #[cfg(feature = "test-mark")]
     out.push(deep_canvas_test_modules::registries::mark());
+    #[cfg(feature = "test-column-source")]
+    out.push(deep_canvas_test_modules::registries::columns());
     // Issue #412's test canvas modules.
     #[cfg(feature = "test-preview")]
     out.push(deep_canvas_test_modules::kinds::preview());

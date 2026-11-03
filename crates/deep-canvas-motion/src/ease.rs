@@ -29,7 +29,7 @@ pub enum Side {
 
 /// A named ease with its params.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Ease {
+pub enum Named {
     Penner(Family, Side),
     Smoothstep,
     Smootherstep,
@@ -80,20 +80,20 @@ pub fn names() -> Vec<String> {
 
 /// The ease `name` with `param` (k, pull or tau; its default when `None`), or `None` for a name
 /// `ease@1` doesn't hold or a param out of its range.
-pub fn named(name: &str, param: Option<f64>) -> Option<Ease> {
+pub fn named(name: &str, param: Option<f64>) -> Option<Named> {
     let k = param.unwrap_or(10.0);
     let sigmoid_k = (k > 0.0 && k.is_finite()).then_some(k);
     Some(match name {
-        "smoothstep" => Ease::Smoothstep,
-        "smootherstep" => Ease::Smootherstep,
-        "sigmoid" => Ease::Sigmoid(sigmoid_k?),
-        "rush_in" => Ease::RushIn(sigmoid_k?),
-        "rush_out" => Ease::RushOut(sigmoid_k?),
-        "double_sigmoid" => Ease::DoubleSigmoid(sigmoid_k?),
-        "running_start" => Ease::RunningStart(param.unwrap_or(-0.5)).finite()?,
+        "smoothstep" => Named::Smoothstep,
+        "smootherstep" => Named::Smootherstep,
+        "sigmoid" => Named::Sigmoid(sigmoid_k?),
+        "rush_in" => Named::RushIn(sigmoid_k?),
+        "rush_out" => Named::RushOut(sigmoid_k?),
+        "double_sigmoid" => Named::DoubleSigmoid(sigmoid_k?),
+        "running_start" => Named::RunningStart(param.unwrap_or(-0.5)).finite()?,
         "exp_decay" => {
             let tau = param.unwrap_or(0.1);
-            (tau > 0.0 && tau.is_finite()).then_some(Ease::ExpDecay(tau))?
+            (tau > 0.0 && tau.is_finite()).then_some(Named::ExpDecay(tau))?
         }
         _ => {
             let (side, family) = if let Some(f) = name.strip_prefix("in_out_") {
@@ -104,15 +104,15 @@ pub fn named(name: &str, param: Option<f64>) -> Option<Ease> {
                 (Side::Out, name.strip_prefix("out_")?)
             };
             let family = FAMILIES.iter().find(|(n, _)| *n == family)?.1;
-            Ease::Penner(family, side)
+            Named::Penner(family, side)
         }
     })
 }
 
-impl Ease {
-    fn finite(self) -> Option<Ease> {
+impl Named {
+    fn finite(self) -> Option<Named> {
         match self {
-            Ease::RunningStart(p) if !p.is_finite() => None,
+            Named::RunningStart(p) if !p.is_finite() => None,
             e => Some(e),
         }
     }
@@ -127,35 +127,35 @@ impl Ease {
             return 1.0;
         }
         match *self {
-            Ease::Penner(f, Side::In) => penner_in(f, x),
-            Ease::Penner(f, Side::Out) => 1.0 - penner_in(f, 1.0 - x),
-            Ease::Penner(f, Side::InOut) => {
+            Named::Penner(f, Side::In) => penner_in(f, x),
+            Named::Penner(f, Side::Out) => 1.0 - penner_in(f, 1.0 - x),
+            Named::Penner(f, Side::InOut) => {
                 if x < 0.5 {
                     0.5 * penner_in(f, 2.0 * x)
                 } else {
                     1.0 - 0.5 * penner_in(f, 2.0 - 2.0 * x)
                 }
             }
-            Ease::Smoothstep => x * x * (3.0 - 2.0 * x),
-            Ease::Smootherstep => x * x * x * (x * (6.0 * x - 15.0) + 10.0),
-            Ease::Sigmoid(k) => sigmoid(k, x),
-            Ease::RushIn(k) => 2.0 * sigmoid(k, 0.5 * x),
-            Ease::RushOut(k) => 2.0 * sigmoid(k, 0.5 * x + 0.5) - 1.0,
-            Ease::DoubleSigmoid(k) => {
+            Named::Smoothstep => x * x * (3.0 - 2.0 * x),
+            Named::Smootherstep => x * x * x * (x * (6.0 * x - 15.0) + 10.0),
+            Named::Sigmoid(k) => sigmoid(k, x),
+            Named::RushIn(k) => 2.0 * sigmoid(k, 0.5 * x),
+            Named::RushOut(k) => 2.0 * sigmoid(k, 0.5 * x + 0.5) - 1.0,
+            Named::DoubleSigmoid(k) => {
                 if x < 0.5 {
                     0.5 * sigmoid(k, 2.0 * x)
                 } else {
                     0.5 * (1.0 + sigmoid(k, 2.0 * x - 1.0))
                 }
             }
-            Ease::RunningStart(pull) => {
+            Named::RunningStart(pull) => {
                 // The six-degree Bernstein curve with control values 0, 0, pull, pull, 1, 1, 1.
                 let s = 1.0 - x;
                 let b = |n: i32, k: i32, c: f64| c * ops::powi(x, k) * ops::powi(s, n - k);
                 b(6, 2, 15.0) * pull + b(6, 3, 20.0) * pull + b(6, 4, 15.0) + b(6, 5, 6.0)
                     + b(6, 6, 1.0)
             }
-            Ease::ExpDecay(tau) => (1.0 - ops::exp(-x / tau)) / (1.0 - ops::exp(-1.0 / tau)),
+            Named::ExpDecay(tau) => (1.0 - ops::exp(-x / tau)) / (1.0 - ops::exp(-1.0 / tau)),
         }
     }
 
@@ -164,7 +164,7 @@ impl Ease {
     pub fn bounded(&self) -> bool {
         !matches!(
             self,
-            Ease::Penner(Family::Back | Family::Elastic, _) | Ease::RunningStart(_)
+            Named::Penner(Family::Back | Family::Elastic, _) | Named::RunningStart(_)
         )
     }
 }

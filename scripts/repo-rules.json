@@ -718,6 +718,10 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #489: the motion module the deep-motion proof binary compiles and evaluates documents with; the binary moved out of the deep-canvas* crate because `eval`'s `timing` reads the clock."
         },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #417: `deep-motion eval` takes a shipped look by its ID (look::shipped), for the time feel a change of state moves by."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: the deep-motion CLI's JSON lines; float_roundtrip, so a key value reads back to its exact f64. Already in the workspace tree."

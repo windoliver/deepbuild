@@ -5,7 +5,7 @@
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 
 
-use crate::ease::Ease;
+use crate::ease::Named;
 use crate::spring::Spring;
 
 /// The Bézier timing solver's step count: Newton steps, each replaced by a bisection step where
@@ -29,7 +29,7 @@ pub enum Interp {
     /// `velocity`, in closed form; the next key's value shows from its time on.
     Spring(Spring),
     /// An entry of `ease@1`.
-    Ease(Ease),
+    Ease(Named),
     /// Handles computed at check from the neighboring keys (Channel and key: auto tangents),
     /// each `smoothness` of the span long; with `clamp`, a local extreme is flat and no handle
     /// passes the next key's value, so no span overshoots its keys.
@@ -357,6 +357,43 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
 fn bernstein(p0: f64, p1: f64, p2: f64, p3: f64, s: f64) -> f64 {
     let r = 1.0 - s;
     r * r * r * p0 + 3.0 * r * r * s * p1 + 3.0 * r * s * s * p2 + s * s * s * p3
+}
+
+/// How a change of state moves over its span (#417, the look's `time.state.interp`; #489's
+/// transition follow): an `ease@1` name or a Bézier, from a share of the span to a share of the way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Ease {
+    Linear,
+    InCubic,
+    OutCubic,
+    InOutCubic,
+    Bezier(Bezier),
+}
+
+impl Ease {
+    /// The `ease@1` names motion lands, as written.
+    pub const NAMES: [(&'static str, Ease); 4] = [
+        ("linear", Ease::Linear),
+        ("in_cubic", Ease::InCubic),
+        ("out_cubic", Ease::OutCubic),
+        ("in_out_cubic", Ease::InOutCubic),
+    ];
+
+    /// The share of the way at `u` of the span, `u` clamped to [0, 1] (the cubics as CSS and
+    /// Penner name them).
+    pub fn at(&self, u: f64) -> f64 {
+        let u = u.clamp(0.0, 1.0);
+        match *self {
+            Ease::Linear => u,
+            Ease::InCubic => u * u * u,
+            Ease::OutCubic => {
+                let r = 1.0 - u;
+                1.0 - r * r * r
+            }
+            Ease::InOutCubic => deep_canvas::camera::ease_in_out_cubic(u),
+            Ease::Bezier(b) => b.solve(u).y,
+        }
+    }
 }
 
 /// A damped spring's displacement from its target, released from rest at 1, after `seconds`, in

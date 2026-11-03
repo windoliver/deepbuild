@@ -31,7 +31,10 @@ pub fn module() -> Module {
             feature: "motion".into(),
             license: "Apache-2.0".into(),
             implements: "motion@1".into(),
-            implementation: deep_canvas::registry::Implementation::reference("motion", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+            implementation: deep_canvas::registry::Implementation::reference(
+                "motion",
+                deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+            ),
         },
         register,
     }
@@ -151,8 +154,8 @@ fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
     );
     r.code(
         "bad_interp",
-        "A key's interpolation motion doesn't land, or one its channel's type can't take.",
-        "Use linear, hold, a bezier or a spring on a number, and hold on a bool.",
+        "A key's interpolation motion doesn't land, or one its channel's type can't take; or a transition's or a shot's ease it doesn't land.",
+        "Use linear, hold, a bezier or a spring on a number, and hold on a bool; for an ease, a bezier or the ease linear, in_cubic, out_cubic or in_out_cubic.",
         false,
     );
     r.code(

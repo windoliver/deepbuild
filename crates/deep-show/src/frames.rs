@@ -768,6 +768,9 @@ fn cell_grids(
                 spec: scene::TextSpec {
                     text: row.text.trim_end().to_string(),
                     font: "mono".into(),
+                    family: Some(deep_text::Role::Mono.family()),
+                    fallback: Vec::new(),
+                    lang: None,
                     size: g.font_size,
                     weight: 400,
                     width: None,

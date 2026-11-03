@@ -31,9 +31,16 @@ pub struct Sparks {
     pub seed: u32,
     pub size_px: f64,
     pub opacity: f64,
-    /// Linear colors at birth and at death.
-    pub from: [f64; 3],
-    pub to: [f64; 3],
+    /// Its size in px and its opacity at birth and at death (#420: channels over life).
+    pub size: [f64; 2],
+    pub fade: [f64; 2],
+    /// Its color over life: up to four stops, each its place in life and a linear color, mixed
+    /// in OKLab.
+    pub stops: Vec<(f64, [f64; 3])>,
+    /// `dot`, `spark`, `puff` or `streak`, by its place in that list.
+    pub draw: u32,
+    /// A puff shaded at half resolution.
+    pub half: bool,
 }
 
 /// What the look, the document and the session turn on this frame, and each effect's values.
@@ -93,6 +100,18 @@ struct SparkDraw {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     instances: wgpu::Buffer,
+    /// The particles its instance buffer holds: a showpiece's count grows it (#420).
+    capacity: u32,
+}
+
+/// An instance buffer for `count` particles.
+fn instance_buffer(d: &wgpu::Device, count: u32) -> wgpu::Buffer {
+    d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("particles instances"),
+        size: u64::from(count) * u64::from(PARTICLE_FLOATS) * 4,
+        usage: wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
+    })
 }
 
 /// The library's stage graph with this ID, compiled (the GPU's planted pass when asked).
@@ -272,16 +291,12 @@ impl Effects {
             cache: None,
         });
         let layout = pipeline.get_bind_group_layout(0);
-        let instances = d.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("particles instances"),
-            size: u64::from(shipped::MAX_PARTICLES * PARTICLE_FLOATS) * 4,
-            usage: wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
+        let instances = instance_buffer(d, shipped::MAX_PARTICLES);
         self.sparks = Some(SparkDraw {
             pipeline,
             layout,
             instances,
+            capacity: shipped::MAX_PARTICLES,
         });
     }
 
@@ -300,13 +315,31 @@ impl Effects {
         let d = &device.device;
         let compute = self.runner(device, "particles.sparks@1");
         self.spark_draw(device);
+        if let Some(draw) = self.sparks.as_mut().filter(|dr| dr.capacity < s.count) {
+            draw.instances = instance_buffer(d, s.count);
+            draw.capacity = s.count;
+        }
         let draw = self.sparks.as_ref().expect("made above");
         let mut c = *camera;
         c.seed = s.seed;
-        let values = interp::inputs(&compute.compiled.checked, &s.params, &self.settings.roles);
-        let (g0, g1, buffers) =
-            compute.bind(d, &c.frame(), [1, 1], &values, &[], &[&draw.instances]);
-        let mut uni: Vec<u8> = Vec::with_capacity(112);
+        // One dispatch per operator's worth of particles, each from its offset (a showpiece's
+        // count runs past one).
+        let chunk = shipped::MAX_PARTICLES;
+        let mut dispatches = Vec::new();
+        for k in 0..s.count.div_ceil(chunk).max(1) {
+            let mut params = s.params.clone();
+            params.insert("particles.offset".into(), Value::from(k * chunk));
+            let values = interp::inputs(&compute.compiled.checked, &params, &self.settings.roles);
+            let bound = compute.bind(d, &c.frame(), [1, 1], &values, &[], &[&draw.instances]);
+            dispatches.push((bound, (s.count - k * chunk).min(chunk)));
+        }
+        let mut uni: Vec<u8> = Vec::with_capacity(192);
+        let mut stops = s.stops.clone();
+        stops.truncate(4);
+        let n_stops = stops.len().max(1) as f32;
+        while stops.len() < 4 {
+            stops.push(*stops.last().unwrap_or(&(0.0, [1.0, 1.0, 1.0])));
+        }
         let floats = camera
             .clip
             .iter()
@@ -317,11 +350,13 @@ impl Effects {
                 s.size_px as f32,
                 s.opacity as f32,
             ])
+            .chain([s.size[0], s.size[1], s.fade[0], s.fade[1]].map(|x| x as f32))
+            .chain([s.draw as f32, f32::from(u8::from(s.half)), n_stops, 0.0])
+            .chain(stops.iter().map(|st| st.0 as f32))
             .chain(
-                [
-                    s.from[0], s.from[1], s.from[2], 0.0, s.to[0], s.to[1], s.to[2], 0.0,
-                ]
-                .map(|x| x as f32),
+                stops
+                    .iter()
+                    .flat_map(|st| [st.1[0] as f32, st.1[1] as f32, st.1[2] as f32, 0.0]),
             );
         for v in floats {
             uni.extend_from_slice(&v.to_le_bytes());
@@ -349,15 +384,18 @@ impl Effects {
         let profiler = self.profiler.clone();
         let count = s.count;
         Box::new(move |encoder| {
-            let _keep = (buffers, ub);
-            match &profiler {
-                Some(p) => {
-                    let p = p.lock().unwrap_or_else(|e| e.into_inner());
-                    let q = p.begin_pass_query(SPARKS, encoder);
-                    compute.dispatch(encoder, count, &(g0, g1), q.compute_pass_timestamp_writes());
-                    p.end_query(encoder, q);
+            let _keep = &ub;
+            for ((g0, g1, _buffers), n) in &dispatches {
+                let groups = (g0.clone(), g1.clone());
+                match &profiler {
+                    Some(p) => {
+                        let p = p.lock().unwrap_or_else(|e| e.into_inner());
+                        let q = p.begin_pass_query(SPARKS, encoder);
+                        compute.dispatch(encoder, *n, &groups, q.compute_pass_timestamp_writes());
+                        p.end_query(encoder, q);
+                    }
+                    None => compute.dispatch(encoder, *n, &groups, None),
                 }
-                None => compute.dispatch(encoder, count, &(g0, g1), None),
             }
             timed(&profiler, SPARKS, encoder, |e, ts| {
                 let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {

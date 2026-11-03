@@ -7,7 +7,7 @@
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::ops;
 
-use crate::ease::Ease;
+use crate::ease::Named;
 
 /// How a wave or a noise counts its cycles.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -47,7 +47,7 @@ pub enum Kind {
         span: i64,
         amount: f64,
         shape: Shape,
-        ease: Ease,
+        ease: Named,
     },
     Limits {
         min: f64,
@@ -141,7 +141,7 @@ impl Modifier {
 }
 
 /// A pulse's shape at u in (0, 1): 0 at both ends, 1 at its height.
-fn shape_at(shape: Shape, ease: &Ease, u: f64) -> f64 {
+fn shape_at(shape: Shape, ease: &Named, u: f64) -> f64 {
     let there_and_back = |u: f64| {
         let x = if u < 0.5 { 2.0 * u } else { 2.0 - 2.0 * u };
         ease.at(x)

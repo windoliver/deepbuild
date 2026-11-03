@@ -132,6 +132,17 @@ pub const ITEM_KEYS: &[&str] = &[
     "broken_out",
     // A solid's modifier stack (Modifier; #411), checked by the canvas module whose kind it is.
     "modifiers",
+    // An object's fields (Object; #420): its materials, constraints, shadows, level of detail,
+    // and in a figure its tone, halo and relations.
+    "materials",
+    "material",
+    "constraints",
+    "cast_shadow",
+    "receive_shadow",
+    "lod",
+    "tone",
+    "halo",
+    "relations",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
@@ -146,6 +157,11 @@ pub const ITEM_OWN_FIELDS: &[&str] = &[
     "pickable",
     "order",
     "broken_out",
+    "material",
+    "cast_shadow",
+    "receive_shadow",
+    "tone",
+    "halo",
 ];
 
 /// The item fields `unset` may remove (every one with a default).
@@ -245,6 +261,14 @@ impl Issue {
         out.insert("fix".into(), json!(self.fix));
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
+        }
+        // The column view's issue names its reader, column, row, value and step (#397).
+        if self.code == "column.out_of_range" {
+            if let Value::Object(fields) = &self.actual {
+                for (k, v) in fields {
+                    out.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
         }
         if let Some(ops) = &self.fix_ops {
             out.insert("fix_ops".into(), json!(ops));
@@ -430,6 +454,7 @@ pub fn fix_for(code: &str) -> String {
         "unknown_kind" => "Register the kind, or remove the item.",
         "kind_too_new" => "Save the item at a major this build knows.",
         "module_missing" => "Open the document in a build with the module, or remove the field.",
+        "column.out_of_range" => "Read the column as a type that holds the value, or fix the source's value.",
         "pack_missing" => "Install the pack at that version, or open the document where it is installed; never draw it with another version.",
         "derived_item" => "Patch the instance's inputs, or break the item out first with `break_out {instance, item}`.",
         "out_of_range" => "Give the field a value of its type inside its range.",

@@ -1,0 +1,7 @@
+removed /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-777-47bdc6/6e16d38b-a018-482d-8c7b-b3b2df93b86c/scratchpad/base21: porcelain before = ["fatal: not a git repository (or any of the parent directories): .git"]
+removed ~/private/deepbuild-core/.claude/worktrees/agent-a367b84c3ec0c1b93: porcelain before = ["?? target"]
+removed ~/private/deepbuild-core/.claude/worktrees/agent-a65e859048883de67: porcelain before = ["?? target"]
+removed ~/private/deepbuild-core/.claude/worktrees/agent-acc593499bc1d6118: porcelain before = (empty)
+removed ~/private/deepbuild-core/.claude/worktrees/agent-ad05b8765cc5b9e8a: porcelain before = ["?? target"]
+removed ~/private/deepbuild-core/.claude/worktrees/issue-327-implementation: porcelain before = (empty)
+before 42 worktrees, after 36

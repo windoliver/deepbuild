@@ -2,6 +2,9 @@
 //! primitives: One clock, pure evaluation; Frame clock and scheduler). Every frame is the document
 //! evaluated at a flick: how the playhead got there never changes it.
 //!
+//! Issue #417 adds the look's time feel for a change of state, the input track, the transition
+//! follow and a stage's glide, in `input`.
+//!
 //! The math is f64 through deep-canvas's ops module on pinned libm, as the canvas lint requires.
 
 mod canonical;
@@ -12,6 +15,7 @@ pub mod doc;
 pub mod ease;
 pub mod eval;
 pub mod follow;
+pub mod input;
 pub mod insert;
 pub mod kit;
 pub mod modifier;
