@@ -3,7 +3,10 @@
 //! values mix per component, which for a color channel is in its OKLab space.
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
-use deep_canvas::ops;
+
+
+use crate::ease::Named;
+use crate::spring::Spring;
 
 /// The Bézier timing solver's step count: Newton steps, each replaced by a bisection step where
 /// |dx/ds| < 1e-6 or Newton would leave the bracket, with no early exit.
@@ -22,12 +25,17 @@ pub enum Interp {
         x2: f64,
         y2: f64,
     },
-    /// The follow spring toward the next key's value, from rest at this key's, in closed form; the
-    /// next key's value shows from its time on.
-    Spring {
-        freq_hz: f64,
-        damping_ratio: f64,
-    },
+    /// A damped spring toward the next key's value from this key's, starting at the key's
+    /// `velocity`, in closed form; the next key's value shows from its time on.
+    Spring(Spring),
+    /// An entry of `ease@1`.
+    Ease(Named),
+    /// Handles computed at check from the neighboring keys (Channel and key: auto tangents),
+    /// each `smoothness` of the span long; with `clamp`, a local extreme is flat and no handle
+    /// passes the next key's value, so no span overshoots its keys.
+    Auto { clamp: bool, smoothness: f64 },
+    /// A cubic Hermite through the neighboring keys.
+    CatmullRom,
 }
 
 /// One key: its time in flicks, its value's components and the interpolation it owns.
@@ -37,6 +45,36 @@ pub struct Key {
     pub t: i64,
     pub value: Vec<f64>,
     pub interp: Interp,
+    /// Each component's rate as a spring segment starts, per second (`velocity`, 0 when absent).
+    pub velocity: Vec<f64>,
+    /// An auto or Catmull-Rom segment's slopes, per component, in value per unit of the
+    /// segment's progress: at this key and at the next. Computed by [`Curve::new`].
+    pub slopes: Vec<[f64; 2]>,
+}
+
+impl Key {
+    pub fn new(id: &str, t: i64, value: Vec<f64>, interp: Interp) -> Key {
+        Key {
+            id: id.to_string(),
+            t,
+            value,
+            interp,
+            velocity: Vec::new(),
+            slopes: Vec::new(),
+        }
+    }
+}
+
+/// How a channel reads before its first key or after its last (Channel and key: `extrapolate`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Extrapolate {
+    #[default]
+    Hold,
+    Linear,
+    Cycle,
+    PingPong,
+    /// Each cycle adds the last key's value minus the first's.
+    CycleOffset,
 }
 
 /// A channel's value at a time, with the Bézier solver's step count for that sample.
@@ -51,12 +89,33 @@ pub struct Sample {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Curve {
     pub keys: Vec<Key>,
+    pub before: Extrapolate,
+    pub after: Extrapolate,
 }
 
 impl Curve {
-    pub fn new(mut keys: Vec<Key>) -> Curve {
+    pub fn new(keys: Vec<Key>) -> Curve {
+        Curve::extrapolated(keys, Extrapolate::Hold, Extrapolate::Hold)
+    }
+
+    /// Keys sorted, with every auto and Catmull-Rom segment's slopes computed from its keys'
+    /// neighbors, so one key's change reaches only the spans its neighbors touch.
+    pub fn extrapolated(mut keys: Vec<Key>, before: Extrapolate, after: Extrapolate) -> Curve {
         keys.sort_by(|a, b| a.t.cmp(&b.t).then_with(|| a.id.cmp(&b.id)));
-        Curve { keys }
+        let width = keys.first().map_or(0, |k| k.value.len());
+        let tangents: Vec<Vec<f64>> = (0..keys.len())
+            .map(|i| (0..width).map(|c| tangent(&keys, i, c)).collect())
+            .collect();
+        for i in 0..keys.len().saturating_sub(1) {
+            if !matches!(keys[i].interp, Interp::Auto { .. } | Interp::CatmullRom) {
+                continue;
+            }
+            let span = (keys[i + 1].t - keys[i].t) as f64;
+            keys[i].slopes = (0..width)
+                .map(|c| [tangents[i][c] * span, tangents[i + 1][c] * span])
+                .collect();
+        }
+        Curve { keys, before, after }
     }
 
     /// The index of the key that owns `t`: the last at or before it, or `None` before the first.
@@ -73,9 +132,48 @@ impl Curve {
     }
 
     /// The value at `t` into `out`, one slot per component, with no allocation; returns the
-    /// Bézier solver's step count. Before the first key and after the last it holds
-    /// (`extrapolate` hold).
+    /// Bézier solver's step count. Before the first key and after the last it extrapolates as
+    /// `before` and `after` say.
     pub fn sample_into(&self, t: i64, out: &mut [f64]) -> u32 {
+        let (Some(first), Some(last)) = (self.keys.first(), self.keys.last()) else {
+            return 0;
+        };
+        let (t0, t1) = (first.t, last.t);
+        let side = if t < t0 { self.before } else { self.after };
+        if (t < t0 || t > t1) && t1 > t0 && side != Extrapolate::Hold {
+            let span = t1 - t0;
+            let k = (t - t0).div_euclid(span);
+            let into = (t - t0).rem_euclid(span);
+            match side {
+                Extrapolate::Linear => {
+                    let (end, at) = if t < t0 { (first, t0) } else { (last, t1) };
+                    let slope = self.end_slope(t < t0);
+                    let dt = (t - at) as f64;
+                    for (c, o) in out.iter_mut().enumerate() {
+                        *o = end.value[c] + slope[c.min(slope.len() - 1)] * dt;
+                    }
+                    return 0;
+                }
+                Extrapolate::Cycle => return self.inside(t0 + into, out),
+                Extrapolate::PingPong => {
+                    let back = k.rem_euclid(2) == 1;
+                    return self.inside(if back { t1 - into } else { t0 + into }, out);
+                }
+                Extrapolate::CycleOffset => {
+                    let steps = self.inside(t0 + into, out);
+                    for (c, o) in out.iter_mut().enumerate() {
+                        *o += k as f64 * (last.value[c] - first.value[c]);
+                    }
+                    return steps;
+                }
+                Extrapolate::Hold => {}
+            }
+        }
+        self.inside(t, out)
+    }
+
+    /// The keyed value at `t`, held before the first key and after the last.
+    fn inside(&self, t: i64, out: &mut [f64]) -> u32 {
         let held = |k: &Key, out: &mut [f64]| {
             out.iter_mut().zip(&k.value).for_each(|(o, v)| *o = *v);
             0
@@ -90,10 +188,38 @@ impl Curve {
         segment_into(a, b, t, out)
     }
 
+    /// Each component's slope, per flick, at the first key (`start`) or the last.
+    fn end_slope(&self, start: bool) -> [f64; 4] {
+        let mut out = [0.0; 4];
+        let n = self.keys.len();
+        if n < 2 {
+            return out;
+        }
+        let (a, b) = (&self.keys[if start { 0 } else { n - 2 }], &self.keys[if start { 1 } else { n - 1 }]);
+        let span = (b.t - a.t) as f64;
+        for (c, o) in out.iter_mut().enumerate().take(a.value.len()) {
+            *o = match a.interp {
+                Interp::Hold => 0.0,
+                Interp::Auto { .. } | Interp::CatmullRom => {
+                    a.slopes.get(c).map_or(0.0, |s| s[usize::from(!start)] / span)
+                }
+                _ => (b.value[c] - a.value[c]) / span,
+            };
+        }
+        out
+    }
+
     /// The earliest time after `t` at which the value may differ from its value at `t`: the next
     /// flick inside a segment that moves, the next key's time otherwise, `None` once nothing
     /// changes again.
     pub fn next_change(&self, t: i64) -> Option<i64> {
+        if self.keys.len() > 1 {
+            let (t0, t1) = (self.keys[0].t, self.keys[self.keys.len() - 1].t);
+            let side = if t < t0 { self.before } else { self.after };
+            if (t < t0 || t >= t1) && side != Extrapolate::Hold {
+                return Some(t + 1);
+            }
+        }
         let Some(i) = self.owner(t) else {
             return self.keys.first().map(|k| k.t);
         };
@@ -107,10 +233,43 @@ impl Curve {
     }
 }
 
+/// Key `i`'s tangent for component `c`, in value per flick, as an auto or Catmull-Rom segment
+/// reads it: from its two neighbors; flat at an end and, for a clamped auto key, at a local
+/// extreme, and short enough that no handle passes either neighbor's value.
+fn tangent(keys: &[Key], i: usize, c: usize) -> f64 {
+    let (Some(prev), Some(next)) = (i.checked_sub(1).map(|p| &keys[p]), keys.get(i + 1)) else {
+        return 0.0;
+    };
+    let k = &keys[i];
+    let (before, here, after) = (prev.value[c], k.value[c], next.value[c]);
+    let slope = (after - before) / (next.t - prev.t) as f64;
+    // The interpolation that reads this tangent: the key's own, or the one into it.
+    let clamp = match (prev.interp, k.interp) {
+        (_, Interp::Auto { clamp, smoothness }) | (Interp::Auto { clamp, smoothness }, _) => {
+            Some((clamp, smoothness))
+        }
+        _ => None,
+    };
+    let Some((true, smoothness)) = clamp else {
+        return slope;
+    };
+    if (here - before) * (after - here) <= 0.0 {
+        return 0.0;
+    }
+    // A handle `smoothness` of a span long rises slope · smoothness · span: never past the key
+    // at its other end.
+    let s = smoothness.max(1e-9);
+    let room_in = (here - before).abs() / (s * (k.t - prev.t) as f64);
+    let room_out = (after - here).abs() / (s * (next.t - k.t) as f64);
+    slope.signum() * slope.abs().min(room_in).min(room_out)
+}
+
 /// Whether a segment's value changes across its span (it may still jump at its end).
 fn moves(a: &Key, b: &Key) -> bool {
     match a.interp {
         Interp::Hold => false,
+        // A spring with a velocity moves even toward its own value.
+        Interp::Spring(_) => a.value != b.value || a.velocity.iter().any(|v| *v != 0.0),
         _ => a.value != b.value,
     }
 }
@@ -149,18 +308,55 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
             mix(solved.y, out);
             solved.steps
         }
-        Interp::Spring {
-            freq_hz,
-            damping_ratio,
-        } => {
+        Interp::Ease(e) => {
+            mix(e.at(u), out);
+            0
+        }
+        Interp::Spring(spring) => {
             let seconds = (t - a.t) as f64 / FLICKS_PER_SECOND as f64;
-            let e = spring_from_rest(freq_hz, damping_ratio, seconds);
-            for ((o, &va), &vb) in out.iter_mut().zip(&a.value).zip(&b.value) {
-                *o = vb + (va - vb) * e;
+            for (c, o) in out.iter_mut().enumerate() {
+                let (va, vb) = (a.value[c], b.value[c]);
+                let v0 = a.velocity.get(c).copied().unwrap_or(0.0);
+                *o = vb + spring.at(va - vb, v0, seconds).e;
+            }
+            0
+        }
+        Interp::Auto { smoothness, clamp } => {
+            // A Bézier in time and value: x handles at smoothness and 1 − smoothness of the span,
+            // y handles along each key's slope.
+            let s = smoothness.clamp(0.0, 1.0);
+            let solved = Bezier::new(s, 0.0, 1.0 - s, 1.0).solve(u);
+            for (c, o) in out.iter_mut().enumerate() {
+                let [ma, mb] = a.slopes.get(c).copied().unwrap_or([0.0; 2]);
+                let (va, vb) = (a.value[c], b.value[c]);
+                // Offsets from the first key, so a flat span is its value bit for bit.
+                let d = vb - va;
+                let v = va + bernstein(0.0, ma * s, d - mb * s, d, solved.s);
+                // Clamped handles keep the curve between its keys; rounding may not pass them.
+                *o = if clamp { v.clamp(va.min(vb), va.max(vb)) } else { v };
+            }
+            solved.steps
+        }
+        Interp::CatmullRom => {
+            let (h00, h10, h01, h11) = (
+                (1.0 + 2.0 * u) * (1.0 - u) * (1.0 - u),
+                u * (1.0 - u) * (1.0 - u),
+                u * u * (3.0 - 2.0 * u),
+                u * u * (u - 1.0),
+            );
+            for (c, o) in out.iter_mut().enumerate() {
+                let [ma, mb] = a.slopes.get(c).copied().unwrap_or([0.0; 2]);
+                *o = h00 * a.value[c] + h10 * ma + h01 * b.value[c] + h11 * mb;
             }
             0
         }
     }
+}
+
+/// The cubic Bernstein form over four control values at parameter `s`.
+fn bernstein(p0: f64, p1: f64, p2: f64, p3: f64, s: f64) -> f64 {
+    let r = 1.0 - s;
+    r * r * r * p0 + 3.0 * r * r * s * p1 + 3.0 * r * s * s * p2 + s * s * s * p3
 }
 
 /// How a change of state moves over its span (#417, the look's `time.state.interp`; #489's
@@ -203,22 +399,9 @@ impl Ease {
 /// A damped spring's displacement from its target, released from rest at 1, after `seconds`, in
 /// closed form in all three damping regimes (ω0 = 2π · `freq_hz`, ζ = `damping_ratio`).
 pub fn spring_from_rest(freq_hz: f64, damping_ratio: f64, seconds: f64) -> f64 {
-    let w = ops::TAU * freq_hz;
-    let z = damping_ratio;
-    if z < 1.0 {
-        let wd = w * ops::sqrt(1.0 - z * z);
-        ops::exp(-z * w * seconds)
-            * (ops::cos(wd * seconds) + (z * w / wd) * ops::sin(wd * seconds))
-    } else if z == 1.0 {
-        ops::exp(-w * seconds) * (1.0 + w * seconds)
-    } else {
-        let root = ops::sqrt(z * z - 1.0);
-        let r1 = -w * (z - root);
-        let r2 = -w * (z + root);
-        let c2 = -r1 / (r2 - r1);
-        let c1 = 1.0 - c2;
-        c1 * ops::exp(r1 * seconds) + c2 * ops::exp(r2 * seconds)
-    }
+    Spring::from_freq(freq_hz, damping_ratio)
+        .at(1.0, 0.0, seconds)
+        .e
 }
 
 /// A cubic Bézier timing curve from (0, 0) to (1, 1) through its two handles.
