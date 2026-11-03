@@ -12,7 +12,7 @@
 //! (or `y2`), a path and an area as one line through the rows in order (an area down to the
 //! zero), symbols, and images from an `asset` column with its `alt`. A key is unique across rows.
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use deep_canvas::ops;
 
@@ -64,6 +64,14 @@ fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
     };
     if let Some(v) = c.get("const") {
         return Ok(Column::Const(v.clone()));
+    }
+    // A table column reaches the module inlined by whoever holds the evidence store, and a
+    // column-view source by the build's column view; one still unread names what's missing.
+    if c.contains_key("from") {
+        return refuse("asset_missing", format!("{path}/from"));
+    }
+    if c.contains_key("source") {
+        return refuse("module_missing", format!("{path}/source"));
     }
     let dtype = c.get("dtype").and_then(Value::as_str).unwrap_or("");
     if c.get("len").and_then(Value::as_u64) != Some(n as u64) {
@@ -129,9 +137,13 @@ fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
 pub enum ScaleKind {
     Linear,
     Time,
+    /// Categories to palette roles, one role each, in order.
+    Ordinal,
+    /// A numeric domain cut into equal bands, one palette role each.
+    Quantize,
 }
 
-/// A scale from data to u, with its domain made nice.
+/// A scale from data to u, with its domain made nice, or from data to palette roles.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scale {
     pub kind: ScaleKind,
@@ -139,7 +151,16 @@ pub struct Scale {
     pub range: [f64; 2],
     /// The tick step: data units for linear, milliseconds for time.
     pub step: f64,
+    /// An ordinal scale's categories.
+    pub categories: Vec<String>,
+    /// The palette roles of an ordinal or a quantize scale's range.
+    pub roles: Vec<String>,
+    /// The table column its domain was read from, when it came from one.
+    pub from: Option<FromColumn>,
 }
+
+/// A mark set column a scale's domain was read from: its name and its table `trace`.
+pub type FromColumn = (String, Value);
 
 /// Calendar steps a time axis ticks on, in milliseconds.
 const TIME_STEPS: [f64; 20] = [
@@ -160,15 +181,68 @@ fn linear_step(span: f64) -> f64 {
         .unwrap_or(10.0 * mag)
 }
 
+/// The domain of scale `id` from the columns encoded through it in `items`, with the table
+/// column it came from, and whether a bar or an area reads it (its domain then holds zero).
+fn column_domain(
+    id: &str,
+    items: &Map<String, Value>,
+) -> Option<([f64; 2], Option<FromColumn>, bool)> {
+    let (mut lo, mut hi, mut from, mut zero) = (f64::INFINITY, f64::NEG_INFINITY, None, false);
+    for (set_id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("marks@1") {
+            continue;
+        }
+        let p = object_or_empty(item.get("params"));
+        let n = p.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+        for e in object_or_empty(p.get("encode")).values() {
+            if e.get("scale").and_then(Value::as_str) != Some(id) {
+                continue;
+            }
+            let Some(name) = e.get("column").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(c) = p.get("columns").and_then(|c| c.get(name)) else {
+                continue;
+            };
+            let path = format!("items/{set_id}/params/columns/{name}");
+            if let Ok(Column::Numbers(values)) = column_of(c, n, &path) {
+                for v in values {
+                    (lo, hi) = (lo.min(v), hi.max(v));
+                }
+            }
+            if let Some(trace) = c.get("trace") {
+                from.get_or_insert((name.to_string(), trace.clone()));
+            }
+            zero |= matches!(p.get("mark").and_then(Value::as_str), Some("bar" | "area"));
+        }
+    }
+    (lo <= hi).then_some(([lo, hi], from, zero))
+}
+
 impl Scale {
-    fn read(id: &str, item: &Value) -> Result<Scale, Refused> {
+    fn read(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Scale, Refused> {
         let path = format!("items/{id}/params");
         let p = item.get("params").and_then(Value::as_object);
         let get = |k: &str| p.and_then(|p| p.get(k));
         let kind = match get("type").and_then(Value::as_str) {
             None | Some("linear") => ScaleKind::Linear,
             Some("time") => ScaleKind::Time,
+            Some("ordinal") => ScaleKind::Ordinal,
+            Some("quantize") => ScaleKind::Quantize,
             Some(_) => return refuse("scale_type", format!("{path}/type")),
+        };
+        let strings = |k: &str| -> Result<Vec<String>, Refused> {
+            match get(k).and_then(Value::as_array) {
+                Some(list) if !list.is_empty() => list
+                    .iter()
+                    .map(|v| v.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or(Refused {
+                        code: "bad_scale",
+                        path: format!("{path}/{k}"),
+                    }),
+                _ => refuse("bad_scale", format!("{path}/{k}")),
+            }
         };
         let pair = |k: &str| -> Result<[f64; 2], Refused> {
             match get(k).and_then(Value::as_array).map(Vec::as_slice) {
@@ -179,18 +253,49 @@ impl Scale {
                 _ => refuse("bad_scale", format!("{path}/{k}")),
             }
         };
-        let (mut domain, range) = (pair("domain")?, pair("range")?);
+        if kind == ScaleKind::Ordinal {
+            return Ok(Scale {
+                kind,
+                domain: [0.0, 0.0],
+                range: [0.0, 0.0],
+                step: 1.0,
+                categories: strings("domain")?,
+                roles: strings("range")?,
+                from: None,
+            });
+        }
+        // A domain read from the columns encoded through the scale, by default.
+        let (mut domain, from) = match get("domain") {
+            Some(_) => (pair("domain")?, None),
+            None => match column_domain(id, items) {
+                Some((mut d, from, zero)) => {
+                    if zero || get("zero") == Some(&Value::Bool(true)) {
+                        d = [d[0].min(0.0), d[1].max(0.0)];
+                    }
+                    if d[1] <= d[0] {
+                        d[1] = d[0] + 1.0;
+                    }
+                    (d, from)
+                }
+                None => return refuse("bad_scale", format!("{path}/domain")),
+            },
+        };
         if domain[1] <= domain[0] {
             return refuse("out_of_range", format!("{path}/domain"));
         }
+        let (range, roles) = if kind == ScaleKind::Quantize {
+            ([0.0, 0.0], strings("range")?)
+        } else {
+            (pair("range")?, Vec::new())
+        };
         let span = domain[1] - domain[0];
         let step = match kind {
-            ScaleKind::Linear => linear_step(span),
             ScaleKind::Time => TIME_STEPS
                 .iter()
                 .copied()
                 .find(|s| span / s <= TICKS)
                 .unwrap_or(TIME_STEPS[TIME_STEPS.len() - 1]),
+            _ => linear_step(span),
         };
         if get("nice").and_then(Value::as_bool).unwrap_or(true) {
             domain = [
@@ -203,7 +308,38 @@ impl Scale {
             domain,
             range,
             step,
+            categories: Vec::new(),
+            roles,
+            from,
         })
+    }
+
+    /// The palette role a value takes through an ordinal or a quantize scale: an ordinal's
+    /// category in order, and a quantize's band, as d3's `scaleQuantize` cuts it (thresholds
+    /// ((i + 1) × x1 − (i − n) × x0) ÷ (n + 1), the band the count of thresholds at or below the
+    /// value, so an edge opens the next band and the domain's ends clamp).
+    pub fn role(&self, number: Option<f64>, text: Option<&str>) -> Option<&str> {
+        match self.kind {
+            ScaleKind::Ordinal => {
+                let i = self
+                    .categories
+                    .iter()
+                    .position(|c| Some(c.as_str()) == text)?;
+                self.roles.get(i % self.roles.len()).map(String::as_str)
+            }
+            ScaleKind::Quantize => {
+                let v = number?;
+                let n = self.roles.len() - 1;
+                let [x0, x1] = self.domain;
+                let band = (0..n)
+                    .filter(|&i| {
+                        ((i + 1) as f64 * x1 - (i as f64 - n as f64) * x0) / (n + 1) as f64 <= v
+                    })
+                    .count();
+                self.roles.get(band).map(String::as_str)
+            }
+            _ => None,
+        }
     }
 
     /// A value's place in u.
@@ -218,15 +354,15 @@ impl Scale {
         let first = (self.domain[0] / self.step).ceil() as i64;
         let last = (self.domain[1] / self.step).floor() as i64;
         let digits = match self.kind {
-            ScaleKind::Linear => (-ops::log10(self.step).floor()).max(0.0) as usize,
             ScaleKind::Time => 0,
+            _ => (-ops::log10(self.step).floor()).max(0.0) as usize,
         };
         (first..=last.min(first + 1_000))
             .map(|k| {
                 let v = k as f64 * self.step;
                 let label = match self.kind {
-                    ScaleKind::Linear => format!("{:.*}", digits, v),
                     ScaleKind::Time => time_label(v as i64, self.step),
+                    _ => format!("{:.*}", digits, v),
                 };
                 (v, label)
             })
@@ -264,13 +400,13 @@ fn time_label(ms: i64, step: f64) -> String {
 
 /// A `scale@1` item's scale, its domain made nice, and its ticks.
 pub fn scale_of(id: &str, item: &Value) -> Result<Scale, Refused> {
-    Scale::read(id, item)
+    Scale::read(id, item, &Map::new())
 }
 
 fn scale_named(items: &Map<String, Value>, id: &str, path: &str) -> Result<Scale, Refused> {
     match items.get(id) {
         Some(item) if item.get("kind").and_then(Value::as_str) == Some("scale@1") => {
-            Scale::read(id, item)
+            Scale::read(id, item, items)
         }
         _ => refuse("ref_unresolved", path),
     }
@@ -356,6 +492,13 @@ pub fn mark_set(
     // typed over), and a row whose reading is missing isn't drawn, so no bar shows a number
     // nothing measured.
     let mut hidden = std::collections::BTreeSet::new();
+    // The rows the column view hid: a value its reader can't narrow to (Array and table: column
+    // view) doesn't draw for as long as it lasts.
+    for c in columns.values() {
+        if let Some(Value::Array(rows)) = c.get("hide") {
+            hidden.extend(rows.iter().filter_map(Value::as_u64).map(|r| r as usize));
+        }
+    }
     for ((key, column), value) in bound {
         let row = p
             .get("key")
@@ -452,6 +595,32 @@ pub fn mark_set(
     } else {
         role(palette, fill_role, &format!("{path}/paint"))?
     };
+    // A row's color: its `role` through a scale whose range is palette roles, or the paint's.
+    let color_of = |i: usize| -> Result<[u8; 3], Refused> {
+        let rpath = format!("{path}/encode/role");
+        match props.get("role") {
+            None => Ok(color),
+            Some(Encoded::Const(Value::String(r))) => role(palette, r, &rpath),
+            Some(Encoded::Column {
+                column,
+                scale: Some(scale),
+            }) => {
+                let c = decoded.get(column);
+                let text = c.and_then(|c| c.text(i));
+                match scale.role(c.and_then(|c| c.number(i)), text.as_deref()) {
+                    Some(r) => role(palette, r, &rpath),
+                    None => refuse("bad_encode", rpath),
+                }
+            }
+            Some(_) => refuse("bad_encode", rpath),
+        }
+    };
+    let dash = paint
+        .and_then(|pt| pt.get("stroke"))
+        .and_then(|s| s.get("dash"))
+        .and_then(Value::as_array)
+        .map(|d| d.iter().filter_map(Value::as_f64).collect::<Vec<_>>())
+        .filter(|d| d.iter().sum::<f64>() > 0.0 && d.iter().all(|v| *v >= 0.0));
     let stroke_width = paint
         .and_then(|pt| pt.get("stroke"))
         .and_then(|s| s.get("width"))
@@ -482,11 +651,13 @@ pub fn mark_set(
     let mut out = Vec::with_capacity(n);
     // A path's and an area's rows are one line through the rows in order.
     let mut line: Vec<[f64; 2]> = Vec::new();
+    let mut line_color = color;
     for (i, key) in keys.iter().enumerate() {
         if hidden.contains(&i) {
             continue;
         }
         let name = format!("{id}#{key}");
+        let color = color_of(i)?;
         let (Some(x), Some(y)) = (number("x", i), number("y", i)) else {
             return refuse("bad_encode", format!("{path}/encode"));
         };
@@ -533,7 +704,12 @@ pub fn mark_set(
                     fill: Fill::Solid(color),
                 });
             }
-            "path" | "area" => line.push(at),
+            "path" | "area" => {
+                if line.is_empty() {
+                    line_color = color;
+                }
+                line.push(at)
+            }
             "image" => {
                 let Some(asset) = column_text("asset", i) else {
                     return refuse("bad_doc", format!("{path}/columns/asset"));
@@ -593,7 +769,10 @@ pub fn mark_set(
             let base = zero + pos[1];
             d.push_str(&format!("L {} {base} L {} {base} Z", last[0], first[0]));
         }
-        let d = d.trim_end().to_string();
+        let d = match (&dash, area) {
+            (Some(dash), false) => dashed(&line, dash),
+            _ => d.trim_end().to_string(),
+        };
         out.push(Mark::Path {
             item: id.to_string(),
             geometry: Geometry {
@@ -603,10 +782,309 @@ pub fn mark_set(
             },
             d,
             offset: [0.0, 0.0],
+            color: line_color,
+        });
+    }
+    Ok(out)
+}
+
+/// A polyline cut into dashes (Paint: `dash: [u]`, on and off lengths repeating from its start),
+/// each dash a sub-path of its own.
+fn dashed(line: &[[f64; 2]], dash: &[f64]) -> String {
+    let mut d = String::new();
+    let (mut k, mut left, mut on) = (0, dash[0], true);
+    for w in line.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+        let at = |f: f64| [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        let mut done = 0.0;
+        while done < len {
+            let step = left.min(len - done);
+            if on {
+                let (p, q) = (at(done / len), at((done + step) / len));
+                d.push_str(&format!("M {} {} L {} {} ", p[0], p[1], q[0], q[1]));
+            }
+            done += step;
+            left -= step;
+            if left <= 0.0 {
+                k = (k + 1) % dash.len();
+                left = dash[k];
+                on = !on;
+            }
+        }
+    }
+    d.trim_end().to_string()
+}
+
+/// A `series@1` item's rows in its window, decimated per 1 px column of its `box` (Series and
+/// decimation): OHLC per bucket for candles (open first, high max, low min, close last), M4 for a
+/// line (first, min, max and last per column, so never more than 4 vertices a column). The rows'
+/// `t` is strictly increasing; rows out of order are refused, naming the column.
+pub fn series(
+    id: &str,
+    item: &Value,
+    palette: &Palette,
+    pos: [f64; 2],
+) -> Result<Vec<Mark>, Refused> {
+    let path = format!("items/{id}/params");
+    let p = object_or_empty(item.get("params"));
+    let n = p
+        .get("t")
+        .and_then(|t| t.get("len"))
+        .and_then(Value::as_u64)
+        .filter(|n| *n <= MAX_ROWS)
+        .ok_or(Refused {
+            code: "bad_column",
+            path: format!("{path}/t"),
+        })? as usize;
+    let numbers = |name: &str| -> Result<Option<Vec<f64>>, Refused> {
+        match p.get(name) {
+            None => Ok(None),
+            Some(c) => match column_of(c, n, &format!("{path}/{name}"))? {
+                Column::Numbers(v) => Ok(Some(v)),
+                _ => refuse("bad_column", format!("{path}/{name}")),
+            },
+        }
+    };
+    let t = numbers("t")?.ok_or(Refused {
+        code: "bad_column",
+        path: format!("{path}/t"),
+    })?;
+    if let Some(i) = t.windows(2).position(|w| w[1] <= w[0]) {
+        return refuse("out_of_range", format!("{path}/t/{}", i + 1));
+    }
+    let Some([bx, by, bw, bh]) = p.get("box").and_then(Value::as_array).and_then(|b| {
+        let b: Option<Vec<f64>> = b.iter().map(Value::as_f64).collect();
+        <[f64; 4]>::try_from(b?.as_slice()).ok()
+    }) else {
+        return refuse("bad_doc", format!("{path}/box"));
+    };
+    let (t0, t1) = match p.get("window") {
+        Some(Value::Array(w)) => match w.as_slice() {
+            [a, b] => (a.as_f64().unwrap_or(0.0), b.as_f64().unwrap_or(0.0)),
+            _ => return refuse("bad_doc", format!("{path}/window")),
+        },
+        Some(Value::Object(w)) => {
+            let last = w.get("last").and_then(Value::as_u64).unwrap_or(n as u64) as usize;
+            (t[n.saturating_sub(last.max(1))], t[n - 1])
+        }
+        None if n > 0 => (t[0], t[n - 1]),
+        _ => return Ok(Vec::new()),
+    };
+    let rows: Vec<usize> = (0..n).filter(|&i| t[i] >= t0 && t[i] <= t1).collect();
+    let cols = bw.floor().max(1.0) as usize;
+    let column = |i: usize| -> usize {
+        let f = if t1 > t0 {
+            (t[i] - t0) / (t1 - t0)
+        } else {
+            0.0
+        };
+        ((f * cols as f64) as usize).min(cols - 1)
+    };
+    let candles = p.get("decimate").and_then(Value::as_str) == Some("ohlc")
+        || p.get("marks")
+            .and_then(Value::as_array)
+            .is_some_and(|m| m.iter().any(|m| m == "candle"));
+    // Each column's (first, high, low, last) of the rows in it, in row order.
+    let mut buckets: Vec<Option<[f64; 4]>> = vec![None; cols];
+    let ohlc = if candles {
+        let (Some(o), Some(h), Some(l), Some(c)) =
+            (numbers("o")?, numbers("h")?, numbers("l")?, numbers("c")?)
+        else {
+            return refuse("bad_column", format!("{path}/o"));
+        };
+        for &i in &rows {
+            let b = buckets[column(i)].get_or_insert([o[i], h[i], l[i], c[i]]);
+            (b[1], b[2], b[3]) = (b[1].max(h[i]), b[2].min(l[i]), c[i]);
+        }
+        true
+    } else {
+        let Some(v) = numbers("v")? else {
+            return refuse("bad_column", format!("{path}/v"));
+        };
+        for &i in &rows {
+            let b = buckets[column(i)].get_or_insert([v[i], v[i], v[i], v[i]]);
+            (b[1], b[2], b[3]) = (b[1].max(v[i]), b[2].min(v[i]), v[i]);
+        }
+        false
+    };
+    let (lo, hi) = buckets
+        .iter()
+        .flatten()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), b| {
+            (lo.min(b[2]), hi.max(b[1]))
+        });
+    let y = |v: f64| {
+        by + pos[1] + bh
+            - if hi > lo {
+                (v - lo) / (hi - lo) * bh
+            } else {
+                bh / 2.0
+            }
+    };
+    let x = |b: usize| bx + pos[0] + b as f64;
+    let mut out = Vec::new();
+    if ohlc {
+        let candle = p.get("candle");
+        let role_of = |k: &str| -> Result<[u8; 3], Refused> {
+            let name = candle
+                .and_then(|c| c.get(k))
+                .and_then(Value::as_str)
+                .unwrap_or("ink");
+            role(palette, name, &format!("{path}/candle/{k}"))
+        };
+        let (up, down) = (role_of("up")?, role_of("down")?);
+        for (b, bucket) in buckets.iter().enumerate() {
+            let Some([o, h, l, c]) = *bucket else {
+                continue;
+            };
+            let color = if c >= o { up } else { down };
+            let (top, bottom) = (y(h), y(l));
+            out.push(Mark::Rect {
+                item: format!("{id}#{b}"),
+                bounds: [x(b), top, 1.0, (bottom - top).max(1.0)],
+                radius: 0.0,
+                fill: Fill::Solid(color),
+            });
+        }
+    } else {
+        let color = role(
+            palette,
+            p.get("role").and_then(Value::as_str).unwrap_or("ink"),
+            &format!("{path}/role"),
+        )?;
+        let mut d = String::new();
+        for (b, bucket) in buckets.iter().enumerate() {
+            let Some([first, high, low, last]) = *bucket else {
+                continue;
+            };
+            for v in [first, high, low, last] {
+                d.push_str(&format!(
+                    "{} {} {} ",
+                    if d.is_empty() { "M" } else { "L" },
+                    x(b) + 0.5,
+                    y(v)
+                ));
+            }
+        }
+        let d = d.trim_end().to_string();
+        out.push(Mark::Path {
+            item: id.to_string(),
+            geometry: Geometry {
+                verbs: path::parse(&d).unwrap_or_default(),
+                stroke: Some(1.0),
+                fill: false,
+            },
+            d,
+            offset: [0.0, 0.0],
             color,
         });
     }
     Ok(out)
+}
+
+/// The numbers in a shown string: each run of digits, with the separators between them.
+fn number_runs(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len()
+            && (chars[i].is_ascii_digit()
+                || (matches!(chars[i], '.' | ',')
+                    && chars.get(i + 1).is_some_and(char::is_ascii_digit)))
+        {
+            i += 1;
+        }
+        out.push(chars[start..i].iter().collect());
+    }
+    out
+}
+
+/// What a table column's cell traces to: the table, its column and data row, the cell's byte
+/// range in the file and its raw bytes as the table keeps them, and the table's source.
+fn traced(trace: &Value, row: Option<usize>) -> Value {
+    let cell = row.and_then(|r| trace.get("cells").and_then(|c| c.get(r)));
+    json!({
+        "table": trace.get("table"), "column": trace.get("column"), "row": row,
+        "bytes": cell.and_then(|c| c.get("bytes")), "raw": cell.and_then(|c| c.get("raw")),
+        "origin": trace.get("source"),
+    })
+}
+
+/// Every number a mark set's text rows or an axis's tick labels show, each with what it traces
+/// to (Honest numbers, the check): `{item, row, text, source}`, `row` the mark set's row key.
+pub fn numbers(id: &str, item: &Value, items: &Map<String, Value>) -> Vec<Value> {
+    let p = object_or_empty(item.get("params"));
+    let mut out = Vec::new();
+    match item.get("kind").and_then(Value::as_str) {
+        Some("marks@1") if p.get("mark").and_then(Value::as_str) == Some("text") => {
+            let n = p.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+            let columns = object_or_empty(p.get("columns"));
+            let read = |name: &str| {
+                columns
+                    .get(name)
+                    .and_then(|c| column_of(c, n, "").ok().map(|col| (col, c.get("trace"))))
+            };
+            let (text_column, text) = match p.get("encode").and_then(|e| e.get("text")) {
+                Some(Value::Object(e)) => {
+                    let name = e.get("column").and_then(Value::as_str).unwrap_or("text");
+                    (name.to_string(), read(name))
+                }
+                Some(v) => (String::new(), Some((Column::Const(v.clone()), None))),
+                None => ("text".to_string(), read("text")),
+            };
+            let Some((text, trace)) = text else {
+                return out;
+            };
+            let keys = p.get("key").and_then(Value::as_str).and_then(read);
+            let hidden: Vec<usize> = columns
+                .values()
+                .filter_map(|c| c.get("hide").and_then(Value::as_array))
+                .flatten()
+                .filter_map(Value::as_u64)
+                .map(|r| r as usize)
+                .collect();
+            for i in (0..n).filter(|i| !hidden.contains(i)) {
+                let key = keys
+                    .as_ref()
+                    .and_then(|(k, _)| k.text(i))
+                    .unwrap_or_else(|| i.to_string());
+                let source = match (trace, &text) {
+                    (Some(t), _) => traced(t, Some(i)),
+                    (None, Column::Const(_)) => json!({"constant": text_column}),
+                    (None, _) => json!({"column": text_column}),
+                };
+                for run in number_runs(&text.text(i).unwrap_or_default()) {
+                    out.push(json!({"item": id, "row": key, "text": run, "source": source}));
+                }
+            }
+        }
+        Some("axis@1") => {
+            let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
+                return out;
+            };
+            let Ok(scale) = scale_named(items, scale_id, "") else {
+                return out;
+            };
+            let source = match &scale.from {
+                Some((_, trace)) => traced(trace, None),
+                None => json!({"scale": scale_id}),
+            };
+            for (_, label) in scale.ticks() {
+                for run in number_runs(&label) {
+                    out.push(json!({"item": id, "row": null, "text": run, "source": source}));
+                }
+            }
+        }
+        _ => {}
+    }
+    out
 }
 
 /// The width a label's box takes so its text centers on its tick.
@@ -746,6 +1224,7 @@ mod tests {
         let s = Scale::read(
             "s",
             &json!({"params": {"domain": [3, 97], "range": [0, 200]}}),
+            &Map::new(),
         )
         .unwrap();
         assert_eq!(s.step, 20.0);
@@ -759,7 +1238,7 @@ mod tests {
     fn a_time_scale_ticks_on_calendar_units_in_utc() {
         // 2026-10-21 14:00 to 14:20 UTC.
         let start = 1_792_591_200_000.0;
-        let s = Scale::read("t", &json!({"params": {"type": "time", "domain": [start, start + 1_200_000.0], "range": [0, 400]}})).unwrap();
+        let s = Scale::read("t", &json!({"params": {"type": "time", "domain": [start, start + 1_200_000.0], "range": [0, 400]}}), &Map::new()).unwrap();
         assert_eq!(s.step, 300_000.0, "five-minute ticks");
         let labels: Vec<String> = s.ticks().into_iter().map(|t| t.1).collect();
         assert_eq!(labels, ["14:00", "14:05", "14:10", "14:15", "14:20"]);
