@@ -34,6 +34,7 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         outlines_before_upscale: p == Some(Planted::OutlinesBeforeUpscale),
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
+        labels_before_upscale: p == Some(Planted::LabelsBeforeUpscale),
     }
 }
 

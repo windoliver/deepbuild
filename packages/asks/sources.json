@@ -1227,6 +1227,42 @@
     }
   },
   {
+    "source": "open_item.waive",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Close this open item of task:01K74FX2B4D6F8H0K2M4P6R8T0 without evidence, as a waiver? The agent's final message left it: “timeout after 5000 ms in /tmp/t-81f2 (pid 4242) at 12:00:01”",
+        "options": [
+          {
+            "id": "waive",
+            "label": "Waive it: close it without evidence",
+            "decision": "none"
+          },
+          {
+            "id": "keep",
+            "label": "Keep it open",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "5d0b2c8a7e9f1d3b4c6a8e0f2d4b6c8a0e2f4d6b8c0a2e4f6d8b0c2a4e6f8d0b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "done.size",
     "kind": "taste",
     "fixture": {
