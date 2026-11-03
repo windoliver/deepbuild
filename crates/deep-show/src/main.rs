@@ -535,6 +535,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
+        "validate" => {
+            return Some(Call::Validate {
+                layout: c.get("layout")?.as_str()?.to_string(),
+                path: PathBuf::from(c.get("path")?.as_str()?),
+            })
+        }
         "resolve" if c.get("registry").is_some() => {
             return Some(Call::Lookup {
                 doc: doc()?,
@@ -1979,6 +1985,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             Some(StartPlanted::Kinds(k)) => Some(k),
             _ => None,
         },
+        layouts: match planted {
+            Some(StartPlanted::Layouts(l)) => l,
+            _ => Default::default(),
+        },
     })
 }
 
@@ -2006,6 +2016,8 @@ enum StartPlanted {
     Relations(deep_canvas_marks::relations::Planted),
     /// #412: a wrong deep_kinds listing, sheet, dump, diff or gallery.
     Kinds(kinds::Planted),
+    /// #415: a wrong first-party layout's cap or validator.
+    Layouts(deep_canvas_sandbox::layouts::Planted),
 }
 
 #[cfg(test)]
@@ -2026,6 +2038,7 @@ mod tests {
             ignores_unknown_occlusion: false,
             listing: None,
             kinds: None,
+            layouts: Default::default(),
         }
     }
 
@@ -2370,6 +2383,14 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
+            pages_pack_cap: true,
+            ..Default::default()
+        })),
+        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
+            trusts_link_count: true,
+            ..Default::default()
+        })),
         _ if kinds::Planted::named(twin).is_some() => {
             Ok(StartPlanted::Kinds(kinds::Planted::named(twin).ok_or(())?))
         }
