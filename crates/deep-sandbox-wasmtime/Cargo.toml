@@ -1,0 +1,21 @@
+[package]
+name = "deep-sandbox-wasmtime"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #238: sandbox@1's engine in the app: wasmtime pinned to 49.0.2, running the bytes the
+# sandbox module rewrote, with wasmtime's own fuel and NaN canonicalization off, so a trap lands
+# where the rewrite put it. Outside the canvas lint's scope: the engine computes nothing a check
+# reads but what the rewritten program itself computes.
+[dependencies]
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
+wasmtime = { version = "=49.0.2", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
+base64 = "0.22"
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+wat = "=1.263.0"
+
+[[bin]]
+name = "deep-sandbox"
+path = "src/main.rs"
