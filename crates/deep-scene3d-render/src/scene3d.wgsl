@@ -569,6 +569,8 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface) -> Direct {
         }
     }
     return Direct(out, select(0.0, removed / total, total > 0.0));
+}
+
 // Ambient occlusion (#418; ao.wgsl): its blurred result and settings, read only by the solids.
 struct Ao {
     clip: mat4x4<f32>,
