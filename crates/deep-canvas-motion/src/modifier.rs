@@ -201,7 +201,8 @@ fn shape_at(shape: Shape, ease: &Named, u: f64) -> f64 {
                 ease.at((1.0 - u) / rise)
             }
         }
-        Shape::Wiggle(count) => there_and_back(u) * ops::sin(ops::TAU * count * u),
+        // math@1's wiggle (Manim's): sin(count · π · u), count half-turns over the span.
+        Shape::Wiggle(count) => there_and_back(u) * ops::sin(ops::PI * count * u),
     }
 }
 

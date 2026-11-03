@@ -1182,7 +1182,13 @@ fn cexp((a, b): (f64, f64)) -> (f64, f64) {
 }
 
 fn clog((a, b): (f64, f64)) -> (f64, f64) {
-    (ops::log(ops::hypot(a, b)), ops::atan2(b, a))
+    (ops::log(ops::hypot(a, b)), atan2(b, a))
+}
+
+/// atan2 with zero one value: −0 reads as 0, so the angle on the negative x axis is π, as its
+/// interval form and IEEE 1788 take it.
+fn atan2(y: f64, x: f64) -> f64 {
+    ops::atan2(if y == 0.0 { 0.0 } else { y }, x)
 }
 
 /// z to a whole power by squaring, or through exp(w · log z).
@@ -1381,7 +1387,7 @@ fn call(f: Fun, a: &[V]) -> V {
         Fun::Asin => m(ops::asin),
         Fun::Acos => m(ops::acos),
         Fun::Atan => m(ops::atan),
-        Fun::Atan2 => map2(a[0], a[1], ops::atan2),
+        Fun::Atan2 => map2(a[0], a[1], atan2),
         Fun::Deg => m(ops::deg),
         Fun::Rad => m(ops::rad),
         Fun::Sinh => m(ops::sinh),
@@ -1495,7 +1501,7 @@ fn call(f: Fun, a: &[V]) -> V {
         }
         Fun::Carg => {
             let (x, y) = c2(a[0]);
-            V::S(ops::atan2(y, x))
+            V::S(atan2(y, x))
         }
         Fun::Hash => {
             let c: Vec<f64> = a.iter().flat_map(|v| comps(*v)).collect();
