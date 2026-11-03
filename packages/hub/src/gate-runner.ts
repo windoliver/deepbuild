@@ -97,7 +97,7 @@ interface Entry {
 }
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo?: Promise<string>; installs?: Promise<string>; names?: Promise<string> }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string> }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -151,10 +151,7 @@ export class GateRunner {
     }
   }
   /** The stem of a check's key on a claim: on the merge base when `base` names it (#1018). */
-  private async stemOf(c: Claim, e: Entry, base: string | null, dir: string): Promise<string> {
-    c.repo ??= repoOf(c.cwd);
-    c.installs ??= installsOf(dir);
-    c.names ??= namesOf(dir);
+  private async stemOf(c: Claim, e: Entry, base: string | null): Promise<string> {
     // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it.
     return stemOf({
       repo: await c.repo, check: e.check.check, approved: e.check.approved, command: e.check.command, deadline_ms: e.check.deadline_ms ?? null, held_out: e.check.held_out ?? null,
@@ -183,8 +180,10 @@ export class GateRunner {
    * key, by stem and snapshot, is what the check waits for; null when there is none and the check runs on its own.
    */
   private async carry(c: Claim, e: Entry, dir: string): Promise<'carried' | { wait: Promise<void> } | null> {
-    const stem = await this.stemOf(c, e, null, dir);
+    const stem = await this.stemOf(c, e, null);
     for (const g of await this.shared.find(e.check.check, stem, dir)) {
+      // Results are shared across sessions: a later claim of the session that ran a key runs its own, as it did before.
+      if (!this.runsOn(g.id).some((s) => s.session !== sessionOf(c.session))) continue;
       if (!this.decided(e, g.id) || !await this.keptAll(this.runsOn(g.id))) continue;
       e.group = g.id;
       e.outcome = this.runsOn(g.id).every((x) => this.records.get(x.run)?.outcome === 'passed') ? 'passed' : 'carried';
@@ -192,7 +191,7 @@ export class GateRunner {
       return 'carried';
     }
     const going = this.going.get(`${stem}\0${c.snapshot}`);
-    return going ? { wait: this.waited(c, going) } : null;
+    return going && going.session !== sessionOf(c.session) ? { wait: this.waited(c, going) } : null;
   }
   /** Whether every run's output is still kept: a result is pruned with its evidence (#1018, under #31's retention). */
   private async keptAll(runs: Source[]): Promise<boolean> {
@@ -216,11 +215,10 @@ export class GateRunner {
     await this.reading(c, 'runs saved by carrying across sessions', 1, 'runs');
     await this.reading(c, 'slot time saved by carrying across sessions', Math.max(0, Number(row?.ms ?? 0)), 'ms');
   }
-  /** The wait on a run going on an equal key, recorded as a reading once it ends when that run is another session's. */
+  /** The wait on another session's run going on an equal key, recorded as a reading once it ends. */
   private waited(c: Claim, going: { done: Promise<void>; session: string }): Promise<void> {
     const from = this.o.now();
     return going.done.then(async () => {
-      if (going.session === sessionOf(c.session)) return;
       await this.reading(c, "runs that waited on another session's run", 1, 'runs');
       await this.reading(c, "time waited on another session's run", Math.max(0, this.o.now() - from), 'ms');
     });
@@ -237,7 +235,7 @@ export class GateRunner {
    * its key, and is never shown to the agent. Every other claim reading the key is judged again.
    */
   private async runOwn(c: Claim, e: Entry, dir: string, lane: 'fast' | 'slow', expected: number | null, ran?: (run: string) => void): Promise<void> {
-    const stem = await this.stemOf(c, e, null, dir);
+    const stem = await this.stemOf(c, e, null);
     const key: RunKey = { check: e.check.check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: false };
     const own = (async () => {
       const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, key });
@@ -396,7 +394,9 @@ export class GateRunner {
       return { fast: [], slow: [], snapshot, readyAt: this.o.now() };
     }
     const readyAt = this.o.now();
-    const claim: Claim = { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, checkout: Promise.resolve({ dir: checkout, commit: snapshot }), requirements: r.requirements, entries: new Map() };
+    const claim: Claim = { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, checkout: Promise.resolve({ dir: checkout, commit: snapshot }), requirements: r.requirements, entries: new Map(),
+      // What its keys' stems name (#1018), read once from the stop's checkout: every checkout of a snapshot holds the same.
+      repo: repoOf(r.cwd), installs: installsOf(checkout), names: namesOf(checkout) };
     const older = this.claims.get(r.session) ?? [];
     this.claims.set(r.session, [...older, claim]);
     // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue.
@@ -479,14 +479,14 @@ export class GateRunner {
     let key: RunKey;
     try {
       const { dir } = await this.checkoutOf(c);
-      const stem = await this.stemOf(c, e, c.base, dir);
+      const stem = await this.stemOf(c, e, c.base);
       const paths = [...new Set(this.ownOf(e))].sort();
       key = { check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: true, withheld: false, id: keyId(stem, paths, await contents(dir, paths)), paths };
     } catch {
       return;
     }
     for (;;) {
-      const from = this.runsOn(`${check}\0${key.id!}`).find((x) => ON_BASE.has(this.records.get(x.run)?.outcome ?? ''));
+      const from = this.runsOn(`${check}\0${key.id!}`).find((x) => x.session !== key.session && ON_BASE.has(this.records.get(x.run)?.outcome ?? ''));
       if (from && await this.keptAll([from])) {
         e.base = from.run;
         e.baseFrom = from;
@@ -494,7 +494,7 @@ export class GateRunner {
         return;
       }
       const going = this.going.get(key.id!);
-      if (!going) break;
+      if (!going || going.session === key.session) break;
       await this.waited(c, going);
     }
     let ran!: () => void;

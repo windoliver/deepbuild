@@ -159,66 +159,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 8192
-        },
-        "key": {
-          "type": "object",
-          "description": "The run's key (#1018): what its result depends on, by which any claim in the repo on this host with an equal key reads it as carried.",
-          "properties": {
-            "id": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$",
-              "description": "A SHA-256, in lower-case hex.",
-              "maxLength": 8192
-            },
-            "stem": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$",
-              "description": "A SHA-256, in lower-case hex.",
-              "maxLength": 8192
-            },
-            "paths": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 8192
-              },
-              "description": "The files whose contents the key holds: the check's declared inputs and the files its runs read, or its own files on a base run."
-            },
-            "claim": {
-              "type": "string",
-              "pattern": "^claim:[0-9A-Za-z]+$",
-              "description": "A claim: handle.",
-              "maxLength": 8192
-            },
-            "session": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "base": {
-              "type": "boolean"
-            },
-            "withheld": {
-              "type": "boolean",
-              "description": "A held-out variant's run: its verdict carries, never its output."
-            },
-            "plain": {
-              "type": "boolean",
-              "description": "Its record is whole here (no retried test, no stand-in seeded, every failure on an assertion, no contract), so a restarted hub may read it again."
-            }
-          },
-          "required": [
-            "id",
-            "stem",
-            "paths",
-            "claim",
-            "session",
-            "base",
-            "withheld",
-            "plain"
-          ],
-          "additionalProperties": false
         }
       },
       "required": [

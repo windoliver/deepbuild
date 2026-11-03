@@ -247,7 +247,7 @@ export class AskTasks {
     const ts = this.o.now();
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 4, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 5, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
