@@ -131,6 +131,8 @@ export interface Gated {
   screen?: boolean;
   /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
   stage?: string[] | null;
+  /** A `gh pr create` (#322): its body's `Closes #n` is checked against the issue's task before it runs. */
+  pr?: boolean;
   /** A call in a session whose cut-off turn started a send with no recorded end (#85): checked against it first. */
   resend?: boolean;
 }
@@ -199,6 +201,8 @@ export interface CoreOptions {
   drafts?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
+  /** The GitHub API's recorded answers, a file named by DEEP_HUB_TEST_GITHUB; only tests set it (#322). */
+  github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */
   failJob?: string;
 }
