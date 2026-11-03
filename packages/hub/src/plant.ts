@@ -73,6 +73,8 @@ export type Plant =
   | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
+  // #55's: an answer handed to paseo's plugin while deep-hook's waiter for the session is live, so it goes in twice.
+  | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
   // #909's: a hub that never checks its lock again once it holds it.
@@ -96,7 +98,10 @@ export type Plant =
   // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
   // only looks for a number, and a gate that runs no check before the definition locks.
   | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
-  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check';
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check'
+  // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
+  // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
+  | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -134,6 +139,7 @@ const PLANTS: readonly string[] = [
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
   'deep-drive-no-lease',
+  'paseo-delivers-beside-waiter',
   'signature-covers-anything',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
@@ -145,6 +151,7 @@ const PLANTS: readonly string[] = [
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
+  'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

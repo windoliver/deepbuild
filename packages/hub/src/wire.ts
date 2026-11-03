@@ -104,6 +104,12 @@ export interface HookMeta {
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
   /**
+   * A line from paseo's plugin (#55): the agent's provider and paseo's own agent ID, the token its DeepBuild MCP server
+   * binds by, a permission request's ID and kind, an answer's source; and, for a provider the facts don't cover, what
+   * they lack.
+   */
+  paseo?: { provider: string; agent: string; bind: string; request?: string; kind?: string; behavior?: string; from?: string; lacks?: string };
+  /**
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
    * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
    */

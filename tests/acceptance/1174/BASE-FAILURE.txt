@@ -1,0 +1,190 @@
+# #1174 acceptance suite at the base, 407d600d (Merge pull request #1205), before any implementation.
+# Run: npx vitest run tests/acceptance/1174 --no-file-parallelism --testTimeout=600000 (repo root), on Mac15,7 (a reference
+# Mac), macOS Metal, load average about 45, after CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu
+# and npm run build --workspaces (the root vitest config resolves the workspace packages). All 5 fail, each for the
+# base's behavior or a missing surface: AC1 names the largest mask difference (192 codes); AC2 the darkest pixel at both
+# scales; AC3 every label (48 of 48) differs between 0.5 and 1, and the base has no --planted labels_before_upscale
+# (bad_input); AC4 is INCONCLUSIVE with no taste call recorded.
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1174-ba6080/agent-a998faa4ee9deb47d
+
+stdout | tests/acceptance/1174/masks.test.ts > #1174.46adb7ec the same 13 px label by scene3d at screen size and by the 2D path at the same device position: glyph masks within 8 codes at every pixel > #1174.46adb7ec "Shard 7 lag 33.5 ms" at 13 px in ink on paper: scene3d's glyph mask and the 2D path's are within 8 codes of each other at every pixel
+#1174.46adb7ec: the 13 px label "Shard 7 lag 33.5 ms": glyph masks differ by up to 192 codes, at device px (190, 52): scene3d 63, the 2D path (gpui) 255, with the 2D text moved (0, 0) px to its closest placement
+
+ ❯ tests/acceptance/1174/masks.test.ts (1 test | 1 failed) 11385ms
+   ❯ #1174.46adb7ec the same 13 px label by scene3d at screen size and by the 2D path at the same device position: glyph masks within 8 codes at every pixel (1)
+     × #1174.46adb7ec "Shard 7 lag 33.5 ms" at 13 px in ink on paper: scene3d's glyph mask and the 2D path's are within 8 codes of each other at every pixel 2516ms
+stdout | tests/acceptance/1174/shard.test.ts > #1174.d79a0063 a 12 px ink label on paper reaches the ink's own value within 4 codes at its darkest pixel, at internal scales 1 and 0.5 > #1174.d79a0063 the shard view's "Shard 7 lag 33.5 ms" at 12 px: its darkest pixel within 4 codes of ink #16181d at internal scale 1 and at 0.5
+#1174.d79a0063: t-32 "Shard 7 lag 33.5 ms" at internal scale 1: darkest pixel #212226 (33, 34, 38) at (842, 477), 11 codes from ink #16181d
+#1174.d79a0063: t-32 "Shard 7 lag 33.5 ms" at internal scale 0.5: darkest pixel #333436 (51, 52, 54) at (750, 475), 29 codes from ink #16181d
+
+stdout | tests/acceptance/1174/shard.test.ts > #1174.197f8e90 at internal scale 0.5 a label's pixels equal its pixels at scale 1 within 8 codes > #1174.197f8e90 each of the shard view's 48 labels: every pixel of its region at internal scale 0.5 within 8 codes of scale 1
+#1174.197f8e90: 48 of 48 labels differ by more than 8 codes between internal scales 0.5 and 1
+
+ ❯ tests/acceptance/1174/shard.test.ts (3 tests | 3 failed) 21797ms
+   ❯ #1174.d79a0063 a 12 px ink label on paper reaches the ink's own value within 4 codes at its darkest pixel, at internal scales 1 and 0.5 (1)
+     × #1174.d79a0063 the shard view's "Shard 7 lag 33.5 ms" at 12 px: its darkest pixel within 4 codes of ink #16181d at internal scale 1 and at 0.5 3348ms
+   ❯ #1174.197f8e90 at internal scale 0.5 a label's pixels equal its pixels at scale 1 within 8 codes (2)
+     × #1174.197f8e90 each of the shard view's 48 labels: every pixel of its region at internal scale 0.5 within 8 codes of scale 1 642ms
+     × #1174.197f8e90 a planted label drawn before the upscale fails, naming the label 51ms
+stdout | tests/acceptance/1174/taste.test.ts > #1174.20f41e3e the screenshots and the one taste call on them > #1174.20f41e3e the run writes the 2D and 3D labels side by side and the shard view at internal scales 1 and 0.5, and the owner's recorded call on exactly those says they look right
+#1174.20f41e3e: screenshots written from this run's pixels:
+  target/acceptance/1174/labels-2d-3d.png  0b850fff1f23aab81b89986b258f485a87ee4fd54fa71eb558a42033a919f83e
+  target/acceptance/1174/labels-2d-3d-x4.png  6cfa66a93777635ffcabf00275a1908d98810a471ac5f527e886828850c26507
+  target/acceptance/1174/shard-scale-1.png  08743679c52d9e84fb95f6655a3386a39f83a8cbcfa3179626b937a22d0a5721
+  target/acceptance/1174/shard-scale-0.5.png  c3a924fbf0c45fa9422bc3923acd6f6dba15fcfeb3e427d6c34ce366939cbdec
+  target/acceptance/1174/shard-label-x4.png  9f6eab6197de757277065aa93b92ddb4d59de54cc36b7823b1cb98febf851416
+
+ ❯ tests/acceptance/1174/taste.test.ts (1 test | 1 failed) 19245ms
+   ❯ #1174.20f41e3e the screenshots and the one taste call on them (1)
+     × #1174.20f41e3e the run writes the 2D and 3D labels side by side and the shard view at internal scales 1 and 0.5, and the owner's recorded call on exactly those says they look right 4145ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1174/masks.test.ts > #1174.46adb7ec the same 13 px label by scene3d at screen size and by the 2D path at the same device position: glyph masks within 8 codes at every pixel > #1174.46adb7ec "Shard 7 lag 33.5 ms" at 13 px in ink on paper: scene3d's glyph mask and the 2D path's are within 8 codes of each other at every pixel
+AssertionError: the 13 px label "Shard 7 lag 33.5 ms": glyph masks differ by up to 192 codes, at device px (190, 52): scene3d 63, the 2D path (gpui) 255, with the 2D text moved (0, 0) px to its closest placement: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1174/masks.test.ts:82:41
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/1174/shard.test.ts > #1174.d79a0063 a 12 px ink label on paper reaches the ink's own value within 4 codes at its darkest pixel, at internal scales 1 and 0.5 > #1174.d79a0063 the shard view's "Shard 7 lag 33.5 ms" at 12 px: its darkest pixel within 4 codes of ink #16181d at internal scale 1 and at 0.5
+AssertionError: the label reaches the ink at its darkest pixel at both scales: t-32 "Shard 7 lag 33.5 ms" at internal scale 1: its darkest pixel is (33, 34, 38) at (842, 477), 11 codes from ink #16181d, not within 4; t-32 "Shard 7 lag 33.5 ms" at internal scale 0.5: its darkest pixel is (51, 52, 54) at (750, 475), 29 codes from ink #16181d, not within 4: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "t-32 \"Shard 7 lag 33.5 ms\" at internal scale 1: its darkest pixel is (33, 34, 38) at (842, 477), 11 codes from ink #16181d, not within 4",
++   "t-32 \"Shard 7 lag 33.5 ms\" at internal scale 0.5: its darkest pixel is (51, 52, 54) at (750, 475), 29 codes from ink #16181d, not within 4",
++ ]
+
+ ❯ tests/acceptance/1174/shard.test.ts:80:97
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/1174/shard.test.ts > #1174.197f8e90 at internal scale 0.5 a label's pixels equal its pixels at scale 1 within 8 codes > #1174.197f8e90 each of the shard view's 48 labels: every pixel of its region at internal scale 0.5 within 8 codes of scale 1
+AssertionError: every label at internal scale 0.5 equals itself at scale 1 within 8 codes: t-00 "Throughput 0.0 ms": at internal scale 0.5 its pixel (188, 111) is #d4d3cf, at scale 1 #1c1e22: 184 codes apart, over 8; t-01 "Latency p95 11.1 ms": at internal scale 0.5 its pixel (521, 111) is #d8d7d4, at scale 1 #38383a: 160 codes apart, over 8; t-02 "Queue depth 22.2 ms": at internal scale 0.5 its pixel (804, 105) is #d6d5d2, at scale 1 #3d3e3f: 153 codes apart, over 8; t-03 "Cache hits 33.3 ms": at internal scale 0.5 its pixel (1168, 111) is #d6d5d1, at scale 1 #454646: 145 codes apart, over 8; t-04 "Retries 44.4 ms": at internal scale 0.5 its pixel (1478, 108) is #333436, at scale 1 #b7b6b3: 132 codes apart, over 8 (and 43 more): expected [ …(48) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "t-00 \"Throughput 0.0 ms\": at internal scale 0.5 its pixel (188, 111) is #d4d3cf, at scale 1 #1c1e22: 184 codes apart, over 8",
++   "t-01 \"Latency p95 11.1 ms\": at internal scale 0.5 its pixel (521, 111) is #d8d7d4, at scale 1 #38383a: 160 codes apart, over 8",
++   "t-02 \"Queue depth 22.2 ms\": at internal scale 0.5 its pixel (804, 105) is #d6d5d2, at scale 1 #3d3e3f: 153 codes apart, over 8",
++   "t-03 \"Cache hits 33.3 ms\": at internal scale 0.5 its pixel (1168, 111) is #d6d5d1, at scale 1 #454646: 145 codes apart, over 8",
++   "t-04 \"Retries 44.4 ms\": at internal scale 0.5 its pixel (1478, 108) is #333436, at scale 1 #b7b6b3: 132 codes apart, over 8",
++   "t-05 \"Shard 7 lag 55.5 ms\": at internal scale 0.5 its pixel (1810, 111) is #dbdad6, at scale 1 #575757: 132 codes apart, over 8",
++   "t-10 \"Latency p95 37.1 ms\": at internal scale 0.5 its pixel (97, 235) is #5e5e5e, at scale 1 #f7f6f2: 153 codes apart, over 8",
++   "t-11 \"Queue depth 48.2 ms\": at internal scale 0.5 its pixel (492, 233) is #292a2c, at scale 1 #b6b6b3: 141 codes apart, over 8",
++   "t-12 \"Cache hits 59.3 ms\": at internal scale 0.5 its pixel (794, 230) is #4b4b4c, at scale 1 #cdccc9: 130 codes apart, over 8",
++   "t-13 \"Retries 70.4 ms\": at internal scale 0.5 its pixel (1102, 230) is #c7c6c3, at scale 1 #292a2c: 158 codes apart, over 8",
++   "t-14 \"Shard 7 lag 81.5 ms\": at internal scale 0.5 its pixel (1459, 232) is #c4c3c0, at scale 1 #474748: 125 codes apart, over 8",
++   "t-15 \"Writes/s 92.6 ms\": at internal scale 0.5 its pixel (1734, 230) is #28292c, at scale 1 #b6b5b3: 142 codes apart, over 8",
++   "t-20 \"Queue depth 74.2 ms\": at internal scale 0.5 its pixel (198, 355) is #2e2f31, at scale 1 #b8b8b5: 138 codes apart, over 8",
++   "t-21 \"Cache hits 85.3 ms\": at internal scale 0.5 its pixel (516, 357) is #d2d1ce, at scale 1 #303133: 162 codes apart, over 8",
++   "t-22 \"Retries 96.4 ms\": at internal scale 0.5 its pixel (802, 353) is #bfbebb, at scale 1 #303132: 143 codes apart, over 8",
++   "t-23 \"Shard 7 lag 7.5 ms\": at internal scale 0.5 its pixel (1093, 357) is #d1d0cd, at scale 1 #49494a: 136 codes apart, over 8",
++   "t-24 \"Writes/s 18.6 ms\": at internal scale 0.5 its pixel (1416, 354) is #2b2c2e, at scale 1 #b6b5b3: 139 codes apart, over 8",
++   "t-25 \"GC pause 29.7 ms\": at internal scale 0.5 its pixel (1806, 357) is #d3d3cf, at scale 1 #16181d: 189 codes apart, over 8",
++   "t-30 \"Cache hits 11.3 ms\": at internal scale 0.5 its pixel (186, 480) is #b2b1af, at scale 1 #252629: 141 codes apart, over 8",
++   "t-31 \"Retries 22.4 ms\": at internal scale 0.5 its pixel (449, 480) is #cbcac7, at scale 1 #1b1d21: 176 codes apart, over 8",
++   "t-32 \"Shard 7 lag 33.5 ms\": at internal scale 0.5 its pixel (842, 480) is #bcbbb8, at scale 1 #212226: 155 codes apart, over 8",
++   "t-33 \"Writes/s 44.6 ms\": at internal scale 0.5 its pixel (1148, 478) is #cbcac7, at scale 1 #373839: 148 codes apart, over 8",
++   "t-34 \"GC pause 55.7 ms\": at internal scale 0.5 its pixel (1444, 478) is #bcbcb9, at scale 1 #3c3c3d: 128 codes apart, over 8",
++   "t-35 \"Throughput 66.8 ms\": at internal scale 0.5 its pixel (1783, 478) is #cccbc8, at scale 1 #575757: 117 codes apart, over 8",
++   "t-40 \"Retries 48.4 ms\": at internal scale 0.5 its pixel (152, 598) is #686868, at scale 1 #dfdedb: 119 codes apart, over 8",
++   "t-41 \"Shard 7 lag 59.5 ms\": at internal scale 0.5 its pixel (514, 603) is #cecdca, at scale 1 #4f4f50: 127 codes apart, over 8",
++   "t-42 \"Writes/s 70.6 ms\": at internal scale 0.5 its pixel (837, 603) is #dbdad7, at scale 1 #4a4a4b: 145 codes apart, over 8",
++   "t-43 \"GC pause 81.7 ms\": at internal scale 0.5 its pixel (1081, 599) is #cbcac7, at scale 1 #3b3b3d: 144 codes apart, over 8",
++   "t-44 \"Throughput 92.8 ms\": at internal scale 0.5 its pixel (1397, 603) is #d9d8d5, at scale 1 #3d3e3f: 156 codes apart, over 8",
++   "t-45 \"Latency p95 3.9 ms\": at internal scale 0.5 its pixel (1768, 601) is #c9c7c5, at scale 1 #3b3b3d: 142 codes apart, over 8",
++   "t-50 \"Shard 7 lag 85.5 ms\": at internal scale 0.5 its pixel (117, 724) is #353537, at scale 1 #b8b7b4: 131 codes apart, over 8",
++   "t-51 \"Writes/s 96.6 ms\": at internal scale 0.5 its pixel (495, 724) is #c0c0bd, at scale 1 #3d3d3e: 131 codes apart, over 8",
++   "t-52 \"GC pause 7.7 ms\": at internal scale 0.5 its pixel (837, 726) is #bebdba, at scale 1 #424243: 124 codes apart, over 8",
++   "t-53 \"Throughput 18.8 ms\": at internal scale 0.5 its pixel (1093, 722) is #cfcecb, at scale 1 #292a2c: 166 codes apart, over 8",
++   "t-54 \"Latency p95 29.9 ms\": at internal scale 0.5 its pixel (1398, 723) is #c1c0bd, at scale 1 #2b2c2e: 150 codes apart, over 8",
++   "t-55 \"Queue depth 40.0 ms\": at internal scale 0.5 its pixel (1788, 725) is #2a2b2d, at scale 1 #b6b6b3: 140 codes apart, over 8",
++   "t-60 \"Writes/s 22.6 ms\": at internal scale 0.5 its pixel (171, 847) is #c9c8c5, at scale 1 #434344: 134 codes apart, over 8",
++   "t-61 \"GC pause 33.7 ms\": at internal scale 0.5 its pixel (510, 849) is #d0cfcc, at scale 1 #424243: 142 codes apart, over 8",
++   "t-62 \"Throughput 44.8 ms\": at internal scale 0.5 its pixel (756, 849) is #d7d6d2, at scale 1 #343436: 163 codes apart, over 8",
++   "t-63 \"Latency p95 55.9 ms\": at internal scale 0.5 its pixel (1169, 849) is #dad9d6, at scale 1 #444545: 150 codes apart, over 8",
++   "t-64 \"Queue depth 66.0 ms\": at internal scale 0.5 its pixel (1495, 849) is #d5d4d1, at scale 1 #343436: 161 codes apart, over 8",
++   "t-65 \"Cache hits 77.1 ms\": at internal scale 0.5 its pixel (1799, 842) is #cfcfca, at scale 1 #454546: 138 codes apart, over 8",
++   "t-70 \"GC pause 59.7 ms\": at internal scale 0.5 its pixel (170, 968) is #b8b7b5, at scale 1 #2a2b2d: 142 codes apart, over 8",
++   "t-71 \"Throughput 70.8 ms\": at internal scale 0.5 its pixel (473, 968) is #cdccc9, at scale 1 #1b1d21: 178 codes apart, over 8",
++   "t-72 \"Latency p95 81.9 ms\": at internal scale 0.5 its pixel (743, 973) is #5e5e5e, at scale 1 #f7f6f2: 153 codes apart, over 8",
++   "t-73 \"Queue depth 92.0 ms\": at internal scale 0.5 its pixel (1128, 965) is #d0cfcc, at scale 1 #212225: 175 codes apart, over 8",
++   "t-74 \"Cache hits 3.1 ms\": at internal scale 0.5 its pixel (1479, 968) is #cfcecb, at scale 1 #515151: 126 codes apart, over 8",
++   "t-75 \"Retries 14.2 ms\": at internal scale 0.5 its pixel (1797, 968) is #cccbc7, at scale 1 #3d3e3f: 143 codes apart, over 8",
++ ]
+
+ ❯ tests/acceptance/1174/shard.test.ts:90:173
+     88|     const p = scaleProblems(one, half);
+     89|     console.log(`${SCALE_ID}: ${p.length} of ${SHARD_LABELS.length} la…
+     90|     expect(p, `every label at internal scale 0.5 equals itself at scal…
+       |                                                                                                                                                                             ^
+     91|   }, 1_800_000);
+     92|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/1174/shard.test.ts > #1174.197f8e90 at internal scale 0.5 a label's pixels equal its pixels at scale 1 within 8 codes > #1174.197f8e90 a planted label drawn before the upscale fails, naming the label
+AssertionError: deep-gpu run --planted labels_before_upscale exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run tests/acceptance/1174/helpers.ts:131:155
+    129|   const name = `${BIN} ${args.join(' ')}`;
+    130|   if (r.error) throw Error(`${name}: ${r.error.message}`);
+    131|   expect(r.status, `${name} exited 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    132|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    133|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ shard tests/acceptance/1174/shard.test.ts:30:21
+ ❯ tests/acceptance/1174/shard.test.ts:95:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/1174/taste.test.ts > #1174.20f41e3e the screenshots and the one taste call on them > #1174.20f41e3e the run writes the 2D and 3D labels side by side and the shard view at internal scales 1 and 0.5, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner the screenshots
+  target/acceptance/1174/labels-2d-3d.png  0b850fff1f23aab81b89986b258f485a87ee4fd54fa71eb558a42033a919f83e
+  target/acceptance/1174/labels-2d-3d-x4.png  6cfa66a93777635ffcabf00275a1908d98810a471ac5f527e886828850c26507
+  target/acceptance/1174/shard-scale-1.png  08743679c52d9e84fb95f6655a3386a39f83a8cbcfa3179626b937a22d0a5721
+  target/acceptance/1174/shard-scale-0.5.png  c3a924fbf0c45fa9422bc3923acd6f6dba15fcfeb3e427d6c34ce366939cbdec
+  target/acceptance/1174/shard-label-x4.png  9f6eab6197de757277065aa93b92ddb4d59de54cc36b7823b1cb98febf851416
+and record the answer in tests/acceptance/1174/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive tests/acceptance/1174/helpers.ts:69:10
+     67| /** A test that can't be judged here fails with this, never passes. */
+     68| export function inconclusive(reason: string): never {
+     69|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     70| }
+     71| /** The reference Macs (technical design: The reference Macs). */
+ ❯ tests/acceptance/1174/taste.test.ts:68:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed (5)
+   Start at  14:01:31
+   Duration  52.88s (tests 100%)
+
