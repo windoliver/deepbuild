@@ -20,6 +20,19 @@
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/recipe" }
     },
+    "aliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "target": { "type": "string" },
+          "conversion": { "type": "string" },
+          "renamed_from": { "type": "string" }
+        },
+        "required": ["target", "conversion"],
+        "additionalProperties": false
+      }
+    },
     "entries": {
       "type": "object",
       "additionalProperties": {

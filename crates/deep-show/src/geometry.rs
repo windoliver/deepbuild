@@ -173,7 +173,7 @@ impl Hub<'_> {
 
     /// `kinds`: every kind the build registers, scene3d's and the building module's with their
     /// schemas, dirty maps, reads, fixtures and sweeps.
-    pub(crate) fn kinds_reply(&self) -> Value {
+    pub(crate) fn kind_schemas_reply(&self) -> Value {
         let planted = self.scenario.module_planted.as_deref();
         let kinds: Vec<Value> = crate::kit::manifest::Manifest::kinds_of(&self.startup.sealed)
             .into_iter()

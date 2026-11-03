@@ -292,6 +292,8 @@ pub struct Startup {
     pub ignores_unknown_occlusion: bool,
     /// #200: a planted wrong `deep://registries` listing.
     pub listing: Option<crate::registries::Listing>,
+    /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
+    pub kinds: Option<crate::kinds::Planted>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -458,8 +460,8 @@ pub struct PatchCall {
 pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
-    /// #411: a deep_show or deep show call in a diagnostic mode.
-    Mode(Box<Show>, String),
+    /// #411: a deep_show or deep show call in a diagnostic mode; #412: from its readings' cursor.
+    Mode(Box<Show>, String, usize),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
@@ -494,7 +496,7 @@ pub enum Call {
     /// #420: an item's built mesh, or its count from its params.
     Geometry(Box<crate::geometry::Geometry>),
     /// #420: every kind's schema, dirty map, reads, fixture and sweep.
-    Kinds,
+    KindSchemas,
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -505,6 +507,8 @@ pub enum Call {
     },
     /// #200: `deep://registries/<core version>`.
     Registries,
+    /// #412: deep_kinds, its fields as the call gave them.
+    Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
     Sandbox,
     /// #238: the providers a document's current revision ran at check, with their output.
@@ -793,6 +797,14 @@ pub struct Scenario {
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
+    /// #412: the entries plug-ins fill, each `{plugin, registry, entry, kit}` with the kit result
+    /// the hub recorded for it on this core.
+    pub plugin_entries: Vec<Value>,
+    /// #412: a folder of guides and examples (`gallery.json` and its files) used in place of the
+    /// installed ones.
+    pub gallery: Option<PathBuf>,
+    /// #412: the corpus runner's recorded runs, `{example, module_set, played, exit}`, last last.
+    pub corpus_runs: Vec<Value>,
     /// Every session's pool in place of its budget class's (#857).
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
@@ -1366,9 +1378,9 @@ impl<'a> Hub<'a> {
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
-            Call::Mode(show, mode) => {
+            Call::Mode(show, mode, cursor) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
-                self.mode_show(show, mode)
+                self.mode_show(show, mode, *cursor)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
@@ -1376,13 +1388,14 @@ impl<'a> Hub<'a> {
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
             Call::Geometry(g) => self.geometry(g),
-            Call::Kinds => self.kinds_reply(),
+            Call::KindSchemas => self.kind_schemas_reply(),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir, session } => {
                 self.install_pack(id, dir, session.as_deref())
             }
             Call::Registries => self.registries_reply(),
+            Call::Kinds(c) => self.kinds_reply(c),
             Call::Sandbox => json!({
                 "module": "sandbox",
                 "version": self.startup.sealed.modules.iter().find(|m| m.name == "sandbox").map(|m| m.version.to_string()),
