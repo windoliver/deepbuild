@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSyn
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
@@ -321,12 +322,47 @@ function runVitest(directory, files, env) {
  * Runs test files in `directory`: .mjs and .js with node --test, .ts with the checkout's vitest.
  * fileErrors holds files that failed outside every test, unrunnable those whose runner couldn't run.
  */
-function runTests(directory, files, { env = {} } = {}) {
+function runTests(directory, files, { env = {}, timed = [] } = {}) {
   // A runner given no file runs every test it finds, so each starts only with files of its own.
-  const node = files.filter((file) => !file.endsWith('.ts')), vitest = files.filter((file) => file.endsWith('.ts'));
-  const parts = [node.length && runNode(directory, node, env), vitest.length && runVitest(directory, vitest, env)].filter(Boolean);
+  const run = (some) => [some.filter((file) => !file.endsWith('.ts')), some.filter((file) => file.endsWith('.ts'))]
+    .map((group, at) => group.length && (at ? runVitest : runNode)(directory, group, env)).filter(Boolean);
+  const parts = run(files.filter((file) => !timed.includes(file)));
+  // The timed set spawns only once it holds timed, so a wait for the grant never eats into its runner's TIMEOUT.
+  const timedFiles = files.filter((file) => timed.includes(file));
+  if (timedFiles.length) {
+    const grant = acquire('timed', { wait: 15 });
+    if (!grant) parts.push({ results: new Map(), fileErrors: new Map(), unrunnable: new Map(timedFiles.map((file) => [file, 'INCONCLUSIVE no grant: no timed grant came within 15 minutes'])) });
+    else {
+      const previous = process.env.DEEP_THROTTLE;
+      process.env.DEEP_THROTTLE = grant.token;
+      try {
+        parts.push(...run(timedFiles));
+      } finally {
+        if (previous === undefined) delete process.env.DEEP_THROTTLE;
+        else process.env.DEEP_THROTTLE = previous;
+        release(grant);
+      }
+    }
+  }
   const merged = (key) => new Map(parts.flatMap((part) => [...part[key]]));
   return { results: merged('results'), fileErrors: merged('fileErrors'), unrunnable: merged('unrunnable') };
+}
+
+/**
+ * The files of `files` in the timed list the checkout's lanes.mjs exports (`timed`: files, or folders ending in /),
+ * which run only under a timed grant. A checkout with no lanes.mjs has no list; when one can't be read, every file
+ * is timed, so none runs ungranted.
+ */
+function timedSet(root, files) {
+  if (!existsSync(join(root, 'scripts/lanes.mjs'))) return [];
+  const code = `const { timed = [] } = await import(${JSON.stringify(pathToFileURL(join(root, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify(timed));`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: root, env: childEnv(), encoding: 'utf8' });
+  try {
+    const list = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    return files.filter((file) => list.some((entry) => (entry.endsWith('/') ? file.startsWith(entry) : file === entry)));
+  } catch {
+    return files;
+  }
 }
 
 const failedAtAssertion = (result) => result?.status === 'fail' && result.failure.atAssertion;
@@ -358,6 +394,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   const empty = () => ({ results: new Map(), fileErrors: new Map(), unrunnable: new Map() });
   const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
+  const timed = timedSet(root, files);
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
   // The merge base, with the change's test code: every file under the test paths (tests, helpers
   // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
@@ -368,14 +405,14 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   // A fixture project's committed packages are its own too, as a test that runs it reads them.
   for (const path of listFiles(root)) if (underTestPaths(path) || underTestPaths(`${path.split('/node_modules/')[0]}/package.json`)) copy(root, path, base);
   if (blocked) runs.base.blocked = blocked;
-  else runs.base = runTests(base, files);
+  else runs.base = runTests(base, files, { timed });
 
   // The change runs in a copy prepared as the merge base's checkout is, so a test can't pass on the
   // change and fail on the base by telling the two places apart.
   const head = changeCopy(root, change);
   runs.directory = head.directory;
   runs.modules = head.modules;
-  runs.head = head.blocked ? { ...empty(), unrunnable: new Map(files.map((file) => [file, head.blocked])) } : runTests(runs.directory, files, { env: runs.coverage ? { NODE_V8_COVERAGE: runs.coverage } : {} });
+  runs.head = head.blocked ? { ...empty(), unrunnable: new Map(files.map((file) => [file, head.blocked])) } : runTests(runs.directory, files, { env: runs.coverage ? { NODE_V8_COVERAGE: runs.coverage } : {}, timed });
   // A test the change adds or edits: its file is new, or a line the change adds or removes is in it.
   const edited = new Map(change.whole.map((file) => [file.path, file.status === 'A' ? true : [...addedLines(file), ...file.hunks.filter(({ added }) => !added.length).map(({ newStart }) => newStart)]]));
   const sourceSpans = new Map(files.map((path) => [path, spans(show(root, null, path) ?? '')]));
@@ -455,7 +492,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     const failed = prepare(root, change, directory);
     undoBuild(root, directory, [], runs.modules);
     for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
-    runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles));
+    runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles, { timed }));
   }
   return runs;
 }
