@@ -185,6 +185,20 @@ them to their size.
   only for a transcript larger than that. 32 MiB is a long resumed session's, and the hub doesn't read what came before
   a session's first hook, so it costs a healthy run nothing but disk.
 
+## Approved changes after the draft
+
+Disputed on the work, and approved by the owner's side on 2026-11-03 after its blind redraft (`redraft-readings/`)
+also failed on the work, with a defect of its own (it reads an event's session as `session_id`; the record names it
+`session`). `readings.test.ts`, two edits:
+
+1. **`afterEach(cleanup)` became `afterAll(cleanup)`.** The record test reads the benchmark run the readings test
+   started, whose home the per-test cleanup had already removed, so no benchmark could pass it in a whole-file run.
+2. **The 1 MB floor holds for `deep mcp` only.** It read "a Node MCP server holds at least 1 MB of its own" for both
+   server entries, but the implementation serves `deep-actions` with deep-hook (`deep-hook mcp actions`), a Rust process
+   of about 0.4 to 0.8 MB of Pss, so that a session fits the 25 MB. Every process must still be read with a positive size.
+
+`redraft-readings/` is kept as written and run by hand only (`scripts/lanes.mjs`, byHand).
+
 ## Files
 
 - `helpers.ts`: the benchmark as a process, its JSON line and words, the growth and the grown role recomputed.
