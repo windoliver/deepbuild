@@ -20,7 +20,7 @@ use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
 use deep_gpu::surface::{allocate, Handoff, Path};
-use deep_scene3d_render::surface::{Filter, Surface, OUTLINE_PASS};
+use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
 pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
 use deep_scene3d_render::{Planted as Planted3, Renderer, LINEAR};
 use serde_json::Value;
@@ -764,10 +764,15 @@ impl View {
                 timer.end(i);
             }
         }
-        if let Some(draw) = self.renderer.outline_draw(false) {
-            let i = timer.start(OUTLINE_PASS, session);
-            draw.record(encoder, &slot_view, timer.writes(i));
-            timer.end(i);
+        for (name, draw) in [
+            (OUTLINE_PASS, self.renderer.outline_draw(false)),
+            (LABEL_PASS, self.renderer.label_draw()),
+        ] {
+            if let Some(draw) = draw {
+                let i = timer.start(name, session);
+                draw.record(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
         }
         self.after(encoder, slot);
         Ok(())

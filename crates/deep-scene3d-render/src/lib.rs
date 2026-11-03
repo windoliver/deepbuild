@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
-use deep_canvas_scene3d::label::{AtlasPage, PAGE, PAGES};
+use deep_canvas_scene3d::label::{half_fraction, AtlasPage, PAGE, PAGES};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Facing, Layer3, PointShape, Scene, Shape, Solid};
@@ -27,7 +27,7 @@ use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
 
 use crate::mesh::Mesh;
-use crate::surface::{Low, Surface, Upscale, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
+use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 /// The 3D writer layers' linear target: what the output pass reads.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -41,6 +41,7 @@ const SHADER: &str = include_str!("scene3d.wgsl");
 const OUTPUT: &str = include_str!("output.wgsl");
 const OUTLINE: &str = include_str!("outline.wgsl");
 const BUSY: &str = include_str!("busy.wgsl");
+const LABEL: &str = include_str!("label.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
 
@@ -70,6 +71,9 @@ pub struct Planted {
     pub status_before_upscale: bool,
     /// #386: status outlines draw with no depth test.
     pub status_without_depth: bool,
+    /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
+    /// upscale, as the base drew them.
+    pub labels_before_upscale: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -145,6 +149,8 @@ pub struct OutlineDraw {
     pipeline: wgpu::RenderPipeline,
     output: wgpu::BindGroup,
     frame: wgpu::BindGroup,
+    /// The glyph atlas, for the label pass's draw (#1174).
+    atlas: Option<wgpu::BindGroup>,
     sets: Vec<(wgpu::Buffer, u32)>,
     statuses: Vec<(wgpu::Buffer, u32)>,
 }
@@ -157,6 +163,7 @@ impl OutlineDraw {
             pipeline: self.pipeline.clone(),
             output: self.output.clone(),
             frame: self.frame.clone(),
+            atlas: None,
             sets: statuses,
             statuses: Vec::new(),
         });
@@ -171,8 +178,13 @@ impl OutlineDraw {
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
         deep_gpu::alloc::outside(|| {
+            let label = if self.atlas.is_some() {
+                LABEL_PASS
+            } else {
+                OUTLINE_PASS
+            };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(OUTLINE_PASS),
+                label: Some(label),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target,
                     resolve_target: None,
@@ -188,6 +200,9 @@ impl OutlineDraw {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.output, &[]);
             pass.set_bind_group(1, &self.frame, &[]);
+            if let Some(atlas) = &self.atlas {
+                pass.set_bind_group(2, atlas, &[]);
+            }
             for (buffer, n) in self.sets.iter().chain(&self.statuses) {
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..*n);
@@ -245,6 +260,8 @@ struct FrameUniform {
     sky_low: [f32; 4],
 }
 
+/// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl).
+const LATER: u32 = 256;
 /// A segment record's flags in the outline pass (outline.wgsl).
 const EXACT: u32 = 2;
 const UNTESTED: u32 = 4;
@@ -309,8 +326,9 @@ struct PointRecord {
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 /// One glyph of a label: the label's anchor and em, the glyph's quad from the label's centre in
-/// ems (x right, y down), its texels on its atlas page, the label's axes, and `flags`: world
-/// size, facing, and the page.
+/// ems (x right, y down), its texels on its atlas page, the label's axes (each `w` the fraction
+/// of half its box on that axis, for the label pass), and `flags`: world size, facing, the page,
+/// and [`LATER`].
 struct TextRecord {
     p: [f32; 4],
     rect: [f32; 4],
@@ -745,6 +763,8 @@ pub struct Renderer {
 /// The pass that draws thin lines and outlines at full size after the upscale (#386).
 struct Outlines {
     pipeline: wgpu::RenderPipeline,
+    /// The screen-size labels' pass after the upscale, over the same frame and depth (#1174).
+    labels: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     /// The camera over the full-size slot, and over the internal size (the planted programs').
     display: wgpu::Buffer,
@@ -1138,7 +1158,7 @@ impl Renderer {
         // core's depth target to test against (#386).
         let outline_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(OUTLINE_PASS),
-            source: wgpu::ShaderSource::Wgsl(format!("{OUTPUT}\n{OUTLINE}").into()),
+            source: wgpu::ShaderSource::Wgsl(format!("{OUTPUT}\n{OUTLINE}\n{LABEL}").into()),
         });
         let outline_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(OUTLINE_PASS),
@@ -1177,8 +1197,34 @@ impl Renderer {
             )),
             None,
         );
+        let label_pipeline = pipeline(
+            d,
+            LABEL_PASS,
+            Some(&layout(&[
+                Some(&output_layout),
+                Some(&outline_layout),
+                Some(&mask_layout),
+            ])),
+            &outline_module,
+            (
+                "label_vs",
+                &[Some(instance(
+                    std::mem::size_of::<TextRecord>() as u64,
+                    &TEXT,
+                ))],
+            ),
+            Some((
+                "label_fs",
+                &[target(
+                    FORMAT,
+                    Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                )],
+            )),
+            None,
+        );
         let outlines = Outlines {
             pipeline: outline_pipeline,
+            labels: label_pipeline,
             layout: outline_layout,
             display: uniform_buffer("scene3d outlines", std::mem::size_of::<FrameUniform>()),
             internal: uniform_buffer(
@@ -1268,6 +1314,7 @@ impl Renderer {
                 "scene3d.output",
                 "scene3d.output_f32",
                 OUTLINE_PASS,
+                LABEL_PASS,
             ],
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
@@ -1838,6 +1885,7 @@ impl Renderer {
                 Facing::Upright => 1,
                 Facing::Fixed => 2,
             };
+            let half = half_fraction(l.bounds).map(f64::from);
             for g in &l.glyphs {
                 let Some(a) = g.atlas else { continue };
                 let texel = |v: u32| v as f32 / PAGE as f32;
@@ -1845,11 +1893,18 @@ impl Renderer {
                     p: v4(l.pos, l.em),
                     rect: g.rect,
                     uv: [texel(a.x), texel(a.y), texel(a.x + a.w), texel(a.y + a.h)],
-                    right: v4(l.axes[0], 0.0),
-                    up: v4(l.axes[1], 0.0),
+                    right: v4(l.axes[0], half[0]),
+                    up: v4(l.axes[1], half[1]),
                     color: pack(l.color),
                     pick: picks[&l.id],
-                    flags: u32::from(l.world) | (facing << 1) | (a.page << 3),
+                    flags: u32::from(l.world)
+                        | (facing << 1)
+                        | (a.page << 3)
+                        | if l.world || self.planted.labels_before_upscale {
+                            0
+                        } else {
+                            LATER
+                        },
                     pad: 0,
                 };
                 batch.labels.push(&l.id, bytemuck::bytes_of(&record));
@@ -2215,33 +2270,36 @@ impl Renderer {
                 }),
             ));
         }
-        if let Some(draw) = self.outline_draw(false) {
-            // Status outlines draw as the status colors, where the frame has them.
-            let (draw, statuses) = if colors.is_empty() {
-                (draw, None)
-            } else {
-                draw.split()
-            };
+        // Status outlines draw as the status colors, where the frame has them, over the labels.
+        let (outlines, statuses) = match self.outline_draw(false) {
+            Some(draw) if !colors.is_empty() => {
+                let (draw, statuses) = draw.split();
+                (Some(draw), statuses)
+            }
+            draw => (draw, None),
+        };
+        for (name, draw) in [(OUTLINE_PASS, outlines), (LABEL_PASS, self.label_draw())] {
+            let Some(draw) = draw else { continue };
             let (profiler, target) = (self.profiler.clone(), slot.clone());
             jobs.push((
-                OUTLINE_PASS.into(),
+                name.into(),
                 Box::new(move |encoder| {
-                    timed(&profiler, OUTLINE_PASS, encoder, |e, ts| {
+                    timed(&profiler, name, encoder, |e, ts| {
                         draw.record(e, &target, ts)
                     })
                 }),
             ));
-            if let Some(statuses) = statuses {
-                let (profiler, slot) = (self.profiler.clone(), slot.clone());
-                jobs.push((
-                    status::COLORS_PASS.into(),
-                    Box::new(move |encoder| {
-                        timed(&profiler, status::COLORS_PASS, encoder, |e, ts| {
-                            statuses.record(e, &slot, ts)
-                        })
-                    }),
-                ));
-            }
+        }
+        if let Some(statuses) = statuses {
+            let (profiler, slot) = (self.profiler.clone(), slot.clone());
+            jobs.push((
+                status::COLORS_PASS.into(),
+                Box::new(move |encoder| {
+                    timed(&profiler, status::COLORS_PASS, encoder, |e, ts| {
+                        statuses.record(e, &slot, ts)
+                    })
+                }),
+            ));
         }
         jobs.extend(colors);
         jobs
@@ -2342,8 +2400,38 @@ impl Renderer {
             pipeline: self.outlines.pipeline.clone(),
             output: t.output_bind.clone(),
             frame: binds[usize::from(early)].clone(),
+            atlas: None,
             sets,
             statuses,
+        })
+    }
+
+    /// The label pass: every layer's screen-size labels at full size, after the upscale (#1174);
+    /// `None` with no labels, or when the planted program drew them in the geometry pass.
+    pub fn label_draw(&self) -> Option<OutlineDraw> {
+        if self.planted.labels_before_upscale {
+            return None;
+        }
+        let t = self.targets.as_ref()?;
+        let binds = self.outlines.binds.as_ref()?;
+        let sets: Vec<(wgpu::Buffer, u32)> = self
+            .order
+            .iter()
+            .filter_map(|id| {
+                let set = &self.batches.get(id)?.labels;
+                Some((set.buffer.clone()?, set.len())).filter(|(_, n)| *n > 0)
+            })
+            .collect();
+        if sets.is_empty() {
+            return None;
+        }
+        Some(OutlineDraw {
+            pipeline: self.outlines.labels.clone(),
+            output: t.output_bind.clone(),
+            frame: binds[0].clone(),
+            atlas: Some(self.atlas.bind.clone()),
+            sets,
+            statuses: Vec::new(),
         })
     }
 
@@ -2801,6 +2889,14 @@ impl RenderModule for Module3 {
         passes.push(pass(
             OUTLINE_PASS,
             2,
+            vec!["depth"],
+            vec!["slot"],
+            0.01,
+            Determinism::SameMachine,
+        ));
+        passes.push(pass(
+            LABEL_PASS,
+            3,
             vec!["depth"],
             vec!["slot"],
             0.01,
