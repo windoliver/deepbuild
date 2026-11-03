@@ -130,6 +130,14 @@ export const piParts: AdapterParts = {
   doctor: () => notChecked('pi'),
 };
 
+export const paseoParts: AdapterParts = {
+  // paseo's plugin runs in paseo's daemon: a turn's end and a permission request reach the hub as notifications it
+  // doesn't wait on, the plugin answers a request in paseo on the hub's word, and words go in as a prompt or a steer.
+  caps: { holdStop: false, wakeIdle: true, steer: true, followUp: false, answerPermission: true, nativeTools: false, mcp: true, rewrite: false, editInput: false, errorTurnHook: true, startTurn: true },
+  unsupported: { terminal: ['interrupt', 'history'] },
+  doctor: () => notChecked('paseo'),
+};
+
 export const codexParts: AdapterParts = {
   // Codex's hooks: a Stop hook can hold the turn and a PermissionRequest hook decides; no hook rewrites or
   // edits a call's input, and a turn that ends in an error fires no hook.

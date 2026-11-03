@@ -249,6 +249,8 @@ interface Routes {
   slowClaims?: string[];
   /** Its waiter is the agent's own package, which places an answer itself, busy or idle, and says what became of each (#40). */
   places?: boolean; placing?: Set<string>;
+  /** paseo's plugin, waiting to prompt a session deep-hook gates where deep-hook's own wake isn't there (#55). */
+  relay?: { key: number; at: number; since: number; give(reply: Obj): void } | undefined;
   /**
    * The cause of its newest stop while that cause's task is open (#85): a sign-in, a token refresh, a refusal, a
    * spend limit, a plan window, or any block you own. No turn DeepBuild causes starts there: what would wake it waits
@@ -530,6 +532,16 @@ export class Core {
   private readonly projects = new Map<string, string>();
   /** The asks raised for permission prompts and saved offers, by handle: their answer is never delivered as a message (#23). */
   private readonly prompts = new Set<string>();
+  /** paseo's plugin (#55): the token each agent's DeepBuild MCP server binds by, to the agent's own session. */
+  private readonly binds = new Map<string, string>();
+  /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not a terminal. */
+  private readonly inPaseo = new Set<string>();
+  /** The ask each permission request paseo's plugin sent became, by session and request ID. */
+  private readonly paseoRequests = new Map<string, string>();
+  /** A permission prompt held for its ask's answer, by the ask. */
+  private readonly permits = new Map<string, (delivery: Delivery) => void>();
+  /** Sessions paseo runs whose answer no route could carry: their rows read "answer waiting". */
+  private readonly answerWaiting = new Set<string>();
   /** Prompts no decision covered, by session and what the call is, until the call runs and is offered back (#23). */
   private readonly pending = new Map<string, { meta: HookMeta; about: About }>();
   /** Permissions you said yes to in the terminal, offered back as decisions to save, by handle (#23). */
@@ -1065,7 +1077,7 @@ export class Core {
     const verified = meta.watchOnly ? false : await this.verify(meta);
     if (meta.watchOnly && meta.session && !this.versioned.has(meta.session)) {
       this.versioned.add(meta.session);
-      await this.appendReading(meta.session, meta.agent, `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and blocks are watch-only until the live smoke test widens the range to ${meta.version}.`).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and blocks are watch-only until the live smoke test widens the range to ${meta.version}.`).catch(() => undefined);
     }
     const session = this.sessions.get(meta.session);
     if (session && (verified || this.options.plant === 'ends-binding')) {
@@ -1260,7 +1272,7 @@ export class Core {
   }
   /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
   private mapped(meta: HookMeta, draft: Draft, payload: Obj, transcript: readonly Obj[]): Obj | undefined {
-    if (meta.agent === 'pi') return undefined;
+    if (meta.agent === 'pi' || meta.agent === 'paseo') return undefined;
     const name = meta.agent === 'codex' ? 'codex' : 'claude';
     const adapter = registry().get(name);
     const version = ((adapter.facts as Obj).versions as string[]).at(-1)!;
@@ -2189,11 +2201,15 @@ export class Core {
   /** An answer the asks core recorded: a stop of its session held now takes it, else its waiter if the session is idle. */
   private answered(delivery: Delivery): void {
     // A permission prompt's answer goes back through the prompt it holds (#23).
+    this.permits.get(delivery.ask)?.(delivery);
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
     void this.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.sessions.get(delivery.session);
-    if (asker?.agent === 'pi' || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    if (asker?.agent === 'pi' || asker?.agent === 'paseo' || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    // Inside paseo, with neither deep-hook's waiter nor paseo's plugin there to take it, the answer waits on the row (#55).
+    const route = this.routes.get(delivery.session);
+    if (this.inPaseo.has(delivery.session) && !route?.waiter && !route?.relay) this.answerWaiting.add(delivery.session);
     // One the restarted hub hasn't heard from may be a pi session replaced before it, or any idle session whose waiter asked again.
     if (!asker) void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
@@ -2250,6 +2266,9 @@ export class Core {
     const r = this.routes.get(session);
     if (!r) return;
     if (r.places) return void this.queue(() => this.placeOrRefuse(session)).catch(() => undefined);
+    // Where deep-hook's own wake isn't there, paseo's plugin prompts the session on its behalf (#55). The planted wrong
+    // program hands it over beside a live waiter too.
+    if (r.relay && !r.holding && (!r.waiter || this.options.plant === 'paseo-delivers-beside-waiter')) void this.queue(() => this.relayAnswers(session, r)).catch(() => undefined);
     const idle = () => r.waiter !== undefined && !r.holding && r.busy < Math.max(r.waiter.since, r.ended);
     if (!r.covered || !r.shown.has('waiter') || r.capped || r.wakes === false || !idle()) return;
     void this.queue(async () => {
@@ -2296,6 +2315,18 @@ export class Core {
       const at = Date.now();
       for (const row of rows) this.handed.set(row.id, { session, at, via: 'wake', timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
     }).catch(() => undefined);
+  }
+  /** The answers waiting for a session deep-hook gates inside paseo, handed to paseo's plugin, which prompts it once it reads idle. */
+  private async relayAnswers(session: string, r: Routes): Promise<void> {
+    const relay = r.relay;
+    const rows = (await this.waitingFor(session)).filter((row) => !this.handed.has(row.id));
+    if (!relay || !rows.length) return;
+    r.relay = undefined;
+    this.answerWaiting.delete(session);
+    relay.give({ session, text: this.answerText(rows), asks: rows.map((row) => row.id) });
+    // Delivered only once a turn shows it, as a wake's answer is.
+    const at = Date.now();
+    for (const row of rows) this.handed.set(row.id, { session, at, via: 'next_prompt', timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
   }
   /** The continues the asks core recorded since the hub last read them (#85): each takes a route back into its session. */
   private continues(): Promise<void> {
@@ -2637,21 +2668,57 @@ export class Core {
    * for you. One no decision covers opens no ask: the agent's own prompt asks you in the terminal (#18), and once the
    * call you said yes to runs it is offered back as a decision you save with one click (`deep inbox save`).
    */
-  async permission(meta: HookMeta): Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }> {
+  async permission(meta: HookMeta, until = 0, inPaseo = false): Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }> {
     await this.ready;
     if (FOREIGN.has(meta.agent) || !meta.session || !meta.call) return { decision: 'none' };
-    const about = aboutPermission(meta.call.tool, meta.call.input);
-    if (!(await this.covered(meta.session, about))) {
+    const tool = aboutPermission(meta.call.tool, meta.call.input);
+    // A request paseo calls `other` is never one a saved decision answers: it asks you (#55).
+    const about = meta.paseo?.kind === 'other' ? { ...tool, subject: { ...tool.subject, target: { ...tool.subject.target, kind: `other:${meta.call.tool}`, owner: `other:${tool.subject.target.owner}` } } } : tool;
+    // A prompt shown in paseo, not in a terminal, is asked here: there is no dialog of the agent's own to draw it (#55).
+    const shown = meta.agent === 'paseo' || inPaseo || this.inPaseo.has(meta.session);
+    if (!shown && !(await this.covered(meta.session, about))) {
       this.pending.set(`${meta.session}|${about.subject.target.owner}`, { meta, about });
       return { decision: 'none' };
     }
     const asked = await this.holds.asked(meta, about);
     this.prompts.add(asked.ask);
     if (asked.decision) return { decision: asked.option === 'approve' ? 'allow' : 'deny', because: asked.decision };
+    if (shown) {
+      if (meta.paseo?.request) this.paseoRequests.set(`${meta.session}|${meta.paseo.request}`, asked.ask);
+      const answer = await new Promise<Delivery | undefined>((done) => {
+        const timer = setTimeout(() => { this.permits.delete(asked.ask); done(undefined); }, Math.max(0, until - Date.now()));
+        timer.unref();
+        this.permits.set(asked.ask, (delivery) => { clearTimeout(timer); this.permits.delete(asked.ask); done(delivery); });
+      });
+      return { decision: !answer ? 'none' : answer.option === 'approve' ? 'allow' : 'deny' };
+    }
     // The core's gate refused what looked covered, as when two decisions disagree: the prompt goes to you, and its ask with it.
     const ts = this.now();
     await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'ask.cancelled', subject: asked.ask, ts, data: { answer: 'decline', plan_hash: null, decision: 'none' } });
     return { decision: 'none' };
+  }
+  /**
+   * Who gates a session paseo's plugin sends a line for (#55): the adapter that bound its session ID first, deep-hook
+   * or the pi package, or null when that is the plugin. Its MCP server's token binds to the session either way.
+   */
+  paseoOwner(meta: HookMeta): Promise<string | null> {
+    return this.queue(async () => {
+      if (meta.paseo?.bind && meta.session) this.binds.set(meta.paseo.bind, meta.session);
+      const session = this.sessions.get(meta.session);
+      const owner = session && session.agent !== 'paseo' ? session.agent : null;
+      if (owner) this.inPaseo.add(meta.session);
+      return owner;
+    });
+  }
+  /**
+   * A permission request someone answered in paseo's own app (#55): no answer to DeepBuild's ask, which stays open,
+   * since an answer with authority counts only on the trusted path or with a paired phone's verified signature.
+   */
+  async paseoAppAnswer(meta: HookMeta): Promise<Obj> {
+    const ask = meta.paseo?.request ? this.paseoRequests.get(`${meta.session}|${meta.paseo.request}`) : undefined;
+    if (!ask || !this.permits.has(ask)) return {};
+    await this.queue(() => this.appendReading(meta.session, meta.agent, `An answer to ${ask} came from paseo's app with no verified device signature, so DeepBuild refused it and ${ask} stays open: an answer with authority counts only on the trusted path (the DeepBuild app, deep inbox answer once the OS confirms you, or a paired phone that signs).`)).catch(() => undefined);
+    return { refused: 'trusted path', ask };
   }
   /** Whether a saved decision covers what a prompt is about, asked of resolver-decisions with nothing raised. */
   private async covered(session: string, about: About): Promise<boolean> {
@@ -3075,8 +3142,18 @@ export class Core {
     if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping; ask again once it is back.', session, true);
     if (this.options.plant === 'waiter-gives-up-at-600s' && this.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
+    // paseo's plugin on deep-hook's behalf, for a session deep-hook gates inside paseo (#55).
+    if (params.relay === true) {
+      if (context.session !== session || !this.inPaseo.has(session)) throw refuse('role', '/params/session', 'Wait only on a session paseo runs that this connection is bound to.', session);
+      return new Promise((give) => {
+        r.relay?.give({ exit: 'replaced by a newer waiter' });
+        r.relay = { key: Number(context.waiter ?? 0), at: Date.now(), since, give };
+        this.offer(session);
+      });
+    }
     if (params.push === true || context.role === 'mcp') {
-      if (context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Wait only on the pi session this connection is bound to.', session);
+      const agent = this.sessions.get(session)?.agent;
+      if (context.session !== session || (agent !== 'pi' && agent !== 'paseo')) throw refuse('role', '/params/session', 'Wait only on the pi or paseo session this connection is bound to.', session);
       r.places = true;
     }
     if (params.poll === true) {
@@ -3135,7 +3212,8 @@ export class Core {
   /** What the package did with the answers it took: only the session that raised an ask reports on it. */
   private async placed(params: Obj, context: CallContext): Promise<Obj> {
     const session = String(params.session);
-    if (!context.session || context.session !== session || this.sessions.get(session)?.agent !== 'pi') throw refuse('role', '/params/session', 'Report only on the pi session this connection is bound to.', session);
+    const agent = this.sessions.get(session)?.agent;
+    if (!context.session || context.session !== session || (agent !== 'pi' && agent !== 'paseo')) throw refuse('role', '/params/session', 'Report only on the pi or paseo session this connection is bound to.', session);
     const via = String(params.via);
     const outcome = String(params.outcome);
     if (!['steer', 'next_prompt'].includes(via)) throw refuse('enum', '/params/via', 'Say steer or next_prompt.', via);
@@ -3180,6 +3258,7 @@ export class Core {
   waiterGone(key: number): void {
     if (this.options.plant === 'delivered-to-dead-waiter') return;
     for (const [session, r] of this.routes) {
+      if (r.relay?.key === key) r.relay = undefined;
       if (r.waiter?.key !== key) continue;
       r.waiter = undefined;
       // The running deep_ask went with it: its answer waits for the next waiter.
@@ -3218,7 +3297,12 @@ export class Core {
     if (newest) { this.claimed(meta.session, newest); return live; }
     // With none, the turn's claim stands while nothing changed since it: a stop after a send-back that changed code
     // claims anew, for the turn's own task.
-    if (live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) return live;
+    if (live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) {
+      // An agent paseo runs with no hooks of its own claims through deep_claim alone: its turn's end runs the gate on
+      // that claim, the repo's spec checks at its commit (#55).
+      if (meta.agent === 'paseo' && !this.lanes.has(live.claim)) await this.paseoClaim(meta, live.claim);
+      return live;
+    }
     // The head as the turn's last commits left it, read by the chain follow() started.
     await live.reading?.catch(() => undefined);
     const commit = live.head ?? (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
@@ -3232,6 +3316,14 @@ export class Core {
     // recorded again after them, or an unclean restart would read the idle session as active and its claim as lost.
     if (live.state === 'finished' || live.state === 'failed') await this.attention(meta.session, live.agent, live.state);
     return live;
+  }
+  /** A deep_claim of a session paseo's plugin gates, judged on the repo's spec at the claim's commit (#55). */
+  private async paseoClaim(meta: HookMeta, claim: string): Promise<void> {
+    const [row] = (await this.record.raw(`SELECT data FROM events WHERE id = ? AND kind = 'claim.made'`, [claim.slice('claim:'.length)])) as { data: string }[];
+    if (!row) return;
+    const d = JSON.parse(row.data) as Obj;
+    const commit = typeof d.commit === 'string' ? d.commit : '0'.repeat(40);
+    await this.runClaim({ claim, session: meta.session, task: String(d.task_ref), commit, base: commit, cwd: meta.cwd, deliverables: [], requirements: [], checks: [], definition: 'pending' });
   }
   /** The turn's task: the one the prompt that opened the turn named, kept at the prompt; after a restart, the newest a person named; else the session's own. */
   private async turnTaskOf(session: string, live: Live): Promise<string> {
@@ -3682,7 +3774,8 @@ export class Core {
   private async verify(meta: HookMeta): Promise<boolean> {
     // A Codex hook may carry no transcript path (its facts: `transcript_path: string|null`); such a session is checked by
     // its working folder and process tree alone, and nothing is read from a transcript for it (#806).
-    const none = meta.agent === 'codex' && !meta.transcript;
+    // paseo's plugin keeps no transcript: its sessions are checked by working folder and the plugin's process (#55).
+    const none = (meta.agent === 'codex' && !meta.transcript) || meta.agent === 'paseo';
     if (!meta.session || !meta.cwd || (!none && !isAbsolute(meta.transcript))) return false;
     const homes = meta.agent === 'codex' ? sessionHomes(this.root.dir) : [join(homedir(), '.claude', 'projects')];
     const transcript = none ? '' : resolve(meta.transcript);
@@ -3753,14 +3846,25 @@ export class Core {
   }
 
   /** Binds a deep mcp to the one live session whose checked hooks came from its parent process, or to none. */
-  mcpHello(parent: { pid: number; start: string }): Promise<string | null> {
+  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null> {
     return this.queue(async () => {
+      // A server paseo's plugin added names its agent's session by the token the plugin's lines carry (#55).
+      const bound = paseo ? this.binds.get(paseo) : undefined;
+      if (bound && !this.sessions.get(bound)?.ended) return bound;
+      if (!parent) return null;
       const actual = await this.startOf(parent.pid, true);
       if (!actual || actual !== parent.start) return null;
       const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
       // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
       return served.length === 1 && served[0]!.agent !== 'codex' ? served[0]!.id : null;
     });
+  }
+
+  /** The sessions' rows; one paseo runs whose answer no route could carry reads "answer waiting" (#55). */
+  private async sessionRows(): Promise<Record<string, unknown>[]> {
+    const rows = (await this.record.table('sessions')).rows as Record<string, unknown>[];
+    for (const id of [...this.answerWaiting]) if (!(await this.waitingFor(id)).length) this.answerWaiting.delete(id);
+    return rows.map((row) => (this.answerWaiting.has(String(row.id)) ? { ...row, delivery: 'answer waiting: neither deep-hook\'s waiter nor paseo\'s plugin can carry it, so it goes with the session\'s next prompt' } : row));
   }
 
   // ---- Methods.
@@ -3787,7 +3891,7 @@ export class Core {
       case 'test.clock': return this.testClock(params);
       case 'events.read': return this.read(params);
       case 'inbox.read': return this.reflecting(() => this.inbox());
-      case 'sessions.read': return this.reflecting(async () => ({ sessions: (await this.record.table('sessions')).rows }));
+      case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows() }));
       case 'numbers.read': return this.reflecting(async () => ({ numbers: (await this.record.table('readings')).rows }));
       case 'changes.read': return this.change(params);
       case 'evidence.read': return this.evidence(params);
@@ -4859,6 +4963,8 @@ export class Core {
     // A claim in a loop's turn starts its stop's slow checks as any turn end does (#965).
     const live = this.live.get(session);
     if (live) live.claimedInTurn = true;
+    // An agent paseo runs with no hooks of its own shows no work but this claim: its turn's end is judged on it (#55).
+    if (live && this.sessions.get(session)?.agent === 'paseo') live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
     const task = sql(String(args.task_ref));
     const answers = await this.queue(async () => this.deliver(await this.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
