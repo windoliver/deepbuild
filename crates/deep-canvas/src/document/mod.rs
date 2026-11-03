@@ -18,6 +18,7 @@
 
 mod apply;
 mod check;
+mod close;
 mod merge;
 mod order;
 pub mod packs;
@@ -34,8 +35,8 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of, recheck,
-    recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
+    check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of,
+    literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
@@ -195,6 +196,9 @@ pub struct Issue {
     /// The last good revision, checked by the same rules, had it too: show-time admission
     /// returns it marked carried and never refuses for it (Revision).
     pub carried: bool,
+    /// On `unknown_kind` and `unknown_field`: at most three close names, a rename or retirement
+    /// record's first (#412).
+    pub close: Vec<Value>,
 }
 
 impl Issue {
@@ -211,6 +215,7 @@ impl Issue {
             forms: Vec::new(),
             fix_ops: None,
             carried: false,
+            close: Vec::new(),
         }
     }
 
@@ -240,6 +245,9 @@ impl Issue {
         }
         if self.carried {
             out.insert("carried".into(), json!(true));
+        }
+        if !self.close.is_empty() {
+            out.insert("close".into(), json!(self.close));
         }
         Value::Object(out)
     }
@@ -277,6 +285,8 @@ pub struct Notice {
     /// On `deprecated`: the kind that replaces it (`family.name@major`) and the release since
     /// which it is deprecated.
     pub replaced_by: Option<(String, String)>,
+    /// On `unknown_kind` and `unknown_field`: at most three close names (#412).
+    pub close: Vec<Value>,
 }
 
 impl Notice {
@@ -296,6 +306,9 @@ impl Notice {
         if let Some((replaced_by, since)) = &self.replaced_by {
             out.insert("replaced_by".into(), json!(replaced_by));
             out.insert("deprecated_since".into(), json!(since));
+        }
+        if !self.close.is_empty() {
+            out.insert("close".into(), json!(self.close));
         }
         Value::Object(out)
     }
@@ -1488,6 +1501,7 @@ mod tests {
             what: String::new(),
             migration: None,
             replaced_by: None,
+            close: Vec::new(),
         };
         let mut forward = vec![notice("items/x/a"), notice("items/x/b")];
         let mut backward = vec![notice("items/x/b"), notice("items/x/a")];

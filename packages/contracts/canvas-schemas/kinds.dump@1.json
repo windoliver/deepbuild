@@ -1,0 +1,243 @@
+{
+  "$comment": "The whole sealed deep_kinds listing as `deep-show kinds --dump` writes it (#412; technical design: the agent-tools paragraph): canonical JSON named by its module-set digest, every registry with its entries, each entry's fields an ordered array with its type, unit, range, whether it takes a list and its default, and its migration records, which `deep-show kinds --diff` reads renames and retirements from.",
+  "x-since": "R6",
+  "x-stability": "preview",
+  "x-tracking": "#412",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "kinds.dump@1"
+    },
+    "core_version": {
+      "type": "string"
+    },
+    "module_set": {
+      "type": "string"
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "digest",
+          "implementation",
+          "module"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "registries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/registry"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "core_version",
+    "module_set",
+    "modules",
+    "interfaces",
+    "registries"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "registry": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "since": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entry"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "owner",
+        "since",
+        "digest",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "entry": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "registry": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "since": {
+          "type": "string"
+        },
+        "stability": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "migrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/migration"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "registry",
+        "origin",
+        "since",
+        "stability",
+        "digest",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "field": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "range": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "list": {
+          "type": "boolean"
+        },
+        "default": {
+          "x-opaque": "a field's default, of the field's own type"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "unit",
+        "range",
+        "list"
+      ],
+      "additionalProperties": false
+    },
+    "migration": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "renames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "retires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "renames",
+        "retires"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

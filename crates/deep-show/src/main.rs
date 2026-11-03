@@ -19,6 +19,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod kinds;
 mod kit;
 mod media;
 mod modes;
@@ -339,6 +340,8 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => query::DEFAULT_CAP,
             Some(n) => usize::try_from(n.as_u64()?).ok()?,
         },
+        // #412: where the page an earlier answer cut at 64 KB left off.
+        cursor: optional(c.get("cursor"), |n| n.as_str()?.parse().ok())?.unwrap_or(0),
         none_of_kind,
         path: match c.get("path") {
             None => None,
@@ -525,6 +528,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "registries" => return Some(Call::Registries),
+        // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path.
+        "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "resolve" if c.get("registry").is_some() => {
@@ -791,7 +796,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         None => Some(Call::Show(show)),
         Some(m) => {
             let mode = m.as_str().filter(|m| modes::owner(m).is_some())?;
-            Some(Call::Mode(show, mode.to_string()))
+            // #412: where the readings an earlier answer cut at 64 KB left off.
+            let cursor = optional(c.get("cursor"), |n| n.as_str()?.parse().ok())?.unwrap_or(0);
+            Some(Call::Mode(show, mode.to_string(), cursor))
         }
     }
 }
@@ -1247,10 +1254,42 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    // #412: the entries plug-ins fill, each with the kit result the hub recorded on this core; the
+    // folder of guides and examples used in place of the installed ones; the corpus runs.
+    let plugin_entries = match input.get("plugin_entries") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|p| {
+                p.get("plugin")?.as_str()?;
+                p.get("registry")?.as_str()?;
+                p.get("entry")?.get("name")?.as_str()?;
+                p.get("kit")?.as_object()?;
+                Some(p.clone())
+            })
+            .collect::<Option<_>>()?,
+    };
+    let corpus_runs = match input.get("corpus_runs") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|r| {
+                r.get("example")?.as_str()?;
+                r.get("module_set")?.as_str()?;
+                r.get("played")?.as_u64()?;
+                Some(r.clone())
+            })
+            .collect::<Option<_>>()?,
+    };
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
         installed,
+        plugin_entries,
+        gallery: optional(input.get("gallery"), |g| Some(PathBuf::from(g.as_str()?)))?,
+        corpus_runs,
         sessions,
         processes,
         panels,
@@ -1419,6 +1458,10 @@ impl CanvasSide {
                 let mut hub = hub::Hub::new(&scenario, startup);
                 let mut replies = hub.run_calls();
                 let reply = replies.pop().unwrap_or(Value::Null);
+                // #412: deep_kinds reads and changes nothing, so it leaves no call to replay.
+                if self.calls.last().and_then(|c| c.get("call")) == Some(&json!("deep_kinds")) {
+                    self.calls.pop();
+                }
                 let presented = match doc.as_deref() {
                     Some(doc)
                         if reply.get("rev").is_some()
@@ -1503,6 +1546,12 @@ fn build_set() -> BuildSet {
 /// operator makes (#387).
 const TEST_BUILD: bool = cfg!(any(
     feature = "test-a",
+    feature = "test-preview",
+    feature = "test-cue",
+    feature = "test-cue-span",
+    feature = "test-ring-a",
+    feature = "test-ring-b",
+    feature = "test-sheet-wordy",
     feature = "test-sim-a",
     feature = "test-sim-b",
     feature = "test-sim-b-f64",
@@ -1853,6 +1902,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     if cfg!(feature = "test-steps-in-effects") {
         registry = registry.plant(Fault::BaseStepsElsewhere);
     }
+    // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
+    if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
+        registry = registry.allows_bare("test.ring", "ring");
+    }
     if let Some(StartPlanted::KitAdmitsAll(name)) = planted {
         registry = registry.plant_admits_all(name);
     }
@@ -1860,6 +1913,26 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     hub::INTERFACE_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let sealed = sealed?;
     kit::ledger::admit(&sealed)?;
+    // #412: a build whose sheet passes 32 KB is refused, naming the entries whose lines put it
+    // past and the bytes over.
+    if let Some((entries, over)) = kinds::sheet_overrun(&sealed) {
+        return Err(SealError {
+            code: "sheet_overrun",
+            what: format!(
+                "the sheet is {over} bytes past its {} bytes; ship {} as a recipe or a gallery example",
+                kinds::SHEET_CAP,
+                entries.join(", ")
+            ),
+            registry: Some(Box::new(deep_canvas::registry::RegistryRefusal {
+                name: "kind@1".into(),
+                entries: entries.into_iter().map(Value::from).collect(),
+                rules: vec!["sheet_cap".into()],
+                passes: Vec::new(),
+            })),
+            overrun_bytes: Some(over),
+            ..SealError::default()
+        });
+    }
     Ok(Startup {
         sealed,
         seal_ms: started.elapsed().as_secs_f64() * 1000.0,
@@ -1875,6 +1948,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
         ignores_unknown_occlusion: planted == Some(StartPlanted::IgnoresUnknownOcclusion),
         listing: match planted {
             Some(StartPlanted::Listing(l)) => Some(l),
+            _ => None,
+        },
+        kinds: match planted {
+            Some(StartPlanted::Kinds(k)) => Some(k),
             _ => None,
         },
     })
@@ -1900,6 +1977,8 @@ enum StartPlanted {
     KitAdmitsAll(&'static str),
     /// #200: a wrong `deep://registries` listing.
     Listing(registries::Listing),
+    /// #412: a wrong deep_kinds listing, sheet, dump, diff or gallery.
+    Kinds(kinds::Planted),
 }
 
 #[cfg(test)]
@@ -1919,6 +1998,7 @@ mod tests {
             network: None,
             ignores_unknown_occlusion: false,
             listing: None,
+            kinds: None,
         }
     }
 
@@ -2253,6 +2333,11 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "takes_foreign_entry" => Ok(StartPlanted::Seal(Fault::TakesForeignEntry)),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
+        "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
+        "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        _ if kinds::Planted::named(twin).is_some() => {
+            Ok(StartPlanted::Kinds(kinds::Planted::named(twin).ok_or(())?))
+        }
         _ if twin.starts_with("kit_admits_all:") => {
             let name = twin.trim_start_matches("kit_admits_all:");
             Ok(StartPlanted::KitAdmitsAll(Box::leak(
@@ -2303,6 +2388,18 @@ fn main() {
     }
     let stdout = io::stdout();
     let mut out = stdout.lock();
+    // #412: `deep-show kinds --dump <dir>` and `--diff <a> <b>`, what `deep kinds` runs.
+    if command == "kinds" {
+        let (line, code) = kinds::command(&args, |planted| {
+            let start = planted.map(StartPlanted::Kinds);
+            seal(start, Coefficients::reference())
+                .map(|s| s.sealed)
+                .map_err(|e| e.what)
+        });
+        let _ = writeln!(out, "{line}");
+        let _ = out.flush();
+        std::process::exit(code);
+    }
     let Ok((fault, costs)) = start_args(&args) else {
         let _ = writeln!(out, "{}", bad_input());
         std::process::exit(2);
@@ -2346,6 +2443,10 @@ fn main() {
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }
+            }
+            // #412: the bytes a sheet runs past its cap.
+            if let Some(over) = err.overrun_bytes {
+                line["overrun_bytes"] = json!(over);
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
