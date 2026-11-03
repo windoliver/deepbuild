@@ -8,7 +8,6 @@
 // the source off; each live call's cost and each new reading go to the record, as the core.
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { scrubValues } from '@deepbuild/evidence';
 import { ulid } from '@deepbuild/record';
@@ -359,6 +358,8 @@ export class Sources {
     const o = source.oauth!;
     const verifier = randomBytes(32).toString('base64url');
     const state = randomBytes(16).toString('base64url');
+    // node:http loads only for a sign-in, never in a hub that runs none.
+    const { createServer } = await import('node:http');
     const server = createServer();
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     const redirect = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`;
