@@ -76,7 +76,7 @@ fn paint() -> P {
 fn shade() -> P {
     p(
         "shade",
-        "smooth | flat",
+        "smooth | flat | by_angle {angle}",
         "",
         json!("smooth"),
         G,
@@ -131,6 +131,21 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
     let mut spec = base_scene3d(kind)?;
     spec.params.extend(extras(kind));
     if crate::builders::KINDS.contains(&kind) {
+        // Builder: uv, on every builder.
+        spec.params.push(p(
+            "uv0",
+            "natural | box {size} | planar {axis} | cylinder {axis} | sphere",
+            "",
+            json!("natural"),
+            G,
+            json!("natural"),
+            json!("box"),
+        ));
+        spec.params.push(ranged(
+            p("uv_scale", "m", "m", json!(1), G, json!(1), json!(0.5)),
+            0.0,
+            1000.0,
+        ));
         spec.params.push(p(
             "scatter",
             "{count, part?}",
@@ -584,11 +599,32 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     1000.0,
                 ),
                 p("twist", "deg", "deg", json!(0), G, json!(0), json!(30)),
+                p(
+                    "along",
+                    "{curve: ID, range, scale, rings}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"curve": "rail", "rings": 4}),
+                    json!({"curve": "rail", "rings": 6}),
+                ),
+                p(
+                    "caps",
+                    "none | flat",
+                    "",
+                    json!("flat"),
+                    G,
+                    json!("flat"),
+                    json!("none"),
+                ),
                 shade(),
                 paint(),
             ],
             reads: None,
-            fixture: json!({"it": item("extrude@1", json!({"outline": rect, "depth": 0.5, "paint": {"fill": {"role": "accent"}}}))}),
+            fixture: json!({
+                "rail": item("curve@1", json!({"points": [[0, 0, 0], [1, 0, 0], [1, 0, 1]], "mode": "linear"})),
+                "it": item("extrude@1", json!({"outline": rect, "depth": 0.5, "paint": {"fill": {"role": "accent"}}}))
+            }),
         },
         "tube@1" => Spec {
             kind: "tube@1",
@@ -759,6 +795,34 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("plate@1", json!({"grid": [4, 3], "size": [2, 1.5], "paint": {"fill": {"role": "accent"}}}))}),
         },
+        "hull@1" => Spec {
+            kind: "hull@1",
+            module: "scene3d",
+            params: vec![
+                p(
+                    "points",
+                    "vec3 column",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+                    json!([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]]),
+                ),
+                p(
+                    "of",
+                    "ID[#part]",
+                    "",
+                    Value::Null,
+                    G,
+                    Value::Null,
+                    Value::Null,
+                ),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item("hull@1", json!({"points": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], "paint": {"fill": {"role": "accent"}}}))}),
+        },
         "display@1" => Spec {
             kind: "display@1",
             module: "scene3d",
@@ -805,13 +869,36 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     json!([[0, 0, 0], [1, 2, 0], [2, 0, 0]]),
                 ),
                 p(
-                    "mode",
-                    "linear | catmull_rom",
+                    "ids",
+                    "u32 column",
                     "",
-                    json!("linear"),
+                    Value::Null,
+                    G,
+                    json!([0, 1, 2]),
+                    json!([5, 6, 7]),
+                ),
+                p(
+                    "mode",
+                    "linear | bezier | catmull_rom | auto | bspline",
+                    "",
+                    json!("auto"),
                     G,
                     json!("linear"),
-                    json!("catmull_rom"),
+                    json!("bspline"),
+                ),
+                p(
+                    "handles",
+                    "{in, out: vec3 column}",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!({"in": [[0, 0, 0], [-0.2, 0, 0], [0, 0, 0]], "out": [[0.2, 0, 0], [0.2, 0, 0], [0, 0, 0]]}),
+                    json!({"in": [[0, 0, 0], [-0.4, 0, 0], [0, 0, 0]], "out": [[0.4, 0, 0], [0.4, 0, 0], [0, 0, 0]]}),
+                ),
+                ranged(
+                    p("alpha", "f32", "", json!(0.5), G, json!(0.5), json!(0.25)),
+                    0.0,
+                    1.0,
                 ),
                 p(
                     "closed",
@@ -822,6 +909,38 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     json!(false),
                     json!(true),
                 ),
+                p(
+                    "roll",
+                    "f32 column",
+                    "deg",
+                    json!(0),
+                    G,
+                    json!(0),
+                    json!([0, 10, 0]),
+                ),
+                p(
+                    "frames",
+                    "rmf | up",
+                    "",
+                    json!("rmf"),
+                    G,
+                    json!("rmf"),
+                    json!("up"),
+                ),
+                p(
+                    "up",
+                    "vec3",
+                    "",
+                    json!([0, 1, 0]),
+                    G,
+                    json!([0, 1, 0]),
+                    json!([0, 0, 1]),
+                ),
+                ranged(
+                    p("samples", "u16", "", json!(16), G, json!(16), json!(8)),
+                    1.0,
+                    1024.0,
+                ),
             ],
             reads: None,
             fixture: json!({"it": item("curve@1", json!({"points": [[0, 0, 0], [1, 1, 0], [2, 0, 0]]}))}),
@@ -831,7 +950,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 17] = [
+pub const SCENE3D: [&str; 18] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -847,6 +966,7 @@ pub const SCENE3D: [&str; 17] = [
     "coil@1",
     "plate@1",
     "display@1",
+    "hull@1",
     "curve@1",
     "mesh.asset@1",
 ];

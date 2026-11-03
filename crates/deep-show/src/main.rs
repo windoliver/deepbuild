@@ -1229,8 +1229,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let at = list
         .iter()
         .map(|c| {
-            // deep_query's `at` is the times it reads (#411): on the clock it arrives at `arrives`.
-            let arrives = if c.get("call") == Some(&json!("deep_query")) {
+            // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
+            // reads (#441): on the clock either arrives at `arrives`.
+            let arrives = if c.get("call") == Some(&json!("deep_query"))
+                || c.get("call") == Some(&json!("geometry"))
+            {
                 "arrives"
             } else {
                 "at"
@@ -1421,7 +1424,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" {
                     "arrives"
                 } else {
                     "at"
@@ -1620,7 +1623,12 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
-        deep_canvas_marks::modules::look(),
+        // #418: `test-look-finish-off` seals the planted look@1 implementation in its place.
+        if cfg!(feature = "test-look-finish-off") {
+            deep_canvas_marks::modules::look_finish_off()
+        } else {
+            deep_canvas_marks::modules::look()
+        },
     ];
     if set >= BuildSet::R1 {
         out.extend([
@@ -1813,9 +1821,17 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
+            // #418: look@1's reference is the shipped look, whichever a test build holds.
+            let reference = if sandbox {
+                deep_canvas_sandbox::module::module()
+            } else if interface == "look@1" {
+                deep_canvas_marks::modules::look()
+            } else {
+                m
+            };
             deep_canvas::registry::Interface {
                 name: interface,
-                reference: if sandbox { deep_canvas_sandbox::module::module() } else { m },
+                reference,
                 kit: parts,
                 behavior: None,
             }
@@ -1900,7 +1916,7 @@ pub fn shipped_manifests() -> Vec<deep_canvas::registry::Manifest> {
 
 /// Registers the build's canvas modules in sorted name order and seals, timing both; the
 /// planted seal (`--planted treats_every_dependency_required`) is the criterion's wrong program.
-fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, SealError> {
+fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, Box<SealError>> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut held = modules(build_set());
@@ -1921,12 +1937,12 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     for name in deep_canvas::registry::CORE_MODULES {
         let exempt = name == "look" && planted == Some(StartPlanted::StartsWithoutLook);
         if !exempt && !held.iter().any(|m| m.manifest.name == name) {
-            return Err(SealError {
+            return Err(Box::new(SealError {
                 code: "missing_core_module",
                 modules: vec![name.to_string()],
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
                 ..SealError::default()
-            });
+            }));
         }
     }
     let mut registry = assemble(build_set(), held)
@@ -1957,7 +1973,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     // #412: a build whose sheet passes 32 KB is refused, naming the entries whose lines put it
     // past and the bytes over.
     if let Some((entries, over)) = kinds::sheet_overrun(&sealed) {
-        return Err(SealError {
+        return Err(Box::new(SealError {
             code: "sheet_overrun",
             what: format!(
                 "the sheet is {over} bytes past its {} bytes; ship {} as a recipe or a gallery example",
@@ -1972,7 +1988,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
-        });
+        }));
     }
     Ok(Startup {
         sealed,

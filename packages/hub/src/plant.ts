@@ -91,7 +91,12 @@ export type Plant =
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
   | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
   // #997's: loop facts read as the merge base did, with no monitor's watch.
-  | 'monitor-unread';
+  | 'monitor-unread'
+  // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
+  // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
+  // only looks for a number, and a gate that runs no check before the definition locks.
+  | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -138,6 +143,8 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
+  'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
