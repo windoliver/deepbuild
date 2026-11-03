@@ -1467,17 +1467,8 @@ impl Paints<'_> {
                 };
                 let mut stroke_paint = self.paint(id, s, &path, bounds, place, true)?;
                 // A per-point opacity column paints the stroke along its length (#160).
-                if let (false, Fill::Solid(c)) = (alphas.is_empty(), &stroke_paint) {
-                    let total = alphas.last().map_or(1.0, |(s, _)| s.max(1e-12));
-                    stroke_paint = Fill::Ramp(paint::Ramp {
-                        geometry: paint::Geometry::Along,
-                        extend: paint::Extend::Pad,
-                        stops: alphas
-                            .iter()
-                            .map(|(s, a)| (s / total, paint::unit(*c), *a))
-                            .collect(),
-                        transform: paint::IDENTITY,
-                    });
+                if let Fill::Solid(c) = &stroke_paint {
+                    stroke_paint = along_alphas(*c, &alphas);
                 }
                 Some(Line {
                     width: num(s.get("width")).unwrap_or(1.0) * k,
@@ -1500,6 +1491,24 @@ impl Paints<'_> {
 
 /// A per-point column at each point's arc length (#160).
 pub type Column = Vec<(f64, f64)>;
+
+/// `color` painted along a stroke's length at each point's opacity from `alphas`, or solid when
+/// there is no opacity column.
+fn along_alphas(color: Rgb, alphas: &Column) -> Fill {
+    let Some((last, _)) = alphas.last() else {
+        return Fill::Solid(color);
+    };
+    let total = last.max(1e-12);
+    Fill::Ramp(paint::Ramp {
+        geometry: paint::Geometry::Along,
+        extend: paint::Extend::Pad,
+        stops: alphas
+            .iter()
+            .map(|(s, a)| (s / total, paint::unit(color), *a))
+            .collect(),
+        transform: paint::IDENTITY,
+    })
+}
 
 /// A path-like item built through its ops (#160): what the `path` surface reports and the marks
 /// draw from. Copies are in copy order (copy 0 first) in the item's own space, with each one's
@@ -1538,8 +1547,7 @@ fn build_path(
     let ops = pathops::read(params.get("ops"), &ops_path)?;
     let (widths, alphas) = columns(ctx, id, params, &verbs)?;
     let ends = ends::Ends::read(params.get("ends"), &format!("items/{id}/params/ends"))?;
-    let base = pathops::segments(&verbs);
-    let (declared, over) = pathops::declared(&ops, base);
+    let (declared, over) = pathops::declared(&ops, &verbs);
     if let Some(i) = over {
         return refuse("segment_budget", format!("{ops_path}/{i}"));
     }
@@ -1613,6 +1621,11 @@ fn build_path(
             .number(h.width);
     }
     k.number(stroke_width);
+    // The stroke's taper and wave set widths at tessellation too.
+    for field in ["taper", "wave"] {
+        let v = paint.get("stroke").and_then(|s| s.get(field));
+        k.text(&v.map_or(String::new(), Value::to_string));
+    }
     for (s, w) in widths.iter().chain(&alphas) {
         k.number(*s).number(*w);
     }
@@ -1923,20 +1936,7 @@ fn ring_mark(
         .and_then(|s| num(s.get("width")))
         .unwrap_or(0.0);
     let (_, alphas) = columns(ctx, cid, params, &verbs)?;
-    let paint = if alphas.is_empty() {
-        Fill::Solid(color)
-    } else {
-        let total = alphas.last().map_or(1.0, |(s, _)| s.max(1e-12));
-        Fill::Ramp(paint::Ramp {
-            geometry: paint::Geometry::Along,
-            extend: paint::Extend::Pad,
-            stops: alphas
-                .iter()
-                .map(|(s, a)| (s / total, paint::unit(color), *a))
-                .collect(),
-            transform: paint::IDENTITY,
-        })
-    };
+    let paint = along_alphas(color, &alphas);
     Ok(Mark::Shape {
         item,
         verbs,
@@ -2111,22 +2111,32 @@ pub fn path_report(
 ) -> Result<Option<PathReport>, Refused> {
     let bound = BTreeMap::new();
     let row_readings = BTreeMap::new();
-    let (frame, _, _) = build(
-        doc,
-        (items, &[]),
-        (palette, ty),
-        (&bound, &row_readings),
-        1.0,
-        planted,
-        None,
-    )?;
-    let boxes = boxes_of(&frame, items);
+    // Only an attachment reads other items' boxes, which take a first pass over the frame.
+    let attaches = items
+        .get(id)
+        .and_then(|i| i.get("params"))
+        .and_then(|p| p.get("attach"))
+        .is_some_and(|a| !a.is_null());
+    let boxes = if attaches {
+        let (frame, _, _) = build(
+            doc,
+            (items, &[]),
+            (palette, ty),
+            (&bound, &row_readings),
+            1.0,
+            planted,
+            None,
+        )?;
+        Some(boxes_of(&frame, items))
+    } else {
+        None
+    };
     let scopes = scopes_of(doc, items, palette)?;
     let paints = Paints {
         doc,
         items,
         palette,
-        boxes: Some(&boxes),
+        boxes: boxes.as_ref(),
         wants_boxes: Cell::new(false),
     };
     let ctx = ItemCtx {
@@ -2229,7 +2239,7 @@ pub fn declared_of(items: &Map<String, Value>, id: &str) -> Option<u64> {
     let params = object_or_empty(item.get("params"));
     let verbs = base_verbs(item.get("kind").and_then(Value::as_str)?, params)?;
     let ops = pathops::read(params.get("ops"), "").ok()?;
-    Some(pathops::declared(&ops, pathops::segments(&verbs)).0)
+    Some(pathops::declared(&ops, &verbs).0)
 }
 
 /// True when `paint` holds only what R1's marks draw: no opacity, dash or `scale_stroke`.
@@ -4039,6 +4049,7 @@ fn shaded(
             scopes: scopes.to_vec(),
         })
     };
+    // Only the item's own outline is shaded, never its heads (`<id>#ends.*`).
     let Mark::Shape {
         item,
         verbs,
@@ -4048,6 +4059,14 @@ fn shaded(
     else {
         return vec![plain(mark)];
     };
+    if item != id {
+        return vec![plain(Mark::Shape {
+            item,
+            verbs,
+            fill: Some(fill),
+            stroke,
+        })];
+    }
     let outline = Arc::new(verbs.clone());
     let mut inside = scopes.to_vec();
     inside.push(Scope::Shape {
@@ -4276,7 +4295,7 @@ fn build(
         };
         let ops_path = format!("items/{id}/params/ops");
         let ops = pathops::read(Some(ops_value), &ops_path)?;
-        let (n, over) = pathops::declared(&ops, pathops::segments(&verbs));
+        let (n, over) = pathops::declared(&ops, &verbs);
         if let Some(i) = over {
             return refuse("segment_budget", format!("{ops_path}/{i}"));
         }
@@ -4726,5 +4745,35 @@ mod tests {
         let mut by_path = ok.clone();
         by_path["items"]["shot"]["params"]["asset"] = json!("/tmp/shot.png");
         assert_eq!(draw(&by_path).unwrap_err().code, "bad_asset");
+    }
+    #[test]
+    fn marks_draw_by_z_then_by_the_tree_not_by_flat_order_keys() {
+        // #160: a group's child draws with its group, after an earlier top-level item, whatever
+        // its own order key says; a z above lifts it over everything in the layer.
+        let doc = |z: f64| {
+            board(json!({
+                "r": {"kind": "rect@1", "layer": "main", "order": "a3", "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"role": "ink"}}}},
+                "g": {"kind": "group@1", "layer": "main", "order": "a5", "params": {}},
+                "c": {"kind": "rect@1", "layer": "main", "order": "a0", "parent": "g", "params": {"box": [5, 5, 10, 10], "z": z, "paint": {"fill": {"role": "ink"}}}},
+                "d": {"kind": "rect@1", "layer": "main", "order": "a1", "params": {"box": [50, 50, 10, 10], "z": -1, "paint": {"fill": {"role": "ink"}}}},
+            }))
+        };
+        let order = |z: f64| -> Vec<String> {
+            draw(&doc(z)).unwrap().layers[0]
+                .marks
+                .iter()
+                .map(|m| m.mark.item().to_string())
+                .collect()
+        };
+        assert_eq!(order(0.0), ["d", "r", "c"]);
+        assert_eq!(order(1.0), ["d", "r", "c"]);
+        let mut below = doc(0.0);
+        below["items"]["r"]["params"]["z"] = json!(2);
+        let marks: Vec<String> = draw(&below).unwrap().layers[0]
+            .marks
+            .iter()
+            .map(|m| m.mark.item().to_string())
+            .collect();
+        assert_eq!(marks, ["d", "c", "r"]);
     }
 }

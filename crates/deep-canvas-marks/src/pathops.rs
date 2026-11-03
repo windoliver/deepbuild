@@ -197,30 +197,6 @@ impl Seg {
         l[l.len() - 1]
     }
 
-    /// The parameter `s` u along the segment, from its start.
-    pub fn t_at(&self, s: f64) -> f64 {
-        let lengths = self.lengths();
-        let total = lengths[lengths.len() - 1];
-        if total <= 0.0 {
-            return 0.0;
-        }
-        if s <= 0.0 {
-            return 0.0;
-        }
-        if s >= total {
-            return 1.0;
-        }
-        let n = lengths.len() - 1;
-        let i = lengths.partition_point(|l| *l <= s).clamp(1, n);
-        let span = lengths[i] - lengths[i - 1];
-        let f = if span > 0.0 {
-            (s - lengths[i - 1]) / span
-        } else {
-            0.0
-        };
-        ((i - 1) as f64 + f) / n as f64
-    }
-
     /// Every point of the segment mapped through `f`.
     pub fn map(&self, f: impl Fn(P) -> P) -> Seg {
         match *self {
@@ -239,19 +215,38 @@ pub struct Sub {
     pub closed: bool,
 }
 
-impl Sub {
-    pub fn length(&self) -> f64 {
-        self.segs.iter().map(Seg::length).sum()
+/// A sub-path with each segment's cumulative chord lengths sampled once, so a trim, an anchor
+/// read or a column's arc lengths measure every curve one time.
+struct Measured<'a> {
+    sub: &'a Sub,
+    lengths: Vec<Vec<f64>>,
+}
+
+impl<'a> Measured<'a> {
+    fn of(sub: &'a Sub) -> Measured<'a> {
+        Measured {
+            sub,
+            lengths: sub.segs.iter().map(Seg::lengths).collect(),
+        }
+    }
+
+    fn seg_length(&self, i: usize) -> f64 {
+        let l = &self.lengths[i];
+        l[l.len() - 1]
+    }
+
+    fn length(&self) -> f64 {
+        (0..self.sub.segs.len()).map(|i| self.seg_length(i)).sum()
     }
 
     /// The point and the tangent direction `s` u along the sub-path.
     fn at_length(&self, s: f64) -> Option<(P, P)> {
         let mut rest = s.max(0.0);
-        let last = self.segs.len().checked_sub(1)?;
-        for (i, seg) in self.segs.iter().enumerate() {
-            let l = seg.length();
+        let last = self.sub.segs.len().checked_sub(1)?;
+        for (i, seg) in self.sub.segs.iter().enumerate() {
+            let l = self.seg_length(i);
             if rest <= l || i == last {
-                let t = seg.t_at(rest.min(l));
+                let t = t_at(&self.lengths[i], rest.min(l));
                 return Some((seg.at(t), seg.tangent(t)));
             }
             rest -= l;
@@ -263,12 +258,20 @@ impl Sub {
     fn piece(&self, s0: f64, s1: f64) -> Sub {
         let mut segs = Vec::new();
         let mut from = 0.0;
-        for seg in &self.segs {
-            let l = seg.length();
+        for (i, seg) in self.sub.segs.iter().enumerate() {
+            let l = self.seg_length(i);
             let to = from + l;
             if to > s0 && from < s1 && l > 0.0 {
-                let t0 = if s0 > from { seg.t_at(s0 - from) } else { 0.0 };
-                let t1 = if s1 < to { seg.t_at(s1 - from) } else { 1.0 };
+                let t0 = if s0 > from {
+                    t_at(&self.lengths[i], s0 - from)
+                } else {
+                    0.0
+                };
+                let t1 = if s1 < to {
+                    t_at(&self.lengths[i], s1 - from)
+                } else {
+                    1.0
+                };
                 if t1 > t0 {
                     segs.push(seg.piece(t0, t1));
                 }
@@ -279,6 +282,32 @@ impl Sub {
             segs,
             closed: false,
         }
+    }
+}
+
+/// The parameter `s` u along a segment whose cumulative lengths are `lengths`.
+fn t_at(lengths: &[f64], s: f64) -> f64 {
+    let total = lengths[lengths.len() - 1];
+    if total <= 0.0 || s <= 0.0 {
+        return 0.0;
+    }
+    if s >= total {
+        return 1.0;
+    }
+    let n = lengths.len() - 1;
+    let i = lengths.partition_point(|l| *l <= s).clamp(1, n);
+    let span = lengths[i] - lengths[i - 1];
+    let f = if span > 0.0 {
+        (s - lengths[i - 1]) / span
+    } else {
+        0.0
+    };
+    ((i - 1) as f64 + f) / n as f64
+}
+
+impl Sub {
+    pub fn length(&self) -> f64 {
+        self.segs.iter().map(Seg::length).sum()
     }
 }
 
@@ -378,10 +407,11 @@ pub fn length(verbs: &[Verb]) -> f64 {
 /// its tangent angle in degrees (clockwise on screen from +x), or `None` for an empty path.
 pub fn at(verbs: &[Verb], f: f64) -> Option<(P, f64)> {
     let subs = subs_of(verbs);
-    let total: f64 = subs.iter().map(Sub::length).sum();
+    let measured: Vec<Measured<'_>> = subs.iter().map(Measured::of).collect();
+    let total: f64 = measured.iter().map(Measured::length).sum();
     let mut s = f.clamp(0.0, 1.0) * total;
-    let last = subs.len().checked_sub(1)?;
-    for (i, sub) in subs.iter().enumerate() {
+    let last = measured.len().checked_sub(1)?;
+    for (i, sub) in measured.iter().enumerate() {
         let l = sub.length();
         if s <= l || i == last {
             let (p, d) = sub.at_length(s.min(l))?;
@@ -570,17 +600,24 @@ impl Op {
         }
     }
 
-    /// The most segments the op builds from `segments` in.
-    pub fn declared(&self, segments: u64) -> u64 {
+    /// The most segments and sub-paths the op builds from `(segments, subpaths)` in.
+    pub fn declared(&self, (segments, subpaths): (u64, u64)) -> (u64, u64) {
         match self {
-            // Each sub-path's window cuts at most two segments in two.
-            Op::Trim { .. } => segments + 2,
+            // The window cuts at most two segments in two, in each sub-path with `each`, and a
+            // wrapped window can split a sub-path in two.
+            Op::Trim { each, .. } => {
+                let windows = if *each { subpaths } else { 1 };
+                (segments + 2 * windows, subpaths * 2)
+            }
             // Each corner adds an arc.
-            Op::RoundCorners { .. } => segments * 2,
-            Op::OffsetPath { copies, .. } => 5 * copies * segments,
-            Op::Zigzag { ridges, .. } => (ridges + 1) * segments,
-            Op::Pucker { .. } | Op::Twist { .. } => segments,
-            Op::Repeater(r) => (r.copies.ceil() as u64) * segments,
+            Op::RoundCorners { .. } => (segments * 2, subpaths),
+            Op::OffsetPath { copies, .. } => (5 * copies * segments, copies * subpaths),
+            Op::Zigzag { ridges, .. } => ((ridges + 1) * segments, subpaths),
+            Op::Pucker { .. } | Op::Twist { .. } => (segments, subpaths),
+            Op::Repeater(r) => {
+                let n = r.copies.ceil() as u64;
+                (n * segments, n * subpaths)
+            }
         }
     }
 }
@@ -642,45 +679,18 @@ fn read_op(value: &Value, path: &str) -> Result<Op, Refused> {
     let Some(map) = value.as_object() else {
         return refuse("bad_doc", path.to_string());
     };
-    // The op's one key names its kind; a channel that writes `ops/<i>/<field>` lands a field
-    // beside it, which reads over the op's own (deeply, so `at/rot` keeps `at`'s other parts).
+    // The op's one key names its kind; the motion evaluator writes a channel's field through it.
     let named: Vec<&String> = map.keys().filter(|k| NAMES.contains(&k.as_str())).collect();
-    let [name] = named.as_slice() else {
+    let ([name], 1) = (named.as_slice(), map.len()) else {
         return refuse("bad_doc", path.to_string());
     };
     let name = *name;
-    let mut merged = match map.get(name) {
-        Some(Value::Object(o)) => o.clone(),
-        None | Some(Value::Null) => Map::new(),
+    let empty = Map::new();
+    let p = match map.get(name) {
+        Some(Value::Object(o)) => o,
+        None | Some(Value::Null) => &empty,
         Some(_) => return refuse("bad_doc", format!("{path}/{name}")),
     };
-    fn merge(into: &mut Map<String, Value>, from: &Map<String, Value>) {
-        for (k, v) in from {
-            match (into.get_mut(k), v) {
-                (Some(Value::Object(a)), Value::Object(b)) => merge(a, b),
-                _ => {
-                    into.insert(k.clone(), v.clone());
-                }
-            }
-        }
-    }
-    for (k, v) in map {
-        if k == name {
-            continue;
-        }
-        match v {
-            Value::Object(o) => match merged.get_mut(k) {
-                Some(Value::Object(a)) => merge(a, o),
-                _ => {
-                    merged.insert(k.clone(), v.clone());
-                }
-            },
-            _ => {
-                merged.insert(k.clone(), v.clone());
-            }
-        }
-    }
-    let p = &merged;
     // A field's path is `ops/<i>/<field>`: the op's one key names its kind, not a level.
     let path = path.to_string();
     let big = 1_000_000.0;
@@ -777,11 +787,6 @@ fn read_op(value: &Value, path: &str) -> Result<Op, Refused> {
             let ease = match p.get("ease") {
                 None | Some(Value::Null) => Ease::LINEAR,
                 Some(Value::String(s)) => Ease::named(s).ok_or_else(|| bad("ease"))?,
-                Some(Value::Object(o)) => o
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .and_then(Ease::named)
-                    .ok_or_else(|| bad("ease"))?,
                 Some(_) => return Err(bad("ease")),
             };
             Op::Repeater(Repeater {
@@ -818,14 +823,6 @@ fn read_op(value: &Value, path: &str) -> Result<Op, Refused> {
                         }
                         flicks
                     }
-                    Some(Value::Number(n)) => {
-                        // A bare number is seconds.
-                        let secs = n
-                            .as_f64()
-                            .filter(|s| s.is_finite() && *s >= 0.0)
-                            .ok_or_else(|| bad("lag"))?;
-                        (secs * deep_canvas::grammar::FLICKS_PER_SECOND as f64).round() as i64
-                    }
                     Some(_) => return Err(bad("lag")),
                 },
             })
@@ -853,15 +850,19 @@ pub fn read(ops: Option<&Value>, path: &str) -> Result<Vec<Op>, Refused> {
 
 /// The segments the ops declare from `segments` in: the count after each op in turn, and the
 /// index of the first op whose output passes `MAX_PATH_SEGMENTS`, if any.
-pub fn declared(ops: &[Op], segments: u64) -> (u64, Option<usize>) {
-    let mut n = segments;
+pub fn declared(ops: &[Op], verbs: &[Verb]) -> (u64, Option<usize>) {
+    let subs = subs_of(verbs);
+    let mut n = (
+        subs.iter().map(|s| s.segs.len() as u64).sum(),
+        subs.len() as u64,
+    );
     for (i, op) in ops.iter().enumerate() {
         n = op.declared(n);
-        if n > MAX_PATH_SEGMENTS {
-            return (n, Some(i));
+        if n.0 > MAX_PATH_SEGMENTS {
+            return (n.0, Some(i));
         }
     }
-    (n, None)
+    (n.0, None)
 }
 
 /// One built copy of the path: its verbs and the opacity it draws at.
@@ -1059,7 +1060,8 @@ fn trim(subs: &[Sub], start: f64, end: f64, offset: f64, each: bool) -> Vec<Sub>
 
 /// The window over `subs` read as one path of their lengths end to end.
 fn trim_one(subs: &[Sub], start: f64, end: f64, offset: f64) -> Vec<Sub> {
-    let lengths: Vec<f64> = subs.iter().map(Sub::length).collect();
+    let measured: Vec<Measured<'_>> = subs.iter().map(Measured::of).collect();
+    let lengths: Vec<f64> = measured.iter().map(Measured::length).collect();
     let total: f64 = lengths.iter().sum();
     if total <= 0.0 {
         return Vec::new();
@@ -1081,7 +1083,7 @@ fn trim_one(subs: &[Sub], start: f64, end: f64, offset: f64) -> Vec<Sub> {
     let mut out: Vec<Sub> = Vec::new();
     for (a, b) in windows {
         let mut from = 0.0;
-        for (sub, l) in subs.iter().zip(&lengths) {
+        for (sub, l) in measured.iter().zip(&lengths) {
             let to = from + l;
             if to > a && from < b {
                 let piece = sub.piece((a - from).max(0.0), (b - from).min(*l));
@@ -1790,7 +1792,7 @@ mod tests {
     #[test]
     fn zigzag_builds_its_declared_segments() {
         let ops = read(Some(&serde_json::json!([{"zigzag": {"ridges": 5}}])), "ops").unwrap();
-        assert_eq!(declared(&ops, 4), (24, None));
+        assert_eq!(declared(&ops, &square()), (24, None));
         let built = apply(&ops, &square());
         assert_eq!(built.len(), 1);
         assert_eq!(segments(&built[0].verbs), 24);
@@ -1803,7 +1805,7 @@ mod tests {
             "ops",
         )
         .unwrap();
-        let (n, over) = declared(&ops, 4);
+        let (n, over) = declared(&ops, &square());
         assert_eq!(over, Some(1));
         assert_eq!(n, 257 * 4 * 64);
     }
@@ -1920,26 +1922,22 @@ mod tests {
     }
 
     #[test]
-    fn a_channel_s_write_beside_the_op_s_key_reads_over_the_op() {
-        let ops = read(
-            Some(&serde_json::json!([{"twist": {"angle": 10, "center": [1, 2]}, "angle": 40}])),
+    fn an_op_is_one_key_and_a_trim_with_each_declares_a_cut_per_sub_path() {
+        let r = read(
+            Some(&serde_json::json!([{"twist": {"angle": 10}, "angle": 40}])),
+            "ops",
+        )
+        .unwrap_err();
+        assert_eq!((r.code, r.path.as_str()), ("bad_doc", "ops/0"));
+        let two = parse("M 0 0 L 10 0 L 10 10 Z M 20 0 L 30 0 L 30 10 Z").unwrap();
+        let each = read(
+            Some(&serde_json::json!([{"trim": {"start": 0.1, "end": 0.9, "each": true}}])),
             "ops",
         )
         .unwrap();
-        assert_eq!(
-            ops[0],
-            Op::Twist {
-                angle: 40.0,
-                center: [1.0, 2.0]
-            }
-        );
-        let ops = read(
-            Some(&serde_json::json!([{"repeater": {"at": {"pos": [5, 0], "rot": 1}}, "at": {"rot": 7}}])),
-            "ops",
-        )
-        .unwrap();
-        let Op::Repeater(r) = &ops[0] else { panic!() };
-        assert_eq!((r.pos, r.rot), ([5.0, 0.0], 7.0));
+        let built: u64 = apply(&each, &two).iter().map(|c| segments(&c.verbs)).sum();
+        assert_eq!(declared(&each, &two).0, 6 + 4);
+        assert!(built <= 10, "{built}");
     }
 
     #[test]
